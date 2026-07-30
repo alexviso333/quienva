@@ -1,72 +1,823 @@
-from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
-
+import os
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Query, Header
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import Response as StarletteResponse
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field, EmailStr
+from typing import List, Optional
+import logging
+import uuid
+import bcrypt
+import secrets
+import requests
+from datetime import datetime, timezone, timedelta, date
+
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
-app = FastAPI()
-
-# Create a router with the /api prefix
+app = FastAPI(title="¿Quién va?")
 api_router = APIRouter(prefix="/api")
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("quienva")
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+SESSION_DAYS = 7
+EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+# ---------------------------------------------------------------------------
+# Object storage
+# ---------------------------------------------------------------------------
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
+APP_NAME = "quienva"
+storage_key = None
 
-# Add your routes to the router instead of directly to app
+
+def init_storage():
+    global storage_key
+    if storage_key:
+        return storage_key
+    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
+    resp.raise_for_status()
+    storage_key = resp.json()["storage_key"]
+    return storage_key
+
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    resp = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data, timeout=120,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_object(path: str):
+    key = init_storage()
+    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
+
+# ---------------------------------------------------------------------------
+# Password helpers
+# ---------------------------------------------------------------------------
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
+
+
+def new_session_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def set_session_cookie(response: Response, token: str):
+    response.set_cookie(
+        key="session_token", value=token, httponly=True, secure=True,
+        samesite="none", max_age=SESSION_DAYS * 24 * 3600, path="/",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+class RegisterInput(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    username: str
+    city: str = "Palma de Mallorca"
+
+
+class LoginInput(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class GoogleSessionInput(BaseModel):
+    session_id: str
+
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    city: Optional[str] = None
+    picture: Optional[str] = None
+    username: Optional[str] = None
+
+
+class FriendActionInput(BaseModel):
+    user_id: str
+
+
+class FriendRespondInput(BaseModel):
+    request_id: str
+    accept: bool
+
+
+class EventInput(BaseModel):
+    name: str
+    venue: str
+    address: str = ""
+    date: str            # YYYY-MM-DD
+    time: str = ""       # HH:MM
+    image_url: str = ""
+    genre: str = ""
+    city: str = "Palma de Mallorca"
+    has_commission: bool = False
+    commission_url: str = ""
+    more_info_url: str = ""
+
+
+class InterestInput(BaseModel):
+    status: str          # "voy" | "me_interesa" | "none"
+
+
+# ---------------------------------------------------------------------------
+# Auth helpers
+# ---------------------------------------------------------------------------
+def public_user(u: dict) -> dict:
+    return {
+        "user_id": u["user_id"],
+        "email": u.get("email"),
+        "name": u.get("name"),
+        "username": u.get("username"),
+        "picture": u.get("picture"),
+        "city": u.get("city"),
+        "role": u.get("role", "user"),
+        "auth_provider": u.get("auth_provider"),
+    }
+
+
+async def get_token_from_request(request: Request) -> Optional[str]:
+    token = request.cookies.get("session_token")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+    return token
+
+
+async def get_current_user(request: Request) -> dict:
+    token = await get_token_from_request(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="No autenticado")
+    session = await db.sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=401, detail="Sesión inválida")
+    expires_at = session["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Sesión expirada")
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    return user
+
+
+async def require_admin(request: Request) -> dict:
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Acceso solo para administrador")
+    return user
+
+
+async def create_session(user_id: str, token: Optional[str] = None) -> str:
+    token = token or new_session_token()
+    await db.sessions.insert_one({
+        "session_token": token,
+        "user_id": user_id,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return token
+
+
+# ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
+@api_router.post("/auth/register")
+async def register(inp: RegisterInput, response: Response):
+    email = inp.email.lower().strip()
+    username = inp.username.lower().strip().replace(" ", "")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="Ese email ya está registrado")
+    if await db.users.find_one({"username": username}):
+        raise HTTPException(status_code=400, detail="Ese nombre de usuario ya existe")
+    user = {
+        "user_id": f"user_{uuid.uuid4().hex[:12]}",
+        "email": email,
+        "username": username,
+        "name": inp.name.strip(),
+        "picture": "",
+        "city": inp.city,
+        "role": "user",
+        "auth_provider": "email",
+        "password_hash": hash_password(inp.password),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(user)
+    token = await create_session(user["user_id"])
+    set_session_cookie(response, token)
+    return {"user": public_user(user), "token": token}
+
+
+@api_router.post("/auth/login")
+async def login(inp: LoginInput, response: Response):
+    email = inp.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    if not user or not user.get("password_hash") or not verify_password(inp.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
+    token = await create_session(user["user_id"])
+    set_session_cookie(response, token)
+    return {"user": public_user(user), "token": token}
+
+
+@api_router.post("/auth/google/session")
+async def google_session(inp: GoogleSessionInput, response: Response):
+    try:
+        r = requests.get(EMERGENT_SESSION_URL, headers={"X-Session-ID": inp.session_id}, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        logger.error(f"Google session error: {e}")
+        raise HTTPException(status_code=401, detail="No se pudo validar la sesión de Google")
+
+    email = (data.get("email") or "").lower().strip()
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        user = existing
+        updates = {}
+        if not user.get("picture") and data.get("picture"):
+            updates["picture"] = data["picture"]
+        if updates:
+            await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
+            user.update(updates)
+    else:
+        base_username = (email.split("@")[0] if email else "user").lower().replace(".", "")
+        username = base_username
+        while await db.users.find_one({"username": username}):
+            username = f"{base_username}{secrets.randbelow(9999)}"
+        user = {
+            "user_id": f"user_{uuid.uuid4().hex[:12]}",
+            "email": email,
+            "username": username,
+            "name": data.get("name", "Usuario"),
+            "picture": data.get("picture", ""),
+            "city": "Palma de Mallorca",
+            "role": "user",
+            "auth_provider": "google",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(user)
+
+    token = await create_session(user["user_id"], token=data.get("session_token"))
+    set_session_cookie(response, token)
+    return {"user": public_user(user), "token": token}
+
+
+@api_router.post("/auth/logout")
+async def logout(request: Request, response: Response):
+    token = await get_token_from_request(request)
+    if token:
+        await db.sessions.delete_one({"session_token": token})
+    response.delete_cookie("session_token", path="/")
+    return {"ok": True}
+
+
+@api_router.get("/auth/me")
+async def me(user: dict = Depends(get_current_user)):
+    return public_user(user)
+
+
+@api_router.put("/auth/profile")
+async def update_profile(inp: ProfileUpdate, user: dict = Depends(get_current_user)):
+    updates = {}
+    if inp.name is not None:
+        updates["name"] = inp.name.strip()
+    if inp.city is not None:
+        updates["city"] = inp.city
+    if inp.picture is not None:
+        updates["picture"] = inp.picture
+    if inp.username is not None:
+        uname = inp.username.lower().strip().replace(" ", "")
+        clash = await db.users.find_one({"username": uname, "user_id": {"$ne": user["user_id"]}})
+        if clash:
+            raise HTTPException(status_code=400, detail="Ese nombre de usuario ya existe")
+        updates["username"] = uname
+    if updates:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
+        user.update(updates)
+    return public_user(user)
+
+
+# ---------------------------------------------------------------------------
+# Friends
+# ---------------------------------------------------------------------------
+async def accepted_friend_ids(user_id: str) -> List[str]:
+    ids = set()
+    async for f in db.friendships.find({"status": "accepted",
+                                        "$or": [{"requester_id": user_id}, {"addressee_id": user_id}]}):
+        ids.add(f["addressee_id"] if f["requester_id"] == user_id else f["requester_id"])
+    return list(ids)
+
+
+async def friendship_status_map(user_id: str) -> dict:
+    """Map other_user_id -> {'status': ..., 'direction': 'in'|'out', 'request_id': ...}"""
+    result = {}
+    async for f in db.friendships.find({"$or": [{"requester_id": user_id}, {"addressee_id": user_id}]}):
+        other = f["addressee_id"] if f["requester_id"] == user_id else f["requester_id"]
+        result[other] = {
+            "status": f["status"],
+            "direction": "out" if f["requester_id"] == user_id else "in",
+            "request_id": f["id"],
+        }
+    return result
+
+
+@api_router.get("/users/search")
+async def search_users(q: str, user: dict = Depends(get_current_user)):
+    q = q.strip().lower()
+    if not q:
+        return []
+    cursor = db.users.find({
+        "user_id": {"$ne": user["user_id"]},
+        "$or": [
+            {"username": {"$regex": q, "$options": "i"}},
+            {"name": {"$regex": q, "$options": "i"}},
+        ],
+    }, {"_id": 0}).limit(20)
+    fmap = await friendship_status_map(user["user_id"])
+    out = []
+    async for u in cursor:
+        pu = public_user(u)
+        rel = fmap.get(u["user_id"])
+        pu["relationship"] = rel or {"status": "none"}
+        out.append(pu)
+    return out
+
+
+@api_router.get("/users/by-username/{username}")
+async def get_by_username(username: str, user: dict = Depends(get_current_user)):
+    u = await db.users.find_one({"username": username.lower().strip()}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    pu = public_user(u)
+    fmap = await friendship_status_map(user["user_id"])
+    pu["relationship"] = fmap.get(u["user_id"]) or {"status": "none"}
+    return pu
+
+
+@api_router.post("/friends/request")
+async def send_friend_request(inp: FriendActionInput, user: dict = Depends(get_current_user)):
+    target = inp.user_id
+    if target == user["user_id"]:
+        raise HTTPException(status_code=400, detail="No puedes añadirte a ti mismo")
+    if not await db.users.find_one({"user_id": target}):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    existing = await db.friendships.find_one({
+        "$or": [
+            {"requester_id": user["user_id"], "addressee_id": target},
+            {"requester_id": target, "addressee_id": user["user_id"]},
+        ]
+    })
+    if existing:
+        if existing["status"] == "accepted":
+            raise HTTPException(status_code=400, detail="Ya sois amigos")
+        # If the other person already sent a request, accept it
+        if existing["requester_id"] == target and existing["status"] == "pending":
+            await db.friendships.update_one({"id": existing["id"]}, {"$set": {"status": "accepted"}})
+            await create_notification(target, "friend_accept",
+                                      f"{user['name']} aceptó tu solicitud de amistad",
+                                      {"user_id": user["user_id"]})
+            return {"status": "accepted"}
+        raise HTTPException(status_code=400, detail="Solicitud ya enviada")
+    fr = {
+        "id": str(uuid.uuid4()),
+        "requester_id": user["user_id"],
+        "addressee_id": target,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.friendships.insert_one(fr)
+    await create_notification(target, "friend_request",
+                              f"{user['name']} te ha enviado una solicitud de amistad",
+                              {"user_id": user["user_id"], "request_id": fr["id"]})
+    return {"status": "pending", "request_id": fr["id"]}
+
+
+@api_router.post("/friends/respond")
+async def respond_friend(inp: FriendRespondInput, user: dict = Depends(get_current_user)):
+    fr = await db.friendships.find_one({"id": inp.request_id})
+    if not fr or fr["addressee_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    if inp.accept:
+        await db.friendships.update_one({"id": fr["id"]}, {"$set": {"status": "accepted"}})
+        await create_notification(fr["requester_id"], "friend_accept",
+                                  f"{user['name']} aceptó tu solicitud de amistad",
+                                  {"user_id": user["user_id"]})
+        return {"status": "accepted"}
+    await db.friendships.delete_one({"id": fr["id"]})
+    return {"status": "rejected"}
+
+
+@api_router.delete("/friends/{friend_id}")
+async def remove_friend(friend_id: str, user: dict = Depends(get_current_user)):
+    await db.friendships.delete_one({
+        "$or": [
+            {"requester_id": user["user_id"], "addressee_id": friend_id},
+            {"requester_id": friend_id, "addressee_id": user["user_id"]},
+        ]
+    })
+    return {"ok": True}
+
+
+@api_router.get("/friends")
+async def list_friends(user: dict = Depends(get_current_user)):
+    ids = await accepted_friend_ids(user["user_id"])
+    out = []
+    async for u in db.users.find({"user_id": {"$in": ids}}, {"_id": 0}):
+        out.append(public_user(u))
+    return out
+
+
+@api_router.get("/friends/requests")
+async def list_requests(user: dict = Depends(get_current_user)):
+    incoming = []
+    async for f in db.friendships.find({"addressee_id": user["user_id"], "status": "pending"}):
+        requester = await db.users.find_one({"user_id": f["requester_id"]}, {"_id": 0})
+        if requester:
+            incoming.append({"request_id": f["id"], "user": public_user(requester)})
+    return incoming
+
+
+# ---------------------------------------------------------------------------
+# Events
+# ---------------------------------------------------------------------------
+def date_in_filter(event_date_str: str, flt: str) -> bool:
+    try:
+        d = date.fromisoformat(event_date_str)
+    except Exception:
+        return True
+    today = datetime.now(timezone.utc).date()
+    if flt == "hoy":
+        return d == today
+    if flt == "finde":
+        # upcoming Friday, Saturday, Sunday within the next 7 days
+        days_until_fri = (4 - today.weekday()) % 7
+        fri = today + timedelta(days=days_until_fri)
+        sun = fri + timedelta(days=2)
+        return fri <= d <= sun
+    if flt == "semana":
+        return today <= d <= today + timedelta(days=7)
+    return True
+
+
+async def serialize_event(ev: dict, user: dict, friend_ids: List[str]) -> dict:
+    interests = []
+    async for it in db.interests.find({"event_id": ev["id"]}):
+        interests.append(it)
+
+    my_status = None
+    friends_going = []
+    friends_interested = []
+    for it in interests:
+        if it["user_id"] == user["user_id"]:
+            my_status = it["status"]
+        elif it["user_id"] in friend_ids:
+            fu = await db.users.find_one({"user_id": it["user_id"]}, {"_id": 0})
+            if fu:
+                entry = {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")}
+                if it["status"] == "voy":
+                    friends_going.append(entry)
+                elif it["status"] == "me_interesa":
+                    friends_interested.append(entry)
+
+    return {
+        "id": ev["id"],
+        "name": ev["name"],
+        "venue": ev["venue"],
+        "address": ev.get("address", ""),
+        "date": ev["date"],
+        "time": ev.get("time", ""),
+        "image_url": ev.get("image_url", ""),
+        "genre": ev.get("genre", ""),
+        "city": ev.get("city", ""),
+        "has_commission": ev.get("has_commission", False),
+        "commission_url": ev.get("commission_url", ""),
+        "more_info_url": ev.get("more_info_url", ""),
+        "my_status": my_status,
+        "friends_going": friends_going,
+        "friends_interested": friends_interested,
+        "total_going": sum(1 for it in interests if it["status"] == "voy"),
+        "total_interested": sum(1 for it in interests if it["status"] == "me_interesa"),
+    }
+
+
+@api_router.get("/events")
+async def list_events(user: dict = Depends(get_current_user),
+                      date_filter: str = Query("all"),
+                      genre: str = Query("all")):
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    query = {"city": user.get("city", "Palma de Mallorca")}
+    events = []
+    async for ev in db.events.find(query, {"_id": 0}).sort("date", 1):
+        if date_filter != "all" and not date_in_filter(ev["date"], date_filter):
+            continue
+        if genre != "all" and ev.get("genre") != genre:
+            continue
+        events.append(await serialize_event(ev, user, friend_ids))
+    return events
+
+
+@api_router.get("/events/genres")
+async def list_genres(user: dict = Depends(get_current_user)):
+    genres = await db.events.distinct("genre", {"city": user.get("city", "Palma de Mallorca")})
+    return [g for g in genres if g]
+
+
+@api_router.get("/events/{event_id}")
+async def get_event(event_id: str, user: dict = Depends(get_current_user)):
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    return await serialize_event(ev, user, friend_ids)
+
+
+@api_router.post("/events/{event_id}/interest")
+async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(get_current_user)):
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    if inp.status not in ("voy", "me_interesa", "none"):
+        raise HTTPException(status_code=400, detail="Estado inválido")
+
+    existing = await db.interests.find_one({"user_id": user["user_id"], "event_id": event_id})
+    prev_status = existing["status"] if existing else None
+
+    if inp.status == "none":
+        await db.interests.delete_one({"user_id": user["user_id"], "event_id": event_id})
+    elif existing:
+        await db.interests.update_one({"_id": existing["_id"]},
+                                      {"$set": {"status": inp.status,
+                                                "updated_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        await db.interests.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["user_id"],
+            "event_id": event_id,
+            "status": inp.status,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # Notify friends when marking "voy" (only on transition to voy)
+    if inp.status == "voy" and prev_status != "voy":
+        friend_ids = await accepted_friend_ids(user["user_id"])
+        for fid in friend_ids:
+            await create_notification(
+                fid, "friend_going",
+                f"{user['name']} va a {ev['name']}",
+                {"event_id": event_id, "user_id": user["user_id"]},
+            )
+
+    return {"status": inp.status}
+
+
+# ---------------------------------------------------------------------------
+# Admin events
+# ---------------------------------------------------------------------------
+@api_router.post("/admin/events")
+async def create_event(inp: EventInput, admin: dict = Depends(require_admin)):
+    ev = inp.model_dump()
+    ev["id"] = str(uuid.uuid4())
+    ev["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.events.insert_one(ev)
+    ev.pop("_id", None)
+    return ev
+
+
+@api_router.put("/admin/events/{event_id}")
+async def edit_event(event_id: str, inp: EventInput, admin: dict = Depends(require_admin)):
+    res = await db.events.update_one({"id": event_id}, {"$set": inp.model_dump()})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return ev
+
+
+@api_router.delete("/admin/events/{event_id}")
+async def delete_event(event_id: str, admin: dict = Depends(require_admin)):
+    await db.events.delete_one({"id": event_id})
+    await db.interests.delete_many({"event_id": event_id})
+    return {"ok": True}
+
+
+@api_router.get("/admin/events")
+async def admin_list_events(admin: dict = Depends(require_admin)):
+    events = []
+    async for ev in db.events.find({}, {"_id": 0}).sort("date", 1):
+        events.append(ev)
+    return events
+
+
+@api_router.post("/admin/upload")
+async def admin_upload(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "bin"
+    path = f"{APP_NAME}/events/{uuid.uuid4().hex}.{ext}"
+    data = await file.read()
+    ct = file.content_type or "image/jpeg"
+    result = put_object(path, data, ct)
+    await db.files.insert_one({
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "content_type": ct,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"image_url": f"/api/files/{result['path']}"}
+
+
+@api_router.post("/upload/avatar")
+async def upload_avatar(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "bin"
+    path = f"{APP_NAME}/avatars/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+    data = await file.read()
+    ct = file.content_type or "image/jpeg"
+    result = put_object(path, data, ct)
+    await db.files.insert_one({
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "content_type": ct,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    url = f"/api/files/{result['path']}"
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": url}})
+    return {"image_url": url}
+
+
+@api_router.get("/files/{path:path}")
+async def serve_file(path: str):
+    record = await db.files.find_one({"storage_path": path})
+    if not record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    data, content_type = get_object(path)
+    return StarletteResponse(content=data, media_type=record.get("content_type", content_type),
+                             headers={"Cache-Control": "public, max-age=86400"})
+
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+async def create_notification(user_id: str, ntype: str, message: str, data: dict):
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "type": ntype,
+        "message": message,
+        "data": data,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+@api_router.get("/notifications")
+async def list_notifications(user: dict = Depends(get_current_user)):
+    out = []
+    async for n in db.notifications.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).limit(50):
+        out.append(n)
+    return out
+
+
+@api_router.get("/notifications/unread-count")
+async def unread_count(user: dict = Depends(get_current_user)):
+    count = await db.notifications.count_documents({"user_id": user["user_id"], "read": False})
+    return {"count": count}
+
+
+@api_router.post("/notifications/{notif_id}/read")
+async def mark_read(notif_id: str, user: dict = Depends(get_current_user)):
+    await db.notifications.update_one({"id": notif_id, "user_id": user["user_id"]}, {"$set": {"read": True}})
+    return {"ok": True}
+
+
+@api_router.post("/notifications/read-all")
+async def mark_all_read(user: dict = Depends(get_current_user)):
+    await db.notifications.update_many({"user_id": user["user_id"]}, {"$set": {"read": True}})
+    return {"ok": True}
+
+
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "¿Quién va? API"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+# ---------------------------------------------------------------------------
+# Startup: indexes, admin seed, sample events
+# ---------------------------------------------------------------------------
+async def seed_admin():
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@quienva.app")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    existing = await db.users.find_one({"email": admin_email})
+    if existing is None:
+        await db.users.insert_one({
+            "user_id": f"user_{uuid.uuid4().hex[:12]}",
+            "email": admin_email,
+            "username": "admin",
+            "name": "Admin",
+            "picture": "",
+            "city": "Palma de Mallorca",
+            "role": "admin",
+            "auth_provider": "email",
+            "password_hash": hash_password(admin_password),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        logger.info("Admin creado")
+    else:
+        updates = {"role": "admin"}
+        if not verify_password(admin_password, existing.get("password_hash", "")):
+            updates["password_hash"] = hash_password(admin_password)
+        await db.users.update_one({"email": admin_email}, {"$set": updates})
 
-# Include the router in the main app
+
+async def seed_events():
+    if await db.events.count_documents({}) > 0:
+        return
+    today = datetime.now(timezone.utc).date()
+
+    def ds(offset):
+        return (today + timedelta(days=offset)).isoformat()
+
+    samples = [
+        {"name": "Techno Underground", "venue": "Sala Focus", "address": "C/ Bartomeu Rosselló, Palma",
+         "date": ds(0), "time": "23:59", "genre": "Techno",
+         "image_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745",
+         "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
+        {"name": "Reggaeton Party", "venue": "Tito's Palma", "address": "Passeig Marítim, Palma",
+         "date": ds(2), "time": "00:30", "genre": "Reggaeton",
+         "image_url": "https://images.unsplash.com/photo-1517983079452-bbaa6a081a6b?crop=entropy&cs=srgb&fm=jpg&q=85",
+         "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
+        {"name": "Sunset Sessions", "venue": "Purobeach", "address": "Cala Estància, Palma",
+         "date": ds(3), "time": "19:00", "genre": "House",
+         "image_url": "https://images.unsplash.com/photo-1563784462029-e9cc28281850?crop=entropy&cs=srgb&fm=jpg&q=85",
+         "has_commission": False, "commission_url": "", "more_info_url": "https://www.instagram.com/purobeach/"},
+        {"name": "Indie Night", "venue": "Es Gremi", "address": "Polígon Son Castelló, Palma",
+         "date": ds(5), "time": "21:30", "genre": "Indie",
+         "image_url": "https://images.pexels.com/photos/9534908/pexels-photo-9534908.jpeg",
+         "has_commission": False, "commission_url": "", "more_info_url": "https://www.instagram.com/esgremi/"},
+        {"name": "Latin Fever", "venue": "Social Club", "address": "C/ dels Paraires, Palma",
+         "date": ds(6), "time": "23:00", "genre": "Latino",
+         "image_url": "https://images.unsplash.com/photo-1763322564752-12ce8fae2bfe?crop=entropy&cs=srgb&fm=jpg&q=85",
+         "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
+        {"name": "House Marathon", "venue": "BCM Planet Dance", "address": "Magaluf, Calvià",
+         "date": ds(9), "time": "23:59", "genre": "House",
+         "image_url": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea",
+         "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
+    ]
+    for s in samples:
+        s["id"] = str(uuid.uuid4())
+        s["city"] = "Palma de Mallorca"
+        s["created_at"] = datetime.now(timezone.utc).isoformat()
+        await db.events.insert_one(s)
+    logger.info("Eventos de ejemplo creados")
+
+
+@app.on_event("startup")
+async def on_startup():
+    try:
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("username", unique=True)
+        await db.sessions.create_index("session_token", unique=True)
+    except Exception as e:
+        logger.warning(f"Index warn: {e}")
+    try:
+        init_storage()
+        logger.info("Storage inicializado")
+    except Exception as e:
+        logger.error(f"Storage init falló: {e}")
+    await seed_admin()
+    await seed_events()
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -77,12 +828,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
