@@ -1,0 +1,126 @@
+{
+  "project_name": "¿Quién va?",
+  "target_audience": "Gen Z (16-25), Palma de Mallorca",
+  "theme": "Dark Mode Only",
+  "archetype": "ARCHETYPE 7: ELECTRIC & NEON (Future, Speed, Nightlife)",
+  "typography": {
+    "headings": "Unbounded, sans-serif",
+    "body": "Outfit, sans-serif",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl tracking-tighter font-black",
+      "h2": "text-2xl sm:text-3xl tracking-tight font-bold",
+      "h3": "text-xl sm:text-2xl tracking-tight font-semibold",
+      "card_title": "text-2xl font-bold tracking-tight text-white",
+      "body": "text-base leading-relaxed text-gray-300",
+      "small_labels": "text-xs tracking-[0.1em] uppercase font-bold text-gray-400"
+    }
+  },
+  "colors": {
+    "background": {
+      "base": "#0A0A0C",
+      "surface": "#121215",
+      "glass": "rgba(18, 18, 21, 0.7)"
+    },
+    "primary": {
+      "hex": "#FF0055",
+      "tw_class": "bg-[#FF0055] text-white",
+      "usage": "Primary CTA ('Conseguir entrada'), 'Voy' active state, notifications"
+    },
+    "secondary": {
+      "hex": "#00F0FF",
+      "tw_class": "bg-[#00F0FF] text-black",
+      "usage": "'Me interesa' active state, subtle tags, verified/friend icons"
+    },
+    "neutral": {
+      "text_main": "#F8F8F8",
+      "text_muted": "#8A8A93",
+      "border": "rgba(255, 255, 255, 0.1)"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-[#121215]/80 border-t border-white/10",
+    "tracing_beam": "For premium featured events, use a subtle 1px animated gradient border.",
+    "gradients": "No generic fullscreen gradients. Use sharp radial glow `bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#FF0055]/15 via-transparent to-transparent` for background ambiance.",
+    "textures": "Subtle noise overlay (`mix-blend-overlay` 5% opacity) to make it feel like film/nightlife photography rather than flat digital."
+  },
+  "layouts": {
+    "mobile_first": "Max width container `max-w-md mx-auto min-h-screen relative` for web view to simulate app, full width on actual mobile.",
+    "navigation": "Bottom tab bar using Glassmorphism. `fixed bottom-0 w-full max-w-md z-50`.",
+    "feed": "Vertical scroll layout `flex flex-col gap-6 pb-24 pt-4 px-4` with full-bleed styled cards.",
+    "spacing": "Generous spacing `p-4` or `p-6` around containers. Tight grouping inside event cards."
+  },
+  "components": {
+    "event_card": {
+      "structure": "Relative container `rounded-3xl overflow-hidden`. Base layer is the event image (`object-cover w-full h-[60vh] max-h-[500px]`). Dark gradient overlay `absolute inset-0 bg-gradient-to-t from-[#0A0A0C] via-[#0A0A0C]/80 to-transparent` covering the bottom 70%.",
+      "content": "Absolute positioned at the bottom `absolute bottom-0 w-full p-5 flex flex-col gap-4 z-10`.",
+      "social_proof": "Flex row with overlapping avatars `-space-x-3` and text `<span className='text-white font-bold'>Marta</span> y 2 amigos más van'. Crucial for FOMO.",
+      "actions": "Grid layout `grid grid-cols-2 gap-3` for 'Voy' vs 'Me interesa' buttons."
+    },
+    "status_toggle": {
+      "voy": "When active: Solid primary `bg-[#FF0055] text-white shadow-[0_0_20px_rgba(255,0,85,0.4)]`. When inactive: outlined glass `bg-white/5 border border-white/20 text-white/70`.",
+      "me_interesa": "When active: Solid secondary `bg-[#00F0FF] text-black shadow-[0_0_20px_rgba(0,240,255,0.4)]`. When inactive: outlined glass."
+    },
+    "filter_chips": {
+      "style": "Pill-shaped `rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap`, horizontal scroll `flex overflow-x-auto hide-scrollbar gap-2`. Active chip: `bg-white text-black`. Inactive: `bg-white/5 border border-white/10 text-white/70`."
+    },
+    "avatars": {
+      "style": "Circular, `w-8 h-8` or `w-10 h-10`, `rounded-full object-cover` with `border-2 border-[#0A0A0C]` to ensure separation when overlapping."
+    }
+  },
+  "motion": {
+    "hover_states": "Buttons lift `-translate-y-1` with increased glow. Avatars slightly separate on hover.",
+    "transitions": "Use `transition-colors duration-300 ease-out` or `transition-transform duration-300 ease-out`.",
+    "feed_entrance": "Staggered fade-up animation `framer-motion` for event cards."
+  },
+  "accessibility": {
+    "contrast": "Ensure white text on dark overlays meets minimum 4.5:1 ratio. Use text-shadow if needed.",
+    "testing_attributes": "All interactive and key informational elements MUST include a `data-testid` attribute (e.g., `data-testid=\"event-voy-btn\"`).",
+    "reduced_motion": "Respect `prefers-reduced-motion: reduce` for all animations."
+  },
+  "media": {
+    "image_urls": {
+      "event_djs_clubs": [
+        "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2Mzl8MHwxfHNlYXJjaHwxfHxkaiUyMHBsYXlpbmclMjBjbHViJTIwbmVvbiUyMGxpZ2h0c3xlbnwwfHx8fDE3ODQzNzI4NzJ8MA&ixlib=rb-4.1.0&q=85",
+        "https://images.pexels.com/photos/19181687/pexels-photo-19181687.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+      ],
+      "avatars": [
+        "https://images.unsplash.com/photo-1638305610693-7f00e71500c3",
+        "https://images.unsplash.com/photo-1633766306924-90e6eccb8cde",
+        "https://images.unsplash.com/photo-1591873116782-a174a005d02f",
+        "https://images.unsplash.com/photo-1536810488332-9342e3ed463d"
+      ]
+    }
+  },
+  "icons_library": "lucide-react",
+  "component_path": {
+    "instructions": "Place generic ui components in `src/components/ui/` (.jsx). Note: Use .jsx instead of .tsx since this is a JS project.",
+    "toast": "Use `sonner` located in `src/components/ui/sonner.jsx`."
+  },
+  "instructions_to_main_agent": [
+    "Build a mobile-first PWA layout. If viewed on desktop, center the app view with max-w-md and a dark atmospheric background behind it.",
+    "Use framer-motion for smooth staggered card entries and micro-interactions on the 'Voy' / 'Me interesa' toggles.",
+    "Implement the UI using pure Tailwind classes for custom layouts. Use Shadcn components for forms, inputs, and dropdowns (Admin Panel).",
+    "The 'Who is going' feature is the core value proposition. Emphasize the avatars and social text visually above the venue details.",
+    "DO NOT use a fully transparent nav bar. Use the glassmorphism variables defined above.",
+    "Ensure 'Voy' and 'Me interesa' behave as mutually exclusive toggles.",
+    "Use pure HTML/Tailwind for the event cards to achieve the specific overlay and overlapping structures.",
+    "Remember you have .js files not .tsx files. Write React components using JSX syntax.",
+    "Always include `data-testid` on all buttons, links, and forms for testability."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: `transition: all`. Always add transitions for specific interactive elements excluding transforms.",
+    "You MUST NOT center align the app container, ie do not add `.App { text-align: center; }` in the css file.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Main agent relies on provided image URLs. Missing categories = main agent will use placeholder text which is FORBIDDEN.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Use sonner for toasts, located in /app/src/components/ui/sonner.jsx."
+  ]
+}
