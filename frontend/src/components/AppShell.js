@@ -14,7 +14,8 @@ export function BottomNav() {
   const { data: unread } = useQuery({
     queryKey: ["unread-count"],
     queryFn: async () => (await api.get("/notifications/unread-count")).data.count,
-    refetchInterval: 20000,
+    refetchInterval: 8000,
+    refetchOnWindowFocus: true,
   });
 
   return (
