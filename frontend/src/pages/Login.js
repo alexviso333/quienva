@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { formatApiErrorDetail } from "@/lib/api";
 import { Input } from "@/components/ui/input";
-import { Loader2 } from "lucide-react";
+import { Loader2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -74,8 +74,8 @@ export default function Login() {
             data-testid="invite-banner"
             className="mb-5 flex items-center gap-3 rounded-2xl border border-qv-secondary/40 bg-qv-secondary/10 px-4 py-3"
           >
-            <span className="w-9 h-9 rounded-full bg-qv-secondary/20 flex items-center justify-center text-qv-secondary font-bold">
-              @
+            <span className="w-9 h-9 rounded-full bg-qv-secondary/20 flex items-center justify-center text-qv-secondary shrink-0">
+              <UserPlus className="w-4 h-4" />
             </span>
             <p className="text-sm text-white/90">
               <span className="font-semibold text-qv-secondary">@{invitedBy}</span> te ha invitado. Crea tu
