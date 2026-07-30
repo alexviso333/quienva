@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { formatApiErrorDetail } from "@/lib/api";
@@ -11,7 +11,19 @@ export default function Login() {
   const navigate = useNavigate();
   const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
+  const [invitedBy, setInvitedBy] = useState(null);
   const [form, setForm] = useState({ email: "", password: "", name: "", username: "", city: "Palma de Mallorca" });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const add = params.get("add");
+    if (add) {
+      const uname = add.toLowerCase().trim();
+      localStorage.setItem("qv_pending_add", uname);
+      setInvitedBy(uname);
+      setMode("register");
+    }
+  }, []);
 
   const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -56,6 +68,21 @@ export default function Login() {
             Descubre los planes del finde y mira <span className="text-white font-semibold">qué amigos van</span> a cada sitio.
           </p>
         </div>
+
+        {invitedBy && (
+          <div
+            data-testid="invite-banner"
+            className="mb-5 flex items-center gap-3 rounded-2xl border border-qv-secondary/40 bg-qv-secondary/10 px-4 py-3"
+          >
+            <span className="w-9 h-9 rounded-full bg-qv-secondary/20 flex items-center justify-center text-qv-secondary font-bold">
+              @
+            </span>
+            <p className="text-sm text-white/90">
+              <span className="font-semibold text-qv-secondary">@{invitedBy}</span> te ha invitado. Crea tu
+              cuenta y os añadiremos como amigos automáticamente.
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-2 mb-6 p-1 bg-white/5 rounded-2xl border border-white/10">
           {["login", "register"].map((m) => (

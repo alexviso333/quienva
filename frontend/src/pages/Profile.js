@@ -1,12 +1,13 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { LogOut, Camera, Share2, Shield, Loader2, Save } from "lucide-react";
+import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing } from "lucide-react";
 import { toast } from "sonner";
+import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 
 export default function Profile() {
   const { user, setUser, logout, refreshUser } = useAuth();
@@ -16,6 +17,32 @@ export default function Profile() {
   const [city, setCity] = useState(user?.city || "Palma de Mallorca");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const pushSupported = isPushSupported();
+
+  useEffect(() => {
+    if (pushSupported) getPushStatus().then(setPushOn);
+  }, [pushSupported]);
+
+  const togglePush = async () => {
+    setPushBusy(true);
+    try {
+      if (pushOn) {
+        await unsubscribeFromPush();
+        setPushOn(false);
+        toast.success("Avisos en el móvil desactivados");
+      } else {
+        await subscribeToPush();
+        setPushOn(true);
+        toast.success("¡Avisos en el móvil activados!");
+      }
+    } catch (e) {
+      toast.error(e.message || "No se pudo cambiar los avisos");
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -48,12 +75,12 @@ export default function Profile() {
   };
 
   const shareInvite = async () => {
-    const link = `${window.location.origin}/login`;
-    const text = `Únete a mí en ¿Quién va? y añádeme: @${user?.username} — ${link}`;
+    const link = `${window.location.origin}/login?add=${user?.username}`;
+    const text = `Únete a mí en ¿Quién va? y te añado como amigo: ${link}`;
     try {
-      if (navigator.share) await navigator.share({ title: "¿Quién va?", text });
+      if (navigator.share) await navigator.share({ title: "¿Quién va?", text, url: link });
       else {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(link);
         toast.success("Enlace de invitación copiado");
       }
     } catch {}
@@ -118,6 +145,27 @@ export default function Profile() {
         >
           <Share2 className="w-4 h-4" /> Invitar amigos
         </button>
+
+        {pushSupported && (
+          <button
+            data-testid="push-toggle-btn"
+            onClick={togglePush}
+            disabled={pushBusy}
+            className={`h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60 ${
+              pushOn
+                ? "bg-qv-primary/15 border border-qv-primary/40 text-qv-primary"
+                : "bg-white/5 border border-white/15 text-white"
+            }`}
+          >
+            {pushBusy ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : pushOn ? (
+              <><BellRing className="w-4 h-4" /> Avisos en el móvil activados</>
+            ) : (
+              <><Bell className="w-4 h-4" /> Activar avisos en el móvil</>
+            )}
+          </button>
+        )}
 
         {user?.role === "admin" && (
           <button

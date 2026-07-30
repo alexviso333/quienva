@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
+import { toast } from "sonner";
 
 const AuthContext = createContext(null);
 
@@ -61,6 +62,26 @@ export function AuthProvider({ children }) {
     setUser(data);
     return data;
   };
+
+  // Auto-add a friend when arriving from an invite link (?add=username)
+  const processPendingInvite = useCallback(async (currentUser) => {
+    if (!currentUser) return;
+    const uname = localStorage.getItem("qv_pending_add");
+    if (!uname) return;
+    localStorage.removeItem("qv_pending_add");
+    if (uname === currentUser.username) return;
+    try {
+      const { data } = await api.post("/friends/request-by-username", { username: uname });
+      if (data.status === "accepted") toast.success(`¡Ya sois amigos con @${uname}!`);
+      else toast.success(`Solicitud de amistad enviada a @${uname}`);
+    } catch (e) {
+      // ignore invalid invite
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) processPendingInvite(user);
+  }, [user, processPendingInvite]);
 
   return (
     <AuthContext.Provider

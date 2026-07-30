@@ -16,7 +16,11 @@ import uuid
 import bcrypt
 import secrets
 import requests
+import json
+import asyncio
 from datetime import datetime, timezone, timedelta, date
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from pywebpush import webpush, WebPushException
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -33,6 +37,11 @@ logger = logging.getLogger("quienva")
 
 SESSION_DAYS = 7
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:hola@quienva.app")
+scheduler = None
 
 # ---------------------------------------------------------------------------
 # Object storage
@@ -148,6 +157,16 @@ class EventInput(BaseModel):
 
 class InterestInput(BaseModel):
     status: str          # "voy" | "me_interesa" | "none"
+
+
+class UsernameInput(BaseModel):
+    username: str
+
+
+class PushSubscriptionInput(BaseModel):
+    endpoint: str
+    keys: dict
+    expirationTime: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -388,9 +407,7 @@ async def get_by_username(username: str, user: dict = Depends(get_current_user))
     return pu
 
 
-@api_router.post("/friends/request")
-async def send_friend_request(inp: FriendActionInput, user: dict = Depends(get_current_user)):
-    target = inp.user_id
+async def do_friend_request(user: dict, target: str) -> dict:
     if target == user["user_id"]:
         raise HTTPException(status_code=400, detail="No puedes añadirte a ti mismo")
     if not await db.users.find_one({"user_id": target}):
@@ -403,7 +420,7 @@ async def send_friend_request(inp: FriendActionInput, user: dict = Depends(get_c
     })
     if existing:
         if existing["status"] == "accepted":
-            raise HTTPException(status_code=400, detail="Ya sois amigos")
+            return {"status": "accepted"}
         # If the other person already sent a request, accept it
         if existing["requester_id"] == target and existing["status"] == "pending":
             await db.friendships.update_one({"id": existing["id"]}, {"$set": {"status": "accepted"}})
@@ -411,7 +428,7 @@ async def send_friend_request(inp: FriendActionInput, user: dict = Depends(get_c
                                       f"{user['name']} aceptó tu solicitud de amistad",
                                       {"user_id": user["user_id"]})
             return {"status": "accepted"}
-        raise HTTPException(status_code=400, detail="Solicitud ya enviada")
+        return {"status": "pending", "request_id": existing["id"]}
     fr = {
         "id": str(uuid.uuid4()),
         "requester_id": user["user_id"],
@@ -424,6 +441,21 @@ async def send_friend_request(inp: FriendActionInput, user: dict = Depends(get_c
                               f"{user['name']} te ha enviado una solicitud de amistad",
                               {"user_id": user["user_id"], "request_id": fr["id"]})
     return {"status": "pending", "request_id": fr["id"]}
+
+
+@api_router.post("/friends/request")
+async def send_friend_request(inp: FriendActionInput, user: dict = Depends(get_current_user)):
+    return await do_friend_request(user, inp.user_id)
+
+
+@api_router.post("/friends/request-by-username")
+async def send_friend_request_by_username(inp: UsernameInput, user: dict = Depends(get_current_user)):
+    target = await db.users.find_one({"username": inp.username.lower().strip()}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    result = await do_friend_request(user, target["user_id"])
+    result["user"] = public_user(target)
+    return result
 
 
 @api_router.post("/friends/respond")
@@ -698,6 +730,45 @@ async def create_notification(user_id: str, ntype: str, message: str, data: dict
         "read": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
+    # Fire-and-forget web push (in-app notification is the fallback)
+    url = "/feed"
+    if ntype in ("friend_request", "friend_accept"):
+        url = "/friends"
+    elif ntype == "weekly_digest":
+        url = "/notifications"
+    try:
+        asyncio.create_task(push_to_user(user_id, "¿Quién va?", message, url))
+    except RuntimeError:
+        pass
+
+
+def _sync_web_push(sub: dict, payload: str):
+    try:
+        webpush(
+            subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]},
+            data=payload,
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": VAPID_SUBJECT},
+        )
+        return None
+    except WebPushException as e:
+        code = getattr(getattr(e, "response", None), "status_code", None)
+        return sub["endpoint"] if code in (404, 410) else "err"
+    except Exception:
+        return "err"
+
+
+async def push_to_user(user_id: str, title: str, body: str, url: str):
+    if not VAPID_PRIVATE_KEY:
+        return
+    payload = json.dumps({"title": title, "body": body, "url": url})
+    subs = []
+    async for s in db.push_subscriptions.find({"user_id": user_id}):
+        subs.append(s)
+    for s in subs:
+        dead = await asyncio.to_thread(_sync_web_push, s, payload)
+        if dead and dead != "err":
+            await db.push_subscriptions.delete_one({"endpoint": dead})
 
 
 @api_router.get("/notifications")
@@ -724,6 +795,87 @@ async def mark_read(notif_id: str, user: dict = Depends(get_current_user)):
 async def mark_all_read(user: dict = Depends(get_current_user)):
     await db.notifications.update_many({"user_id": user["user_id"]}, {"$set": {"read": True}})
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Web Push
+# ---------------------------------------------------------------------------
+@api_router.get("/push/vapid-public-key")
+async def vapid_public_key():
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+
+@api_router.post("/push/subscribe")
+async def push_subscribe(inp: PushSubscriptionInput, user: dict = Depends(get_current_user)):
+    await db.push_subscriptions.update_one(
+        {"endpoint": inp.endpoint},
+        {"$set": {
+            "endpoint": inp.endpoint,
+            "keys": inp.keys,
+            "user_id": user["user_id"],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }, "$setOnInsert": {"created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.post("/push/unsubscribe")
+async def push_unsubscribe(inp: PushSubscriptionInput, user: dict = Depends(get_current_user)):
+    await db.push_subscriptions.delete_one({"endpoint": inp.endpoint, "user_id": user["user_id"]})
+    return {"ok": True}
+
+
+@api_router.get("/push/status")
+async def push_status(user: dict = Depends(get_current_user)):
+    count = await db.push_subscriptions.count_documents({"user_id": user["user_id"]})
+    return {"subscribed": count > 0}
+
+
+# ---------------------------------------------------------------------------
+# Weekly digest
+# ---------------------------------------------------------------------------
+async def generate_weekly_digest() -> int:
+    today = datetime.now(timezone.utc).date()
+    week_end = today + timedelta(days=7)
+    sent = 0
+    async for u in db.users.find({}, {"_id": 0}):
+        fids = await accepted_friend_ids(u["user_id"])
+        if not fids:
+            continue
+        plans = {}  # event name -> set of friend first names
+        async for it in db.interests.find({"user_id": {"$in": fids},
+                                           "status": {"$in": ["voy", "me_interesa"]}}):
+            ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+            if not ev:
+                continue
+            try:
+                d = date.fromisoformat(ev["date"])
+            except Exception:
+                continue
+            if not (today <= d <= week_end):
+                continue
+            fu = await db.users.find_one({"user_id": it["user_id"]}, {"_id": 0})
+            plans.setdefault(ev["name"], set())
+            if fu:
+                plans[ev["name"]].add(fu["name"].split(" ")[0])
+        if not plans:
+            continue
+        n = len(plans)
+        names = list(plans.keys())[:3]
+        msg = f"Tus amigos tienen {n} plan{'es' if n > 1 else ''} esta semana: " + ", ".join(names)
+        if n > 3:
+            msg += "…"
+        await create_notification(u["user_id"], "weekly_digest", msg, {})
+        sent += 1
+    logger.info(f"Resumen semanal enviado a {sent} usuarios")
+    return sent
+
+
+@api_router.post("/admin/trigger-weekly-digest")
+async def trigger_weekly_digest(admin: dict = Depends(require_admin)):
+    sent = await generate_weekly_digest()
+    return {"sent": sent}
 
 
 @api_router.get("/")
@@ -816,6 +968,16 @@ async def on_startup():
         logger.error(f"Storage init falló: {e}")
     await seed_admin()
     await seed_events()
+    global scheduler
+    try:
+        scheduler = AsyncIOScheduler(timezone="Europe/Madrid")
+        # Friday at 12:00 (Palma time) — weekly plans digest
+        scheduler.add_job(generate_weekly_digest, "cron", day_of_week="fri", hour=12, minute=0,
+                          id="weekly_digest", replace_existing=True)
+        scheduler.start()
+        logger.info("Scheduler iniciado (resumen semanal viernes 12:00)")
+    except Exception as e:
+        logger.error(f"Scheduler init falló: {e}")
 
 
 app.include_router(api_router)

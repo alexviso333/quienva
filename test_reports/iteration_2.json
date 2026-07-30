@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 2 testing (invite auto-add + weekly digest + web push + regressions). Backend: 10/10 new pytest cases pass (test_iteration2.py) covering POST /api/friends/request-by-username (success + 404 + duplicate no-400 regression), POST /api/admin/trigger-weekly-digest (admin gate + end-to-end notification creation with a friend voy on an event within 7 days), and /api/push/{vapid-public-key,status,subscribe,unsubscribe} auth + persistence. Full previous suite still passes 16/16, so 26/26 backend. Frontend Playwright: /login?add=marta shows invite-banner naming @marta, forces register tab, stores localStorage qv_pending_add=marta. Registering a fresh user via UI triggers auto friend-request to marta (verified via marta's notifications API) and toast 'Solicitud de amistad enviada a @marta' appears; qv_pending_add is removed after processing. Existing-user LOGIN via /login?add=bob also auto-fires the request (bob got friend_request notification) and clears qv_pending_add. Profile page renders push-toggle-btn 'Activar avisos en el móvil' when accessed at /profile; clicking it (in headless incognito Chromium where Push API is unavailable) shows an error toast and does NOT crash the app. GET /api/push/status returns {subscribed:false} and endpoint requires auth (401 unauth). Duplicate-friend-request regression fully verified via backend (returns 200 with status=accepted instead of 400).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login /login?add=<user>", "issues": ["Invite banner shows a decorative '@' avatar circle immediately followed by '@marta' text — reads as '@@marta' when extracting text (visually two separate elements). Purely cosmetic; consider removing the leading '@' from the avatar or using just an icon."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_iteration2.py",
+    "/app/test_reports/pytest/iteration2_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL cosmetic: invite-banner avatar circle contains a literal '@' that visually duplicates with the '@username' text right after it — swap for an icon or remove the '@' from the badge."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 997 lines (>700 threshold) — split into routers (auth, events, friends, admin, notifications, push, digest) is even more urgent.",
+    "generate_weekly_digest() iterates all interests per user and re-fetches each event and each friend inside the loop — O(users * interests * 2). Fine for MVP but should batch-fetch events/users once for larger datasets.",
+    "push_to_user() uses asyncio.create_task fire-and-forget inside create_notification — silent failures. Consider logging exceptions from the background task via a done_callback.",
+    "do_friend_request now returns {'status':'accepted'} idempotently on duplicates — good regression fix. Consider still returning a hint field like already_friends:true so the UI can suppress the 'solicitud enviada' toast when appropriate.",
+    "/api/push/vapid-public-key is unauthenticated (OK — public key is not sensitive), but consider caching header to avoid repeated fetches.",
+    "Login.js invite-banner: the leading '@' circle+text produces visual duplication ('@ @marta')."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2.py"
+  ],
+  "success_rate": { "backend": "100% (26/26)", "frontend": "100% of testable flows (real push delivery not testable in headless per task spec)" },
+  "test_credentials": "Admin admin@quienva.app / QuienVa2026! confirmed working. marta/bob users auto-created by test where absent.",
+  "seed_data_creation": "Test users test_inv_*, test_new_*, test_dup_a/b_*, test_wd_a/b_*, test_ui_*, test_existing_*; TEST_WD_ event auto-deleted after digest test. marta@test.com and bob@test.com created if missing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 2 features fully covered by /app/backend/tests/test_iteration2.py. Real Web Push DELIVERY cannot be tested in headless Chromium (Push API disabled in incognito). Route for profile is /profile (NOT /perfil). Login flow returns {user, token}; token stored in localStorage as qv_token and pending invite in qv_pending_add — consumed by AuthContext.processPendingInvite() after auth.",
+  "rca_of_the_issue": "N/A — no bugs found. Only cosmetic double '@' observation on invite banner."
+}
