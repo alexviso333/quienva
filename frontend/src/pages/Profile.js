@@ -20,6 +20,7 @@ export default function Profile() {
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [streakLoaded, setStreakLoaded] = useState(false);
   const pushSupported = isPushSupported();
 
   useEffect(() => {
@@ -27,7 +28,10 @@ export default function Profile() {
   }, [pushSupported]);
 
   useEffect(() => {
-    api.get("/me/streak").then(({ data }) => setStreak(data.streak)).catch(() => {});
+    api.get("/me/streak")
+      .then(({ data }) => setStreak(data.streak))
+      .catch(() => {})
+      .finally(() => setStreakLoaded(true));
   }, []);
 
   const togglePush = async () => {
@@ -116,6 +120,7 @@ export default function Profile() {
       </div>
 
       <div className="px-5 mb-2">
+        {streakLoaded && (
         <div
           data-testid="streak-card"
           className="relative rounded-2xl overflow-hidden border border-qv-primary/40 bg-[#1a0a12] p-4 flex items-center gap-4"
@@ -135,6 +140,7 @@ export default function Profile() {
             </p>
           </div>
         </div>
+        )}
       </div>
 
       <div className="px-5 flex flex-col gap-3">

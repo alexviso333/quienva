@@ -26,11 +26,17 @@ Mobile-first PWA "¿Quién va?" for youth (16-25) in Palma de Mallorca to decide
 7. In-app notifications (bell) on friend "Voy" + friend requests/accepts. ✅ (weekly digest scheduler deferred)
 - Privacy: interests visible only to accepted friends. ✅
 
-## Implemented (2026-07-30)
+## Implemented (2026-07-30 → 2026-07-31)
 - Full auth (email/password + Google OAuth callback), admin seed (admin@quienva.app).
 - Friends flow, events feed + filters, Voy/Me interesa core with social proof + privacy.
 - Admin CRUD + image upload, avatar upload, in-app notifications with unread badge.
-- Seeded 6 sample Palma events. Verified: 16/16 backend tests, ~95% frontend flows.
+- Weekly digest (Fri 12:00 APScheduler + admin trigger); invite link auto-add (?add=username); Web Push (VAPID) + PWA manifest/service worker/icon.
+- DENSER compact feed; Event reminders (voy few hours before + me_interesa day-of); "Estuve"/Recuerdos past-events mode; mutual friends count; WhatsApp share + deep link.
+- Event Detail page /event/:id (map + directions + full friend lists); Racha de salidas (streak) on Profile; Top del finde banner.
+- Verified: 54/54 backend tests pass; frontend flows 100%.
+
+## Self-hosting note (future)
+App is env-driven and portable. To host fully independent of Emergent later, replace only: (1) object storage (integrations.emergentagent.com) and (2) Emergent Google OAuth (auth.emergentagent.com). Email/password auth, Mongo, Web Push (self-owned VAPID) are already independent.
 
 ## Backlog / Not yet built
 - P1: Weekly summary notification (Friday digest) — needs scheduler/cron.
