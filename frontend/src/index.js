@@ -7,8 +7,17 @@ import App from "@/App";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60_000,
+      // Data is considered fresh for 5 min — no refetch when re-visiting a page.
+      staleTime: 5 * 60_000,
+      // Keep unused query data in cache for 30 min → back navigation is instant.
+      gcTime: 30 * 60_000,
       refetchOnWindowFocus: false,
+      refetchOnReconnect: "always",
+      retry: 1,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+    },
+    mutations: {
+      retry: 0,
     },
   },
 });

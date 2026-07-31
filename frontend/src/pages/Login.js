@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -9,12 +10,18 @@ import { toast } from "sonner";
 export default function Login() {
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
   const [invitedBy, setInvitedBy] = useState(null);
   const [form, setForm] = useState({ email: "", password: "", name: "", username: "", city: "Palma de Mallorca" });
 
   useEffect(() => {
+    // WARMUP PING: fire-and-forget health check to wake up the backend
+    // (Render free tier sleeps after 15 min). By the time the user submits
+    // the form, the server is warm → login feels instant.
+    api.get("/health").catch(() => {});
+
     const params = new URLSearchParams(window.location.search);
     const add = params.get("add");
     if (add) {
@@ -59,6 +66,20 @@ export default function Login() {
         }
       }
       const onboarded = localStorage.getItem("qv_onboarded") === "1";
+      // PREFETCH: start loading feed + carousels in parallel while the router
+      // transitions to /feed → the page renders instantly instead of showing a spinner.
+      qc.prefetchQuery({
+        queryKey: ["events", "all", "all"],
+        queryFn: async () => (await api.get("/events", { params: { date_filter: "all", genre: "all" } })).data,
+      });
+      qc.prefetchQuery({
+        queryKey: ["carousels"],
+        queryFn: async () => (await api.get("/events/carousels")).data,
+      });
+      qc.prefetchQuery({
+        queryKey: ["top-weekend"],
+        queryFn: async () => (await api.get("/events/top-weekend")).data,
+      });
       navigate(onboarded ? "/feed" : "/onboarding");
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || err.message);

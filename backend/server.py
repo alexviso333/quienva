@@ -8,6 +8,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Form, Query, Header
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import Response as StarletteResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
@@ -52,6 +53,10 @@ VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:hola@quienva.app")
 
 # In-memory TTL cache for expensive user-stats computation
 _STATS_CACHE = {}
+
+# In-memory TTL cache for /events/carousels (per user, short TTL)
+_CAROUSELS_CACHE = {}
+_CAROUSELS_TTL = 20  # seconds
 
 scheduler = None
 
@@ -575,10 +580,14 @@ def date_in_filter(event_date_str: str, flt: str) -> bool:
     return d >= today
 
 
-async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map: dict | None = None) -> dict:
-    interests = []
-    async for it in db.interests.find({"event_id": ev["id"]}):
-        interests.append(it)
+async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map: dict | None = None,
+                          interests_by_event: dict | None = None) -> dict:
+    if interests_by_event is not None:
+        interests = interests_by_event.get(ev["id"], [])
+    else:
+        interests = []
+        async for it in db.interests.find({"event_id": ev["id"]}):
+            interests.append(it)
 
     # Batch-load friend users if not provided
     if users_map is None:
@@ -643,13 +652,25 @@ async def list_events(user: dict = Depends(get_current_user),
         async for u in db.users.find({"user_id": {"$in": list(friend_ids)}}, {"_id": 0}):
             users_map[u["user_id"]] = u
 
-    events = []
+    # First pass: load & filter events
+    filtered_events = []
     async for ev in db.events.find(query, {"_id": 0}).sort("date", sort_dir):
         if not date_in_filter(ev["date"], date_filter):
             continue
         if genre != "all" and ev.get("genre") != genre:
             continue
-        events.append(await serialize_event(ev, user, friend_ids, users_map))
+        filtered_events.append(ev)
+
+    # BULK LOAD all interests for these events in ONE query (avoid N+1)
+    event_ids = [ev["id"] for ev in filtered_events]
+    interests_by_event: dict = {eid: [] for eid in event_ids}
+    if event_ids:
+        async for it in db.interests.find({"event_id": {"$in": event_ids}}):
+            interests_by_event.setdefault(it["event_id"], []).append(it)
+
+    events = []
+    for ev in filtered_events:
+        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event))
     return events
 
 
@@ -685,6 +706,14 @@ async def top_weekend(user: dict = Depends(get_current_user)):
 @api_router.get("/events/carousels")
 async def event_carousels(user: dict = Depends(get_current_user)):
     """Home-page carousels: top del finde (list), lo que va tu grupo, descubrir géneros."""
+    # TTL cache (per user, 20s) — carousels are heavy but data doesn't change every second.
+    try:
+        entry = _CAROUSELS_CACHE.get(user["user_id"])
+        if entry and (time.time() - entry[0]) < _CAROUSELS_TTL:
+            return entry[1]
+    except Exception:
+        pass
+
     friend_ids = await accepted_friend_ids(user["user_id"])
     today = datetime.now(ZoneInfo("Europe/Madrid")).date()
     city = user.get("city", "Palma de Mallorca")
@@ -706,10 +735,27 @@ async def event_carousels(user: dict = Depends(get_current_user)):
             continue
         all_upcoming.append((d, ev))
 
+    # BULK LOAD all interests for these events in ONE query (avoid N+1 per serialize_event)
+    upcoming_ids = [ev["id"] for _, ev in all_upcoming]
+    interests_by_event: dict = {eid: [] for eid in upcoming_ids}
+    if upcoming_ids:
+        async for it in db.interests.find({"event_id": {"$in": upcoming_ids}}):
+            interests_by_event.setdefault(it["event_id"], []).append(it)
+
+    # BULK LOAD user's own interests once (for discover_new "my_genres")
+    my_interests = []
+    async for it in db.interests.find({"user_id": user["user_id"]}):
+        my_interests.append(it)
+    my_event_ids = list({it["event_id"] for it in my_interests})
+    my_events_map = {}
+    if my_event_ids:
+        async for ev in db.events.find({"id": {"$in": my_event_ids}}, {"_id": 0, "id": 1, "genre": 1}):
+            my_events_map[ev["id"]] = ev
+
     # ---- Top del finde: upcoming Fri-Sun (or next 7 days) sorted by attendance ----
     week_end = today + timedelta(days=7)
     weekend_serialized = [
-        await serialize_event(ev, user, friend_ids, users_map)
+        await serialize_event(ev, user, friend_ids, users_map, interests_by_event)
         for d, ev in all_upcoming if d <= week_end
     ]
     top_weekend_list = sorted(
@@ -721,7 +767,7 @@ async def event_carousels(user: dict = Depends(get_current_user)):
     friends_going_list = []
     if friend_ids:
         for d, ev in all_upcoming:
-            se = await serialize_event(ev, user, friend_ids, users_map)
+            se = await serialize_event(ev, user, friend_ids, users_map, interests_by_event)
             if (len(se["friends_going"]) + len(se["friends_interested"])) > 0:
                 friends_going_list.append(se)
         friends_going_list = sorted(
@@ -731,24 +777,33 @@ async def event_carousels(user: dict = Depends(get_current_user)):
 
     # ---- Descubre géneros nuevos: upcoming events in genres the user has NOT interacted with ----
     my_genres = set()
-    async for it in db.interests.find({"user_id": user["user_id"]}):
-        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0, "genre": 1})
-        if ev and ev.get("genre"):
-            my_genres.add(ev["genre"])
+    for it in my_interests:
+        ev_g = my_events_map.get(it["event_id"])
+        if ev_g and ev_g.get("genre"):
+            my_genres.add(ev_g["genre"])
     discover_new = []
     for d, ev in all_upcoming:
         g = ev.get("genre")
         if not g or g in my_genres:
             continue
-        discover_new.append(await serialize_event(ev, user, friend_ids, users_map))
+        discover_new.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event))
         if len(discover_new) >= 8:
             break
 
-    return {
+    result = {
         "top_weekend": top_weekend_list,
         "friends_going": friends_going_list,
         "discover_new": discover_new,
     }
+    try:
+        _CAROUSELS_CACHE[user["user_id"]] = (time.time(), result)
+        if len(_CAROUSELS_CACHE) > 500:
+            items = sorted(_CAROUSELS_CACHE.items(), key=lambda kv: kv[1][0])
+            for k, _ in items[:250]:
+                _CAROUSELS_CACHE.pop(k, None)
+    except Exception:
+        pass
+    return result
 
 
 @api_router.get("/me/streak")
@@ -904,14 +959,25 @@ async def _compute_user_stats(user_id: str) -> dict:
     dates_list = []  # to detect same-day multiple events
     early_bird = False
 
+    # Load ALL interests + events in bulk (avoid N+1: previous code did a
+    # find_one on events for every single interest).
+    interests_list = []
     async for it in db.interests.find({"user_id": user_id}):
+        interests_list.append(it)
+    event_ids_needed = list({it["event_id"] for it in interests_list})
+    events_map = {}
+    if event_ids_needed:
+        async for ev in db.events.find({"id": {"$in": event_ids_needed}}, {"_id": 0}):
+            events_map[ev["id"]] = ev
+
+    for it in interests_list:
         if it["status"] == "voy":
             going += 1
         if it["status"] == "me_interesa":
             interested += 1
         if it["status"] == "estuve":
             attended += 1
-        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+        ev = events_map.get(it["event_id"])
         if not ev:
             continue
         if it["status"] in ("voy", "estuve") and ev.get("genre"):
@@ -1120,11 +1186,15 @@ def _invalidate_stats_cache(user_id: str = None):
     """Call whenever activity changes (interest, friend, story, etc.). If user_id
     is None, wipe everything."""
     try:
-        global _STATS_CACHE
+        global _STATS_CACHE, _CAROUSELS_CACHE
         if user_id is None:
             _STATS_CACHE.clear()
+            _CAROUSELS_CACHE.clear()
         else:
             _STATS_CACHE.pop(user_id, None)
+            # Interests/friends affect carousels for the user AND their friends.
+            # Simpler and safe: clear whole carousels cache (it's short-lived, 20s).
+            _CAROUSELS_CACHE.clear()
     except Exception:
         pass
 
@@ -3252,25 +3322,42 @@ async def on_startup():
     try:
         await db.users.create_index("email", unique=True)
         await db.users.create_index("username", unique=True)
+        await db.users.create_index("user_id", unique=True)
+        await db.users.create_index("city")
+        await db.users.create_index("referral_code")
+        await db.users.create_index("referred_by")
+        await db.users.create_index("created_at")
         await db.sessions.create_index("session_token", unique=True)
+        await db.sessions.create_index("user_id")
         # Performance indices (idempotent) — speed up hot queries
         await db.interests.create_index([("user_id", 1), ("event_id", 1)])
         await db.interests.create_index([("event_id", 1), ("status", 1)])
+        await db.interests.create_index("event_id")
         await db.interests.create_index("user_id")
-        await db.friendships.create_index([("from_user_id", 1), ("to_user_id", 1)])
-        await db.friendships.create_index([("to_user_id", 1), ("status", 1)])
+        # CRITICAL FIX: friendships uses requester_id/addressee_id in code,
+        # NOT from_user_id/to_user_id (old indexes were dead weight).
+        await db.friendships.create_index([("requester_id", 1), ("addressee_id", 1)])
+        await db.friendships.create_index([("addressee_id", 1), ("status", 1)])
+        await db.friendships.create_index([("requester_id", 1), ("status", 1)])
+        await db.friendships.create_index("id")
         await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
         await db.notifications.create_index([("user_id", 1), ("read", 1)])
         await db.stories.create_index([("user_id", 1), ("created_at", -1)])
+        await db.stories.create_index("expires_at")
         await db.dm_messages.create_index([("thread_key", 1), ("created_at", 1)])
         await db.dm_messages.create_index([("to_user_id", 1), ("read", 1)])
         await db.group_messages.create_index([("group_id", 1), ("created_at", 1)])
         await db.groups.create_index("member_ids")
         await db.captures.create_index([("event_id", 1), ("user_id", 1)])
+        await db.captures.create_index("user_id")
         await db.album_uploads.create_index([("event_id", 1), ("created_at", -1)])
         await db.album_uploads.create_index("user_id")
+        # Compound index for the feed's main query (city + date)
+        await db.events.create_index([("city", 1), ("date", 1)])
+        await db.events.create_index("id", unique=True)
         await db.events.create_index("date")
         await db.moment_prompts.create_index("event_id", unique=True)
+        await db.ticket_purchases.create_index([("user_id", 1), ("confirmed", 1)])
     except Exception as e:
         logger.warning(f"Index warn: {e}")
     await seed_admin()
@@ -3447,6 +3534,23 @@ async def next_badges(user: dict = Depends(get_current_user), limit: int = Query
 app.include_router(api_router)
 
 
+# =========================================================================
+# HEALTH CHECK — public endpoint for keep-alive pings (cron-job.org / UptimeRobot)
+# Kept ultra-lightweight: no DB call, just proves the process is up.
+# =========================================================================
+@app.get("/api/health")
+async def health():
+    return {"ok": True, "ts": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/health")
+async def health_root():
+    return {"ok": True}
+
+
+# GZip compression: shrinks JSON responses ~5-10x on the wire.
+# Only compress payloads >= 500 bytes (small responses aren't worth CPU).
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 
 _cors_env = os.environ.get('CORS_ORIGINS', '*').strip()
