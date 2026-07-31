@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
-import { Bell, UserPlus, PartyPopper, Check, CheckCheck, CalendarDays, AlarmClock } from "lucide-react";
+import { Bell, UserPlus, PartyPopper, Check, CheckCheck, CalendarDays, AlarmClock, Star } from "lucide-react";
 
 const ICONS = {
   friend_going: PartyPopper,
@@ -10,6 +10,7 @@ const ICONS = {
   friend_accept: Check,
   weekly_digest: CalendarDays,
   event_reminder: AlarmClock,
+  interested_reminder: Star,
 };
 
 function timeAgo(iso) {

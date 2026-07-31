@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "@/lib/api";
+import api, { mediaUrl } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
+import { AvatarCircle } from "@/components/AvatarCircle";
 import { useAuth } from "@/context/AuthContext";
-import { Loader2, PartyPopper } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 const DATE_FILTERS = [
@@ -19,6 +20,7 @@ const DATE_FILTERS = [
 export default function Feed() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dateFilter, setDateFilter] = useState("all");
   const [genre, setGenre] = useState("all");
@@ -26,6 +28,11 @@ export default function Feed() {
   const cardRefs = useRef({});
 
   const isPastView = dateFilter === "pasados";
+
+  const { data: topEvent } = useQuery({
+    queryKey: ["top-weekend"],
+    queryFn: async () => (await api.get("/events/top-weekend")).data,
+  });
 
   const { data: genres = [] } = useQuery({
     queryKey: ["genres"],
@@ -41,6 +48,7 @@ export default function Feed() {
     mutationFn: async ({ eventId, status }) => (await api.post(`/events/${eventId}/interest`, { status })).data,
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["top-weekend"] });
       if (vars.status === "voy") toast.success("¡Apuntado! Tus amigos ya lo verán 🎉");
       if (vars.status === "estuve") toast.success("Guardado en tus recuerdos ✨");
     },
@@ -118,6 +126,38 @@ export default function Feed() {
       )}
 
       <div className="flex flex-col gap-4 px-4 pt-1">
+        {!isPastView && topEvent && (topEvent.friends_going || []).length > 0 && (
+          <button
+            data-testid="top-weekend-banner"
+            onClick={() => navigate(`/event/${topEvent.id}`)}
+            className="relative w-full text-left rounded-2xl overflow-hidden border border-qv-primary/40 bg-[#1a0a12] active:scale-[0.99] transition-transform"
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,_rgba(255,0,85,0.25),transparent_60%)]" />
+            <div className="relative flex items-center gap-3 p-3">
+              {topEvent.image_url && (
+                <img src={mediaUrl(topEvent.image_url)} alt={topEvent.name} className="w-16 h-16 rounded-xl object-cover shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-qv-primary">
+                  <Flame className="w-3.5 h-3.5" /> Top del finde
+                </p>
+                <p className="font-display font-bold text-white truncate mt-0.5">{topEvent.name}</p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <div className="flex -space-x-2">
+                    {topEvent.friends_going.slice(0, 3).map((f, i) => (
+                      <AvatarCircle key={f.user_id + i} name={f.name} picture={f.picture} size={22} />
+                    ))}
+                  </div>
+                  <span className="text-xs text-white/80 font-semibold">
+                    {topEvent.friends_going.length} amigo{topEvent.friends_going.length > 1 ? "s" : ""} {topEvent.friends_going.length > 1 ? "van" : "va"}
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-white/40 shrink-0" />
+            </div>
+          </button>
+        )}
+
         {isLoading ? (
           <div className="flex justify-center py-20">
             <Loader2 className="w-7 h-7 text-qv-primary animate-spin" />

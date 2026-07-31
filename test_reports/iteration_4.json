@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 4 (Detalle del plan, Racha, Top del finde, Recordar interesados) validated end-to-end. Backend: new pytest file test_iteration4.py with 20 cases -> 20/20 PASS (event detail shape/404/auth/toggle-persistence/friend lists/friends_attended for past; /events/top-weekend not shadowed by /events/{id}, null when no friend going, picks event with MOST friends going, ignores me_interesa + past events; /me/streak 0/1/3, gap-break, ignores me_interesa, auth-gated; interested_reminder created with correct 'Hoy: ... te animas?' copy, dedupes on 2nd run, not sent for future-day events, 'voy' event_reminder still fires and dedupes independently, trigger-reminders is admin-only 403). Full suite 54 tests: all pass when files run individually (see flaky note). Frontend Playwright (390x844): login OK; top-weekend-banner shows 'TOP DEL FINDE' + event name + friend avatar + '1 amigo va' and navigates to /event/<id>; detail page shows name, venue+address, date/time, detail-map iframe, detail-directions with correct Google Maps dir URL, detail-ticket-btn for has_commission event and detail-info-btn for non-commission one, 'VAN A IR (1) BrunoUI' friend list, mutually-exclusive Voy/Me interesa toggle that persists after reload, detail-back returns to feed; event card image tap (event-open-<id>) opens detail; detail-nofriends shows when no friends; PAST event shows detail-estuve-btn + 'COINCIDISTE CON (1)' and no Voy/Interesa; Profile streak-card renders 2 with 'findes seguidos saliendo'; Notifications shows the interested_reminder with star icon. Banner correctly HIDDEN for a brand-new user with no friends going (and stays hidden after the user's own 'voy'). Regressions OK: 8 compact feed cards, 8 share buttons, feed Voy toggle + '¡Apuntado!' toast, Recuerdos view (heading 'Recuerdos.', Estuve button only, no Voy), friends page search/list, logout -> /login, admin panel lists 11 events with edit/delete testids.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/events/top-weekend", "issue": "Naming vs behaviour: it returns the best event within the next 7 days (any weekday), not specifically Fri-Sun, unlike the 'finde' date filter. Intentional? UI label says 'Top del finde' but a Monday/Tuesday event can be shown."},
+      {"endpoint": "GET /api/events/top-weekend", "issue": "Tie-breaking uses strict '>' so with equal friend counts the earliest-dated event wins (implicit, undocumented). Also runs full serialize_event() per candidate event (N x interests x user lookups) — O(n) Mongo round-trips per request."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Profile / streak card", "issues": ["streak-count renders the default 0 for ~1s before /api/me/streak resolves (no loading state), so the card briefly shows '0 / Empieza tu racha este finde' for users who DO have a streak. Consider a skeleton or hiding the card until data arrives."]},
+      {"screen": "Profile", "issues": ["/api/me/streak is requested twice on mount (React StrictMode double-effect). Harmless in dev but the fetch is in a bare useEffect instead of react-query like the rest of the app — inconsistent + no cache/refetch on interest change, so the streak is stale until a remount."]},
+      {"screen": "EventDetail hero", "issues": ["When event.image_url is empty the hero falls back to a gradient (good), but with no image the back/share buttons sit on a nearly-black hero — still legible; low priority."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4.py",
+    "/app/backend/tests/setup_ui_iteration4.py",
+    "/app/test_reports/pytest/iteration4_results.xml",
+    "/app/test_reports/pytest/all_results.xml"
+  ],
+  "action_items": [
+    "Optional: add a loading state (or use react-query) for /api/me/streak in Profile.js so the streak card doesn't flash '0'.",
+    "Optional: clarify /events/top-weekend window (next 7 days vs Fri-Sun) to match the 'Top del finde' label."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1132 lines — still well over the 700-line guideline; split into routers (auth, friends, events, admin, notifications, reminders).",
+    "GET /events/top-weekend calls serialize_event() for every event in the 7-day window, and serialize_event does a per-interest db.users.find_one. Combined with GET /events this is the app's main N+1; batch the user lookups with a single $in query.",
+    "/me/streak fetches each event document one-by-one for the user's interests (find_one in a loop). Use a single $in on event ids and project only 'date'.",
+    "Reminder dedupe still keys on {user_id, type, data.event_id} with no unique index — a concurrent double trigger could duplicate. Add a unique compound index on notifications (user_id, type, data.event_id) for reminder types."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration4.py",
+    "/app/backend/tests/setup_ui_iteration4.py"
+  ],
+  "success_rate": {"backend": "100% (20/20 new, 54/54 overall)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "Created throwaway users (test_i4*, uia*/uib*, lone*) and TEST_ prefixed events; all TEST_ events (including a stale TEST_UI_441960 left by a previous iteration) were deleted after the run, so only the 6 seeded Palma events remain. Test users were left in place (harmless).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@quienva.app / QuienVa2026! ; any created user uses password test1234",
+  "context_for_next_testing_agent": "Run backend tests per-file (pytest tests/test_iteration4.py) or expect one flaky failure: backend_test.py::TestInterestAndSocial::test_persistence_across_requests picks the FIRST upcoming event from /events, which can be a TEST_ event created (and later deleted) by test_iteration4.py running in another xdist worker -> KeyError 'my_status' from a 404 body. Passes 16/16 when backend_test.py runs alone. Fix suggestion for the dev/next tester: make _first_event_id skip names starting with 'TEST_'. Use /app/backend/tests/setup_ui_iteration4.py to regenerate UI seed data (prints user emails + event ids as JSON). UI note: two 'Entrar' texts exist — use [data-testid=auth-submit]. Text in banner/section headings is CSS-uppercased, so assert case-insensitively ('VAN A IR', 'TOP DEL FINDE').",
+  "rca_of_the_issue": "No product defects found this iteration. The only observed anomaly (Profile showing streak 0) was a test-timing artifact: the streak card renders its default state before the /api/me/streak response arrives; after a 4s wait it correctly shows 2 (API also returns {streak:2}). Reported as a design/loading-state nit, not a bug. The single flaky backend failure is cross-test data interference between xdist workers, not an application error."
+}

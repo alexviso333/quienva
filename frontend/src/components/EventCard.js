@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2 } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
@@ -26,6 +27,7 @@ const todayStr = () => {
 };
 
 export function EventCard({ event, index = 0, onSetStatus, pending, highlight, cardRef }) {
+  const navigate = useNavigate();
   const isPast = event.date < todayStr();
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
@@ -42,8 +44,9 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
 
   const toggle = (status) => onSetStatus(event.id, event.my_status === status ? "none" : status);
 
-  const shareWhatsApp = () => {
-    const link = `${window.location.origin}/feed?event=${event.id}`;
+  const shareWhatsApp = (e) => {
+    if (e) e.stopPropagation();
+    const link = `${window.location.origin}/event/${event.id}`;
     const text = `${event.name} · ${event.venue} · ${formatDate(event.date)}${event.time ? " " + event.time : ""} — míralo en ¿Quién va? y dime si vienes 👀 ${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   };
@@ -60,7 +63,11 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
       }`}
     >
       {/* Image banner */}
-      <div className="relative h-40">
+      <div
+        className="relative h-40 cursor-pointer"
+        onClick={() => navigate(`/event/${event.id}`)}
+        data-testid={`event-open-${event.id}`}
+      >
         {event.image_url ? (
           <img src={mediaUrl(event.image_url)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
         ) : (

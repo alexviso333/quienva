@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing } from "lucide-react";
+import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Flame } from "lucide-react";
 import { toast } from "sonner";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 
@@ -19,11 +19,16 @@ export default function Profile() {
   const [uploading, setUploading] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [streak, setStreak] = useState(0);
   const pushSupported = isPushSupported();
 
   useEffect(() => {
     if (pushSupported) getPushStatus().then(setPushOn);
   }, [pushSupported]);
+
+  useEffect(() => {
+    api.get("/me/streak").then(({ data }) => setStreak(data.streak)).catch(() => {});
+  }, []);
 
   const togglePush = async () => {
     setPushBusy(true);
@@ -108,6 +113,28 @@ export default function Profile() {
         </div>
         <p className="mt-4 text-xl font-bold">{user?.name}</p>
         <p className="text-white/40 text-sm">@{user?.username}</p>
+      </div>
+
+      <div className="px-5 mb-2">
+        <div
+          data-testid="streak-card"
+          className="relative rounded-2xl overflow-hidden border border-qv-primary/40 bg-[#1a0a12] p-4 flex items-center gap-4"
+        >
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,_rgba(255,0,85,0.22),transparent_65%)]" />
+          <div className="relative w-14 h-14 rounded-2xl bg-qv-primary/20 flex items-center justify-center shrink-0">
+            <Flame className="w-7 h-7 text-qv-primary" style={{ filter: "drop-shadow(0 0 8px rgba(255,0,85,0.7))" }} />
+          </div>
+          <div className="relative">
+            <p className="font-display text-3xl font-black leading-none" data-testid="streak-count">
+              {streak}
+            </p>
+            <p className="text-sm text-white/70 mt-1">
+              {streak === 0
+                ? "Empieza tu racha este finde 🔥"
+                : `finde${streak > 1 ? "s" : ""} seguido${streak > 1 ? "s" : ""} saliendo`}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="px-5 flex flex-col gap-3">

@@ -9,6 +9,7 @@ import Friends from "@/pages/Friends";
 import Notifications from "@/pages/Notifications";
 import Profile from "@/pages/Profile";
 import Admin from "@/pages/Admin";
+import EventDetail from "@/pages/EventDetail";
 import { Loader2 } from "lucide-react";
 
 function LoadingScreen() {
@@ -37,6 +38,7 @@ function AppRouter() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
+      <Route path="/event/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
       <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

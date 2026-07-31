@@ -612,6 +612,52 @@ async def list_genres(user: dict = Depends(get_current_user)):
     return [g for g in genres if g]
 
 
+@api_router.get("/events/top-weekend")
+async def top_weekend(user: dict = Depends(get_current_user)):
+    """The upcoming event (next 7 days) where the most of your friends are going."""
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    week_end = today + timedelta(days=7)
+    best = None
+    best_count = 0
+    async for ev in db.events.find({"city": user.get("city", "Palma de Mallorca")}, {"_id": 0}).sort("date", 1):
+        try:
+            d = date.fromisoformat(ev["date"])
+        except Exception:
+            continue
+        if not (today <= d <= week_end):
+            continue
+        se = await serialize_event(ev, user, friend_ids)
+        c = len(se["friends_going"])
+        if c > best_count:
+            best_count = c
+            best = se
+    return best
+
+
+@api_router.get("/me/streak")
+async def my_streak(user: dict = Depends(get_current_user)):
+    """Consecutive weeks the user went out (voy/estuve on an event that week)."""
+    mondays = set()
+    async for it in db.interests.find({"user_id": user["user_id"], "status": {"$in": ["voy", "estuve"]}}):
+        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+        if not ev:
+            continue
+        try:
+            d = date.fromisoformat(ev["date"])
+        except Exception:
+            continue
+        mondays.add(d - timedelta(days=d.weekday()))
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    this_monday = today - timedelta(days=today.weekday())
+    anchor = this_monday if this_monday in mondays else this_monday - timedelta(days=7)
+    streak = 0
+    while anchor in mondays:
+        streak += 1
+        anchor -= timedelta(days=7)
+    return {"streak": streak}
+
+
 @api_router.get("/events/{event_id}")
 async def get_event(event_id: str, user: dict = Depends(get_current_user)):
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
@@ -910,32 +956,50 @@ PALMA_TZ = ZoneInfo("Europe/Madrid")
 
 async def generate_event_reminders() -> int:
     now = datetime.now(PALMA_TZ)
+    today = now.date()
     horizon = now + timedelta(hours=3)
     sent = 0
+
+    async def already(uid, eid, ntype):
+        return await db.notifications.find_one({"user_id": uid, "type": ntype, "data.event_id": eid})
+
     async for ev in db.events.find({}, {"_id": 0}):
-        t = ev.get("time")
-        if not t:
-            continue
         try:
-            start = datetime.fromisoformat(f"{ev['date']}T{t}:00").replace(tzinfo=PALMA_TZ)
+            ev_date = date.fromisoformat(ev["date"])
         except Exception:
-            continue
-        if not (now <= start <= horizon):
-            continue
-        async for it in db.interests.find({"event_id": ev["id"], "status": "voy"}):
-            already = await db.notifications.find_one({
-                "user_id": it["user_id"],
-                "type": "event_reminder",
-                "data.event_id": ev["id"],
-            })
-            if already:
-                continue
-            await create_notification(
-                it["user_id"], "event_reminder",
-                f"¡Tu plan empieza pronto! {ev['name']} en {ev['venue']} a las {t}",
-                {"event_id": ev["id"]},
-            )
-            sent += 1
+            ev_date = None
+        t = ev.get("time")
+        start = None
+        if t:
+            try:
+                start = datetime.fromisoformat(f"{ev['date']}T{t}:00").replace(tzinfo=PALMA_TZ)
+            except Exception:
+                start = None
+
+        # 1) 'voy' — remind a few hours before it starts
+        if start and now <= start <= horizon:
+            async for it in db.interests.find({"event_id": ev["id"], "status": "voy"}):
+                if await already(it["user_id"], ev["id"], "event_reminder"):
+                    continue
+                await create_notification(
+                    it["user_id"], "event_reminder",
+                    f"¡Tu plan empieza pronto! {ev['name']} en {ev['venue']} a las {t}",
+                    {"event_id": ev["id"]},
+                )
+                sent += 1
+
+        # 2) 'me_interesa' — nudge on the day of the event
+        if ev_date == today:
+            async for it in db.interests.find({"event_id": ev["id"], "status": "me_interesa"}):
+                if await already(it["user_id"], ev["id"], "interested_reminder"):
+                    continue
+                await create_notification(
+                    it["user_id"], "interested_reminder",
+                    f"Hoy: {ev['name']} en {ev['venue']} — te interesaba, ¿te animas?",
+                    {"event_id": ev["id"]},
+                )
+                sent += 1
+
     if sent:
         logger.info(f"Recordatorios enviados: {sent}")
     return sent
