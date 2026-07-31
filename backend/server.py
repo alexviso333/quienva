@@ -2430,7 +2430,9 @@ async def send_dm(inp: DMSendInput, user: dict = Depends(get_current_user)):
     friend_ids = await accepted_friend_ids(user["user_id"])
     if inp.to_user_id not in friend_ids:
         raise HTTPException(status_code=403, detail="Solo puedes hablar con amigos")
-    text = inp.text.strip()[:1000]
+    if len(inp.text) > 1000:
+        raise HTTPException(status_code=400, detail="Mensaje demasiado largo (máx 1000)")
+    text = inp.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Escribe un mensaje")
     msg = {
@@ -2632,7 +2634,9 @@ async def list_group_messages(group_id: str, user: dict = Depends(get_current_us
 @api_router.post("/groups/{group_id}/messages")
 async def send_group_message(group_id: str, inp: GroupMessageInput, user: dict = Depends(get_current_user)):
     g = await _group_or_404(group_id, user["user_id"])
-    text = inp.text.strip()[:1000]
+    text = inp.text.strip()
+    if len(text) > 1000:
+        raise HTTPException(status_code=400, detail="Mensaje demasiado largo (máx 1000)")
     if not text:
         raise HTTPException(status_code=400, detail="Escribe algo")
     msg = {
