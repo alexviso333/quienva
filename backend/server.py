@@ -784,6 +784,8 @@ async def edit_event(event_id: str, inp: EventInput, admin: dict = Depends(requi
 async def delete_event(event_id: str, admin: dict = Depends(require_admin)):
     await db.events.delete_one({"id": event_id})
     await db.interests.delete_many({"event_id": event_id})
+    await db.event_messages.delete_many({"event_id": event_id})
+    await db.notifications.delete_many({"data.event_id": event_id})
     return {"ok": True}
 
 
@@ -1215,9 +1217,10 @@ async def list_event_messages(event_id: str, user: dict = Depends(get_current_us
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
     out = []
-    async for m in db.event_messages.find({"event_id": event_id}, {"_id": 0}).sort("created_at", 1).limit(100):
+    async for m in db.event_messages.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1).limit(100):
         au = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0})
         out.append({**m, "author": _msg_author(au), "is_mine": m["user_id"] == user["user_id"]})
+    out.reverse()
     return out
 
 
@@ -1291,9 +1294,12 @@ async def generate_weekend_recap() -> int:
 
         if my_plans + len(group_events) + photos == 0:
             continue
+        week_key = last_friday.isoformat()
+        if await db.notifications.find_one({"user_id": u["user_id"], "type": "weekend_recap", "data.week": week_key}):
+            continue
         msg = (f"Recuerdo del finde 🎉 Fuiste a {my_plans} plan{'es' if my_plans != 1 else ''}, "
                f"tu grupo se apuntó a {len(group_events)} y subisteis {photos} foto{'s' if photos != 1 else ''}.")
-        await create_notification(u["user_id"], "weekend_recap", msg, {})
+        await create_notification(u["user_id"], "weekend_recap", msg, {"week": week_key})
         sent += 1
     logger.info(f"Recuerdo del finde enviado a {sent} usuarios")
     return sent

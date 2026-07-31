@@ -223,13 +223,13 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
             <p className="text-white/50 text-xs">Aún nadie ha reaccionado</p>
           )
         ) : (
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             {["❤️", "🔥", "😂", "😮"].map((emo) => (
               <button
                 key={emo}
                 data-testid={`story-react-${emo}`}
                 onClick={() => react.mutate(emo)}
-                className="text-2xl active:scale-125 transition-transform"
+                className="text-xl active:scale-125 transition-transform shrink-0"
               >
                 {emo}
               </button>
@@ -239,8 +239,8 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
               value={reactText}
               onChange={(e) => setReactText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && reactText.trim()) react.mutate(reactText.trim()); }}
-              placeholder="Envía un mensaje…"
-              className="flex-1 h-10 rounded-full bg-white/10 border border-white/20 px-4 text-white text-sm placeholder:text-white/50 outline-none"
+              placeholder="Mensaje…"
+              className="flex-1 min-w-0 h-10 rounded-full bg-white/10 border border-white/20 px-3 text-white text-sm placeholder:text-white/50 outline-none"
             />
             <button
               data-testid="story-react-send"
@@ -320,41 +320,47 @@ export function StoriesArchive({ open, onOpenChange }) {
     : null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="font-display">Tu archivo de historias</DialogTitle>
-          <DialogDescription className="text-white/50">
-            Solo tú ves esto. Revive tus noches pasadas.
-          </DialogDescription>
-        </DialogHeader>
-        {stories.length === 0 ? (
-          <p className="text-white/40 text-sm py-10 text-center" data-testid="archive-empty">
-            Todavía no has subido ninguna historia.
-          </p>
-        ) : (
-          <div className="grid grid-cols-3 gap-2" data-testid="stories-archive-grid">
-            {stories.map((s, i) => (
-              <button
-                key={s.id}
-                data-testid={`archive-item-${s.id}`}
-                onClick={() => setViewerIdx(i)}
-                className="relative aspect-[3/4] rounded-xl overflow-hidden border border-white/10"
-              >
-                <img src={mediaUrl(s.image_url)} alt="" className="w-full h-full object-cover" />
-                {s.reactions && s.reactions.length > 0 && (
-                  <span className="absolute bottom-1 right-1 text-xs bg-black/60 rounded-full px-1.5 py-0.5">
-                    {s.reactions.length} 💌
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </DialogContent>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Tu archivo de historias</DialogTitle>
+            <DialogDescription className="text-white/50">
+              Solo tú ves esto. Revive tus noches pasadas.
+            </DialogDescription>
+          </DialogHeader>
+          {stories.length === 0 ? (
+            <p className="text-white/40 text-sm py-10 text-center" data-testid="archive-empty">
+              Todavía no has subido ninguna historia.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2" data-testid="stories-archive-grid">
+              {stories.map((s, i) => (
+                <button
+                  key={s.id}
+                  data-testid={`archive-item-${s.id}`}
+                  onClick={() => { setViewerIdx(i); onOpenChange(false); }}
+                  className="relative aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-white/5"
+                >
+                  <img src={mediaUrl(s.image_url)} alt="" className="w-full h-full object-cover" />
+                  {s.reactions && s.reactions.length > 0 && (
+                    <span className="absolute bottom-1 right-1 text-xs bg-black/60 rounded-full px-1.5 py-0.5">
+                      {s.reactions.length} 💌
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       {viewerIdx !== null && myGroup && (
-        <StoryViewer group={myGroup} startIndex={viewerIdx} onClose={() => setViewerIdx(null)} />
+        <StoryViewer
+          group={myGroup}
+          startIndex={viewerIdx}
+          onClose={() => { setViewerIdx(null); onOpenChange(true); }}
+        />
       )}
-    </Dialog>
+    </>
   );
 }
