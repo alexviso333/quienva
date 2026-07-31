@@ -7,7 +7,7 @@ import requests
 import time
 import json
 
-BASE_URL = "https://8212b2f0-abf2-44ec-8d3e-ed989692e2c0.preview.emergentagent.com/api"
+BASE_URL = "https://quick-deploy-311.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
