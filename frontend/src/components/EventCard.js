@@ -1,8 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2 } from "lucide-react";
+import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { mediaUrl } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 function friendsText(friends, verb) {
   if (!friends || friends.length === 0) return null;
@@ -10,6 +11,18 @@ function friendsText(friends, verb) {
   if (friends.length === 1) return `${first} ${verb}`;
   const rest = friends.length - 1;
   return `${first} y ${rest} ${verb}`;
+}
+
+function friendsTextWithSelf(friends, isMe, verbSingle, verbPlural) {
+  // Total count including current user if applicable
+  const count = friends.length + (isMe ? 1 : 0);
+  if (count === 0) return null;
+  const verb = count === 1 ? verbSingle : verbPlural;
+  if (isMe && friends.length === 0) return `Tú ${verb}`;
+  if (isMe) return `Tú y ${friends.length} más ${verb}`;
+  const first = friends[0].name.split(" ")[0];
+  if (friends.length === 1) return `${first} ${verb}`;
+  return `${first} y ${friends.length - 1} más ${verb}`;
 }
 
 function formatDate(dateStr) {
@@ -28,19 +41,25 @@ const todayStr = () => {
 
 export function EventCard({ event, index = 0, onSetStatus, pending, highlight, cardRef }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const isPast = event.date < todayStr();
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
   const attended = event.friends_attended || [];
 
-  const previewFriends = (isPast ? attended : [...going, ...interested]).slice(0, 4);
-
-  const goingText = friendsText(going, going.length === 1 ? "va" : "van");
-  const interestedText = friendsText(interested, interested.length === 1 ? "tiene interés" : "tienen interés");
-
   const isVoy = event.my_status === "voy";
   const isInteresa = event.my_status === "me_interesa";
   const isEstuve = event.my_status === "estuve";
+
+  // Build preview list including "yo" if I'm going/interested/attended
+  const meEntry = user ? { user_id: "me", name: "Tú", picture: user.picture || "" } : null;
+  const previewGoing = isVoy && meEntry ? [meEntry, ...going] : going;
+  const previewInteresa = isInteresa && meEntry ? [meEntry, ...interested] : interested;
+  const previewAttended = isEstuve && meEntry ? [meEntry, ...attended] : attended;
+  const previewFriends = (isPast ? previewAttended : [...previewGoing, ...previewInteresa]).slice(0, 4);
+
+  const goingText = friendsTextWithSelf(going, isVoy, "vas", "van");
+  const interestedText = friendsTextWithSelf(interested, isInteresa, "tienes interés", "tienen interés");
 
   const toggle = (status) => onSetStatus(event.id, event.my_status === status ? "none" : status);
 
@@ -124,6 +143,8 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 {isPast ? (
                   isEstuve && attended.length > 0 ? (
                     <span className="font-semibold text-white">Coincidiste con {friendsText(attended, attended.length === 1 ? "" : "más").trim()}</span>
+                  ) : isEstuve ? (
+                    <span className="font-semibold text-white">Estuviste aquí</span>
                   ) : (
                     <span className="font-semibold text-white">{friendsText(attended, attended.length === 1 ? "estuvo" : "estuvieron")}</span>
                   )
@@ -188,6 +209,11 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 {isInteresa && <Star className="w-4 h-4" />} Me interesa
               </button>
             </div>
+
+            <p className="flex items-center gap-1.5 text-[10.5px] text-white/40 leading-tight pl-0.5">
+              <Info className="w-3 h-3 shrink-0" />
+              <span><b className="text-white/60">Voy</b> = confirmado · <b className="text-white/60">Me interesa</b> = te avisamos el día</span>
+            </p>
 
             {event.has_commission && event.commission_url ? (
               <a

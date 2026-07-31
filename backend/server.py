@@ -568,10 +568,18 @@ def date_in_filter(event_date_str: str, flt: str) -> bool:
     return d >= today
 
 
-async def serialize_event(ev: dict, user: dict, friend_ids: List[str]) -> dict:
+async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map: dict | None = None) -> dict:
     interests = []
     async for it in db.interests.find({"event_id": ev["id"]}):
         interests.append(it)
+
+    # Batch-load friend users if not provided
+    if users_map is None:
+        needed = list({it["user_id"] for it in interests if it["user_id"] in friend_ids})
+        users_map = {}
+        if needed:
+            async for u in db.users.find({"user_id": {"$in": needed}}, {"_id": 0}):
+                users_map[u["user_id"]] = u
 
     my_status = None
     friends_going = []
@@ -581,7 +589,7 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str]) -> dict:
         if it["user_id"] == user["user_id"]:
             my_status = it["status"]
         elif it["user_id"] in friend_ids:
-            fu = await db.users.find_one({"user_id": it["user_id"]}, {"_id": 0})
+            fu = users_map.get(it["user_id"])
             if fu:
                 entry = {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")}
                 if it["status"] == "voy":
@@ -621,13 +629,20 @@ async def list_events(user: dict = Depends(get_current_user),
     friend_ids = await accepted_friend_ids(user["user_id"])
     query = {"city": user.get("city", "Palma de Mallorca")}
     sort_dir = -1 if date_filter == "pasados" else 1
+
+    # Preload friend users once (avoid N+1 lookups inside serialize_event)
+    users_map: dict = {}
+    if friend_ids:
+        async for u in db.users.find({"user_id": {"$in": list(friend_ids)}}, {"_id": 0}):
+            users_map[u["user_id"]] = u
+
     events = []
     async for ev in db.events.find(query, {"_id": 0}).sort("date", sort_dir):
         if not date_in_filter(ev["date"], date_filter):
             continue
         if genre != "all" and ev.get("genre") != genre:
             continue
-        events.append(await serialize_event(ev, user, friend_ids))
+        events.append(await serialize_event(ev, user, friend_ids, users_map))
     return events
 
 
@@ -667,18 +682,29 @@ async def event_carousels(user: dict = Depends(get_current_user)):
     today = datetime.now(ZoneInfo("Europe/Madrid")).date()
     city = user.get("city", "Palma de Mallorca")
 
-    # ---- Top del finde: upcoming Fri-Sun (or next 7 days) sorted by friend attendance ----
-    week_end = today + timedelta(days=7)
-    weekend_pool = []
+    # Preload friend users once for the whole endpoint
+    users_map: dict = {}
+    if friend_ids:
+        async for u in db.users.find({"user_id": {"$in": list(friend_ids)}}, {"_id": 0}):
+            users_map[u["user_id"]] = u
+
+    # Preload upcoming events for this city (single query, reused by all three carousels)
+    all_upcoming = []
     async for ev in db.events.find({"city": city}, {"_id": 0}).sort("date", 1):
         try:
             d = date.fromisoformat(ev["date"])
         except Exception:
             continue
-        if not (today <= d <= week_end):
+        if d < today:
             continue
-        weekend_pool.append(ev)
-    weekend_serialized = [await serialize_event(ev, user, friend_ids) for ev in weekend_pool]
+        all_upcoming.append((d, ev))
+
+    # ---- Top del finde: upcoming Fri-Sun (or next 7 days) sorted by attendance ----
+    week_end = today + timedelta(days=7)
+    weekend_serialized = [
+        await serialize_event(ev, user, friend_ids, users_map)
+        for d, ev in all_upcoming if d <= week_end
+    ]
     top_weekend_list = sorted(
         weekend_serialized,
         key=lambda e: (-(e["total_going"] + e["total_interested"]), e["date"]),
@@ -687,18 +713,10 @@ async def event_carousels(user: dict = Depends(get_current_user)):
     # ---- Lo que va tu grupo: upcoming events with at least one friend going/interested ----
     friends_going_list = []
     if friend_ids:
-        seen_ids = set()
-        async for ev in db.events.find({"city": city}, {"_id": 0}).sort("date", 1):
-            try:
-                d = date.fromisoformat(ev["date"])
-            except Exception:
-                continue
-            if d < today:
-                continue
-            se = await serialize_event(ev, user, friend_ids)
-            if (len(se["friends_going"]) + len(se["friends_interested"])) > 0 and ev["id"] not in seen_ids:
+        for d, ev in all_upcoming:
+            se = await serialize_event(ev, user, friend_ids, users_map)
+            if (len(se["friends_going"]) + len(se["friends_interested"])) > 0:
                 friends_going_list.append(se)
-                seen_ids.add(ev["id"])
         friends_going_list = sorted(
             friends_going_list,
             key=lambda e: (-(len(e["friends_going"]) * 2 + len(e["friends_interested"])), e["date"]),
@@ -707,25 +725,15 @@ async def event_carousels(user: dict = Depends(get_current_user)):
     # ---- Descubre géneros nuevos: upcoming events in genres the user has NOT interacted with ----
     my_genres = set()
     async for it in db.interests.find({"user_id": user["user_id"]}):
-        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0, "genre": 1})
         if ev and ev.get("genre"):
             my_genres.add(ev["genre"])
     discover_new = []
-    seen_ids = set()
-    async for ev in db.events.find({"city": city}, {"_id": 0}).sort("date", 1):
-        try:
-            d = date.fromisoformat(ev["date"])
-        except Exception:
-            continue
-        if d < today:
-            continue
+    for d, ev in all_upcoming:
         g = ev.get("genre")
         if not g or g in my_genres:
             continue
-        if ev["id"] in seen_ids:
-            continue
-        discover_new.append(await serialize_event(ev, user, friend_ids))
-        seen_ids.add(ev["id"])
+        discover_new.append(await serialize_event(ev, user, friend_ids, users_map))
         if len(discover_new) >= 8:
             break
 

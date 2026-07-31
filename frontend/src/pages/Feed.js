@@ -40,17 +40,20 @@ export default function Feed() {
   const { data: topEvent } = useQuery({
     queryKey: ["top-weekend"],
     queryFn: async () => (await api.get("/events/top-weekend")).data,
+    staleTime: 60_000,
   });
 
   const { data: carousels } = useQuery({
     queryKey: ["carousels"],
     queryFn: async () => (await api.get("/events/carousels")).data,
     enabled: isDefaultView && !isPastView && !isDiscover,
+    staleTime: 60_000,
   });
 
   const { data: genres = [] } = useQuery({
     queryKey: ["genres"],
     queryFn: async () => (await api.get("/events/genres")).data,
+    staleTime: 5 * 60_000,
   });
 
   const { data: events, isLoading } = useQuery({
@@ -59,6 +62,7 @@ export default function Feed() {
       if (dateFilter === "descubrir") return (await api.get("/events/discover")).data;
       return (await api.get("/events", { params: { date_filter: dateFilter, genre } })).data;
     },
+    staleTime: 30_000,
   });
 
   const setStatus = useMutation({

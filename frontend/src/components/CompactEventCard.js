@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Flame, Users } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { mediaUrl } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 function formatDate(dateStr) {
   try {
@@ -19,10 +20,18 @@ function formatDate(dateStr) {
  */
 export function CompactEventCard({ event, index = 0, width }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
-  const previewFriends = [...going, ...interested].slice(0, 3);
-  const friendCount = going.length + interested.length;
+  const isVoy = event.my_status === "voy";
+  const isInteresa = event.my_status === "me_interesa";
+  const meEntry = user ? { user_id: "me", name: "Tú", picture: user.picture || "" } : null;
+  const previewGoing = isVoy && meEntry ? [meEntry, ...going] : going;
+  const previewInteresa = isInteresa && meEntry ? [meEntry, ...interested] : interested;
+  const previewFriends = [...previewGoing, ...previewInteresa].slice(0, 3);
+  const goingCount = going.length + (isVoy ? 1 : 0);
+  const interestedCount = interested.length + (isInteresa ? 1 : 0);
+  const friendCount = goingCount + interestedCount;
 
   return (
     <motion.button
@@ -68,9 +77,9 @@ export function CompactEventCard({ event, index = 0, width }) {
                 ))}
               </div>
               <span className="text-[10px] text-white/70 font-semibold truncate">
-                {going.length > 0
-                  ? `${going.length} va${going.length > 1 ? "n" : ""}`
-                  : `${interested.length} interesad${interested.length > 1 ? "os" : "o"}`}
+                {goingCount > 0
+                  ? `${goingCount} va${goingCount > 1 ? "n" : ""}`
+                  : `${interestedCount} interesad${interestedCount > 1 ? "os" : "o"}`}
               </span>
             </div>
           ) : (
