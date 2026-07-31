@@ -8,6 +8,7 @@ import { CompactEventCard } from "@/components/CompactEventCard";
 import { EventCarousel } from "@/components/EventCarousel";
 import { StoriesBar } from "@/components/Stories";
 import { StreakBanner } from "@/components/StreakBanner";
+import { NextBadgeBanner } from "@/components/NextBadgeBanner";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { useAuth } from "@/context/AuthContext";
 import { useCompactMode } from "@/hooks/useCompactMode";
@@ -112,6 +113,10 @@ export default function Feed() {
 
       <div className="px-4 pb-3">
         <StreakBanner />
+      </div>
+
+      <div className="px-4 pb-3">
+        <NextBadgeBanner />
       </div>
 
       <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-2" data-testid="date-filters">

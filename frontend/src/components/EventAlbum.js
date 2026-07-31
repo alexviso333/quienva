@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { Camera, Plus, Play, Trash2, Images, Loader2, X } from "lucide-react";
+import { Camera, Plus, Play, Trash2, Images, Loader2, X, Share2 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
@@ -78,12 +78,37 @@ export function EventAlbum({ eventId, hasInterest }) {
   }
 
   const items = data.items || [];
+  const eventName = data.event?.name || "";
+
+  const shareAlbum = async () => {
+    const url = `${window.location.origin}/event/${eventId}`;
+    const text = `Mira el álbum compartido de ${eventName} 📸 ${items.length} recuerdo${items.length === 1 ? "" : "s"} · ${url}`;
+    try {
+      if (navigator.share) await navigator.share({ title: eventName, text, url });
+      else {
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      /* cancelled */
+    }
+  };
 
   return (
     <div>
-      <p className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 font-bold mb-2">
-        <Images className="w-4 h-4 text-qv-secondary" /> Álbum compartido <span className="text-white/30">({items.length})</span>
-      </p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 font-bold">
+          <Images className="w-4 h-4 text-qv-secondary" /> Álbum compartido <span className="text-white/30">({items.length})</span>
+        </p>
+        {items.length > 0 && (
+          <button
+            data-testid="album-share-btn"
+            onClick={shareAlbum}
+            className="flex items-center gap-1 text-qv-secondary text-xs font-bold active:opacity-70"
+          >
+            <Share2 className="w-3.5 h-3.5" /> Compartir
+          </button>
+        )}
+      </div>
 
       {items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-6 text-center">

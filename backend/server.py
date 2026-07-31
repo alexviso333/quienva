@@ -19,7 +19,7 @@ import requests
 import re
 import json
 import asyncio
-from datetime import datetime, timezone, timedelta, date
+from datetime import datetime, timezone, timedelta, date, time as dtime
 from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pywebpush import webpush, WebPushException
@@ -2829,6 +2829,27 @@ async def moment_upload(event_id: str, file: UploadFile = File(...), user: dict 
     }
     await db.captures.insert_one(capture)
     capture.pop("_id", None)
+    # Notify friends who are also going/attended this event (or all friends if it's a live moment)
+    try:
+        friend_ids = await accepted_friend_ids(user["user_id"])
+        if friend_ids:
+            # Prefer friends who are on this same event; if none, ping all friends
+            same_event_friends = []
+            async for it in db.interests.find({
+                "event_id": event_id,
+                "user_id": {"$in": friend_ids},
+                "status": {"$in": ["voy", "estuve", "me_interesa"]},
+            }):
+                same_event_friends.append(it["user_id"])
+            targets = same_event_friends or friend_ids[:30]  # cap at 30 to avoid spam
+            for fid in targets:
+                await create_notification(
+                    fid, "moment_friend",
+                    f"⚡ {user['name']} subió su momento en {ev['name']}. ¡No te lo pierdas!",
+                    {"event_id": event_id, "type": "moment_friend"},
+                )
+    except Exception as e:
+        logger.warning(f"Moment friend notify failed: {e}")
     return capture
 
 
@@ -3153,13 +3174,169 @@ async def on_startup():
                           id="event_reminders", replace_existing=True)
         scheduler.add_job(generate_weekend_recap, "cron", day_of_week="mon", hour=12, minute=0,
                           id="weekend_recap", replace_existing=True)
+        # Auto-trigger "El Momento" every 10 minutes for events happening right now
+        scheduler.add_job(auto_trigger_moments, "interval", minutes=10,
+                          id="auto_moments", replace_existing=True)
         scheduler.start()
-        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00)")
+        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min)")
     except Exception as e:
         logger.error(f"Scheduler init falló: {e}")
 
 
+async def auto_trigger_moments():
+    """Automatically trigger 'El Momento' for events happening right now.
+    For each event whose time window is active (start_time to start_time+5h),
+    if it has 'voy' users and no prompt yet, schedule a random moment within
+    60–180 min after event start."""
+    try:
+        now = datetime.now(ZoneInfo("Europe/Madrid"))
+        today = now.date().isoformat()
+        yesterday = (now.date() - timedelta(days=1)).isoformat()
+        candidates = []
+        # Events today AND yesterday (for after-midnight parties)
+        async for ev in db.events.find({"date": {"$in": [today, yesterday]}}, {"_id": 0}):
+            candidates.append(ev)
+        for ev in candidates:
+            try:
+                # If already has a prompt, skip
+                existing = await db.moment_prompts.find_one({"event_id": ev["id"]})
+                if existing:
+                    continue
+                # Only trigger if voy users exist
+                voy_count = await db.interests.count_documents({"event_id": ev["id"], "status": "voy"})
+                if voy_count == 0:
+                    continue
+                # Parse event start datetime
+                start_str = ev.get("time") or "22:00"
+                try:
+                    hh, mm = start_str.split(":")[:2]
+                    hh, mm = int(hh), int(mm)
+                except Exception:
+                    hh, mm = 22, 0
+                event_date = date.fromisoformat(ev["date"])
+                event_start = datetime.combine(event_date, dtime(hh, mm), tzinfo=ZoneInfo("Europe/Madrid"))
+                # Check if we plan a moment time; store it in the event doc so it's deterministic
+                planned = ev.get("planned_moment_at")
+                if not planned:
+                    # Pick a random offset between 60 and 180 minutes after start
+                    offset_min = secrets.randbelow(121) + 60
+                    planned_dt = event_start + timedelta(minutes=offset_min)
+                    planned = planned_dt.isoformat()
+                    await db.events.update_one({"id": ev["id"]}, {"$set": {"planned_moment_at": planned}})
+                planned_dt = datetime.fromisoformat(planned)
+                if planned_dt.tzinfo is None:
+                    planned_dt = planned_dt.replace(tzinfo=ZoneInfo("Europe/Madrid"))
+                # Trigger if we've reached planned_dt and we're not more than 4h past it
+                if planned_dt <= now <= planned_dt + timedelta(hours=4):
+                    now_utc = datetime.now(timezone.utc)
+                    prompt = {
+                        "id": str(uuid.uuid4()),
+                        "event_id": ev["id"],
+                        "sent_at": now_utc.isoformat(),
+                        "on_time_deadline": (now_utc + timedelta(minutes=2)).isoformat(),
+                        "expires_at": (now_utc + timedelta(hours=6)).isoformat(),
+                        "triggered_by": "auto",
+                    }
+                    await db.moment_prompts.insert_one(prompt)
+                    notified = 0
+                    async for it in db.interests.find({"event_id": ev["id"], "status": "voy"}):
+                        await create_notification(
+                            it["user_id"], "moment_prompt",
+                            f"⚡ Es EL MOMENTO en {ev['name']}. ¡Sube una foto ya! (2 min para +30 puntos)",
+                            {"event_id": ev["id"], "type": "moment"},
+                        )
+                        notified += 1
+                    logger.info(f"Auto moment triggered for {ev['name']} → {notified} users")
+            except Exception as e:
+                logger.warning(f"auto_moment inner failed for event {ev.get('id')}: {e}")
+    except Exception as e:
+        logger.error(f"auto_trigger_moments failed: {e}")
+
+
+# =========================================================================
+# NEXT BADGES (progress hints — for the "Insignia Diaria" nudge)
+# =========================================================================
+
+BADGE_THRESHOLDS = {
+    # id -> (stat_key, threshold)
+    "night_owl": ("total_events", 5),
+    "party_pro": ("total_events", 10),
+    "party_veteran": ("total_events", 20),
+    "party_master": ("total_events", 35),
+    "legend": ("total_events", 50),
+    "immortal": ("total_events", 100),
+    "day_streak_2": ("day_streak", 2),
+    "day_streak_3": ("day_streak", 3),
+    "day_streak_5": ("day_streak", 5),
+    "day_streak_7": ("day_streak", 7),
+    "day_streak_10": ("day_streak", 10),
+    "day_streak_15": ("day_streak", 15),
+    "week_streak_2": ("week_streak", 2),
+    "week_streak_4": ("week_streak", 4),
+    "week_streak_8": ("week_streak", 8),
+    "week_streak_12": ("week_streak", 12),
+    "week_streak_26": ("week_streak", 26),
+    "weekday_warrior": ("weekday_count", 3),
+    "weekday_boss": ("weekday_count", 10),
+    "sunday_lover": ("sunday_count", 3),
+    "social_5": ("friends_count", 5),
+    "social_10": ("friends_count", 10),
+    "social_20": ("friends_count", 20),
+    "social_50": ("friends_count", 50),
+    "social_100": ("friends_count", 100),
+    "referral_1": ("referrals_count", 1),
+    "referral_3": ("referrals_count", 3),
+    "referral_5": ("referrals_count", 5),
+    "referral_10": ("referrals_count", 10),
+    "ticket_1": ("tickets_count", 1),
+    "ticket_5": ("tickets_count", 5),
+    "ticket_15": ("tickets_count", 15),
+    "explorer_3": ("genres_count", 3),
+    "explorer": ("genres_count", 5),
+    "explorer_10": ("genres_count", 10),
+    "venue_hopper": ("venues_count", 5),
+    "capture_5": ("captures_count", 5),
+    "capture_20": ("captures_count", 20),
+    "storyteller": ("stories_count", 3),
+    "storyteller_10": ("stories_count", 10),
+    "story_star": ("stories_count", 30),
+    "album_pro": ("album_uploads", 10),
+    "album_master": ("album_uploads", 50),
+}
+
+
+@api_router.get("/me/next-badges")
+async def next_badges(user: dict = Depends(get_current_user), limit: int = Query(3)):
+    """Return the closest 'unlocked' badges (least gap between current stat and threshold).
+    Used by the 'Insignia Diaria' banner on the Feed."""
+    stats = await _compute_user_stats(user["user_id"])
+    earned_ids = set(_award_badges(stats))
+    out = []
+    for bid, (key, threshold) in BADGE_THRESHOLDS.items():
+        if bid in earned_ids:
+            continue
+        current = stats.get(key, 0)
+        remaining = threshold - current
+        if remaining <= 0:
+            continue
+        b = BADGES_BY_ID.get(bid)
+        if not b:
+            continue
+        out.append({
+            **b,
+            "current": current,
+            "threshold": threshold,
+            "remaining": remaining,
+            "stat_key": key,
+            "progress": round(current / threshold * 100, 1) if threshold else 0,
+        })
+    out.sort(key=lambda x: (x["remaining"], -x["progress"]))
+    return out[:limit]
+
 app.include_router(api_router)
+
+
+
 
 _cors_env = os.environ.get('CORS_ORIGINS', '*').strip()
 if _cors_env == '*':

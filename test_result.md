@@ -308,6 +308,66 @@ backend:
         agent: "main"
         comment: "Restored .env with MONGO_URL, DB_NAME, ADMIN, VAPID (regenerated). Admin seed re-created on startup."
 
+  - task: "Google OAuth config endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/auth/google/config returns {enabled: bool, client_id: str}. GOOGLE_ENABLED set from env vars."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: GET /auth/google/config returns enabled=true with correct client_id (043435767943-...) ✓. Config endpoint working correctly."
+
+  - task: "Next badges endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/me/next-badges?limit=3 returns closest unlocked badges sorted by remaining ascending. Each badge includes id, name, emoji, tier, cat, points, current, threshold, remaining, stat_key, progress."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: GET /me/next-badges default limit returns ≤3 items ✓. Badge structure includes all required fields (id, name, emoji, tier, cat, points, current, threshold, remaining, stat_key, progress) ✓. All returned badges have remaining > 0 ✓. Progress is 0-100 ✓. Custom limit parameter works (?limit=1 returns 1 item) ✓. Returned badges are NOT in earned list ✓. All functionality working correctly."
+
+  - task: "Moment upload friend notifications"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "When user uploads moment capture, notify friends. If friend is on same event, notify them; otherwise fallback to all friends (capped at 30). Notification type 'moment_friend' with event_id and user name."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: Created Bob and Charlie as friends ✓. Bob marks 'voy' on event ✓. Admin triggers moment ✓. Bob uploads moment ✓. Charlie receives moment_friend notification with Bob's name and event name in message ✓. Friend not on event still receives notification (fallback to all friends) ✓. All functionality working correctly."
+
+  - task: "Auto-trigger moments scheduler"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Scheduler job 'auto_moments' runs every 10 minutes calling auto_trigger_moments(). For events today/yesterday with time and voy users, triggers moment at random time 60-180 min after event start. Upserts moment_prompts to avoid duplicates."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: Scheduler configured correctly (runs every 10 min) ✓. Admin dashboard includes captures count ✓. No auto_trigger_moments errors in backend logs ✓. Repeated admin triggers don't create duplicates (upsert behavior) ✓. All functionality working correctly."
+
 frontend:
   - task: "EventAlbum shared media component (photos + videos)"
     implemented: true
@@ -515,24 +575,16 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.0"
-  test_sequence: 1
+  version: "2.1"
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Points and rankings (friends/city/world)"
-    - "Referral system"
-    - "DM chat between friends"
-    - "Groups CRUD + group chat"
-    - "Badges catalog expanded to 60+ with points and categories"
-    - "Extended stats & _award_badges for new criteria"
-    - "Streak-full endpoint"
-    - "Shared album per event"
-    - "Moment capture (El Momento)"
-    - "Calendar (past + multimedia by day)"
-    - "Admin advanced dashboard"
-    - "Tickets tracking"
+    - "Google OAuth config endpoint"
+    - "Next badges endpoint"
+    - "Moment upload friend notifications"
+    - "Auto-trigger moments scheduler"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -596,4 +648,48 @@ agent_communication:
       - Invalid referral code returns 400 instead of 404 - acceptable
       
       All other functionality tested and working correctly. Test file created at /app/backend/tests/test_iteration8.py with comprehensive coverage of all new endpoints.
+  - agent: "main"
+    message: |
+      Small iteration adding 4 new features:
+      1. Google OAuth config endpoint (GET /api/auth/google/config)
+      2. Next badges endpoint (GET /api/me/next-badges?limit=3)
+      3. Moment upload friend notifications (notify friends when user uploads moment)
+      4. Auto-trigger moments scheduler (runs every 10 min)
+      
+      Testing focus: ONLY these 4 new features. All previous endpoints already tested and working.
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - NEW FEATURES ITERATION
+      
+      TEST RESULTS: 14 PASSED / 0 FAILED (100% pass rate)
+      
+      ✅ ALL NEW FEATURES WORKING:
+      
+      1. Google OAuth Config Endpoint ✅
+         - GET /auth/google/config returns enabled=true with correct client_id
+         - Config properly exposed from environment variables
+      
+      2. Next Badges Endpoint ✅
+         - GET /me/next-badges returns array with default limit of 3
+         - Custom limit parameter works (?limit=1 returns 1 item)
+         - All badge objects include required fields: id, name, emoji, tier, cat, points, current, threshold, remaining, stat_key, progress
+         - All returned badges have remaining > 0 (not yet earned)
+         - Badges sorted by remaining ascending
+         - Returned badges are NOT in earned list
+      
+      3. Moment Upload Friend Notifications ✅
+         - Created test users Bob and Charlie as friends
+         - Bob marks 'voy' on event and uploads moment
+         - Charlie receives moment_friend notification with Bob's name and event name
+         - Notification fallback works: friend not on event still receives notification (all friends notified)
+         - Notification message format correct: "⚡ [User] subió su momento en [Event]. ¡No te lo pierdas!"
+      
+      4. Auto-trigger Moments Scheduler ✅
+         - Scheduler configured correctly (runs every 10 minutes)
+         - Admin dashboard includes captures count
+         - No auto_trigger_moments errors in backend logs
+         - Repeated admin triggers don't create duplicates (upsert behavior working)
+      
+      All 4 new features tested and working correctly. No issues found.
+      Test file: /app/backend_test.py
 
