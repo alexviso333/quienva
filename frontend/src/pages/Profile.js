@@ -5,10 +5,11 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Flame, Archive } from "lucide-react";
+import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Flame, Archive, Grid3x3, Rows3 } from "lucide-react";
 import { toast } from "sonner";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 import { StoriesArchive } from "@/components/Stories";
+import { useCompactMode } from "@/hooks/useCompactMode";
 
 export default function Profile() {
   const { user, setUser, logout, refreshUser } = useAuth();
@@ -23,6 +24,7 @@ export default function Profile() {
   const [streak, setStreak] = useState(0);
   const [streakLoaded, setStreakLoaded] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [compact, setCompact] = useCompactMode();
   const pushSupported = isPushSupported();
 
   useEffect(() => {
@@ -94,7 +96,9 @@ export default function Profile() {
         await navigator.clipboard.writeText(link);
         toast.success("Enlace de invitación copiado");
       }
-    } catch {}
+    } catch {
+      /* share cancelled */
+    }
   };
 
   return (
@@ -210,6 +214,23 @@ export default function Profile() {
             )}
           </button>
         )}
+
+        <button
+          data-testid="compact-toggle-btn"
+          onClick={() => {
+            setCompact(!compact);
+            toast.success(compact ? "Vista completa activada" : "Vista compacta activada");
+          }}
+          className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-between px-4 active:scale-95 transition-transform"
+        >
+          <span className="flex items-center gap-2">
+            {compact ? <Grid3x3 className="w-4 h-4" /> : <Rows3 className="w-4 h-4" />}
+            Vista del feed
+          </span>
+          <span className={`text-xs px-2.5 py-1 rounded-full ${compact ? "bg-qv-secondary/20 text-qv-secondary" : "bg-white/10 text-white/70"}`}>
+            {compact ? "Compacta" : "Completa"}
+          </span>
+        </button>
 
         {user?.role === "admin" && (
           <button

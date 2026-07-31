@@ -659,6 +659,82 @@ async def top_weekend(user: dict = Depends(get_current_user)):
     return best
 
 
+@api_router.get("/events/carousels")
+async def event_carousels(user: dict = Depends(get_current_user)):
+    """Home-page carousels: top del finde (list), lo que va tu grupo, descubrir géneros."""
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    city = user.get("city", "Palma de Mallorca")
+
+    # ---- Top del finde: upcoming Fri-Sun (or next 7 days) sorted by friend attendance ----
+    week_end = today + timedelta(days=7)
+    weekend_pool = []
+    async for ev in db.events.find({"city": city}, {"_id": 0}).sort("date", 1):
+        try:
+            d = date.fromisoformat(ev["date"])
+        except Exception:
+            continue
+        if not (today <= d <= week_end):
+            continue
+        weekend_pool.append(ev)
+    weekend_serialized = [await serialize_event(ev, user, friend_ids) for ev in weekend_pool]
+    top_weekend_list = sorted(
+        weekend_serialized,
+        key=lambda e: (-(e["total_going"] + e["total_interested"]), e["date"]),
+    )[:6]
+
+    # ---- Lo que va tu grupo: upcoming events with at least one friend going/interested ----
+    friends_going_list = []
+    if friend_ids:
+        seen_ids = set()
+        async for ev in db.events.find({"city": city}, {"_id": 0}).sort("date", 1):
+            try:
+                d = date.fromisoformat(ev["date"])
+            except Exception:
+                continue
+            if d < today:
+                continue
+            se = await serialize_event(ev, user, friend_ids)
+            if (len(se["friends_going"]) + len(se["friends_interested"])) > 0 and ev["id"] not in seen_ids:
+                friends_going_list.append(se)
+                seen_ids.add(ev["id"])
+        friends_going_list = sorted(
+            friends_going_list,
+            key=lambda e: (-(len(e["friends_going"]) * 2 + len(e["friends_interested"])), e["date"]),
+        )[:8]
+
+    # ---- Descubre géneros nuevos: upcoming events in genres the user has NOT interacted with ----
+    my_genres = set()
+    async for it in db.interests.find({"user_id": user["user_id"]}):
+        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+        if ev and ev.get("genre"):
+            my_genres.add(ev["genre"])
+    discover_new = []
+    seen_ids = set()
+    async for ev in db.events.find({"city": city}, {"_id": 0}).sort("date", 1):
+        try:
+            d = date.fromisoformat(ev["date"])
+        except Exception:
+            continue
+        if d < today:
+            continue
+        g = ev.get("genre")
+        if not g or g in my_genres:
+            continue
+        if ev["id"] in seen_ids:
+            continue
+        discover_new.append(await serialize_event(ev, user, friend_ids))
+        seen_ids.add(ev["id"])
+        if len(discover_new) >= 8:
+            break
+
+    return {
+        "top_weekend": top_weekend_list,
+        "friends_going": friends_going_list,
+        "discover_new": discover_new,
+    }
+
+
 @api_router.get("/me/streak")
 async def my_streak(user: dict = Depends(get_current_user)):
     """Consecutive weeks the user went out (voy/estuve on an event that week)."""
@@ -827,6 +903,91 @@ async def admin_upload(file: UploadFile = File(...), admin: dict = Depends(requi
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     return {"image_url": f"/api/files/{path}"}
+
+
+class ImportUrlInput(BaseModel):
+    url: str
+
+
+@api_router.post("/admin/import-url")
+async def admin_import_url(inp: ImportUrlInput, admin: dict = Depends(require_admin)):
+    """Fetch OpenGraph metadata from a URL and (optionally) download the og:image.
+
+    Returns a dict with best-effort fields the admin can paste into the event form:
+    { name, description, image_url, more_info_url }
+    Legal: reads only public meta tags (og:*, twitter:*, <title>) — no scraping.
+    """
+    from bs4 import BeautifulSoup
+    from urllib.parse import urlparse
+
+    url = inp.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="URL inválida")
+    try:
+        res = requests.get(
+            url,
+            timeout=12,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; QuienVaBot/1.0; +https://quienva.app)"
+                ),
+                "Accept": "text/html,application/xhtml+xml",
+            },
+            allow_redirects=True,
+        )
+        res.raise_for_status()
+    except Exception as e:
+        logger.warning(f"import-url fetch failed: {e}")
+        raise HTTPException(status_code=400, detail="No se pudo leer esa URL")
+
+    soup = BeautifulSoup(res.text, "html.parser")
+
+    def meta(*names):
+        for n in names:
+            tag = soup.find("meta", attrs={"property": n}) or soup.find("meta", attrs={"name": n})
+            if tag and tag.get("content"):
+                return tag["content"].strip()
+        return ""
+
+    title = meta("og:title", "twitter:title") or (soup.title.string.strip() if soup.title and soup.title.string else "")
+    description = meta("og:description", "twitter:description", "description")
+    og_image = meta("og:image", "twitter:image", "og:image:secure_url")
+
+    # Try to download the image and store it locally so we don't hotlink external CDNs
+    image_url = ""
+    if og_image:
+        try:
+            if og_image.startswith("//"):
+                og_image = "https:" + og_image
+            elif og_image.startswith("/"):
+                parsed = urlparse(url)
+                og_image = f"{parsed.scheme}://{parsed.netloc}{og_image}"
+            img_res = requests.get(og_image, timeout=12,
+                                   headers={"User-Agent": "Mozilla/5.0 (QuienVaBot)"})
+            img_res.raise_for_status()
+            ct = img_res.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+            ext = mimetypes.guess_extension(ct) or ".jpg"
+            if ext == ".jpe":
+                ext = ".jpg"
+            path = f"{APP_NAME}/events/{uuid.uuid4().hex}{ext}"
+            save_object(path, img_res.content)
+            await db.files.insert_one({
+                "id": str(uuid.uuid4()),
+                "storage_path": path,
+                "content_type": ct,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            image_url = f"/api/files/{path}"
+        except Exception as e:
+            logger.info(f"og:image download skipped: {e}")
+            image_url = ""  # frontend will just show empty
+
+    return {
+        "name": title[:120],
+        "description": description[:280],
+        "image_url": image_url,
+        "more_info_url": url,
+    }
 
 
 @api_router.post("/upload/avatar")

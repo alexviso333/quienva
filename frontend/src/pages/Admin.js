@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, ArrowLeft, ImageUp, Loader2, Ticket, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowLeft, ImageUp, Loader2, Ticket, ExternalLink, Link as LinkIcon, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY = {
@@ -21,7 +21,33 @@ function EventForm({ initial, onSaved }) {
   const [form, setForm] = useState(initial || EMPTY);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  const importFromUrl = async () => {
+    const url = importUrl.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      toast.error("Pega una URL que empiece por http(s)://");
+      return;
+    }
+    setImporting(true);
+    try {
+      const { data } = await api.post("/admin/import-url", { url });
+      setForm((f) => ({
+        ...f,
+        name: data.name || f.name,
+        image_url: data.image_url || f.image_url,
+        more_info_url: data.more_info_url || f.more_info_url,
+      }));
+      toast.success(data.image_url ? "Datos e imagen importados" : "Datos importados (sin imagen)");
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "No se pudo importar");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const upload = async (e) => {
     const file = e.target.files?.[0];
@@ -64,6 +90,37 @@ function EventForm({ initial, onSaved }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {!initial?.id && (
+        <div className="rounded-2xl border border-qv-secondary/40 bg-qv-secondary/5 p-3 flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-qv-secondary text-xs font-bold uppercase tracking-widest">
+            <Wand2 className="w-3.5 h-3.5" /> Importar desde URL
+          </div>
+          <p className="text-white/50 text-xs -mt-1">
+            Pega el enlace del evento (Fourvenues, web del local, Instagram…) y rellenamos nombre e imagen.
+          </p>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <LinkIcon className="w-4 h-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input
+                data-testid="admin-import-url"
+                placeholder="https://..."
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                className="h-11 pl-9 bg-white/5 border-white/15 rounded-xl text-white placeholder:text-white/40"
+              />
+            </div>
+            <button
+              data-testid="admin-import-btn"
+              onClick={importFromUrl}
+              disabled={importing || !importUrl.trim()}
+              className="h-11 px-4 rounded-xl bg-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-50"
+            >
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Importar</>}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         onClick={() => document.getElementById("admin-img-input").click()}
         className="relative h-40 rounded-2xl overflow-hidden border border-white/15 bg-white/5 flex items-center justify-center cursor-pointer"

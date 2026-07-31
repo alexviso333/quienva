@@ -4,10 +4,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
+import { CompactEventCard } from "@/components/CompactEventCard";
+import { EventCarousel } from "@/components/EventCarousel";
 import { StoriesBar } from "@/components/Stories";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { useAuth } from "@/context/AuthContext";
-import { Loader2, PartyPopper, Flame, ChevronRight } from "lucide-react";
+import { useCompactMode } from "@/hooks/useCompactMode";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 const DATE_FILTERS = [
@@ -27,14 +30,22 @@ export default function Feed() {
   const [dateFilter, setDateFilter] = useState("all");
   const [genre, setGenre] = useState("all");
   const [highlightId, setHighlightId] = useState(null);
+  const [compact] = useCompactMode();
   const cardRefs = useRef({});
 
   const isPastView = dateFilter === "pasados";
   const isDiscover = dateFilter === "descubrir";
+  const isDefaultView = dateFilter === "all" && genre === "all";
 
   const { data: topEvent } = useQuery({
     queryKey: ["top-weekend"],
     queryFn: async () => (await api.get("/events/top-weekend")).data,
+  });
+
+  const { data: carousels } = useQuery({
+    queryKey: ["carousels"],
+    queryFn: async () => (await api.get("/events/carousels")).data,
+    enabled: isDefaultView && !isPastView && !isDiscover,
   });
 
   const { data: genres = [] } = useQuery({
@@ -55,6 +66,7 @@ export default function Feed() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["events"] });
       qc.invalidateQueries({ queryKey: ["top-weekend"] });
+      qc.invalidateQueries({ queryKey: ["carousels"] });
       if (vars.status === "voy") toast.success("¡Apuntado! Tus amigos ya lo verán 🎉");
       if (vars.status === "estuve") toast.success("Guardado en tus recuerdos ✨");
     },
@@ -135,7 +147,33 @@ export default function Feed() {
       )}
 
       <div className="flex flex-col gap-4 px-4 pt-1">
-        {!isPastView && !isDiscover && topEvent && (topEvent.friends_going || []).length > 0 && (
+        {!isPastView && !isDiscover && isDefaultView && carousels && (
+          <div className="-mx-4">
+            <EventCarousel
+              testId="carousel-top-weekend"
+              title="Top del finde"
+              subtitle="Los planes con más movida"
+              icon={Flame}
+              events={carousels.top_weekend}
+            />
+            <EventCarousel
+              testId="carousel-friends-going"
+              title="Lo que va tu grupo"
+              subtitle="Donde están tus amigos"
+              icon={Users}
+              events={carousels.friends_going}
+            />
+            <EventCarousel
+              testId="carousel-discover-new"
+              title="Prueba algo nuevo"
+              subtitle="Géneros que aún no exploras"
+              icon={Sparkles}
+              events={carousels.discover_new}
+            />
+          </div>
+        )}
+
+        {!isPastView && !isDiscover && !isDefaultView && topEvent && (topEvent.friends_going || []).length > 0 && (
           <button
             data-testid="top-weekend-banner"
             onClick={() => navigate(`/event/${topEvent.id}`)}
@@ -172,17 +210,25 @@ export default function Feed() {
             <Loader2 className="w-7 h-7 text-qv-primary animate-spin" />
           </div>
         ) : events && events.length > 0 ? (
-          events.map((ev, i) => (
-            <EventCard
-              key={ev.id}
-              event={ev}
-              index={i}
-              highlight={highlightId === ev.id}
-              cardRef={(el) => (cardRefs.current[ev.id] = el)}
-              pending={setStatus.isPending}
-              onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
-            />
-          ))
+          compact ? (
+            <div className="grid grid-cols-2 gap-3" data-testid="feed-compact-grid">
+              {events.map((ev, i) => (
+                <CompactEventCard key={ev.id} event={ev} index={i} />
+              ))}
+            </div>
+          ) : (
+            events.map((ev, i) => (
+              <EventCard
+                key={ev.id}
+                event={ev}
+                index={i}
+                highlight={highlightId === ev.id}
+                cardRef={(el) => (cardRefs.current[ev.id] = el)}
+                pending={setStatus.isPending}
+                onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
+              />
+            ))
+          )
         ) : (
           <div className="text-center py-20 px-6" data-testid="feed-empty">
             <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
