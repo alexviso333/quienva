@@ -39,7 +39,9 @@ function EventForm({ initial, onSaved }) {
         ...f,
         name: data.name || f.name,
         venue: data.venue || f.venue,
+        address: data.address || f.address,
         date: data.date || f.date,
+        genre: data.genre || f.genre,
         image_url: data.image_url || f.image_url,
         more_info_url: data.more_info_url || f.more_info_url,
         has_commission: data.has_commission ?? f.has_commission,
@@ -48,7 +50,9 @@ function EventForm({ initial, onSaved }) {
       const bits = [];
       if (data.name) bits.push("nombre");
       if (data.venue) bits.push("local");
+      if (data.address) bits.push("dirección");
       if (data.date) bits.push("fecha");
+      if (data.genre) bits.push("género");
       if (data.image_url) bits.push("imagen");
       if (bits.length) toast.success(`Importado: ${bits.join(", ")}`);
       else toast.info("URL guardada, rellena el resto a mano");
@@ -59,13 +63,14 @@ function EventForm({ initial, onSaved }) {
     }
   };
 
-  const upload = async (e) => {
-    const file = e.target.files?.[0];
+  const uploadFile = async (file) => {
     if (!file) return;
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      // Preserve extension for the backend; blobs from paste have no name
+      const named = file.name ? file : new File([file], `pasted-${Date.now()}.png`, { type: file.type || "image/png" });
+      fd.append("file", named);
       const { data } = await api.post("/admin/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
       setForm((f) => ({ ...f, image_url: data.image_url }));
       toast.success("Imagen subida");
@@ -73,6 +78,19 @@ function EventForm({ initial, onSaved }) {
       toast.error("Error al subir imagen");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const upload = (e) => uploadFile(e.target.files?.[0]);
+
+  const onPasteImage = async (e) => {
+    const items = e.clipboardData?.items || [];
+    for (const it of items) {
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        e.preventDefault();
+        await uploadFile(it.getAsFile());
+        return;
+      }
     }
   };
 
@@ -87,6 +105,8 @@ function EventForm({ initial, onSaved }) {
       else await api.post("/admin/events", form);
       qc.invalidateQueries({ queryKey: ["admin-events"] });
       qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["carousels"] });
+      qc.invalidateQueries({ queryKey: ["top-weekend"] });
       toast.success("Guardado");
       onSaved();
     } catch (e) {
@@ -99,7 +119,7 @@ function EventForm({ initial, onSaved }) {
   const inputCls = "h-11 bg-white/5 border-white/15 rounded-xl text-white placeholder:text-white/40";
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" onPaste={onPasteImage} data-testid="admin-event-form">
       {!initial?.id && (
         <div className="rounded-2xl border border-qv-secondary/40 bg-qv-secondary/5 p-3 flex flex-col gap-2">
           <div className="flex items-center gap-2 text-qv-secondary text-xs font-bold uppercase tracking-widest">
@@ -133,15 +153,18 @@ function EventForm({ initial, onSaved }) {
 
       <div
         onClick={() => document.getElementById("admin-img-input").click()}
-        className="relative h-40 rounded-2xl overflow-hidden border border-white/15 bg-white/5 flex items-center justify-center cursor-pointer"
+        onPaste={onPasteImage}
+        tabIndex={0}
+        className="relative h-40 rounded-2xl overflow-hidden border border-white/15 bg-white/5 flex items-center justify-center cursor-pointer outline-none focus:border-qv-secondary focus:ring-2 focus:ring-qv-secondary/40"
         data-testid="admin-image-drop"
       >
         {form.image_url ? (
           <img src={mediaUrl(form.image_url)} alt="preview" className="w-full h-full object-cover" />
         ) : (
-          <div className="text-white/40 flex flex-col items-center gap-2 text-sm">
+          <div className="text-white/40 flex flex-col items-center gap-1.5 text-sm">
             {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ImageUp className="w-6 h-6" />}
-            Subir imagen
+            <span>Subir imagen</span>
+            <span className="text-[11px] text-white/30">o pega desde el portapapeles</span>
           </div>
         )}
         <input id="admin-img-input" type="file" accept="image/*" hidden onChange={upload} data-testid="admin-image-input" />

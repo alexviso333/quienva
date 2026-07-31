@@ -906,6 +906,32 @@ async def admin_upload(file: UploadFile = File(...), admin: dict = Depends(requi
     return {"image_url": f"/api/files/{path}"}
 
 
+def _detect_genre(name: str) -> str:
+    """Best-effort genre detection from an event name using Spanish keywords."""
+    if not name:
+        return ""
+    n = name.lower()
+    mapping = [
+        (["techno", "technho", "tekno", "underground"], "Techno"),
+        (["reggaeton", "reggeton", "regueton", "perreo", "latin trap"], "Reggaeton"),
+        (["house ", " house", "house-", "-house", "deephouse", "deep house", "tech house"], "House"),
+        (["indie", "rock ", " rock", "alternative"], "Indie"),
+        (["latino", "latin ", "salsa", "bachata", "kizomba", "merengue"], "Latino"),
+        (["hip hop", "hip-hop", "hiphop", "rap ", "trap"], "Hip Hop"),
+        (["edm ", " edm", "electro", "electronic"], "Electrónica"),
+        (["sunset", "chillout", "chill out", "lounge"], "Sunset"),
+        (["reggae", "dancehall"], "Reggae"),
+        (["pop ", " pop", "hits"], "Pop"),
+        (["ochenta", "80s", "90s", "noventa", "retro"], "Retro"),
+    ]
+    padded = f" {n} "
+    for keys, label in mapping:
+        for k in keys:
+            if k in padded:
+                return label
+    return ""
+
+
 class ImportUrlInput(BaseModel):
     url: str
 
@@ -1068,13 +1094,29 @@ async def admin_import_url(inp: ImportUrlInput, admin: dict = Depends(require_ad
 
     image_url = _download_image(og.get("image", ""), url) if og.get("image") else ""
 
+    venue = parsed.get("venue", "") or ""
+    address = ""
+    if venue:
+        # Look up address from previously-saved events for this venue
+        prev = await db.events.find_one({"venue": venue, "address": {"$ne": ""}}, {"_id": 0, "address": 1})
+        if not prev:
+            # Fuzzy: case-insensitive contains
+            prev = await db.events.find_one(
+                {"venue": {"$regex": f"^{_re.escape(venue)}$", "$options": "i"}, "address": {"$ne": ""}},
+                {"_id": 0, "address": 1},
+            )
+        if prev and prev.get("address"):
+            address = prev["address"]
+
     result = {
         "name": name,
         "description": (og.get("description") or "")[:280],
         "image_url": image_url,
         "more_info_url": url,
-        "venue": parsed.get("venue", ""),
+        "venue": venue,
+        "address": address,
         "date": parsed.get("date", ""),
+        "genre": _detect_genre(name),
         "has_commission": parsed.get("has_commission", False),
         "commission_url": parsed.get("commission_url", "") if parsed.get("has_commission") else "",
     }
