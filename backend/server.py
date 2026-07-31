@@ -686,11 +686,12 @@ async def discover_events(user: dict = Depends(get_current_user)):
         upcoming.append(ev)
 
     if ranked_genres:
-        matches = [e for e in upcoming if e.get("genre") in genre_rank]
-        pool = matches if matches else upcoming
-        pool.sort(key=lambda e: (genre_rank.get(e.get("genre"), 999), e["date"]))
+        matched = [e for e in upcoming if e.get("genre") in genre_rank]
+        others = [e for e in upcoming if e.get("genre") not in genre_rank]
+        matched.sort(key=lambda e: (genre_rank.get(e.get("genre"), 999), e["date"]))
+        others.sort(key=lambda e: e["date"])
+        pool = matched + others
     else:
-        # No history yet — surface the most popular upcoming events
         pool = upcoming
 
     result = []
@@ -1068,9 +1069,17 @@ async def create_story(
     user: dict = Depends(get_current_user),
 ):
     ext = file.filename.split(".")[-1].lower() if "." in file.filename else "jpg"
-    path = f"{APP_NAME}/stories/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
     data = await file.read()
     ct = file.content_type or "image/jpeg"
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen")
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="La imagen supera el máximo de 8MB")
+    if event_id:
+        ev = await db.events.find_one({"id": event_id})
+        if not ev:
+            raise HTTPException(status_code=404, detail="Evento no encontrado")
+    path = f"{APP_NAME}/stories/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
     result = put_object(path, data, ct)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
@@ -1120,7 +1129,9 @@ async def list_stories(user: dict = Depends(get_current_user)):
 
 @api_router.delete("/stories/{story_id}")
 async def delete_story(story_id: str, user: dict = Depends(get_current_user)):
-    await db.stories.delete_one({"id": story_id, "user_id": user["user_id"]})
+    res = await db.stories.delete_one({"id": story_id, "user_id": user["user_id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Historia no encontrada")
     return {"ok": True}
 
 

@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +42,14 @@ export function AddStoryDialog({ open, onOpenChange, eventId }) {
   const pick = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      toast.error("El archivo debe ser una imagen");
+      return;
+    }
+    if (f.size > 8 * 1024 * 1024) {
+      toast.error("La imagen supera el máximo de 8MB");
+      return;
+    }
     setFile(f);
     setPreview(URL.createObjectURL(f));
   };
@@ -71,6 +79,9 @@ export function AddStoryDialog({ open, onOpenChange, eventId }) {
       <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl">
         <DialogHeader>
           <DialogTitle className="font-display">Subir historia</DialogTitle>
+          <DialogDescription className="text-white/50">
+            Comparte una foto de la noche. Solo la verán tus amigos y desaparece en 24h.
+          </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div
