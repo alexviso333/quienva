@@ -39,46 +39,40 @@ logger = logging.getLogger("quienva")
 SESSION_DAYS = 7
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
+# Self-hosted Google OAuth (no Emergent dependency). Optional: disabled if unset.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:hola@quienva.app")
 scheduler = None
 
 # ---------------------------------------------------------------------------
-# Object storage
+# Local file storage (no external dependency, free, fully portable)
 # ---------------------------------------------------------------------------
-STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
+import mimetypes
+
 APP_NAME = "quienva"
-storage_key = None
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT_DIR / "uploads")))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def init_storage():
-    global storage_key
-    if storage_key:
-        return storage_key
-    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
-    resp.raise_for_status()
-    storage_key = resp.json()["storage_key"]
-    return storage_key
+def save_object(rel_path: str, data: bytes) -> str:
+    full = (UPLOAD_DIR / rel_path).resolve()
+    if UPLOAD_DIR.resolve() not in full.parents:
+        raise HTTPException(status_code=400, detail="Ruta inválida")
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_bytes(data)
+    return rel_path
 
 
-def put_object(path: str, data: bytes, content_type: str) -> dict:
-    key = init_storage()
-    resp = requests.put(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type},
-        data=data, timeout=120,
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def get_object(path: str):
-    key = init_storage()
-    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+def read_object(rel_path: str):
+    full = (UPLOAD_DIR / rel_path).resolve()
+    if UPLOAD_DIR.resolve() not in full.parents or not full.exists():
+        return None
+    return full.read_bytes()
 
 
 # ---------------------------------------------------------------------------
@@ -281,26 +275,48 @@ async def login(inp: LoginInput, response: Response):
     return {"user": public_user(user), "token": token}
 
 
-@api_router.post("/auth/google/session")
-async def google_session(inp: GoogleSessionInput, response: Response):
+class GoogleCallbackInput(BaseModel):
+    code: str
+    redirect_uri: str
+
+
+@api_router.get("/auth/google/config")
+async def google_config():
+    return {"enabled": GOOGLE_ENABLED, "client_id": GOOGLE_CLIENT_ID}
+
+
+@api_router.post("/auth/google/callback")
+async def google_callback(inp: GoogleCallbackInput, response: Response):
+    # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    if not GOOGLE_ENABLED:
+        raise HTTPException(status_code=400, detail="Google login no está configurado")
     try:
-        r = requests.get(EMERGENT_SESSION_URL, headers={"X-Session-ID": inp.session_id}, timeout=30)
-        r.raise_for_status()
-        data = r.json()
+        token_res = requests.post("https://oauth2.googleapis.com/token", data={
+            "code": inp.code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": inp.redirect_uri,
+            "grant_type": "authorization_code",
+        }, timeout=30)
+        token_res.raise_for_status()
+        access_token = token_res.json()["access_token"]
+        info = requests.get("https://www.googleapis.com/oauth2/v3/userinfo",
+                            headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+        info.raise_for_status()
+        data = info.json()
     except Exception as e:
-        logger.error(f"Google session error: {e}")
-        raise HTTPException(status_code=401, detail="No se pudo validar la sesión de Google")
+        logger.error(f"Google OAuth error: {e}")
+        raise HTTPException(status_code=401, detail="No se pudo validar el login de Google")
 
     email = (data.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=401, detail="Google no devolvió email")
     existing = await db.users.find_one({"email": email})
     if existing:
         user = existing
-        updates = {}
         if not user.get("picture") and data.get("picture"):
-            updates["picture"] = data["picture"]
-        if updates:
-            await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
-            user.update(updates)
+            await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": data["picture"]}})
+            user["picture"] = data["picture"]
     else:
         base_username = (email.split("@")[0] if email else "user").lower().replace(".", "")
         username = base_username
@@ -319,7 +335,7 @@ async def google_session(inp: GoogleSessionInput, response: Response):
         }
         await db.users.insert_one(user)
 
-    token = await create_session(user["user_id"], token=data.get("session_token"))
+    token = await create_session(user["user_id"])
     set_session_cookie(response, token)
     return {"user": public_user(user), "token": token}
 
@@ -803,14 +819,14 @@ async def admin_upload(file: UploadFile = File(...), admin: dict = Depends(requi
     path = f"{APP_NAME}/events/{uuid.uuid4().hex}.{ext}"
     data = await file.read()
     ct = file.content_type or "image/jpeg"
-    result = put_object(path, data, ct)
+    save_object(path, data)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
-        "storage_path": result["path"],
+        "storage_path": path,
         "content_type": ct,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    return {"image_url": f"/api/files/{result['path']}"}
+    return {"image_url": f"/api/files/{path}"}
 
 
 @api_router.post("/upload/avatar")
@@ -819,25 +835,26 @@ async def upload_avatar(file: UploadFile = File(...), user: dict = Depends(get_c
     path = f"{APP_NAME}/avatars/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
     data = await file.read()
     ct = file.content_type or "image/jpeg"
-    result = put_object(path, data, ct)
+    save_object(path, data)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
-        "storage_path": result["path"],
+        "storage_path": path,
         "content_type": ct,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    url = f"/api/files/{result['path']}"
+    url = f"/api/files/{path}"
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": url}})
     return {"image_url": url}
 
 
 @api_router.get("/files/{path:path}")
 async def serve_file(path: str):
-    record = await db.files.find_one({"storage_path": path})
-    if not record:
+    data = read_object(path)
+    if data is None:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    data, content_type = get_object(path)
-    return StarletteResponse(content=data, media_type=record.get("content_type", content_type),
+    record = await db.files.find_one({"storage_path": path})
+    ct = record["content_type"] if record else (mimetypes.guess_type(path)[0] or "application/octet-stream")
+    return StarletteResponse(content=data, media_type=ct,
                              headers={"Cache-Control": "public, max-age=86400"})
 
 
@@ -1094,10 +1111,10 @@ async def create_story(
         if not ev:
             raise HTTPException(status_code=404, detail="Evento no encontrado")
     path = f"{APP_NAME}/stories/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
-    result = put_object(path, data, ct)
+    save_object(path, data)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
-        "storage_path": result["path"],
+        "storage_path": path,
         "content_type": ct,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
@@ -1105,7 +1122,7 @@ async def create_story(
     story = {
         "id": str(uuid.uuid4()),
         "user_id": user["user_id"],
-        "image_url": f"/api/files/{result['path']}",
+        "image_url": f"/api/files/{path}",
         "caption": caption.strip(),
         "event_id": event_id or None,
         "created_at": now.isoformat(),
@@ -1402,11 +1419,6 @@ async def on_startup():
         await db.sessions.create_index("session_token", unique=True)
     except Exception as e:
         logger.warning(f"Index warn: {e}")
-    try:
-        init_storage()
-        logger.info("Storage inicializado")
-    except Exception as e:
-        logger.error(f"Storage init falló: {e}")
     await seed_admin()
     await seed_events()
     global scheduler
