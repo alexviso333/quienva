@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, ArrowLeft, ImageUp, Loader2, Ticket, ExternalLink, Link as LinkIcon, Wand2 } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowLeft, ImageUp, Loader2, Ticket, ExternalLink, Link as LinkIcon, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY = {
@@ -229,6 +229,14 @@ export default function Admin() {
     },
   });
 
+  const triggerMoment = useMutation({
+    mutationFn: async (id) => (await api.post(`/admin/events/${id}/moment/trigger`)).data,
+    onSuccess: (data) => {
+      toast.success(`⚡ Momento lanzado a ${data.notified} usuarios`);
+    },
+    onError: () => toast.error("No se pudo lanzar"),
+  });
+
   return (
     <div className="min-h-screen qv-app-bg">
       <div className="max-w-md mx-auto min-h-screen pb-10">
@@ -280,6 +288,16 @@ export default function Admin() {
                 <div className="flex flex-col gap-2">
                   <button data-testid={`admin-edit-${ev.id}`} onClick={() => setEditing(ev)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
                     <Pencil className="w-4 h-4 text-white/80" />
+                  </button>
+                  <button
+                    data-testid={`admin-moment-${ev.id}`}
+                    onClick={() => {
+                      if (window.confirm(`¿Lanzar 'El Momento' a los asistentes de ${ev.name}?`)) triggerMoment.mutate(ev.id);
+                    }}
+                    className="w-9 h-9 rounded-full bg-yellow-300/20 flex items-center justify-center"
+                    title="Lanzar Momento"
+                  >
+                    <Zap className="w-4 h-4 text-yellow-300" />
                   </button>
                   <button data-testid={`admin-delete-${ev.id}`} onClick={() => del.mutate(ev.id)} className="w-9 h-9 rounded-full bg-qv-primary/20 flex items-center justify-center">
                     <Trash2 className="w-4 h-4 text-qv-primary" />

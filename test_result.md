@@ -309,6 +309,78 @@ backend:
         comment: "Restored .env with MONGO_URL, DB_NAME, ADMIN, VAPID (regenerated). Admin seed re-created on startup."
 
 frontend:
+  - task: "EventAlbum shared media component (photos + videos)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/EventAlbum.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New /components/EventAlbum used inside EventDetail. Grid layout, upload button with progress %, preview dialog for image and video, delete for own uploads. Uses /events/:id/album/{upload,list,delete}."
+
+  - task: "EventMoment component (El Momento, BeReal-like)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/EventMoment.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New /components/EventMoment. Three states: no-prompt (informational), prompt-active (yellow CTA with countdown, capture button opens rear camera), already-uploaded (grid of my + friends' captures with A TIEMPO badge). Uses /events/:id/moment/{status,upload,gallery}."
+
+  - task: "Ticket click tracking wired in EventDetail"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/EventDetail.js"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "'Conseguir entrada' now fires POST /tickets/click before opening the affiliate link, so admin can confirm to award +50 pts."
+
+  - task: "Memories retrospective calendar page"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Memories.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New /memories route. Month navigator with < >, calendar grid highlights days with activity, expandable day cards showing event + friends + moments + shared photos/videos below. Accessible from Profile via 'Calendario y recuerdos' button."
+
+  - task: "Admin dashboard with charts and pending tickets"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/AdminDashboard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added recharts LineChart for 30-day activity (signups/voys/stories/captures), extras row (DMs/groups/album/moments), Top users by points (with medal ring for top 3), and pending tickets section with confirm/reject buttons wired to /admin/tickets/confirm."
+
+  - task: "Admin events: Trigger 'El Momento' button per event"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Admin.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New yellow lightning button on each event row triggers POST /admin/events/:id/moment/trigger with a confirmation, notifying all 'voy' users."
+
   - task: "StreakBanner on Feed"
     implemented: true
     working: "NA"

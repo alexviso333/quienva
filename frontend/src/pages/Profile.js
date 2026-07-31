@@ -193,6 +193,14 @@ export default function Profile() {
         </button>
 
         <button
+          data-testid="memories-btn"
+          onClick={() => navigate("/memories")}
+          className="h-12 rounded-2xl bg-qv-secondary/10 border border-qv-secondary/30 text-qv-secondary font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+        >
+          <Archive className="w-4 h-4" /> Calendario y recuerdos
+        </button>
+
+        <button
           data-testid="archive-btn"
           onClick={() => setArchiveOpen(true)}
           className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"

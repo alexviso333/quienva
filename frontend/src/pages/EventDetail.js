@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { AddStoryButton } from "@/components/Stories";
+import { EventAlbum } from "@/components/EventAlbum";
+import { EventMoment } from "@/components/EventMoment";
 import {
   ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2,
 } from "lucide-react";
@@ -80,6 +82,13 @@ export default function EventDetail() {
     const link = `${window.location.origin}/event/${event.id}`;
     const text = `${event.name} · ${event.venue} · ${formatDate(event.date)} — ¿vienes? ${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  };
+
+  const hasInterest = !!event.my_status && event.my_status !== "none";
+
+  const onTicketClick = () => {
+    // Fire-and-forget tracking for points
+    api.post("/tickets/click", { event_id: event.id }).catch(() => {});
   };
 
   return (
@@ -167,6 +176,7 @@ export default function EventDetail() {
               href={event.commission_url}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={onTicketClick}
               className="h-12 rounded-2xl bg-white text-black font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
             >
               <Ticket className="w-5 h-5" /> Conseguir entrada
@@ -232,6 +242,12 @@ export default function EventDetail() {
             label="Subir historia de esta noche"
             className="h-12 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
           />
+
+          {/* El Momento — only during event window; component handles empty states */}
+          {!isPast && <EventMoment eventId={event.id} hasInterest={hasInterest} />}
+
+          {/* Shared album — photos + videos (past or current) */}
+          <EventAlbum eventId={event.id} hasInterest={hasInterest} />
         </div>
       </div>
     </div>

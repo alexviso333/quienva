@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck } from "lucide-react";
+import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck, Trophy, MessageCircle, Images, Zap, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from "recharts";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
@@ -28,6 +29,28 @@ export default function AdminDashboard() {
     queryKey: ["admin-stats"],
     queryFn: async () => (await api.get("/admin/stats")).data,
     staleTime: 30_000,
+  });
+
+  const { data: dashboard } = useQuery({
+    queryKey: ["admin-dashboard"],
+    queryFn: async () => (await api.get("/admin/dashboard")).data,
+    staleTime: 30_000,
+  });
+
+  const { data: pendingTickets = [] } = useQuery({
+    queryKey: ["admin-tickets", "pending"],
+    queryFn: async () => (await api.get("/admin/tickets?status=pending")).data,
+    staleTime: 20_000,
+  });
+
+  const confirmTicket = useMutation({
+    mutationFn: async ({ purchase_id, confirmed }) => (await api.post("/admin/tickets/confirm", { purchase_id, confirmed })).data,
+    onSuccess: () => {
+      toast.success("Actualizado");
+      qc.invalidateQueries({ queryKey: ["admin-tickets"] });
+      qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
+    },
+    onError: () => toast.error("Error"),
   });
 
   const { data: users = [], isLoading: loadingUsers } = useQuery({
@@ -80,6 +103,108 @@ export default function AdminDashboard() {
         <StatBox icon={Users} value={stats?.totals.friendships} label="amistades" color="text-green-300" />
         <StatBox icon={TrendingUp} value={stats?.totals.events} label="total fiestas" color="text-pink-300" />
       </div>
+
+      {/* Activity chart */}
+      {dashboard?.activity_30d && (
+        <div className="px-4 mt-6">
+          <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-qv-secondary" /> Actividad · últimos 30 días
+          </h2>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+            <div style={{ width: "100%", height: 220 }}>
+              <ResponsiveContainer>
+                <LineChart
+                  data={dashboard.activity_30d.map((d) => ({
+                    ...d,
+                    label: new Date(d.date + "T00:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "short" }),
+                  }))}
+                  margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid stroke="#ffffff10" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: "#ffffff60", fontSize: 10 }} interval={4} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#ffffff60", fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} width={30} />
+                  <Tooltip contentStyle={{ background: "#121215", border: "1px solid #ffffff25", borderRadius: 12, color: "#fff" }} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: "#ffffff80" }} />
+                  <Line type="monotone" dataKey="signups" name="Registros" stroke="#00F0FF" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="voys" name="Voys" stroke="#FF0055" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="stories" name="Stories" stroke="#FFD93D" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="captures" name="Momentos" stroke="#B45CFF" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Extras row */}
+      {dashboard?.extras && (
+        <div className="px-4 mt-3 grid grid-cols-4 gap-2">
+          <StatBox icon={MessageCircle} value={dashboard.extras.dms} label="mensajes DM" color="text-blue-300" />
+          <StatBox icon={Users} value={dashboard.extras.groups} label="grupos" color="text-emerald-300" />
+          <StatBox icon={Images} value={dashboard.extras.album_items} label="album" color="text-fuchsia-300" />
+          <StatBox icon={Zap} value={dashboard.extras.captures} label="momentos" color="text-yellow-300" />
+        </div>
+      )}
+
+      {/* Top users by points */}
+      {dashboard?.top_users && dashboard.top_users.length > 0 && (
+        <div className="px-4 mt-6">
+          <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-yellow-300" /> Top usuarios por puntos
+          </h2>
+          <div className="flex flex-col gap-1.5" data-testid="admin-top-users">
+            {dashboard.top_users.map((u) => (
+              <button
+                key={u.user_id}
+                onClick={() => navigate(`/users/${u.user_id}`)}
+                className="text-left rounded-xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center gap-3 active:scale-[0.99]"
+              >
+                <span className="w-8 text-center font-display font-black text-white/80">#{u.rank}</span>
+                <AvatarCircle name={u.name} picture={u.picture} size={34} ring={u.rank <= 3} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-white truncate">{u.name}</p>
+                  <p className="text-white/40 text-[10px] truncate">{u.city}</p>
+                </div>
+                <span className="font-display font-black text-yellow-300 text-sm">{u.points.toLocaleString("es-ES")}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pending tickets */}
+      {pendingTickets.length > 0 && (
+        <div className="px-4 mt-6">
+          <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2">
+            <Ticket className="w-4 h-4 text-orange-300" /> Entradas pendientes
+            <span className="text-xs font-normal text-white/40">({pendingTickets.length})</span>
+          </h2>
+          <div className="flex flex-col gap-1.5" data-testid="admin-pending-tickets">
+            {pendingTickets.map((t) => (
+              <div key={t.id} className="rounded-xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-white truncate">{t.event?.name}</p>
+                  <p className="text-white/50 text-xs truncate">{t.user?.name} · {new Date(t.created_at).toLocaleString("es-ES")}</p>
+                </div>
+                <button
+                  onClick={() => confirmTicket.mutate({ purchase_id: t.id, confirmed: true })}
+                  className="w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center active:scale-90"
+                  data-testid={`ticket-confirm-${t.id}`}
+                >
+                  <Check className="w-4 h-4 text-emerald-300" />
+                </button>
+                <button
+                  onClick={() => confirmTicket.mutate({ purchase_id: t.id, confirmed: false })}
+                  className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center active:scale-90"
+                  data-testid={`ticket-reject-${t.id}`}
+                >
+                  <X className="w-4 h-4 text-white/60" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Top events */}
       <div className="px-4 mt-6">
