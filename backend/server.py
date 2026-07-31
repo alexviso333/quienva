@@ -5,7 +5,7 @@ import os
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Query, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Form, Query, Header
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response as StarletteResponse
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -658,6 +658,49 @@ async def my_streak(user: dict = Depends(get_current_user)):
     return {"streak": streak}
 
 
+@api_router.get("/events/discover")
+async def discover_events(user: dict = Depends(get_current_user)):
+    """Recommend upcoming events based on the genres the user engages with most."""
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    genre_count = {}
+    interacted = set()
+    async for it in db.interests.find({"user_id": user["user_id"]}):
+        interacted.add(it["event_id"])
+        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+        if ev and ev.get("genre"):
+            genre_count[ev["genre"]] = genre_count.get(ev["genre"], 0) + 1
+    ranked_genres = [g for g, _ in sorted(genre_count.items(), key=lambda x: -x[1])]
+    genre_rank = {g: i for i, g in enumerate(ranked_genres)}
+
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    upcoming = []
+    async for ev in db.events.find({"city": user.get("city", "Palma de Mallorca")}, {"_id": 0}):
+        if ev["id"] in interacted:
+            continue
+        try:
+            d = date.fromisoformat(ev["date"])
+        except Exception:
+            continue
+        if d < today:
+            continue
+        upcoming.append(ev)
+
+    if ranked_genres:
+        matches = [e for e in upcoming if e.get("genre") in genre_rank]
+        pool = matches if matches else upcoming
+        pool.sort(key=lambda e: (genre_rank.get(e.get("genre"), 999), e["date"]))
+    else:
+        # No history yet — surface the most popular upcoming events
+        pool = upcoming
+
+    result = []
+    for ev in pool[:12]:
+        result.append(await serialize_event(ev, user, friend_ids))
+    if not ranked_genres:
+        result.sort(key=lambda e: -(e["total_going"] + e["total_interested"]))
+    return result
+
+
 @api_router.get("/events/{event_id}")
 async def get_event(event_id: str, user: dict = Depends(get_current_user)):
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
@@ -1009,6 +1052,76 @@ async def generate_event_reminders() -> int:
 async def trigger_reminders(admin: dict = Depends(require_admin)):
     sent = await generate_event_reminders()
     return {"sent": sent}
+
+
+# ---------------------------------------------------------------------------
+# Stories (ephemeral 24h, friends-only)
+# ---------------------------------------------------------------------------
+STORY_TTL_HOURS = 24
+
+
+@api_router.post("/stories")
+async def create_story(
+    file: UploadFile = File(...),
+    caption: str = Form(""),
+    event_id: str = Form(""),
+    user: dict = Depends(get_current_user),
+):
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "jpg"
+    path = f"{APP_NAME}/stories/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+    data = await file.read()
+    ct = file.content_type or "image/jpeg"
+    result = put_object(path, data, ct)
+    await db.files.insert_one({
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "content_type": ct,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    now = datetime.now(timezone.utc)
+    story = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["user_id"],
+        "image_url": f"/api/files/{result['path']}",
+        "caption": caption.strip(),
+        "event_id": event_id or None,
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(hours=STORY_TTL_HOURS)).isoformat(),
+    }
+    await db.stories.insert_one(story)
+    story.pop("_id", None)
+    return story
+
+
+@api_router.get("/stories")
+async def list_stories(user: dict = Depends(get_current_user)):
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    allowed = friend_ids + [user["user_id"]]
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=STORY_TTL_HOURS)).isoformat()
+    out = []
+    async for s in db.stories.find(
+        {"user_id": {"$in": allowed}, "created_at": {"$gte": cutoff}}, {"_id": 0}
+    ).sort("created_at", 1):
+        author = await db.users.find_one({"user_id": s["user_id"]}, {"_id": 0})
+        if not author:
+            continue
+        event_name = None
+        if s.get("event_id"):
+            ev = await db.events.find_one({"id": s["event_id"]}, {"_id": 0})
+            event_name = ev["name"] if ev else None
+        out.append({
+            **s,
+            "is_mine": s["user_id"] == user["user_id"],
+            "author": {"name": author["name"], "picture": author.get("picture", ""), "username": author["username"]},
+            "event_name": event_name,
+        })
+    return out
+
+
+@api_router.delete("/stories/{story_id}")
+async def delete_story(story_id: str, user: dict = Depends(get_current_user)):
+    await db.stories.delete_one({"id": story_id, "user_id": user["user_id"]})
+    return {"ok": True}
 
 
 @api_router.get("/")

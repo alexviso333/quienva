@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
+import { StoriesBar } from "@/components/Stories";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { useAuth } from "@/context/AuthContext";
 import { Loader2, PartyPopper, Flame, ChevronRight } from "lucide-react";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
 
 const DATE_FILTERS = [
   { key: "all", label: "Todos" },
+  { key: "descubrir", label: "Descubrir" },
   { key: "hoy", label: "Hoy" },
   { key: "finde", label: "Este finde" },
   { key: "semana", label: "Próx. semana" },
@@ -28,6 +30,7 @@ export default function Feed() {
   const cardRefs = useRef({});
 
   const isPastView = dateFilter === "pasados";
+  const isDiscover = dateFilter === "descubrir";
 
   const { data: topEvent } = useQuery({
     queryKey: ["top-weekend"],
@@ -41,7 +44,10 @@ export default function Feed() {
 
   const { data: events, isLoading } = useQuery({
     queryKey: ["events", dateFilter, genre],
-    queryFn: async () => (await api.get("/events", { params: { date_filter: dateFilter, genre } })).data,
+    queryFn: async () => {
+      if (dateFilter === "descubrir") return (await api.get("/events/discover")).data;
+      return (await api.get("/events", { params: { date_filter: dateFilter, genre } })).data;
+    },
   });
 
   const setStatus = useMutation({
@@ -80,9 +86,12 @@ export default function Feed() {
           {user?.city || "Palma de Mallorca"}
         </p>
         <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
-          {isPastView ? "Recuerdos" : "Los planes"}<span className="text-qv-primary">.</span>
+          {isPastView ? "Recuerdos" : isDiscover ? "Para ti" : "Los planes"}<span className="text-qv-primary">.</span>
         </h1>
+        {isDiscover && <p className="text-white/50 text-sm mt-1">Según los géneros a los que más vas.</p>}
       </header>
+
+      <StoriesBar />
 
       <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-2" data-testid="date-filters">
         {DATE_FILTERS.map((f) => (
@@ -99,7 +108,7 @@ export default function Feed() {
         ))}
       </div>
 
-      {genres.length > 0 && !isPastView && (
+      {genres.length > 0 && !isPastView && !isDiscover && (
         <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-4" data-testid="genre-filters">
           <button
             data-testid="filter-genre-all"
@@ -126,7 +135,7 @@ export default function Feed() {
       )}
 
       <div className="flex flex-col gap-4 px-4 pt-1">
-        {!isPastView && topEvent && (topEvent.friends_going || []).length > 0 && (
+        {!isPastView && !isDiscover && topEvent && (topEvent.friends_going || []).length > 0 && (
           <button
             data-testid="top-weekend-banner"
             onClick={() => navigate(`/event/${topEvent.id}`)}

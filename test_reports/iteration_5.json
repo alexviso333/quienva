@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 5 (HISTORIAS DE ANOCHE + MODO DESCUBRIR) tested end-to-end. Backend: new /app/backend/tests/test_iteration5.py with 16 cases -> 16/16 PASS (story upload shape + ~24h expires_at, image served 200 image/* at /api/files/..., is_mine/author payload, accepted-friend visibility, stranger sees [], PENDING friend request grants no access, event-tied story returns event_name, non-owner cannot delete someone else's story, owner delete removes it, >24h-old story injected in Mongo is filtered out of GET /api/stories, auth-gating 401; discover: auth-gated, not shadowed by /events/{event_id}, brand-new user gets non-empty list sorted by popularity, all dates >= today, engaged-genre events prioritized, already-interacted events excluded, full event shape with no _id). Full regression suite /app/backend/tests -> 70/70 PASS. Frontend Playwright (390x844): stories-bar + add-story-btn render under header; Marta sees accepted friend Bob's story-bubble-bob, viewer shows avatar/author 'Bob Marley'/'ahora'/caption/event chip, image loads (naturalWidth>0), no story-delete on a friend's story, right-side tap on story-nav-area closes at end, story-close closes; upload via story-drop/story-file-input/story-caption/story-submit succeeds with '¡Historia publicada!' toast and own bubble ('Tú') appears; own viewer shows 'Tu historia' + story-delete which removes the bubble; add-story-detail-btn on /event/:id uploads a story tied to that event (viewer shows the event chip 'Reggaeton Party'); NON-friend 'stranger' sees zero story bubbles (privacy OK in UI). Descubrir: filter-date-descubrir switches heading to 'Para ti.', shows 'Según los géneros a los que más vas.', hides genre-filters and top-weekend-banner, keeps stories bar, lists /events/discover results; after marking Voy on a Reggaeton event that event disappears from the Descubrir list (exclusion verified in UI). Regressions OK: 6 compact feed cards with share/Voy/Me interesa, event detail, friends search, 8 notifications, Profile streak=1, logout -> /login, 0 error elements on page.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/stories", "issue": "No file validation: uploading a text/plain file (evil.txt) returns 200 and is stored as the story image_url (.txt). Should reject content_type not starting with image/ (415/400) and enforce a max size."},
+      {"endpoint": "POST /api/stories", "issue": "event_id is not validated — a nonexistent event_id is stored and later returns event_name=null. Should 404/400 on unknown event_id."},
+      {"endpoint": "DELETE /api/stories/{id}", "issue": "Always returns {ok:true} even for a nonexistent id or a story owned by another user (delete_one matches nothing). Privacy is not broken, but the UI shows 'Historia eliminada' for a no-op. Should return 404 when nothing was deleted."},
+      {"endpoint": "GET /api/events/discover", "issue": "When the user has history, pool = matches only (non-matching genres are dropped), so 'Para ti' can show a single card when only 1 upcoming event matches the top genre — the pool.sort with genre_rank.get(...,999) suggests the intent was matched-first-then-others. Also the popularity sort is applied only in the no-history branch, so the fallback (history but zero genre matches) is date-sorted, not popularity-sorted."},
+      {"endpoint": "GET /api/stories", "issue": "N+1 queries: one users lookup + one events lookup per story. Fine at current scale; batch with $in if story volume grows."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AddStoryDialog", "issues": ["Radix warning in console: 'Missing Description or aria-describedby for DialogContent' (a11y only)", "No client-side size/type guard or upload progress; only the button spinner indicates work"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration5.py",
+    "/app/backend/tests/setup_ui_iteration5.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Validate story uploads server-side: reject non-image content_type and cap file size in POST /api/stories",
+    "Validate event_id exists in POST /api/stories (400/404) instead of storing a dangling reference",
+    "Return 404 from DELETE /api/stories/{id} when no story was deleted so the UI does not show a false 'Historia eliminada' toast",
+    "Decide intended /events/discover ranking: either append non-matching upcoming events after genre matches (so 'Para ti' is never near-empty) or keep matches-only and add an empty-state; also apply popularity sort to the with-history fallback",
+    "Add DialogDescription (or aria-describedby) to AddStoryDialog to clear the Radix a11y warning"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1245 lines — stories/discover/reminders should move into routers/ modules before it grows further",
+    "POST /api/stories trusts the uploaded file blindly (content_type from the client, no size limit) — an unauthenticated-size DoS / arbitrary-file-store vector via an authenticated user",
+    "discover_events loads every city event and does per-interest event lookups in Python; acceptable now, but should be a single aggregation if event count grows"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration5.py",
+    "/app/backend/tests/setup_ui_iteration5.py"
+  ],
+  "success_rate": {"backend": "100% (70/70, incl. 16 new iteration-5 cases)", "frontend": "100% of iteration-5 flows verified"},
+  "seed_data_creation": "setup_ui_iteration5.py ensures marta@test.com / bob@test.com (accepted friends) / stranger@test.com (all test1234), creates one upcoming Reggaeton event 'UI5 Reggaeton Night <tag>' and uploads one story from Bob tied to it. Pytest creates TEST_* users/events and deletes its events + stories afterwards.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@quienva.app / QuienVa2026! ; marta@test.com, bob@test.com, stranger@test.com all test1234",
+  "context_for_next_testing_agent": "Feed date-filter testids use KEYS not labels: filter-date-all (label 'Todos'), filter-date-descubrir, filter-date-hoy, filter-date-finde, filter-date-semana, filter-date-pasados. Feed card action testids are event-voy-btn-<id> / event-interesa-btn-<id> / event-estuve-btn-<id> / event-open-<id> / event-share-btn-<id>. Profile route is /profile (not /perfil); login submit is [data-testid=auth-submit]. For story upload in Playwright use set_input_files on the hidden [data-testid=story-file-input] (works). Use a real >1px PNG for screenshots — a 1x1 PNG renders as a black viewer. Discover is stateful: marking Voy from the Descubrir list changes subsequent recommendations, so re-toggle to clean up. Backend suite: pytest tests/ from /app/backend passes 70/70 (~3 min); the previously flaky backend_test.py::test_persistence_across_requests did not fail this run.",
+  "rca_of_the_issue": "No functional defect found in either new feature. The only behavioural surprise is /events/discover returning a very short list once the user's top genre has few upcoming matches, because the code filters the pool to genre matches only (server.py ~line 689) while the following sort implies a mixed pool — a spec ambiguity, not a crash."
+}

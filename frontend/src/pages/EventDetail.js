@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
+import { AddStoryButton } from "@/components/Stories";
 import {
   ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2,
 } from "lucide-react";
@@ -225,6 +226,12 @@ export default function EventDetail() {
               <Navigation className="w-4 h-4 text-qv-secondary" /> Cómo llegar
             </a>
           </div>
+
+          <AddStoryButton
+            eventId={event.id}
+            label="Subir historia de esta noche"
+            className="h-12 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+          />
         </div>
       </div>
     </div>
