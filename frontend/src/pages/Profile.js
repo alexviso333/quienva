@@ -5,11 +5,12 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Flame, Archive, Grid3x3, Rows3 } from "lucide-react";
+import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, LayoutDashboard } from "lucide-react";
 import { toast } from "sonner";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 import { StoriesArchive } from "@/components/Stories";
 import { useCompactMode } from "@/hooks/useCompactMode";
+import { BadgesPanel } from "@/components/BadgesPanel";
 
 export default function Profile() {
   const { user, setUser, logout, refreshUser } = useAuth();
@@ -21,8 +22,6 @@ export default function Profile() {
   const [uploading, setUploading] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
-  const [streak, setStreak] = useState(0);
-  const [streakLoaded, setStreakLoaded] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [compact, setCompact] = useCompactMode();
   const pushSupported = isPushSupported();
@@ -30,13 +29,6 @@ export default function Profile() {
   useEffect(() => {
     if (pushSupported) getPushStatus().then(setPushOn);
   }, [pushSupported]);
-
-  useEffect(() => {
-    api.get("/me/streak")
-      .then(({ data }) => setStreak(data.streak))
-      .catch(() => {})
-      .finally(() => setStreakLoaded(true));
-  }, []);
 
   const togglePush = async () => {
     setPushBusy(true);
@@ -125,28 +117,8 @@ export default function Profile() {
         <p className="text-white/40 text-sm">@{user?.username}</p>
       </div>
 
-      <div className="px-5 mb-2">
-        {streakLoaded && (
-        <div
-          data-testid="streak-card"
-          className="relative rounded-2xl overflow-hidden border border-qv-primary/40 bg-[#1a0a12] p-4 flex items-center gap-4"
-        >
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,_rgba(255,0,85,0.22),transparent_65%)]" />
-          <div className="relative w-14 h-14 rounded-2xl bg-qv-primary/20 flex items-center justify-center shrink-0">
-            <Flame className="w-7 h-7 text-qv-primary" style={{ filter: "drop-shadow(0 0 8px rgba(255,0,85,0.7))" }} />
-          </div>
-          <div className="relative">
-            <p className="font-display text-3xl font-black leading-none" data-testid="streak-count">
-              {streak}
-            </p>
-            <p className="text-sm text-white/70 mt-1">
-              {streak === 0
-                ? "Empieza tu racha este finde 🔥"
-                : `finde${streak > 1 ? "s" : ""} seguido${streak > 1 ? "s" : ""} saliendo`}
-            </p>
-          </div>
-        </div>
-        )}
+      <div className="px-5 mb-4">
+        <BadgesPanel />
       </div>
 
       <div className="px-5 flex flex-col gap-3">
@@ -233,13 +205,22 @@ export default function Profile() {
         </button>
 
         {user?.role === "admin" && (
-          <button
-            data-testid="admin-panel-btn"
-            onClick={() => navigate("/admin")}
-            className="h-12 rounded-2xl bg-qv-secondary/15 border border-qv-secondary/40 text-qv-secondary font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-          >
-            <Shield className="w-4 h-4" /> Panel de administración
-          </button>
+          <>
+            <button
+              data-testid="admin-dashboard-btn"
+              onClick={() => navigate("/admin/dashboard")}
+              className="h-12 rounded-2xl bg-qv-secondary/15 border border-qv-secondary/40 text-qv-secondary font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+            >
+              <LayoutDashboard className="w-4 h-4" /> Panel avanzado
+            </button>
+            <button
+              data-testid="admin-panel-btn"
+              onClick={() => navigate("/admin")}
+              className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+            >
+              <Shield className="w-4 h-4" /> Gestionar fiestas
+            </button>
+          </>
         )}
 
         <button

@@ -136,7 +136,13 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
             <>
               <div className="flex -space-x-2.5 shrink-0">
                 {previewFriends.map((f, i) => (
-                  <AvatarCircle key={f.user_id + i} name={f.name} picture={f.picture} size={30} />
+                  <button
+                    key={f.user_id + i}
+                    onClick={(e) => { e.stopPropagation(); if (f.user_id && f.user_id !== "me") navigate(`/users/${f.user_id}`); }}
+                    className="rounded-full active:scale-90 transition-transform"
+                  >
+                    <AvatarCircle name={f.name} picture={f.picture} size={30} />
+                  </button>
                 ))}
               </div>
               <p className="text-xs text-white/85 leading-tight">

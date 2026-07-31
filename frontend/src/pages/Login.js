@@ -41,7 +41,8 @@ export default function Login() {
         }
         await register(form);
       }
-      navigate("/feed");
+      const onboarded = localStorage.getItem("qv_onboarded") === "1";
+      navigate(onboarded ? "/feed" : "/onboarding");
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || err.message);
     } finally {

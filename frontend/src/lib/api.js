@@ -5,10 +5,13 @@ export const API = `${BACKEND_URL}/api`;
 
 const api = axios.create({
   baseURL: API,
-  withCredentials: true,
+  // Cookies are NOT the primary auth (JWT in Authorization header is). Setting
+  // withCredentials=false lets us work behind proxies that force
+  // Access-Control-Allow-Origin: * (which browsers otherwise block).
+  withCredentials: false,
 });
 
-// Attach bearer token fallback (cookies are primary)
+// Bearer token is the primary auth mechanism.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("qv_token");
   if (token) {

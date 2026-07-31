@@ -767,6 +767,222 @@ async def my_streak(user: dict = Depends(get_current_user)):
     return {"streak": streak}
 
 
+# =========================
+# BADGES / ACHIEVEMENTS
+# =========================
+
+BADGES_CATALOG = [
+    {"id": "first_step", "name": "Primer paso", "desc": "Te apuntaste a tu primera fiesta", "emoji": "🎉", "tier": "bronze"},
+    {"id": "night_owl", "name": "Búho nocturno", "desc": "Estuviste en 5 fiestas", "emoji": "🌙", "tier": "silver"},
+    {"id": "party_veteran", "name": "Veterano", "desc": "Estuviste en 20 fiestas", "emoji": "🏆", "tier": "gold"},
+    {"id": "legend", "name": "Leyenda", "desc": "Estuviste en 50 fiestas", "emoji": "👑", "tier": "platinum"},
+    {"id": "week_streak_2", "name": "Racha en marcha", "desc": "2 semanas seguidas de salir", "emoji": "🔥", "tier": "bronze"},
+    {"id": "week_streak_5", "name": "Imparable", "desc": "5 semanas seguidas saliendo", "emoji": "⚡", "tier": "silver"},
+    {"id": "week_streak_10", "name": "Máquina", "desc": "10 semanas seguidas", "emoji": "🚀", "tier": "gold"},
+    {"id": "day_streak_3", "name": "Finde entero", "desc": "3 días seguidos saliendo", "emoji": "🌈", "tier": "bronze"},
+    {"id": "day_streak_7", "name": "Semana intensa", "desc": "7 días seguidos saliendo", "emoji": "💫", "tier": "gold"},
+    {"id": "social_5", "name": "Con amigos", "desc": "5 amigos aceptados", "emoji": "🤝", "tier": "bronze"},
+    {"id": "social_20", "name": "Círculo grande", "desc": "20 amigos aceptados", "emoji": "🌍", "tier": "silver"},
+    {"id": "explorer", "name": "Explorador", "desc": "Fuiste a 5 géneros distintos", "emoji": "🧭", "tier": "silver"},
+    {"id": "weekday_warrior", "name": "Guerrero entre semana", "desc": "3 fiestas de lunes a jueves", "emoji": "🗡️", "tier": "silver"},
+    {"id": "early_bird", "name": "Madrugador", "desc": "Te apuntaste a un evento con >1 semana de antelación", "emoji": "🐦", "tier": "bronze"},
+    {"id": "trendsetter", "name": "Marcaste el rumbo", "desc": "3 amigos fueron a un evento después que tú", "emoji": "💡", "tier": "gold"},
+    {"id": "loyal_venue", "name": "Cliente fiel", "desc": "3 fiestas en el mismo local", "emoji": "🏛️", "tier": "silver"},
+    {"id": "sunday_survivor", "name": "Sobrevivir domingo", "desc": "Saliste un domingo", "emoji": "☀️", "tier": "bronze"},
+    {"id": "storyteller", "name": "Cuentacuentos", "desc": "Subiste 3 stories", "emoji": "📸", "tier": "bronze"},
+]
+
+BADGES_BY_ID = {b["id"]: b for b in BADGES_CATALOG}
+
+
+async def _compute_user_stats(user_id: str) -> dict:
+    """Aggregate counts and stats for badges/profile."""
+    attended = 0
+    going = 0
+    interested = 0
+    genres_seen = set()
+    venue_counts = {}
+    weekday_count = 0
+    sunday_count = 0
+    dates = set()
+    early_bird = False
+
+    async for it in db.interests.find({"user_id": user_id}):
+        if it["status"] == "voy":
+            going += 1
+        if it["status"] == "me_interesa":
+            interested += 1
+        if it["status"] == "estuve":
+            attended += 1
+        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+        if not ev:
+            continue
+        if it["status"] in ("voy", "estuve") and ev.get("genre"):
+            genres_seen.add(ev["genre"])
+        if it["status"] in ("voy", "estuve") and ev.get("venue"):
+            venue_counts[ev["venue"]] = venue_counts.get(ev["venue"], 0) + 1
+        try:
+            d = date.fromisoformat(ev["date"])
+            if it["status"] in ("voy", "estuve"):
+                dates.add(d)
+                if d.weekday() < 4:  # Mon-Thu
+                    weekday_count += 1
+                if d.weekday() == 6:  # Sunday
+                    sunday_count += 1
+                # Early bird: signed up voy more than 7 days before event
+                if it["status"] == "voy" and it.get("created_at"):
+                    try:
+                        created = datetime.fromisoformat(it["created_at"]).date()
+                        if (d - created).days > 7:
+                            early_bird = True
+                    except Exception:
+                        pass
+        except Exception:
+            continue
+
+    # Day streak: consecutive dates
+    day_streak = 0
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    cursor = today
+    while cursor in dates:
+        day_streak += 1
+        cursor -= timedelta(days=1)
+    # If not going today, check from yesterday
+    if day_streak == 0:
+        cursor = today - timedelta(days=1)
+        while cursor in dates:
+            day_streak += 1
+            cursor -= timedelta(days=1)
+
+    # Week streak (reuse logic)
+    mondays = {d - timedelta(days=d.weekday()) for d in dates}
+    this_monday = today - timedelta(days=today.weekday())
+    anchor = this_monday if this_monday in mondays else this_monday - timedelta(days=7)
+    week_streak = 0
+    while anchor in mondays:
+        week_streak += 1
+        anchor -= timedelta(days=7)
+
+    # Friends count (accepted)
+    friend_ids = await accepted_friend_ids(user_id)
+    friends_count = len(friend_ids)
+
+    # Stories count
+    stories_count = await db.stories.count_documents({"user_id": user_id})
+
+    # Trendsetter: for any voy event, did 3+ friends join AFTER user?
+    trendsetter = False
+    async for it in db.interests.find({"user_id": user_id, "status": "voy"}):
+        my_time = it.get("created_at", "")
+        cnt = 0
+        async for other in db.interests.find({"event_id": it["event_id"], "status": "voy", "user_id": {"$in": list(friend_ids)}}):
+            if other.get("created_at", "") > my_time:
+                cnt += 1
+        if cnt >= 3:
+            trendsetter = True
+            break
+
+    top_venue = max(venue_counts.values()) if venue_counts else 0
+    top_venue_name = max(venue_counts, key=venue_counts.get) if venue_counts else ""
+
+    return {
+        "attended": attended,
+        "going": going,
+        "interested": interested,
+        "total_events": attended + going,
+        "week_streak": week_streak,
+        "day_streak": day_streak,
+        "genres_count": len(genres_seen),
+        "genres": sorted(genres_seen),
+        "friends_count": friends_count,
+        "weekday_count": weekday_count,
+        "sunday_count": sunday_count,
+        "stories_count": stories_count,
+        "early_bird": early_bird,
+        "trendsetter": trendsetter,
+        "top_venue": top_venue_name,
+        "top_venue_count": top_venue,
+    }
+
+
+def _award_badges(stats: dict) -> list:
+    """Given user stats, return list of earned badge ids."""
+    earned = []
+    if stats["going"] + stats["attended"] >= 1:
+        earned.append("first_step")
+    if stats["attended"] >= 5 or stats["going"] >= 5:
+        earned.append("night_owl")
+    if stats["attended"] + stats["going"] >= 20:
+        earned.append("party_veteran")
+    if stats["attended"] + stats["going"] >= 50:
+        earned.append("legend")
+    if stats["week_streak"] >= 2:
+        earned.append("week_streak_2")
+    if stats["week_streak"] >= 5:
+        earned.append("week_streak_5")
+    if stats["week_streak"] >= 10:
+        earned.append("week_streak_10")
+    if stats["day_streak"] >= 3:
+        earned.append("day_streak_3")
+    if stats["day_streak"] >= 7:
+        earned.append("day_streak_7")
+    if stats["friends_count"] >= 5:
+        earned.append("social_5")
+    if stats["friends_count"] >= 20:
+        earned.append("social_20")
+    if stats["genres_count"] >= 5:
+        earned.append("explorer")
+    if stats["weekday_count"] >= 3:
+        earned.append("weekday_warrior")
+    if stats["early_bird"]:
+        earned.append("early_bird")
+    if stats["trendsetter"]:
+        earned.append("trendsetter")
+    if stats["top_venue_count"] >= 3:
+        earned.append("loyal_venue")
+    if stats["sunday_count"] >= 1:
+        earned.append("sunday_survivor")
+    if stats["stories_count"] >= 3:
+        earned.append("storyteller")
+    return earned
+
+
+@api_router.get("/badges/catalog")
+async def badges_catalog():
+    return BADGES_CATALOG
+
+
+@api_router.get("/me/badges")
+async def my_badges(user: dict = Depends(get_current_user)):
+    stats = await _compute_user_stats(user["user_id"])
+    earned_ids = _award_badges(stats)
+    return {
+        "stats": stats,
+        "earned": [BADGES_BY_ID[b] for b in earned_ids if b in BADGES_BY_ID],
+        "locked": [b for b in BADGES_CATALOG if b["id"] not in earned_ids],
+    }
+
+
+@api_router.get("/users/{user_id}/badges")
+async def user_badges(user_id: str, viewer: dict = Depends(get_current_user)):
+    """View another user's badges + public stats. Must be self or friend."""
+    if user_id != viewer["user_id"]:
+        friend_ids = await accepted_friend_ids(viewer["user_id"])
+        if user_id not in friend_ids:
+            raise HTTPException(status_code=403, detail="No es tu amigo")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    stats = await _compute_user_stats(user_id)
+    earned_ids = _award_badges(stats)
+    return {
+        "user": {"user_id": target["user_id"], "name": target["name"], "picture": target.get("picture", "")},
+        "stats": stats,
+        "earned": [BADGES_BY_ID[b] for b in earned_ids if b in BADGES_BY_ID],
+        "locked": [b for b in BADGES_CATALOG if b["id"] not in earned_ids],
+    }
+
+
 @api_router.get("/events/discover")
 async def discover_events(user: dict = Depends(get_current_user)):
     """Recommend upcoming events based on the genres the user engages with most."""
@@ -888,6 +1104,109 @@ async def delete_event(event_id: str, admin: dict = Depends(require_admin)):
     await db.event_messages.delete_many({"event_id": event_id})
     await db.notifications.delete_many({"data.event_id": event_id})
     return {"ok": True}
+
+
+# =========================
+# ADMIN — Users & Stats
+# =========================
+
+@api_router.get("/admin/users")
+async def admin_list_users(
+    admin: dict = Depends(require_admin),
+    search: str = Query("", description="Búsqueda por nombre o email"),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    q = {}
+    if search:
+        rx = {"$regex": re.escape(search), "$options": "i"}
+        q = {"$or": [{"name": rx}, {"email": rx}]}
+    users = []
+    async for u in db.users.find(q, {"_id": 0, "password": 0}).sort("created_at", -1).limit(limit):
+        going = await db.interests.count_documents({"user_id": u["user_id"], "status": "voy"})
+        attended = await db.interests.count_documents({"user_id": u["user_id"], "status": "estuve"})
+        friends = await db.friendships.count_documents({
+            "$or": [{"from_user_id": u["user_id"], "status": "accepted"},
+                    {"to_user_id": u["user_id"], "status": "accepted"}]
+        })
+        u["_stats"] = {"going": going, "attended": attended, "friends": friends}
+        users.append(u)
+    return users
+
+
+class UserRoleInput(BaseModel):
+    role: str  # "admin" | "user"
+
+
+@api_router.put("/admin/users/{user_id}/role")
+async def admin_set_role(user_id: str, inp: UserRoleInput, admin: dict = Depends(require_admin)):
+    if inp.role not in ("admin", "user"):
+        raise HTTPException(status_code=400, detail="Rol inválido")
+    res = await db.users.update_one({"user_id": user_id}, {"$set": {"role": inp.role}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin: dict = Depends(require_admin)):
+    if user_id == admin["user_id"]:
+        raise HTTPException(status_code=400, detail="No puedes borrarte a ti mismo")
+    await db.users.delete_one({"user_id": user_id})
+    await db.interests.delete_many({"user_id": user_id})
+    await db.friendships.delete_many({"$or": [{"from_user_id": user_id}, {"to_user_id": user_id}]})
+    await db.notifications.delete_many({"user_id": user_id})
+    await db.stories.delete_many({"user_id": user_id})
+    return {"ok": True}
+
+
+@api_router.get("/admin/stats")
+async def admin_stats(admin: dict = Depends(require_admin)):
+    """High-level dashboard stats for the admin panel."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    week_ago = (today - timedelta(days=7)).isoformat()
+    total_users = await db.users.count_documents({})
+    active_week = await db.interests.distinct("user_id", {"created_at": {"$gte": week_ago}})
+    total_events = await db.events.count_documents({})
+    upcoming_events = await db.events.count_documents({"date": {"$gte": today.isoformat()}})
+    total_going = await db.interests.count_documents({"status": "voy"})
+    total_interested = await db.interests.count_documents({"status": "me_interesa"})
+    total_attended = await db.interests.count_documents({"status": "estuve"})
+    total_stories = await db.stories.count_documents({})
+    total_friendships = await db.friendships.count_documents({"status": "accepted"})
+
+    # Top events by attendance in the next 30 days
+    horizon = (today + timedelta(days=30)).isoformat()
+    top_events = []
+    async for ev in db.events.find({"date": {"$gte": today.isoformat(), "$lte": horizon}}, {"_id": 0}):
+        cnt = await db.interests.count_documents({"event_id": ev["id"], "status": {"$in": ["voy", "me_interesa"]}})
+        if cnt > 0:
+            top_events.append({"id": ev["id"], "name": ev["name"], "date": ev["date"], "venue": ev.get("venue", ""), "signups": cnt})
+    top_events.sort(key=lambda e: -e["signups"])
+    top_events = top_events[:8]
+
+    # Genre popularity
+    genre_counts = {}
+    async for it in db.interests.find({"status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "event_id": 1}):
+        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0, "genre": 1})
+        if ev and ev.get("genre"):
+            genre_counts[ev["genre"]] = genre_counts.get(ev["genre"], 0) + 1
+    genres_ranked = sorted([{"genre": g, "count": c} for g, c in genre_counts.items()], key=lambda x: -x["count"])[:8]
+
+    return {
+        "totals": {
+            "users": total_users,
+            "active_week": len(active_week),
+            "events": total_events,
+            "upcoming": upcoming_events,
+            "going": total_going,
+            "interested": total_interested,
+            "attended": total_attended,
+            "stories": total_stories,
+            "friendships": total_friendships,
+        },
+        "top_events": top_events,
+        "genres": genres_ranked,
+    }
 
 
 @api_router.get("/admin/events")
@@ -1741,13 +2060,24 @@ async def on_startup():
 
 app.include_router(api_router)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_env = os.environ.get('CORS_ORIGINS', '*').strip()
+if _cors_env == '*':
+    # Wildcard + credentials is invalid per spec — use regex to echo the origin back.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_credentials=True,
+        allow_origin_regex=".*",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_credentials=True,
+        allow_origins=[o.strip() for o in _cors_env.split(',') if o.strip()],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.on_event("shutdown")

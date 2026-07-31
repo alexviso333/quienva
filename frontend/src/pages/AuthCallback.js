@@ -27,7 +27,8 @@ export default function AuthCallback() {
           if (data.token) localStorage.setItem("qv_token", data.token);
           setUser(data.user);
           window.history.replaceState(null, "", "/feed");
-          navigate("/feed", { replace: true });
+          const onboarded = localStorage.getItem("qv_onboarded") === "1";
+          navigate(onboarded ? "/feed" : "/onboarding", { replace: true });
           return;
         } catch (e) {
           navigate("/login", { replace: true });

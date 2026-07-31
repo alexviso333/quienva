@@ -9,7 +9,10 @@ import Friends from "@/pages/Friends";
 import Notifications from "@/pages/Notifications";
 import Profile from "@/pages/Profile";
 import Admin from "@/pages/Admin";
+import AdminDashboard from "@/pages/AdminDashboard";
 import EventDetail from "@/pages/EventDetail";
+import Onboarding from "@/pages/Onboarding";
+import UserProfile from "@/pages/UserProfile";
 import { Loader2 } from "lucide-react";
 
 function LoadingScreen() {
@@ -38,12 +41,15 @@ function AppRouter() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
       <Route path="/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
       <Route path="/event/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
       <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+      <Route path="/users/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
+      <Route path="/admin/dashboard" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/feed" replace />} />
       <Route path="*" element={<Navigate to="/feed" replace />} />
     </Routes>

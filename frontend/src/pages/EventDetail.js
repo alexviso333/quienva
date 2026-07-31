@@ -304,8 +304,6 @@ export default function EventDetail() {
             label="Subir historia de esta noche"
             className="h-12 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
           />
-
-          <EventChat eventId={event.id} />
         </div>
       </div>
     </div>
