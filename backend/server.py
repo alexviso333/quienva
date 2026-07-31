@@ -170,6 +170,14 @@ class PushSubscriptionInput(BaseModel):
     expirationTime: Optional[int] = None
 
 
+class ReactionInput(BaseModel):
+    content: str
+
+
+class MessageInput(BaseModel):
+    text: str
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
@@ -848,8 +856,12 @@ async def create_notification(user_id: str, ntype: str, message: str, data: dict
     url = "/feed"
     if ntype in ("friend_request", "friend_accept"):
         url = "/friends"
-    elif ntype == "weekly_digest":
+    elif ntype in ("weekly_digest", "weekend_recap"):
         url = "/notifications"
+    elif ntype == "story_reaction":
+        url = "/profile"
+    elif data and data.get("event_id"):
+        url = f"/event/{data['event_id']}"
     try:
         asyncio.create_task(push_to_user(user_id, "¿Quién va?", message, url))
     except RuntimeError:
@@ -1102,6 +1114,35 @@ async def create_story(
     return story
 
 
+async def serialize_story(s: dict, viewer: dict) -> dict:
+    author = await db.users.find_one({"user_id": s["user_id"]}, {"_id": 0})
+    event_name = None
+    if s.get("event_id"):
+        ev = await db.events.find_one({"id": s["event_id"]}, {"_id": 0})
+        event_name = ev["name"] if ev else None
+    is_mine = s["user_id"] == viewer["user_id"]
+    out = {
+        **{k: v for k, v in s.items() if k != "_id"},
+        "is_mine": is_mine,
+        "author": {
+            "name": author["name"] if author else "Usuario",
+            "picture": author.get("picture", "") if author else "",
+            "username": author["username"] if author else "",
+        },
+        "event_name": event_name,
+    }
+    if is_mine:
+        reactions = []
+        async for r in db.story_reactions.find({"story_id": s["id"]}, {"_id": 0}).sort("created_at", 1):
+            ru = await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0})
+            reactions.append({
+                "content": r["content"],
+                "user": {"name": ru["name"] if ru else "Usuario", "picture": ru.get("picture", "") if ru else ""},
+            })
+        out["reactions"] = reactions
+    return out
+
+
 @api_router.get("/stories")
 async def list_stories(user: dict = Depends(get_current_user)):
     friend_ids = await accepted_friend_ids(user["user_id"])
@@ -1111,20 +1152,45 @@ async def list_stories(user: dict = Depends(get_current_user)):
     async for s in db.stories.find(
         {"user_id": {"$in": allowed}, "created_at": {"$gte": cutoff}}, {"_id": 0}
     ).sort("created_at", 1):
-        author = await db.users.find_one({"user_id": s["user_id"]}, {"_id": 0})
-        if not author:
-            continue
-        event_name = None
-        if s.get("event_id"):
-            ev = await db.events.find_one({"id": s["event_id"]}, {"_id": 0})
-            event_name = ev["name"] if ev else None
-        out.append({
-            **s,
-            "is_mine": s["user_id"] == user["user_id"],
-            "author": {"name": author["name"], "picture": author.get("picture", ""), "username": author["username"]},
-            "event_name": event_name,
-        })
+        out.append(await serialize_story(s, user))
     return out
+
+
+@api_router.get("/stories/archive")
+async def stories_archive(user: dict = Depends(get_current_user)):
+    """All of the user's own stories (including expired) — like an Instagram/BeReal archive."""
+    out = []
+    async for s in db.stories.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1):
+        out.append(await serialize_story(s, user))
+    return out
+
+
+@api_router.post("/stories/{story_id}/react")
+async def react_to_story(story_id: str, inp: ReactionInput, user: dict = Depends(get_current_user)):
+    s = await db.stories.find_one({"id": story_id}, {"_id": 0})
+    if not s:
+        raise HTTPException(status_code=404, detail="Historia no encontrada")
+    if s["user_id"] != user["user_id"]:
+        friends = await accepted_friend_ids(user["user_id"])
+        if s["user_id"] not in friends:
+            raise HTTPException(status_code=403, detail="No puedes reaccionar a esta historia")
+    content = inp.content.strip()[:200]
+    if not content:
+        raise HTTPException(status_code=400, detail="Escribe algo")
+    await db.story_reactions.insert_one({
+        "id": str(uuid.uuid4()),
+        "story_id": story_id,
+        "user_id": user["user_id"],
+        "content": content,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    if s["user_id"] != user["user_id"]:
+        await create_notification(
+            s["user_id"], "story_reaction",
+            f"{user['name']} reaccionó a tu historia: {content}",
+            {"story_id": story_id},
+        )
+    return {"ok": True}
 
 
 @api_router.delete("/stories/{story_id}")
@@ -1133,6 +1199,110 @@ async def delete_story(story_id: str, user: dict = Depends(get_current_user)):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Historia no encontrada")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Event chat
+# ---------------------------------------------------------------------------
+def _msg_author(u):
+    return {"name": u["name"] if u else "Usuario", "picture": u.get("picture", "") if u else "",
+            "username": u["username"] if u else ""}
+
+
+@api_router.get("/events/{event_id}/messages")
+async def list_event_messages(event_id: str, user: dict = Depends(get_current_user)):
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    out = []
+    async for m in db.event_messages.find({"event_id": event_id}, {"_id": 0}).sort("created_at", 1).limit(100):
+        au = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0})
+        out.append({**m, "author": _msg_author(au), "is_mine": m["user_id"] == user["user_id"]})
+    return out
+
+
+@api_router.post("/events/{event_id}/messages")
+async def post_event_message(event_id: str, inp: MessageInput, user: dict = Depends(get_current_user)):
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    text = inp.text.strip()[:500]
+    if not text:
+        raise HTTPException(status_code=400, detail="Escribe un mensaje")
+    msg = {
+        "id": str(uuid.uuid4()),
+        "event_id": event_id,
+        "user_id": user["user_id"],
+        "text": text,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.event_messages.insert_one(msg)
+    msg.pop("_id", None)
+    # notify people interested/going (except sender)
+    participants = set()
+    async for it in db.interests.find({"event_id": event_id, "status": {"$in": ["voy", "me_interesa"]}}):
+        participants.add(it["user_id"])
+    for pid in participants:
+        if pid != user["user_id"]:
+            await create_notification(
+                pid, "event_message",
+                f"{user['name']} en el chat de {ev['name']}: {text[:60]}",
+                {"event_id": event_id},
+            )
+    return {**msg, "author": _msg_author(user), "is_mine": True}
+
+
+# ---------------------------------------------------------------------------
+# Weekend recap (Monday summary of your group's weekend)
+# ---------------------------------------------------------------------------
+async def generate_weekend_recap() -> int:
+    today = datetime.now(PALMA_TZ).date()
+    days_back = (today.weekday() + 1) % 7 or 7  # most recent past Sunday
+    last_sunday = today - timedelta(days=days_back)
+    last_friday = last_sunday - timedelta(days=2)
+    sent = 0
+
+    def in_weekend(dstr):
+        try:
+            d = date.fromisoformat(dstr)
+        except Exception:
+            return False
+        return last_friday <= d <= last_sunday
+
+    async for u in db.users.find({}, {"_id": 0}):
+        friend_ids = await accepted_friend_ids(u["user_id"])
+        allowed = friend_ids + [u["user_id"]]
+
+        my_plans = 0
+        async for it in db.interests.find({"user_id": u["user_id"], "status": {"$in": ["voy", "estuve"]}}):
+            ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+            if ev and in_weekend(ev["date"]):
+                my_plans += 1
+
+        group_events = set()
+        async for it in db.interests.find({"user_id": {"$in": friend_ids}, "status": {"$in": ["voy", "estuve"]}}):
+            ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+            if ev and in_weekend(ev["date"]):
+                group_events.add(ev["id"])
+
+        fri_iso = datetime.combine(last_friday, datetime.min.time()).replace(tzinfo=PALMA_TZ).isoformat()
+        sun_iso = datetime.combine(last_sunday + timedelta(days=1), datetime.min.time()).replace(tzinfo=PALMA_TZ).isoformat()
+        photos = await db.stories.count_documents({"user_id": {"$in": allowed}, "created_at": {"$gte": fri_iso, "$lte": sun_iso}})
+
+        if my_plans + len(group_events) + photos == 0:
+            continue
+        msg = (f"Recuerdo del finde 🎉 Fuiste a {my_plans} plan{'es' if my_plans != 1 else ''}, "
+               f"tu grupo se apuntó a {len(group_events)} y subisteis {photos} foto{'s' if photos != 1 else ''}.")
+        await create_notification(u["user_id"], "weekend_recap", msg, {})
+        sent += 1
+    logger.info(f"Recuerdo del finde enviado a {sent} usuarios")
+    return sent
+
+
+@api_router.post("/admin/trigger-weekend-recap")
+async def trigger_weekend_recap(admin: dict = Depends(require_admin)):
+    sent = await generate_weekend_recap()
+    return {"sent": sent}
 
 
 @api_router.get("/")
@@ -1168,46 +1338,54 @@ async def seed_admin():
         await db.users.update_one({"email": admin_email}, {"$set": updates})
 
 
+DEMO_EVENTS = [
+    {"offset": 0, "name": "Techno Underground", "venue": "Sala Focus", "address": "C/ Bartomeu Rosselló, Palma",
+     "time": "23:59", "genre": "Techno",
+     "image_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745",
+     "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
+    {"offset": 1, "name": "Reggaeton Party", "venue": "Tito's Palma", "address": "Passeig Marítim, Palma",
+     "time": "00:30", "genre": "Reggaeton",
+     "image_url": "https://images.unsplash.com/photo-1517983079452-bbaa6a081a6b?crop=entropy&cs=srgb&fm=jpg&q=85",
+     "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
+    {"offset": 2, "name": "Sunset Sessions", "venue": "Purobeach", "address": "Cala Estància, Palma",
+     "time": "19:00", "genre": "House",
+     "image_url": "https://images.unsplash.com/photo-1563784462029-e9cc28281850?crop=entropy&cs=srgb&fm=jpg&q=85",
+     "has_commission": False, "commission_url": "", "more_info_url": "https://www.instagram.com/purobeach/"},
+    {"offset": 4, "name": "Indie Night", "venue": "Es Gremi", "address": "Polígon Son Castelló, Palma",
+     "time": "21:30", "genre": "Indie",
+     "image_url": "https://images.pexels.com/photos/9534908/pexels-photo-9534908.jpeg",
+     "has_commission": False, "commission_url": "", "more_info_url": "https://www.instagram.com/esgremi/"},
+    {"offset": 5, "name": "Latin Fever", "venue": "Social Club", "address": "C/ dels Paraires, Palma",
+     "time": "23:00", "genre": "Latino",
+     "image_url": "https://images.unsplash.com/photo-1763322564752-12ce8fae2bfe?crop=entropy&cs=srgb&fm=jpg&q=85",
+     "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
+    {"offset": 8, "name": "House Marathon", "venue": "BCM Planet Dance", "address": "Magaluf, Calvià",
+     "time": "23:59", "genre": "House",
+     "image_url": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea",
+     "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
+]
+
+
 async def seed_events():
-    if await db.events.count_documents({}) > 0:
-        return
-    today = datetime.now(timezone.utc).date()
-
-    def ds(offset):
-        return (today + timedelta(days=offset)).isoformat()
-
-    samples = [
-        {"name": "Techno Underground", "venue": "Sala Focus", "address": "C/ Bartomeu Rosselló, Palma",
-         "date": ds(0), "time": "23:59", "genre": "Techno",
-         "image_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745",
-         "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
-        {"name": "Reggaeton Party", "venue": "Tito's Palma", "address": "Passeig Marítim, Palma",
-         "date": ds(2), "time": "00:30", "genre": "Reggaeton",
-         "image_url": "https://images.unsplash.com/photo-1517983079452-bbaa6a081a6b?crop=entropy&cs=srgb&fm=jpg&q=85",
-         "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
-        {"name": "Sunset Sessions", "venue": "Purobeach", "address": "Cala Estància, Palma",
-         "date": ds(3), "time": "19:00", "genre": "House",
-         "image_url": "https://images.unsplash.com/photo-1563784462029-e9cc28281850?crop=entropy&cs=srgb&fm=jpg&q=85",
-         "has_commission": False, "commission_url": "", "more_info_url": "https://www.instagram.com/purobeach/"},
-        {"name": "Indie Night", "venue": "Es Gremi", "address": "Polígon Son Castelló, Palma",
-         "date": ds(5), "time": "21:30", "genre": "Indie",
-         "image_url": "https://images.pexels.com/photos/9534908/pexels-photo-9534908.jpeg",
-         "has_commission": False, "commission_url": "", "more_info_url": "https://www.instagram.com/esgremi/"},
-        {"name": "Latin Fever", "venue": "Social Club", "address": "C/ dels Paraires, Palma",
-         "date": ds(6), "time": "23:00", "genre": "Latino",
-         "image_url": "https://images.unsplash.com/photo-1763322564752-12ce8fae2bfe?crop=entropy&cs=srgb&fm=jpg&q=85",
-         "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
-        {"name": "House Marathon", "venue": "BCM Planet Dance", "address": "Magaluf, Calvià",
-         "date": ds(9), "time": "23:59", "genre": "House",
-         "image_url": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea",
-         "has_commission": True, "commission_url": "https://fourvenues.com/", "more_info_url": ""},
-    ]
-    for s in samples:
-        s["id"] = str(uuid.uuid4())
-        s["city"] = "Palma de Mallorca"
-        s["created_at"] = datetime.now(timezone.utc).isoformat()
-        await db.events.insert_one(s)
-    logger.info("Eventos de ejemplo creados")
+    # Remove leftover automated-test artifacts so the pilot feed stays clean
+    await db.events.delete_many({"name": {"$regex": "^(TEST|UI5|Iteration)", "$options": "i"}})
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    for d in DEMO_EVENTS:
+        date_str = (today + timedelta(days=d["offset"])).isoformat()
+        await db.events.update_one(
+            {"name": d["name"]},
+            {
+                "$set": {
+                    "venue": d["venue"], "address": d["address"], "date": date_str, "time": d["time"],
+                    "genre": d["genre"], "image_url": d["image_url"], "has_commission": d["has_commission"],
+                    "commission_url": d["commission_url"], "more_info_url": d["more_info_url"],
+                    "city": "Palma de Mallorca",
+                },
+                "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat()},
+            },
+            upsert=True,
+        )
+    logger.info("Eventos demo actualizados (fechas próximas)")
 
 
 @app.on_event("startup")
@@ -1233,8 +1411,10 @@ async def on_startup():
                           id="weekly_digest", replace_existing=True)
         scheduler.add_job(generate_event_reminders, "interval", minutes=30,
                           id="event_reminders", replace_existing=True)
+        scheduler.add_job(generate_weekend_recap, "cron", day_of_week="mon", hour=12, minute=0,
+                          id="weekend_recap", replace_existing=True)
         scheduler.start()
-        logger.info("Scheduler iniciado (resumen semanal viernes 12:00 + recordatorios cada 30 min)")
+        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00)")
     except Exception as e:
         logger.error(f"Scheduler init falló: {e}")
 

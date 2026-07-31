@@ -4,7 +4,7 @@ import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon } from "lucide-react";
+import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon, Send } from "lucide-react";
 import { toast } from "sonner";
 
 function timeAgo(iso) {
@@ -132,18 +132,29 @@ export function AddStoryButton({ eventId, className = "", label = "Subir histori
   );
 }
 
-function StoryViewer({ group, onClose }) {
+function StoryViewer({ group, onClose, startIndex = 0 }) {
   const qc = useQueryClient();
-  const [idx, setIdx] = useState(0);
+  const [idx, setIdx] = useState(startIndex);
+  const [reactText, setReactText] = useState("");
   const story = group.stories[idx];
 
   const del = useMutation({
     mutationFn: async () => (await api.delete(`/stories/${story.id}`)).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["stories"] });
+      qc.invalidateQueries({ queryKey: ["stories-archive"] });
       toast.success("Historia eliminada");
       onClose();
     },
+  });
+
+  const react = useMutation({
+    mutationFn: async (content) => (await api.post(`/stories/${story.id}/react`, { content })).data,
+    onSuccess: () => {
+      setReactText("");
+      toast.success("Enviado 💌");
+    },
+    onError: () => toast.error("No se pudo enviar"),
   });
 
   const nav = (e) => {
@@ -187,13 +198,59 @@ function StoryViewer({ group, onClose }) {
         <img src={mediaUrl(story.image_url)} alt="" className="max-w-full max-h-full object-contain" />
       </div>
 
-      <div className="absolute bottom-8 left-4 right-4 z-20 pointer-events-none">
+      <div className="absolute bottom-0 left-0 right-0 z-20 p-4 pb-6 bg-gradient-to-t from-black/80 to-transparent">
         {story.event_name && (
           <span className="inline-block qv-glass text-white text-xs font-semibold px-3 py-1 rounded-full border border-white/15 mb-2">
             🎉 {story.event_name}
           </span>
         )}
-        {story.caption && <p className="text-white text-base leading-snug" style={{ textShadow: "0 1px 8px rgba(0,0,0,0.8)" }}>{story.caption}</p>}
+        {story.caption && (
+          <p className="text-white text-base leading-snug mb-3" style={{ textShadow: "0 1px 8px rgba(0,0,0,0.8)" }}>
+            {story.caption}
+          </p>
+        )}
+
+        {group.is_mine ? (
+          (story.reactions && story.reactions.length > 0) ? (
+            <div className="flex flex-wrap gap-2" data-testid="story-received-reactions">
+              {story.reactions.map((r, i) => (
+                <span key={i} className="qv-glass border border-white/15 text-white text-xs px-2.5 py-1 rounded-full">
+                  {r.content} · {r.user.name.split(" ")[0]}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-white/50 text-xs">Aún nadie ha reaccionado</p>
+          )
+        ) : (
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            {["❤️", "🔥", "😂", "😮"].map((emo) => (
+              <button
+                key={emo}
+                data-testid={`story-react-${emo}`}
+                onClick={() => react.mutate(emo)}
+                className="text-2xl active:scale-125 transition-transform"
+              >
+                {emo}
+              </button>
+            ))}
+            <input
+              data-testid="story-react-input"
+              value={reactText}
+              onChange={(e) => setReactText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && reactText.trim()) react.mutate(reactText.trim()); }}
+              placeholder="Envía un mensaje…"
+              className="flex-1 h-10 rounded-full bg-white/10 border border-white/20 px-4 text-white text-sm placeholder:text-white/50 outline-none"
+            />
+            <button
+              data-testid="story-react-send"
+              onClick={() => reactText.trim() && react.mutate(reactText.trim())}
+              className="w-10 h-10 rounded-full bg-qv-primary flex items-center justify-center shrink-0"
+            >
+              <Send className="w-4 h-4 text-white" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -247,5 +304,57 @@ export function StoriesBar() {
       <AddStoryDialog open={addOpen} onOpenChange={setAddOpen} />
       {viewer && <StoryViewer group={viewer} onClose={() => setViewer(null)} />}
     </>
+  );
+}
+
+export function StoriesArchive({ open, onOpenChange }) {
+  const [viewerIdx, setViewerIdx] = useState(null);
+  const { data: stories = [] } = useQuery({
+    queryKey: ["stories-archive"],
+    queryFn: async () => (await api.get("/stories/archive")).data,
+    enabled: open,
+  });
+
+  const myGroup = stories.length
+    ? { user_id: stories[0].user_id, is_mine: true, author: stories[0].author, stories }
+    : null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-display">Tu archivo de historias</DialogTitle>
+          <DialogDescription className="text-white/50">
+            Solo tú ves esto. Revive tus noches pasadas.
+          </DialogDescription>
+        </DialogHeader>
+        {stories.length === 0 ? (
+          <p className="text-white/40 text-sm py-10 text-center" data-testid="archive-empty">
+            Todavía no has subido ninguna historia.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2" data-testid="stories-archive-grid">
+            {stories.map((s, i) => (
+              <button
+                key={s.id}
+                data-testid={`archive-item-${s.id}`}
+                onClick={() => setViewerIdx(i)}
+                className="relative aspect-[3/4] rounded-xl overflow-hidden border border-white/10"
+              >
+                <img src={mediaUrl(s.image_url)} alt="" className="w-full h-full object-cover" />
+                {s.reactions && s.reactions.length > 0 && (
+                  <span className="absolute bottom-1 right-1 text-xs bg-black/60 rounded-full px-1.5 py-0.5">
+                    {s.reactions.length} 💌
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+      {viewerIdx !== null && myGroup && (
+        <StoryViewer group={myGroup} startIndex={viewerIdx} onClose={() => setViewerIdx(null)} />
+      )}
+    </Dialog>
   );
 }

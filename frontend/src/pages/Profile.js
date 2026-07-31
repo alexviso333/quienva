@@ -5,9 +5,10 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Flame } from "lucide-react";
+import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Flame, Archive } from "lucide-react";
 import { toast } from "sonner";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
+import { StoriesArchive } from "@/components/Stories";
 
 export default function Profile() {
   const { user, setUser, logout, refreshUser } = useAuth();
@@ -21,6 +22,7 @@ export default function Profile() {
   const [pushBusy, setPushBusy] = useState(false);
   const [streak, setStreak] = useState(0);
   const [streakLoaded, setStreakLoaded] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const pushSupported = isPushSupported();
 
   useEffect(() => {
@@ -178,6 +180,15 @@ export default function Profile() {
         >
           <Share2 className="w-4 h-4" /> Invitar amigos
         </button>
+
+        <button
+          data-testid="archive-btn"
+          onClick={() => setArchiveOpen(true)}
+          className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+        >
+          <Archive className="w-4 h-4" /> Archivo de historias
+        </button>
+        <StoriesArchive open={archiveOpen} onOpenChange={setArchiveOpen} />
 
         {pushSupported && (
           <button

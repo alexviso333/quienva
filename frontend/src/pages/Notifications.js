@@ -1,8 +1,9 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
-import { Bell, UserPlus, PartyPopper, Check, CheckCheck, CalendarDays, AlarmClock, Star } from "lucide-react";
+import { Bell, UserPlus, PartyPopper, Check, CheckCheck, CalendarDays, AlarmClock, Star, Heart, MessageCircle, Sparkles } from "lucide-react";
 
 const ICONS = {
   friend_going: PartyPopper,
@@ -11,6 +12,9 @@ const ICONS = {
   weekly_digest: CalendarDays,
   event_reminder: AlarmClock,
   interested_reminder: Star,
+  story_reaction: Heart,
+  event_message: MessageCircle,
+  weekend_recap: Sparkles,
 };
 
 function timeAgo(iso) {
@@ -24,6 +28,7 @@ function timeAgo(iso) {
 
 export default function Notifications() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { data: notifs = [], isLoading } = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => (await api.get("/notifications")).data,
@@ -73,11 +78,16 @@ export default function Notifications() {
         ) : (
           notifs.map((n) => {
             const Icon = ICONS[n.type] || Bell;
+            const target =
+              n.data?.event_id ? `/event/${n.data.event_id}` :
+              n.type === "friend_request" || n.type === "friend_accept" ? "/friends" :
+              n.type === "story_reaction" ? "/profile" : null;
             return (
               <div
                 key={n.id}
                 data-testid={`notif-${n.id}`}
-                className={`flex items-center gap-3 rounded-2xl p-3.5 border ${
+                onClick={() => target && navigate(target)}
+                className={`flex items-center gap-3 rounded-2xl p-3.5 border ${target ? "cursor-pointer" : ""} ${
                   n.read ? "bg-white/5 border-white/10" : "bg-qv-primary/10 border-qv-primary/30"
                 }`}
               >

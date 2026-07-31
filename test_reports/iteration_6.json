@@ -1,0 +1,61 @@
+{
+  "summary": "Iteration 6 (Stories Archive, Story Reactions, Event Chat, Weekend Recap, data refresh) tested end-to-end. Backend: new /app/backend/tests/test_iteration6.py with 21 cases -> 21/21 PASS (archive: auth-gated, empty for new user, includes a 40h-backdated story that is correctly filtered out of the 24h feed, newest-first, is_mine/author/reactions payload, no other users' stories; reactions: friend react (emoji + text) -> owner gets 2 story_reaction notifications with story_id and sees both reactions on own story, reactions NOT exposed to non-owner viewers, non-friend gets 403 and owner gets no notification, self-react allowed with no notification, blank=400 / unknown story=404 / no auth=401 / missing body=422, >200 chars truncated to 200; event chat: auth-gated, post returns author/is_mine and is visible+chronological for a second user, voy AND me_interesa participants each get exactly 1 event_message notification with event_id while sender and outsider get none, blank=400, unknown event=404 on GET and POST; weekend recap: non-admin 403 / no-auth 401, admin trigger returns {sent:int}, seeded prior-weekend 'estuve' activity produces an unread weekend_recap notification, idle user gets none; data refresh: GET /api/events = exactly 6 demo events, all date >= today, ascending, no TEST/UI4/UI5/Iteration names, no _id, 'pasados' filter only returns past dates). Full regression suite /app/backend/tests -> 91/91 PASS. Frontend Playwright (390x844, real 300x450 PNG seeds): Profile 'Archivo de historias' opens stories-archive-grid with 2 items incl. the expired one, thumbnails load (naturalWidth 300) and show the '1 dinero/reaction' badge, tapping a thumbnail opens the viewer with 'Tu historia' + story-delete and no reaction bar; friend viewer (story-bubble-bob) shows all 4 emoji buttons + input + send, emoji tap and Enter-key send both show 'Enviado' toast and clear the input; Marta's own bubble viewer shows story-received-reactions ('\ud83d\udd25 \u00b7 Bob'); event chat on /event/:id: Marta posts -> message renders immediately, input clears, empty send is a no-op, Bob (voy) receives an event_message notification (MessageCircle icon) that navigates to the exact /event/<id>, sees Marta's message and replies successfully; Notifications: weekend_recap (Sparkles) + story_reaction (Heart) render, story_reaction click -> /profile, event notification click -> /event/<id>; regression OK: 6 feed cards, filters hoy=1/finde=3/semana=5/pasados=0/descubrir=5/all=6, event detail share/map/directions/Voy (\u00a1Apuntado! toast, 'Van a ir' updated), streak=1, logout -> /login, 0 error elements. TWO HIGH frontend bugs found (archive viewer clicks dead; reaction send button off-screen on mobile).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/stories/{id}/react", "issue": "No dedup/rate-limit: the same user can send unlimited reactions to the same story and each one creates a separate notification for the owner (spam vector)."},
+      {"endpoint": "GET /api/events/{id}/messages", "issue": "Returns the OLDEST 100 messages (sort created_at asc + limit 100) with no pagination, so once a chat exceeds 100 messages new messages become invisible. Should sort desc+limit then reverse, or add pagination."},
+      {"endpoint": "POST /api/admin/trigger-weekend-recap", "issue": "Not idempotent - repeated triggers (or a manual trigger on a Monday after the cron ran) create duplicate weekend_recap notifications for the same weekend window."},
+      {"endpoint": "GET/POST /api/events/{id}/messages", "issue": "Any authenticated user can read/write any event chat (no voy/me_interesa or friend restriction). Confirm this is intended, otherwise chat is fully public."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "StoriesArchive -> StoryViewer (components/Stories.js:355)",
+        "issue": "HIGH: the story viewer opened from the archive is completely non-interactive. StoryViewer is rendered as a child of the Radix <Dialog>, so while the dialog is open the body gets pointer-events:none and the dialog overlay (div.fixed.inset-0.z-50.bg-black/80) is the element returned by elementFromPoint over the viewer's controls. Verified: computed pointerEvents on body AND on [data-testid=story-viewer] = 'none'; normal click on story-close times out, and even force-click does not close it (the overlay swallows the event). Same applies to story-delete and the story-nav-area tap (cannot page through archived stories). Only Escape works, and it closes the whole archive. Fix: render StoryViewer in a portal outside the Dialog (or close/hide the archive dialog when the viewer opens).",
+        "selector": "[data-testid=\"story-close\"] inside [data-testid=\"story-viewer\"] (from archive)",
+        "priority": "HIGH"
+      },
+      {
+        "component": "StoryViewer reaction bar (components/Stories.js:226-252)",
+        "issue": "HIGH: the reaction row overflows the mobile viewport. At 390px the send button rect is left=413/right=453 (viewport 390, documentElement.scrollWidth 390) so [data-testid=story-react-send] is rendered off-screen and is unclickable (Playwright: 'element is outside of the viewport' after 60 retries). Cause: 4 text-2xl emoji buttons + a flex-1 input without min-w-0 (px-4) + w-10 button inside a p-4 container. Fix: add 'min-w-0' to the input (and/or gap-1.5 / smaller emoji). Workarounds that DO work today: emoji taps and pressing Enter in the input.",
+        "selector": "[data-testid=\"story-react-send\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Archive dialog (Profile)", "issues": ["Thumbnail images occasionally render as empty boxes for ~1s after the dialog opens (no skeleton/placeholder while loading)."]},
+      {"screen": "Notifications", "issues": ["Stale notifications reference deleted events (e.g. 'Marta Gomez va a UI5 Reggaeton Night cff28'); tapping them navigates to /event/<deleted id>. Consider pruning notifications when an event is deleted."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration6.py",
+    "/app/backend/tests/setup_ui_iteration6.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/it6.xml"
+  ],
+  "action_items": [
+    "Fix archive story viewer interactivity: move StoryViewer out of the Radix Dialog tree (portal to body) or close the archive dialog when a thumbnail is tapped - currently story-close/story-delete/story-nav-area are all dead clicks (body pointer-events:none + z-50 overlay).",
+    "Fix reaction bar overflow on 390px: add min-w-0 to [data-testid=story-react-input] so [data-testid=story-react-send] stays inside the viewport.",
+    "Optional hardening: dedup/rate-limit story reactions, paginate event chat (currently oldest-100 only), make weekend recap idempotent per weekend window, and decide whether event chat should be restricted to participants."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py is 1436 lines - split into routers (auth, events, stories, chat, notifications, admin, scheduler).",
+    "list_event_messages sorts ascending with limit(100) -> newest messages are dropped once a chat grows beyond 100.",
+    "react_to_story has no dedup / rate limit; every call fans out a notification + push to the owner.",
+    "generate_weekend_recap re-notifies on every invocation (no per-week marker), so cron + manual trigger duplicates."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration6.py (new)",
+    "/app/backend/tests/setup_ui_iteration6.py (new)"
+  ],
+  "success_rate": {"backend": "100% (21/21 new, 91/91 full suite)", "frontend": "~85% (all 4 features functional; 2 HIGH interaction/layout bugs)"},
+  "seed_data_creation": "setup_ui_iteration6.py: marta@test.com / bob@test.com (accepted friends) / stranger@test.com, all password test1234; marta has 1 fresh + 1 backdated(40h) story, bob 1 fresh story (300x450 PNG); bob marked 'voy' on the first demo event. Test-created TEST_* events, TEST chat messages and the temporary past-weekend event were deleted after testing (6 demo events remain).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@quienva.app/QuienVa2026!; marta@test.com, bob@test.com, stranger@test.com / test1234",
+  "context_for_next_testing_agent": "Re-seed UI data with `python /app/backend/tests/setup_ui_iteration6.py` (prints story/event ids; needs Pillow, present). Backend regression: `cd /app/backend && python -m pytest tests/ -q` (91 tests, ~190s, pytest.ini forces -n 2). Retest focus after fixes: (1) archive viewer clicks (story-close/story-delete/tap-navigation) - verify getComputedStyle(body).pointerEvents and elementFromPoint over the viewer controls; (2) story-react-send bounding rect must be <= 390px viewport width. Emoji testids embed the char: story-react-\u2764\ufe0f/\ud83d\udd25/\ud83d\ude02/\ud83d\ude2e; avoid backslashes inside f-strings in Playwright scripts (tool wraps in py3.11).",
+  "rca_of_the_issue": "Archive viewer: Radix DialogContent sets pointer-events:none on <body> and renders a z-50 overlay; StoryViewer is a sibling child of <Dialog> outside DialogContent, so it inherits pointer-events:none and its z-70 stacking does not help because hit-testing lands on the overlay -> all clicks inside the archive viewer are swallowed. Reaction send button: flex row with a flex-1 input lacking min-w-0; the input's intrinsic/padding width prevents shrinking, pushing the fixed w-10 send button 63px past the 390px viewport with no horizontal scroll available."
+}

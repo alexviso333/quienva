@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { AddStoryButton } from "@/components/Stories";
+import { Input } from "@/components/ui/input";
 import {
-  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2,
+  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +37,76 @@ function FriendRow({ title, color, friends }) {
             <span className="font-semibold text-sm">{f.name}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function chatTime(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+function EventChat({ eventId }) {
+  const qc = useQueryClient();
+  const [text, setText] = useState("");
+  const { data: messages = [] } = useQuery({
+    queryKey: ["event-messages", eventId],
+    queryFn: async () => (await api.get(`/events/${eventId}/messages`)).data,
+    refetchInterval: 8000,
+  });
+  const send = useMutation({
+    mutationFn: async () => (await api.post(`/events/${eventId}/messages`, { text: text.trim() })).data,
+    onSuccess: () => {
+      setText("");
+      qc.invalidateQueries({ queryKey: ["event-messages", eventId] });
+    },
+    onError: () => toast.error("No se pudo enviar"),
+  });
+
+  return (
+    <div data-testid="event-chat">
+      <p className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 font-bold mb-2">
+        <MessageCircle className="w-4 h-4 text-qv-secondary" /> Chat del plan
+      </p>
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 flex flex-col gap-3 max-h-72 overflow-y-auto hide-scrollbar">
+        {messages.length === 0 ? (
+          <p className="text-white/40 text-sm text-center py-4">Sé el primero en escribir. ¿A qué hora quedamos?</p>
+        ) : (
+          messages.map((m) => (
+            <div key={m.id} data-testid={`chat-message-${m.id}`} className={`flex gap-2 ${m.is_mine ? "flex-row-reverse" : ""}`}>
+              <AvatarCircle name={m.author.name} picture={m.author.picture} size={30} ring={false} />
+              <div className={`max-w-[75%] ${m.is_mine ? "items-end" : "items-start"} flex flex-col`}>
+                <div className={`rounded-2xl px-3 py-2 text-sm ${m.is_mine ? "bg-qv-primary text-white" : "bg-white/10 text-white"}`}>
+                  {!m.is_mine && <span className="block text-[11px] text-qv-secondary font-semibold">{m.author.name.split(" ")[0]}</span>}
+                  {m.text}
+                </div>
+                <span className="text-[10px] text-white/40 mt-0.5 px-1">{chatTime(m.created_at)}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-2">
+        <Input
+          data-testid="event-chat-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && text.trim()) send.mutate(); }}
+          placeholder="Escribe un mensaje…"
+          className="flex-1 h-11 bg-white/5 border-white/15 rounded-full text-white placeholder:text-white/40"
+        />
+        <button
+          data-testid="event-chat-send"
+          onClick={() => text.trim() && send.mutate()}
+          disabled={send.isPending}
+          className="w-11 h-11 rounded-full bg-qv-primary flex items-center justify-center shrink-0 active:scale-90 transition-transform"
+        >
+          <Send className="w-4 h-4 text-white" />
+        </button>
       </div>
     </div>
   );
@@ -232,6 +304,8 @@ export default function EventDetail() {
             label="Subir historia de esta noche"
             className="h-12 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
           />
+
+          <EventChat eventId={event.id} />
         </div>
       </div>
     </div>
