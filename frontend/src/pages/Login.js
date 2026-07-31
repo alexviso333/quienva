@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { formatApiErrorDetail } from "@/lib/api";
+import api, { formatApiErrorDetail } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Loader2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
@@ -49,10 +49,26 @@ export default function Login() {
     }
   };
 
-  const googleLogin = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/feed";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  const googleLogin = async () => {
+    try {
+      const { data } = await api.get("/auth/google/config");
+      if (!data.enabled || !data.client_id) {
+        toast.error("Google login no está configurado");
+        return;
+      }
+      const redirectUri = window.location.origin + "/auth/callback";
+      const params = new URLSearchParams({
+        client_id: data.client_id,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "openid email profile",
+        access_type: "online",
+        prompt: "select_account",
+      });
+      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    } catch (e) {
+      toast.error("No se pudo iniciar Google login");
+    }
   };
 
   return (
