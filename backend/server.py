@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from pathlib import Path
 import os
+import time
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -48,6 +49,10 @@ GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:hola@quienva.app")
+
+# In-memory TTL cache for expensive user-stats computation
+_STATS_CACHE = {}
+
 scheduler = None
 
 # ---------------------------------------------------------------------------
@@ -502,6 +507,8 @@ async def respond_friend(inp: FriendRespondInput, user: dict = Depends(get_curre
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
     if inp.accept:
         await db.friendships.update_one({"id": fr["id"]}, {"$set": {"status": "accepted"}})
+        _invalidate_stats_cache(fr["requester_id"])
+        _invalidate_stats_cache(user["user_id"])
         await create_notification(fr["requester_id"], "friend_accept",
                                   f"{user['name']} aceptó tu solicitud de amistad",
                                   {"user_id": user["user_id"]})
@@ -875,7 +882,16 @@ ACTION_POINTS = {
 
 
 async def _compute_user_stats(user_id: str) -> dict:
-    """Aggregate counts and stats for badges/profile."""
+    """Aggregate counts and stats for badges/profile. Cached 60s per user in memory."""
+    # In-memory TTL cache to speed up rankings and repeated calls in the same session
+    global _STATS_CACHE
+    try:
+        entry = _STATS_CACHE.get(user_id)
+        if entry and (time.time() - entry[0]) < 60:
+            return entry[1]
+    except NameError:
+        _STATS_CACHE = {}
+
     attended = 0
     going = 0
     interested = 0
@@ -1054,7 +1070,7 @@ async def _compute_user_stats(user_id: str) -> dict:
     top_venue_name = max(venue_counts, key=venue_counts.get) if venue_counts else ""
     venues_count = len(venue_counts)
 
-    return {
+    result = {
         "attended": attended,
         "going": going,
         "interested": interested,
@@ -1087,6 +1103,30 @@ async def _compute_user_stats(user_id: str) -> dict:
         "top_venue_count": top_venue,
         "venues_count": venues_count,
     }
+    try:
+        _STATS_CACHE[user_id] = (time.time(), result)
+        # Prevent unbounded growth
+        if len(_STATS_CACHE) > 500:
+            # Drop oldest half
+            items = sorted(_STATS_CACHE.items(), key=lambda kv: kv[1][0])
+            for k, _ in items[:250]:
+                _STATS_CACHE.pop(k, None)
+    except Exception:
+        pass
+    return result
+
+
+def _invalidate_stats_cache(user_id: str = None):
+    """Call whenever activity changes (interest, friend, story, etc.). If user_id
+    is None, wipe everything."""
+    try:
+        global _STATS_CACHE
+        if user_id is None:
+            _STATS_CACHE.clear()
+        else:
+            _STATS_CACHE.pop(user_id, None)
+    except Exception:
+        pass
 
 
 def _award_badges(stats: dict) -> list:
@@ -1211,23 +1251,69 @@ async def my_badges(user: dict = Depends(get_current_user)):
 
 @api_router.get("/users/{user_id}/badges")
 async def user_badges(user_id: str, viewer: dict = Depends(get_current_user)):
-    """View another user's badges + public stats. Must be self or friend."""
-    if user_id != viewer["user_id"]:
-        friend_ids = await accepted_friend_ids(viewer["user_id"])
-        if user_id not in friend_ids:
-            raise HTTPException(status_code=403, detail="No es tu amigo")
+    """View another user's badges + public stats. Anyone can see basic public info;
+    friends see the full stats. Non-friends see limited data + is_friend=false so
+    the UI can offer 'Add friend'."""
     target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    is_self = user_id == viewer["user_id"]
+    is_friend = False
+    friend_status = "none"
+    if not is_self:
+        friend_ids = await accepted_friend_ids(viewer["user_id"])
+        is_friend = user_id in friend_ids
+        if not is_friend:
+            # Check pending request either way
+            req = await db.friendships.find_one({
+                "$or": [
+                    {"requester_id": viewer["user_id"], "addressee_id": user_id, "status": "pending"},
+                    {"requester_id": user_id, "addressee_id": viewer["user_id"], "status": "pending"},
+                ],
+            })
+            if req:
+                friend_status = "pending_out" if req.get("requester_id") == viewer["user_id"] else "pending_in"
+        else:
+            friend_status = "friends"
+    else:
+        friend_status = "self"
+
     stats = await _compute_user_stats(user_id)
     earned_ids = _award_badges(stats)
     points = _compute_points(stats, earned_ids)
+
+    if is_self or is_friend:
+        return {
+            "user": {"user_id": target["user_id"], "name": target["name"],
+                     "picture": target.get("picture", ""), "username": target.get("username", ""),
+                     "city": target.get("city", ""), "bio": target.get("bio", "")},
+            "stats": stats,
+            "points": points,
+            "earned": [BADGES_BY_ID[b] for b in earned_ids if b in BADGES_BY_ID],
+            "locked": [b for b in BADGES_CATALOG if b["id"] not in earned_ids],
+            "is_friend": is_friend,
+            "is_self": is_self,
+            "friend_status": friend_status,
+        }
+    # Public view for non-friends: limited stats, only earned badges
+    public_stats = {
+        "total_events": stats.get("total_events", 0),
+        "friends_count": stats.get("friends_count", 0),
+        "genres_count": stats.get("genres_count", 0),
+        "week_streak": stats.get("week_streak", 0),
+        "day_streak": stats.get("day_streak", 0),
+    }
     return {
-        "user": {"user_id": target["user_id"], "name": target["name"], "picture": target.get("picture", "")},
-        "stats": stats,
-        "points": points,
+        "user": {"user_id": target["user_id"], "name": target["name"],
+                 "picture": target.get("picture", ""), "username": target.get("username", ""),
+                 "city": target.get("city", ""), "bio": target.get("bio", "")},
+        "stats": public_stats,
+        "points": {"total": points["total"], "badge_points": points["badge_points"], "action_points": 0},
         "earned": [BADGES_BY_ID[b] for b in earned_ids if b in BADGES_BY_ID],
-        "locked": [b for b in BADGES_CATALOG if b["id"] not in earned_ids],
+        "locked": [],
+        "is_friend": False,
+        "is_self": False,
+        "friend_status": friend_status,
     }
 
 
@@ -1241,20 +1327,26 @@ async def _points_for_user(user_id: str) -> int:
 
 
 async def _build_ranking(candidate_user_ids: list, limit: int = 100) -> list:
-    """Given a list of user_ids, compute their points and return sorted ranking."""
+    """Given a list of user_ids, compute their points and return sorted ranking.
+    Parallelized: fetches users in one query and computes stats concurrently."""
     if not candidate_user_ids:
         return []
-    entries = []
+    users = []
     async for u in db.users.find({"user_id": {"$in": candidate_user_ids}}, {"_id": 0}):
-        pts = await _points_for_user(u["user_id"])
-        entries.append({
+        users.append(u)
+    # Compute points in parallel (cached to 60s so this is fast on repeat calls)
+    points_list = await asyncio.gather(*[_points_for_user(u["user_id"]) for u in users])
+    entries = [
+        {
             "user_id": u["user_id"],
             "name": u["name"],
             "username": u.get("username", ""),
             "picture": u.get("picture", ""),
             "city": u.get("city", ""),
             "points": pts,
-        })
+        }
+        for u, pts in zip(users, points_list)
+    ]
     entries.sort(key=lambda e: -e["points"])
     for i, e in enumerate(entries[:limit]):
         e["rank"] = i + 1
@@ -1447,6 +1539,7 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
             "status": inp.status,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
+    _invalidate_stats_cache(user["user_id"])
 
     # Notify friends when marking "voy" (only on transition to voy)
     if inp.status == "voy" and prev_status != "voy":
@@ -3160,6 +3253,24 @@ async def on_startup():
         await db.users.create_index("email", unique=True)
         await db.users.create_index("username", unique=True)
         await db.sessions.create_index("session_token", unique=True)
+        # Performance indices (idempotent) — speed up hot queries
+        await db.interests.create_index([("user_id", 1), ("event_id", 1)])
+        await db.interests.create_index([("event_id", 1), ("status", 1)])
+        await db.interests.create_index("user_id")
+        await db.friendships.create_index([("from_user_id", 1), ("to_user_id", 1)])
+        await db.friendships.create_index([("to_user_id", 1), ("status", 1)])
+        await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+        await db.notifications.create_index([("user_id", 1), ("read", 1)])
+        await db.stories.create_index([("user_id", 1), ("created_at", -1)])
+        await db.dm_messages.create_index([("thread_key", 1), ("created_at", 1)])
+        await db.dm_messages.create_index([("to_user_id", 1), ("read", 1)])
+        await db.group_messages.create_index([("group_id", 1), ("created_at", 1)])
+        await db.groups.create_index("member_ids")
+        await db.captures.create_index([("event_id", 1), ("user_id", 1)])
+        await db.album_uploads.create_index([("event_id", 1), ("created_at", -1)])
+        await db.album_uploads.create_index("user_id")
+        await db.events.create_index("date")
+        await db.moment_prompts.create_index("event_id", unique=True)
     except Exception as e:
         logger.warning(f"Index warn: {e}")
     await seed_admin()

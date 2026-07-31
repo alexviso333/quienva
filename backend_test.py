@@ -1,454 +1,583 @@
 #!/usr/bin/env python3
 """
-Backend test for NEW features in this iteration only.
-Tests:
-1. Google OAuth config endpoint
-2. Next badges endpoint
-3. Moment upload friend notifications
-4. Auto-trigger moments scheduler
+Test script for profile permission bug fix.
+Tests the /api/users/{user_id}/badges endpoint with different friend statuses.
 """
-
 import requests
-import json
 import time
-from datetime import datetime, timedelta
-from pathlib import Path
+import json
 
-# Backend URL from frontend/.env
-BACKEND_URL = "https://8212b2f0-abf2-44ec-8d3e-ed989692e2c0.preview.emergentagent.com/api"
+BASE_URL = "https://8212b2f0-abf2-44ec-8d3e-ed989692e2c0.preview.emergentagent.com/api"
 
-# Admin credentials
+# Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
+BOB_EMAIL = "bob@test.com"
+BOB_PASSWORD = "pass1234"
+CHARLIE_EMAIL = "charlie@test.com"
+CHARLIE_PASSWORD = "pass1234"
 
-# Test results
-results = {
-    "passed": 0,
-    "failed": 0,
-    "tests": []
-}
-
-def log_test(name, passed, details=""):
-    """Log test result"""
-    status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"{status}: {name}")
-    if details:
-        print(f"  Details: {details}")
-    results["tests"].append({
-        "name": name,
-        "passed": passed,
-        "details": details
-    })
-    if passed:
-        results["passed"] += 1
-    else:
-        results["failed"] += 1
-
-def login_admin():
-    """Login as admin and return token"""
-    resp = requests.post(f"{BACKEND_URL}/auth/login", json={
-        "email": ADMIN_EMAIL,
-        "password": ADMIN_PASSWORD
-    })
+def login(email, password):
+    """Login and return session token"""
+    resp = requests.post(f"{BASE_URL}/auth/login", json={"email": email, "password": password})
     if resp.status_code != 200:
-        raise Exception(f"Admin login failed: {resp.status_code} {resp.text}")
-    return resp.json()["token"]
+        print(f"❌ Login failed for {email}: {resp.status_code} - {resp.text}")
+        return None
+    data = resp.json()
+    return data.get("token")
 
-def create_user(name, email, password, token=None):
-    """Create a new user and return token"""
-    username = email.split("@")[0].replace(".", "")
-    resp = requests.post(f"{BACKEND_URL}/auth/register", json={
+def register_user(email, password, name, username):
+    """Register a new user"""
+    resp = requests.post(f"{BASE_URL}/auth/register", json={
         "email": email,
         "password": password,
         "name": name,
         "username": username,
         "city": "Palma de Mallorca"
     })
-    if resp.status_code != 200:
-        raise Exception(f"User creation failed: {resp.status_code} {resp.text}")
-    return resp.json()["token"]
-
-def send_friend_request(token, target_email):
-    """Send friend request by email"""
-    # First get user by username
-    username = target_email.split("@")[0].replace(".", "")
-    resp = requests.post(f"{BACKEND_URL}/friends/request-by-username", 
-                        json={"username": username},
-                        headers={"Authorization": f"Bearer {token}"})
-    return resp.status_code == 200
-
-def accept_friend_request(token):
-    """Accept the first pending friend request"""
-    resp = requests.get(f"{BACKEND_URL}/friends/requests",
-                       headers={"Authorization": f"Bearer {token}"})
-    if resp.status_code != 200:
-        return False
-    requests_list = resp.json()
-    if not requests_list:
-        return False
-    request_id = requests_list[0]["request_id"]
-    resp = requests.post(f"{BACKEND_URL}/friends/respond",
-                        json={"request_id": request_id, "accept": True},
-                        headers={"Authorization": f"Bearer {token}"})
-    return resp.status_code == 200
-
-def create_event(token, name, date_str, time_str="22:00"):
-    """Create an event and return event_id"""
-    resp = requests.post(f"{BACKEND_URL}/admin/events", json={
-        "name": name,
-        "venue": "Test Venue",
-        "address": "Test Address",
-        "date": date_str,
-        "time": time_str,
-        "city": "Palma de Mallorca",
-        "genre": "Techno"
-    }, headers={"Authorization": f"Bearer {token}"})
-    if resp.status_code != 200:
-        raise Exception(f"Event creation failed: {resp.status_code} {resp.text}")
-    return resp.json()["id"]
-
-def mark_interest(token, event_id, status="voy"):
-    """Mark interest in an event"""
-    resp = requests.post(f"{BACKEND_URL}/events/{event_id}/interest",
-                        json={"status": status},
-                        headers={"Authorization": f"Bearer {token}"})
-    return resp.status_code == 200
-
-def trigger_moment(admin_token, event_id):
-    """Admin triggers moment for an event"""
-    resp = requests.post(f"{BACKEND_URL}/admin/events/{event_id}/moment/trigger",
-                        headers={"Authorization": f"Bearer {admin_token}"})
-    return resp.status_code == 200, resp
-
-def upload_moment(token, event_id):
-    """Upload a moment capture"""
-    # Create a small test image
-    import io
-    from PIL import Image
-    img = Image.new('RGB', (100, 100), color='red')
-    buf = io.BytesIO()
-    img.save(buf, format='JPEG')
-    buf.seek(0)
-    
-    resp = requests.post(f"{BACKEND_URL}/events/{event_id}/moment/upload",
-                        files={"file": ("test.jpg", buf, "image/jpeg")},
-                        headers={"Authorization": f"Bearer {token}"})
-    return resp.status_code == 200, resp
-
-def get_notifications(token):
-    """Get user notifications"""
-    resp = requests.get(f"{BACKEND_URL}/notifications",
-                       headers={"Authorization": f"Bearer {token}"})
-    if resp.status_code != 200:
-        return []
-    return resp.json()
-
-def get_admin_dashboard(token):
-    """Get admin dashboard data"""
-    resp = requests.get(f"{BACKEND_URL}/admin/dashboard",
-                       headers={"Authorization": f"Bearer {token}"})
-    if resp.status_code != 200:
-        return None
-    return resp.json()
-
-print("=" * 80)
-print("BACKEND TESTING - NEW FEATURES ONLY")
-print("=" * 80)
-print()
-
-# ============================================================================
-# TEST 1: Google OAuth Config Endpoint
-# ============================================================================
-print("TEST 1: Google OAuth Config Endpoint")
-print("-" * 80)
-
-try:
-    resp = requests.get(f"{BACKEND_URL}/auth/google/config")
     if resp.status_code == 200:
-        data = resp.json()
-        if data.get("enabled") == True and data.get("client_id") == "043435767943-4iv6dvgue2fmoa81167901vi9j9f2lc7.apps.googleusercontent.com":
-            log_test("GET /auth/google/config returns enabled=true with correct client_id", True)
-        elif data.get("enabled") == False:
-            log_test("GET /auth/google/config returns enabled=false", False, 
-                    "Expected enabled=true but got false")
-        else:
-            log_test("GET /auth/google/config structure", False,
-                    f"Got: {data}")
-    else:
-        log_test("GET /auth/google/config", False, f"Status: {resp.status_code}")
-except Exception as e:
-    log_test("GET /auth/google/config", False, str(e))
+        return resp.json()
+    return None
 
-print()
+def get_user_badges(user_id, token):
+    """Get user badges with authorization"""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(f"{BASE_URL}/users/{user_id}/badges", headers=headers)
+    return resp
 
-# ============================================================================
-# TEST 2: Next Badges Endpoint
-# ============================================================================
-print("TEST 2: Next Badges Endpoint")
-print("-" * 80)
+def send_friend_request(target_user_id, token):
+    """Send friend request"""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.post(f"{BASE_URL}/friends/request", 
+                        json={"user_id": target_user_id}, 
+                        headers=headers)
+    return resp
 
-try:
-    admin_token = login_admin()
+def get_friend_requests(token):
+    """Get pending friend requests"""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(f"{BASE_URL}/friends/requests", headers=headers)
+    return resp
+
+def respond_to_friend_request(request_id, accept, token):
+    """Accept or reject friend request"""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.post(f"{BASE_URL}/friends/respond", 
+                        json={"request_id": request_id, "accept": accept}, 
+                        headers=headers)
+    return resp
+
+def get_rankings_world(token):
+    """Get world rankings"""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(f"{BASE_URL}/rankings/world", headers=headers)
+    return resp
+
+def get_me(token):
+    """Get current user info"""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(f"{BASE_URL}/auth/me", headers=headers)
+    return resp
+
+def print_test_header(test_num, description):
+    """Print formatted test header"""
+    print(f"\n{'='*80}")
+    print(f"TEST {test_num}: {description}")
+    print(f"{'='*80}")
+
+def print_result(passed, message):
+    """Print test result"""
+    status = "✅ PASS" if passed else "❌ FAIL"
+    print(f"{status}: {message}")
+
+def main():
+    print("🧪 Starting Profile Permission Bug Fix Tests")
+    print(f"Backend URL: {BASE_URL}")
     
-    # Test default limit (3)
-    resp = requests.get(f"{BACKEND_URL}/me/next-badges",
-                       headers={"Authorization": f"Bearer {admin_token}"})
-    if resp.status_code == 200:
-        data = resp.json()
-        if isinstance(data, list):
-            if len(data) <= 3:
-                log_test("GET /me/next-badges default limit returns ≤3 items", True,
-                        f"Returned {len(data)} items")
-            else:
-                log_test("GET /me/next-badges default limit", False,
-                        f"Expected ≤3 items, got {len(data)}")
-            
-            # Check structure of first item
-            if len(data) > 0:
-                item = data[0]
-                required_fields = ["id", "name", "emoji", "tier", "cat", "points", 
-                                 "current", "threshold", "remaining", "stat_key", "progress"]
-                missing = [f for f in required_fields if f not in item]
-                if not missing:
-                    log_test("Next badge item has all required fields", True,
-                            f"Fields: {', '.join(required_fields)}")
-                else:
-                    log_test("Next badge item structure", False,
-                            f"Missing fields: {missing}")
-                
-                # Check remaining > 0
-                if item.get("remaining", 0) > 0:
-                    log_test("Next badge has remaining > 0", True,
-                            f"remaining={item['remaining']}")
-                else:
-                    log_test("Next badge remaining value", False,
-                            f"Expected remaining > 0, got {item.get('remaining')}")
-                
-                # Check progress is 0-100
-                progress = item.get("progress", -1)
-                if 0 <= progress <= 100:
-                    log_test("Next badge progress is 0-100", True,
-                            f"progress={progress}")
-                else:
-                    log_test("Next badge progress range", False,
-                            f"Expected 0-100, got {progress}")
-            else:
-                log_test("Next badges returned items", False, "No items returned")
-        else:
-            log_test("GET /me/next-badges returns array", False,
-                    f"Got type: {type(data)}")
-    else:
-        log_test("GET /me/next-badges", False, f"Status: {resp.status_code}")
+    # Login as admin
+    print("\n🔐 Logging in as admin...")
+    admin_token = login(ADMIN_EMAIL, ADMIN_PASSWORD)
+    if not admin_token:
+        print("❌ CRITICAL: Cannot login as admin. Aborting tests.")
+        return
+    print("✅ Admin login successful")
     
-    # Test custom limit (1)
-    resp = requests.get(f"{BACKEND_URL}/me/next-badges?limit=1",
-                       headers={"Authorization": f"Bearer {admin_token}"})
-    if resp.status_code == 200:
-        data = resp.json()
-        if isinstance(data, list) and len(data) == 1:
-            log_test("GET /me/next-badges?limit=1 returns 1 item", True)
-        else:
-            log_test("GET /me/next-badges?limit=1", False,
-                    f"Expected 1 item, got {len(data) if isinstance(data, list) else 'not a list'}")
-    else:
-        log_test("GET /me/next-badges?limit=1", False, f"Status: {resp.status_code}")
+    # Get admin user_id
+    admin_resp = get_me(admin_token)
+    if admin_resp.status_code != 200:
+        print("❌ CRITICAL: Cannot get admin user info. Aborting tests.")
+        return
+    admin_user_id = admin_resp.json()["user_id"]
+    print(f"Admin user_id: {admin_user_id}")
     
-    # Verify returned badges are NOT in earned list
-    resp_earned = requests.get(f"{BACKEND_URL}/me/badges",
-                              headers={"Authorization": f"Bearer {admin_token}"})
-    if resp_earned.status_code == 200:
-        earned_ids = {b["id"] for b in resp_earned.json().get("earned", [])}
-        resp_next = requests.get(f"{BACKEND_URL}/me/next-badges",
-                                headers={"Authorization": f"Bearer {admin_token}"})
-        if resp_next.status_code == 200:
-            next_ids = {b["id"] for b in resp_next.json()}
-            overlap = earned_ids.intersection(next_ids)
-            if not overlap:
-                log_test("Next badges are not in earned list", True)
-            else:
-                log_test("Next badges exclusion", False,
-                        f"Found earned badges in next list: {overlap}")
-        else:
-            log_test("Next badges verification", False, "Could not fetch next badges")
+    # Try to login as Bob, if fails, register
+    print("\n🔐 Checking Bob user...")
+    bob_token = login(BOB_EMAIL, BOB_PASSWORD)
+    if not bob_token:
+        print("Bob doesn't exist, registering...")
+        bob_data = register_user(BOB_EMAIL, BOB_PASSWORD, "Bob Test", "bobtest")
+        if not bob_data:
+            print("❌ CRITICAL: Cannot register Bob. Aborting tests.")
+            return
+        bob_token = bob_data.get("token")
+        print("✅ Bob registered successfully")
     else:
-        log_test("Earned badges verification", False, "Could not fetch earned badges")
+        print("✅ Bob login successful")
+    
+    # Get Bob's user_id
+    bob_resp = get_me(bob_token)
+    if bob_resp.status_code != 200:
+        print("❌ CRITICAL: Cannot get Bob user info. Aborting tests.")
+        return
+    bob_user_id = bob_resp.json()["user_id"]
+    print(f"Bob user_id: {bob_user_id}")
+    
+    # Check if admin and Bob are already friends
+    bob_badges_resp = get_user_badges(bob_user_id, admin_token)
+    if bob_badges_resp.status_code == 200:
+        bob_friend_status = bob_badges_resp.json().get("friend_status")
+        print(f"Admin-Bob relationship: {bob_friend_status}")
         
-except Exception as e:
-    log_test("Next badges endpoint tests", False, str(e))
-
-print()
-
-# ============================================================================
-# TEST 3: Moment Upload Friend Notifications
-# ============================================================================
-print("TEST 3: Moment Upload Friend Notifications")
-print("-" * 80)
-
-try:
-    admin_token = login_admin()
-    
-    # Create two test users (Bob and Charlie)
-    timestamp = int(time.time())
-    bob_email = f"bob{timestamp}@test.com"
-    charlie_email = f"charlie{timestamp}@test.com"
-    
-    print(f"Creating Bob: {bob_email}")
-    bob_token = create_user("Bob Test", bob_email, "password123")
-    print(f"Creating Charlie: {charlie_email}")
-    charlie_token = create_user("Charlie Test", charlie_email, "password123")
-    
-    # Make them friends
-    print("Sending friend request from Bob to Charlie...")
-    send_friend_request(bob_token, charlie_email)
-    time.sleep(0.5)
-    print("Charlie accepting friend request...")
-    accept_friend_request(charlie_token)
-    time.sleep(0.5)
-    
-    # Create an event for today
-    today = datetime.now().date().isoformat()
-    print(f"Creating event for {today}...")
-    event_id = create_event(admin_token, f"Test Party {timestamp}", today, "22:00")
-    
-    # Bob marks 'voy' on the event
-    print("Bob marking 'voy' on event...")
-    mark_interest(bob_token, event_id, "voy")
-    time.sleep(0.5)
-    
-    # Admin triggers moment
-    print("Admin triggering moment...")
-    success, resp = trigger_moment(admin_token, event_id)
-    if not success:
-        log_test("Admin trigger moment", False, f"Status: {resp.status_code}")
-    else:
-        log_test("Admin trigger moment", True)
-    time.sleep(0.5)
-    
-    # Bob uploads moment
-    print("Bob uploading moment...")
-    success, resp = upload_moment(bob_token, event_id)
-    if not success:
-        log_test("Bob upload moment", False, f"Status: {resp.status_code}, {resp.text}")
-    else:
-        log_test("Bob upload moment", True)
-    time.sleep(1)  # Give time for notification to be created
-    
-    # Check Charlie's notifications
-    print("Checking Charlie's notifications...")
-    charlie_notifs = get_notifications(charlie_token)
-    moment_notifs = [n for n in charlie_notifs if n.get("type") == "moment_friend"]
-    
-    if moment_notifs:
-        notif = moment_notifs[0]
-        message = notif.get("message", "")
-        if "Bob" in message and "Test Party" in message:
-            log_test("Charlie receives moment_friend notification with Bob's name and event name", True,
-                    f"Message: {message}")
+        if bob_friend_status == "friends":
+            print("⚠️  Admin and Bob are already friends. Using Charlie for non-friend tests.")
+            # Use Charlie for non-friend tests
+            charlie_token = login(CHARLIE_EMAIL, CHARLIE_PASSWORD)
+            if not charlie_token:
+                print("Charlie doesn't exist, registering...")
+                charlie_data = register_user(CHARLIE_EMAIL, CHARLIE_PASSWORD, "Charlie Test", "charlietest")
+                if not charlie_data:
+                    print("❌ CRITICAL: Cannot register Charlie. Aborting tests.")
+                    return
+                charlie_token = charlie_data.get("token")
+                print("✅ Charlie registered successfully")
+            else:
+                print("✅ Charlie login successful")
+            
+            charlie_resp = get_me(charlie_token)
+            if charlie_resp.status_code != 200:
+                print("❌ CRITICAL: Cannot get Charlie user info. Aborting tests.")
+                return
+            charlie_user_id = charlie_resp.json()["user_id"]
+            print(f"Charlie user_id: {charlie_user_id}")
+            
+            # Use Charlie for tests 1 and 2
+            test_user_id = charlie_user_id
+            test_user_token = charlie_token
+            test_user_name = "Charlie"
         else:
-            log_test("Notification content", False,
-                    f"Expected Bob and event name in message, got: {message}")
+            # Use Bob for all tests
+            test_user_id = bob_user_id
+            test_user_token = bob_token
+            test_user_name = "Bob"
     else:
-        log_test("Charlie receives moment_friend notification", False,
-                f"No moment_friend notifications found. Total notifications: {len(charlie_notifs)}")
+        # Use Bob for all tests
+        test_user_id = bob_user_id
+        test_user_token = bob_token
+        test_user_name = "Bob"
     
-    # Test case: friend not on event (Charlie is not on the event)
-    # The notification should still be sent to all friends
-    if moment_notifs:
-        log_test("Friend not on event still receives notification (fallback to all friends)", True,
-                "Charlie received notification even though not on event")
+    # TEST 1: Admin viewing non-friend user's badges
+    print_test_header(1, f"Admin viewing non-friend {test_user_name}'s badges (expect 200, limited view)")
+    resp = get_user_badges(test_user_id, admin_token)
     
-except Exception as e:
-    log_test("Moment upload friend notifications", False, str(e))
-
-print()
-
-# ============================================================================
-# TEST 4: Auto-trigger Moments Scheduler
-# ============================================================================
-print("TEST 4: Auto-trigger Moments Scheduler")
-print("-" * 80)
-
-try:
-    admin_token = login_admin()
-    
-    # Check admin dashboard for structure (includes captures count)
-    # Note: "captures" is the moment captures count (there's no separate "moments" field)
-    dashboard = get_admin_dashboard(admin_token)
-    if dashboard:
-        extras = dashboard.get("extras", {})
-        if "captures" in extras:
-            log_test("Admin dashboard includes captures count", True,
-                    f"captures={extras['captures']}")
+    test1_passed = True
+    if resp.status_code != 200:
+        print_result(False, f"Expected 200, got {resp.status_code}")
+        test1_passed = False
+    else:
+        data = resp.json()
+        
+        # Check is_friend
+        if data.get("is_friend") != False:
+            print_result(False, f"Expected is_friend=False, got {data.get('is_friend')}")
+            test1_passed = False
         else:
-            log_test("Admin dashboard extras structure", False,
-                    f"Missing captures. Got: {list(extras.keys())}")
+            print_result(True, "is_friend=False ✓")
+        
+        # Check is_self
+        if data.get("is_self") != False:
+            print_result(False, f"Expected is_self=False, got {data.get('is_self')}")
+            test1_passed = False
+        else:
+            print_result(True, "is_self=False ✓")
+        
+        # Check friend_status
+        if data.get("friend_status") != "none":
+            print_result(False, f"Expected friend_status='none', got {data.get('friend_status')}")
+            test1_passed = False
+        else:
+            print_result(True, "friend_status='none' ✓")
+        
+        # Check stats (should only have 5 keys)
+        stats = data.get("stats", {})
+        expected_keys = {"total_events", "friends_count", "genres_count", "week_streak", "day_streak"}
+        actual_keys = set(stats.keys())
+        
+        if actual_keys != expected_keys:
+            print_result(False, f"Stats keys mismatch. Expected {expected_keys}, got {actual_keys}")
+            test1_passed = False
+        else:
+            print_result(True, f"Stats contains only 5 reduced keys ✓")
+        
+        # Check locked is empty
+        if data.get("locked") != []:
+            print_result(False, f"Expected locked=[], got {len(data.get('locked', []))} items")
+            test1_passed = False
+        else:
+            print_result(True, "locked=[] ✓")
+        
+        # Check earned is present
+        if "earned" not in data:
+            print_result(False, "earned field missing")
+            test1_passed = False
+        else:
+            print_result(True, f"earned array present with {len(data['earned'])} badges ✓")
+        
+        # Check points structure
+        points = data.get("points", {})
+        if "total" not in points or "badge_points" not in points:
+            print_result(False, "points.total or points.badge_points missing")
+            test1_passed = False
+        elif points.get("action_points") != 0:
+            print_result(False, f"Expected action_points=0 for non-friends, got {points.get('action_points')}")
+            test1_passed = False
+        else:
+            print_result(True, f"points structure correct (action_points=0 for non-friends) ✓")
+    
+    if test1_passed:
+        print("\n✅ TEST 1 PASSED")
     else:
-        log_test("Admin dashboard fetch", False, "Could not fetch dashboard")
+        print("\n❌ TEST 1 FAILED")
     
-    # Check backend logs for auto_trigger_moments errors
-    print("Checking backend logs for auto_trigger_moments errors...")
-    import subprocess
-    result = subprocess.run(
-        ["tail", "-n", "100", "/var/log/supervisor/backend.err.log"],
-        capture_output=True,
-        text=True
-    )
-    error_log = result.stdout
+    # TEST 2: Admin sends friend request to test user
+    print_test_header(2, f"Admin sends friend request to {test_user_name} (expect pending_out)")
     
-    # Look for auto_trigger_moments errors in last 100 lines
-    if "auto_trigger_moments failed" in error_log:
-        log_test("Auto-trigger moments scheduler - no errors in logs", False,
-                "Found 'auto_trigger_moments failed' in error logs")
+    # First, check if they're already friends or have pending request
+    resp = get_user_badges(test_user_id, admin_token)
+    if resp.status_code == 200:
+        current_status = resp.json().get("friend_status")
+        if current_status == "friends":
+            print("⚠️  Admin and test user are already friends. Skipping friend request test.")
+            print("✅ TEST 2 SKIPPED (already friends)")
+            test2_passed = True
+        elif current_status in ["pending_out", "pending_in"]:
+            print(f"⚠️  Friend request already exists (status: {current_status})")
+            # Verify the status is correct
+            test2_passed = True
+            if current_status == "pending_out":
+                print_result(True, "friend_status='pending_out' ✓")
+            else:
+                print_result(True, f"friend_status='{current_status}' ✓")
+            
+            # Should still have limited view
+            data = resp.json()
+            stats = data.get("stats", {})
+            expected_keys = {"total_events", "friends_count", "genres_count", "week_streak", "day_streak"}
+            actual_keys = set(stats.keys())
+            
+            if actual_keys != expected_keys:
+                print_result(False, f"Stats should still be limited. Got {actual_keys}")
+                test2_passed = False
+            else:
+                print_result(True, "Stats still limited (non-friend view) ✓")
+            
+            print("✅ TEST 2 PASSED (verified existing request)")
+        else:
+            # Send friend request
+            friend_req_resp = send_friend_request(test_user_id, admin_token)
+            if friend_req_resp.status_code not in [200, 400]:
+                print_result(False, f"Friend request failed: {friend_req_resp.status_code} - {friend_req_resp.text}")
+                test2_passed = False
+            else:
+                # Check badges endpoint again
+                resp = get_user_badges(test_user_id, admin_token)
+                test2_passed = True
+                
+                if resp.status_code != 200:
+                    print_result(False, f"Expected 200, got {resp.status_code}")
+                    test2_passed = False
+                else:
+                    data = resp.json()
+                    
+                    # Should still be non-friend view
+                    if data.get("is_friend") != False:
+                        print_result(False, f"Expected is_friend=False, got {data.get('is_friend')}")
+                        test2_passed = False
+                    else:
+                        print_result(True, "is_friend=False (still non-friend) ✓")
+                    
+                    # Check friend_status is pending_out
+                    if data.get("friend_status") != "pending_out":
+                        print_result(False, f"Expected friend_status='pending_out', got {data.get('friend_status')}")
+                        test2_passed = False
+                    else:
+                        print_result(True, "friend_status='pending_out' ✓")
+                    
+                    # Should still have limited view
+                    stats = data.get("stats", {})
+                    expected_keys = {"total_events", "friends_count", "genres_count", "week_streak", "day_streak"}
+                    actual_keys = set(stats.keys())
+                    
+                    if actual_keys != expected_keys:
+                        print_result(False, f"Stats should still be limited. Got {actual_keys}")
+                        test2_passed = False
+                    else:
+                        print_result(True, "Stats still limited (non-friend view) ✓")
+                
+                if test2_passed:
+                    print("\n✅ TEST 2 PASSED")
+                else:
+                    print("\n❌ TEST 2 FAILED")
     else:
-        log_test("Auto-trigger moments scheduler - no errors in logs", True,
-                "No auto_trigger_moments errors found in recent logs")
+        print_result(False, f"Cannot check current friend status: {resp.status_code}")
+        test2_passed = False
+        print("\n❌ TEST 2 FAILED")
     
-    # Test that repeated admin triggers don't create duplicates (upsert behavior)
-    today = datetime.now().date().isoformat()
-    timestamp = int(time.time())
-    event_id = create_event(admin_token, f"Duplicate Test {timestamp}", today, "23:00")
+    # TEST 3: Test user accepts friend request
+    print_test_header(3, f"{test_user_name} accepts friend request (expect friends, full view)")
     
-    # Mark admin as 'voy' so there's at least one voy user
-    mark_interest(admin_token, event_id, "voy")
-    time.sleep(0.5)
-    
-    # Trigger twice
-    print("Testing duplicate trigger prevention...")
-    trigger_moment(admin_token, event_id)
-    time.sleep(0.5)
-    success2, resp2 = trigger_moment(admin_token, event_id)
-    
-    # Second trigger should succeed (upsert) but not create duplicate
-    if success2:
-        log_test("Repeated moment trigger doesn't fail (upsert behavior)", True,
-                "Second trigger succeeded")
+    # Get test user's pending requests
+    requests_resp = get_friend_requests(test_user_token)
+    if requests_resp.status_code != 200:
+        print_result(False, f"Cannot get friend requests: {requests_resp.status_code}")
+        test3_passed = False
     else:
-        log_test("Repeated moment trigger", False,
-                f"Second trigger failed: {resp2.status_code}")
+        requests_data = requests_resp.json()
+        # API returns 'user' field, not 'requester'
+        pending = [r for r in requests_data if r.get("user", {}).get("user_id") == admin_user_id]
+        
+        if not pending:
+            print("⚠️  No pending request from admin to test user. Checking if already friends...")
+            resp = get_user_badges(test_user_id, admin_token)
+            if resp.status_code == 200 and resp.json().get("friend_status") == "friends":
+                print("✅ Already friends. Testing full view...")
+                test3_passed = True
+            else:
+                print_result(False, "No pending request and not friends")
+                test3_passed = False
+        else:
+            # Accept the request (API uses 'request_id' field)
+            request_id = pending[0]["request_id"]
+            accept_resp = respond_to_friend_request(request_id, True, test_user_token)
+            
+            if accept_resp.status_code != 200:
+                print_result(False, f"Accept request failed: {accept_resp.status_code} - {accept_resp.text}")
+                test3_passed = False
+            else:
+                print_result(True, "Friend request accepted ✓")
+                test3_passed = True
+        
+        if test3_passed:
+            # Now check admin's view of test user's badges (should be full)
+            resp = get_user_badges(test_user_id, admin_token)
+            
+            if resp.status_code != 200:
+                print_result(False, f"Expected 200, got {resp.status_code}")
+                test3_passed = False
+            else:
+                data = resp.json()
+                
+                # Check is_friend
+                if data.get("is_friend") != True:
+                    print_result(False, f"Expected is_friend=True, got {data.get('is_friend')}")
+                    test3_passed = False
+                else:
+                    print_result(True, "is_friend=True ✓")
+                
+                # Check friend_status
+                if data.get("friend_status") != "friends":
+                    print_result(False, f"Expected friend_status='friends', got {data.get('friend_status')}")
+                    test3_passed = False
+                else:
+                    print_result(True, "friend_status='friends' ✓")
+                
+                # Check stats (should have full keys now)
+                stats = data.get("stats", {})
+                required_full_keys = {"total_events", "friends_count", "genres_count", "week_streak", 
+                                     "day_streak", "attended", "going", "weekday_count"}
+                actual_keys = set(stats.keys())
+                
+                if not required_full_keys.issubset(actual_keys):
+                    print_result(False, f"Stats missing full keys. Expected at least {required_full_keys}, got {actual_keys}")
+                    test3_passed = False
+                else:
+                    print_result(True, f"Stats contains full keys (including attended, going, weekday_count, etc.) ✓")
+                
+                # Check locked is filled
+                locked = data.get("locked", [])
+                if len(locked) == 0:
+                    print_result(False, "Expected locked badges to be filled for friends")
+                    test3_passed = False
+                else:
+                    print_result(True, f"locked array filled with {len(locked)} badges ✓")
+                
+                # Check points structure (should have full action_points now)
+                points = data.get("points", {})
+                if points.get("action_points") == 0:
+                    print_result(False, "Expected action_points > 0 for friends (or at least not hidden)")
+                    test3_passed = False
+                else:
+                    print_result(True, f"action_points visible for friends ({points.get('action_points')}) ✓")
     
-except Exception as e:
-    log_test("Auto-trigger moments scheduler tests", False, str(e))
+    if test3_passed:
+        print("\n✅ TEST 3 PASSED")
+    else:
+        print("\n❌ TEST 3 FAILED")
+    
+    # TEST 4: Bob viewing own profile
+    print_test_header(4, "Bob viewing own profile (expect is_self=True, full view)")
+    
+    resp = get_user_badges(bob_user_id, bob_token)
+    test4_passed = True
+    
+    if resp.status_code != 200:
+        print_result(False, f"Expected 200, got {resp.status_code}")
+        test4_passed = False
+    else:
+        data = resp.json()
+        
+        # Check is_self
+        if data.get("is_self") != True:
+            print_result(False, f"Expected is_self=True, got {data.get('is_self')}")
+            test4_passed = False
+        else:
+            print_result(True, "is_self=True ✓")
+        
+        # Check friend_status
+        if data.get("friend_status") != "self":
+            print_result(False, f"Expected friend_status='self', got {data.get('friend_status')}")
+            test4_passed = False
+        else:
+            print_result(True, "friend_status='self' ✓")
+        
+        # Check stats (should have full keys)
+        stats = data.get("stats", {})
+        required_full_keys = {"total_events", "friends_count", "genres_count", "week_streak", 
+                             "day_streak", "attended", "going", "weekday_count"}
+        actual_keys = set(stats.keys())
+        
+        if not required_full_keys.issubset(actual_keys):
+            print_result(False, f"Stats missing full keys. Expected at least {required_full_keys}, got {actual_keys}")
+            test4_passed = False
+        else:
+            print_result(True, f"Stats contains full keys ✓")
+        
+        # Check locked is filled
+        locked = data.get("locked", [])
+        if len(locked) == 0:
+            print_result(False, "Expected locked badges to be filled for self")
+            test4_passed = False
+        else:
+            print_result(True, f"locked array filled with {len(locked)} badges ✓")
+    
+    if test4_passed:
+        print("\n✅ TEST 4 PASSED")
+    else:
+        print("\n❌ TEST 4 FAILED")
+    
+    # TEST 5: Non-existent user
+    print_test_header(5, "GET non-existent user (expect 404)")
+    
+    fake_user_id = "nonexistent-user-12345"
+    resp = get_user_badges(fake_user_id, admin_token)
+    test5_passed = True
+    
+    if resp.status_code != 404:
+        print_result(False, f"Expected 404, got {resp.status_code}")
+        test5_passed = False
+    else:
+        print_result(True, "Returns 404 for non-existent user ✓")
+    
+    if test5_passed:
+        print("\n✅ TEST 5 PASSED")
+    else:
+        print("\n❌ TEST 5 FAILED")
+    
+    # TEST 6: Performance check - rankings cache
+    print_test_header(6, "Performance: rankings/world cache test")
+    
+    print("First call (cold cache)...")
+    start1 = time.time()
+    resp1 = get_rankings_world(admin_token)
+    elapsed1 = (time.time() - start1) * 1000  # ms
+    
+    if resp1.status_code != 200:
+        print_result(False, f"First call failed: {resp1.status_code}")
+        test6_passed = False
+    else:
+        data1 = resp1.json()
+        print_result(True, f"First call: {elapsed1:.1f}ms, returned {len(data1)} users")
+        
+        # Second call (should be cached)
+        print("Second call (warm cache)...")
+        start2 = time.time()
+        resp2 = get_rankings_world(admin_token)
+        elapsed2 = (time.time() - start2) * 1000  # ms
+        
+        if resp2.status_code != 200:
+            print_result(False, f"Second call failed: {resp2.status_code}")
+            test6_passed = False
+        else:
+            data2 = resp2.json()
+            print_result(True, f"Second call: {elapsed2:.1f}ms, returned {len(data2)} users")
+            
+            # Check if second call is faster
+            if elapsed2 < elapsed1:
+                speedup = elapsed1 / elapsed2
+                print_result(True, f"Second call is {speedup:.1f}x faster (cache working) ✓")
+                test6_passed = True
+            else:
+                print_result(False, f"Second call not faster ({elapsed2:.1f}ms vs {elapsed1:.1f}ms)")
+                test6_passed = False
+            
+            # Check data consistency
+            if len(data1) != len(data2):
+                print_result(False, f"Data length mismatch: {len(data1)} vs {len(data2)}")
+                test6_passed = False
+            else:
+                # Check if order and points are the same
+                same_order = all(d1["user_id"] == d2["user_id"] for d1, d2 in zip(data1, data2))
+                same_points = all(d1["points"] == d2["points"] for d1, d2 in zip(data1, data2))
+                
+                if same_order and same_points:
+                    print_result(True, "Data consistency: same order and points ✓")
+                else:
+                    print_result(False, "Data inconsistency between calls")
+                    test6_passed = False
+    
+    if test6_passed:
+        print("\n✅ TEST 6 PASSED")
+    else:
+        print("\n❌ TEST 6 FAILED")
+    
+    # Summary
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    
+    all_tests = [
+        ("TEST 1: Non-friend view (limited data)", test1_passed),
+        ("TEST 2: Pending friend request view", test2_passed),
+        ("TEST 3: Friend view (full data)", test3_passed),
+        ("TEST 4: Self view (full data)", test4_passed),
+        ("TEST 5: Non-existent user (404)", test5_passed),
+        ("TEST 6: Performance cache", test6_passed),
+    ]
+    
+    passed_count = sum(1 for _, passed in all_tests if passed)
+    total_count = len(all_tests)
+    
+    for test_name, passed in all_tests:
+        status = "✅ PASS" if passed else "❌ FAIL"
+        print(f"{status}: {test_name}")
+    
+    print(f"\n{'='*80}")
+    print(f"TOTAL: {passed_count}/{total_count} tests passed ({passed_count/total_count*100:.1f}%)")
+    print(f"{'='*80}")
+    
+    if passed_count == total_count:
+        print("\n🎉 ALL TESTS PASSED! Bug fix verified successfully.")
+    else:
+        print(f"\n⚠️  {total_count - passed_count} test(s) failed. Review needed.")
 
-print()
-
-# ============================================================================
-# SUMMARY
-# ============================================================================
-print("=" * 80)
-print("TEST SUMMARY")
-print("=" * 80)
-print(f"Total Tests: {results['passed'] + results['failed']}")
-print(f"Passed: {results['passed']} ✅")
-print(f"Failed: {results['failed']} ❌")
-print()
-
-if results['failed'] > 0:
-    print("FAILED TESTS:")
-    for test in results['tests']:
-        if not test['passed']:
-            print(f"  ❌ {test['name']}")
-            if test['details']:
-                print(f"     {test['details']}")
-    print()
-
-print("=" * 80)
+if __name__ == "__main__":
+    main()
