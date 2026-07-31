@@ -16,6 +16,7 @@ import uuid
 import bcrypt
 import secrets
 import requests
+import re
 import json
 import asyncio
 from datetime import datetime, timezone, timedelta, date
@@ -909,38 +910,83 @@ class ImportUrlInput(BaseModel):
     url: str
 
 
-@api_router.post("/admin/import-url")
-async def admin_import_url(inp: ImportUrlInput, admin: dict = Depends(require_admin)):
-    """Fetch OpenGraph metadata from a URL and (optionally) download the og:image.
+def _parse_fourvenues_url(url: str) -> dict:
+    """Deterministic extraction from Fourvenues URLs (works even if the page is Cloudflare-blocked).
 
-    Returns a dict with best-effort fields the admin can paste into the event form:
-    { name, description, image_url, more_info_url }
-    Legal: reads only public meta tags (og:*, twitter:*, <title>) — no scraping.
+    Examples:
+      https://site.fourvenues.com/es/discoteca-amok-mallorca@amok/events/bonitx--01-08-2026-WVUY
+      https://site.fourvenues.com/es/discoteca-amok-mallorca@amok?gad_source=...
     """
-    from bs4 import BeautifulSoup
     from urllib.parse import urlparse
+    p = urlparse(url)
+    if "fourvenues.com" not in p.netloc:
+        return {}
+    parts = [x for x in p.path.split("/") if x]
+    # Strip locale (es, en, ca...)
+    if parts and len(parts[0]) == 2:
+        parts = parts[1:]
+    if not parts:
+        return {}
 
-    url = inp.url.strip()
-    if not url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="URL inválida")
-    try:
-        res = requests.get(
-            url,
-            timeout=12,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (compatible; QuienVaBot/1.0; +https://quienva.app)"
-                ),
-                "Accept": "text/html,application/xhtml+xml",
-            },
-            allow_redirects=True,
-        )
-        res.raise_for_status()
-    except Exception as e:
-        logger.warning(f"import-url fetch failed: {e}")
-        raise HTTPException(status_code=400, detail="No se pudo leer esa URL")
+    venue_slug = parts[0]  # "discoteca-amok-mallorca@amok"
+    # After "@" is the short handle, before is the descriptive slug
+    venue_pretty = venue_slug.split("@")[0].replace("-", " ").strip().title()
 
-    soup = BeautifulSoup(res.text, "html.parser")
+    out = {"venue": venue_pretty, "commission_url": url, "has_commission": True}
+
+    # Event details
+    if len(parts) >= 3 and parts[1] == "events":
+        event_part = parts[2]  # "bonitx--01-08-2026-WVUY"
+        # Regex: <slug>--DD-MM-YYYY-<id>
+        m = re.match(r"^(.+?)--(\d{2})-(\d{2})-(\d{4})(?:-([A-Za-z0-9]+))?$", event_part)
+        if m:
+            name_slug, dd, mm, yyyy, _id = m.groups()
+            out["name"] = name_slug.replace("-", " ").strip().title()
+            out["date"] = f"{yyyy}-{mm}-{dd}"
+        else:
+            out["name"] = event_part.replace("-", " ").strip().title()
+    return out
+
+
+def _fetch_html_best_effort(url: str) -> str:
+    """Fetch HTML trying multiple strategies. Returns '' if everything fails.
+
+    1) curl_cffi with Chrome fingerprint (bypasses many Cloudflare setups)
+    2) plain requests with WhatsApp UA (many sites whitelist link-preview bots)
+    3) plain requests with generic browser UA
+    """
+    strategies = [
+        ("curl_cffi:chrome124", True, {"impersonate": "chrome124"}),
+        ("curl_cffi:chrome110", True, {"impersonate": "chrome110"}),
+        ("whatsapp", False, {"headers": {"User-Agent": "WhatsApp/2.19.81 A"}}),
+        ("browser", False, {"headers": {
+            "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        }}),
+    ]
+    for label, use_cffi, kwargs in strategies:
+        try:
+            if use_cffi:
+                from curl_cffi import requests as cf
+                r = cf.get(url, timeout=15, **kwargs)
+            else:
+                r = requests.get(url, timeout=15, allow_redirects=True, **kwargs)
+            html = getattr(r, "text", "") or ""
+            if r.status_code == 200 and "Hang on a sec" not in html and len(html) > 500:
+                logger.info(f"import-url fetched via {label} ({len(html)} bytes)")
+                return html
+            logger.info(f"import-url {label} => status={r.status_code} blocked={'Hang on a sec' in html}")
+        except Exception as e:
+            logger.info(f"import-url {label} error: {e}")
+    return ""
+
+
+def _extract_og(html: str) -> dict:
+    from bs4 import BeautifulSoup
+    if not html:
+        return {}
+    soup = BeautifulSoup(html, "html.parser")
 
     def meta(*names):
         for n in names:
@@ -949,45 +995,90 @@ async def admin_import_url(inp: ImportUrlInput, admin: dict = Depends(require_ad
                 return tag["content"].strip()
         return ""
 
-    title = meta("og:title", "twitter:title") or (soup.title.string.strip() if soup.title and soup.title.string else "")
-    description = meta("og:description", "twitter:description", "description")
-    og_image = meta("og:image", "twitter:image", "og:image:secure_url")
-
-    # Try to download the image and store it locally so we don't hotlink external CDNs
-    image_url = ""
-    if og_image:
-        try:
-            if og_image.startswith("//"):
-                og_image = "https:" + og_image
-            elif og_image.startswith("/"):
-                parsed = urlparse(url)
-                og_image = f"{parsed.scheme}://{parsed.netloc}{og_image}"
-            img_res = requests.get(og_image, timeout=12,
-                                   headers={"User-Agent": "Mozilla/5.0 (QuienVaBot)"})
-            img_res.raise_for_status()
-            ct = img_res.headers.get("content-type", "image/jpeg").split(";")[0].strip()
-            ext = mimetypes.guess_extension(ct) or ".jpg"
-            if ext == ".jpe":
-                ext = ".jpg"
-            path = f"{APP_NAME}/events/{uuid.uuid4().hex}{ext}"
-            save_object(path, img_res.content)
-            await db.files.insert_one({
-                "id": str(uuid.uuid4()),
-                "storage_path": path,
-                "content_type": ct,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            image_url = f"/api/files/{path}"
-        except Exception as e:
-            logger.info(f"og:image download skipped: {e}")
-            image_url = ""  # frontend will just show empty
-
     return {
-        "name": title[:120],
-        "description": description[:280],
+        "title": meta("og:title", "twitter:title") or (
+            soup.title.string.strip() if soup.title and soup.title.string else ""
+        ),
+        "description": meta("og:description", "twitter:description", "description"),
+        "image": meta("og:image", "twitter:image", "og:image:secure_url"),
+    }
+
+
+def _download_image(image_url: str, page_url: str) -> str:
+    """Download an image and store it locally. Returns internal /api/files/... path or ''."""
+    from urllib.parse import urlparse
+    if not image_url:
+        return ""
+    try:
+        if image_url.startswith("//"):
+            image_url = "https:" + image_url
+        elif image_url.startswith("/"):
+            base = urlparse(page_url)
+            image_url = f"{base.scheme}://{base.netloc}{image_url}"
+        img_res = requests.get(image_url, timeout=12,
+                               headers={"User-Agent": "Mozilla/5.0 (QuienVaBot)"})
+        img_res.raise_for_status()
+        ct = img_res.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+        if not ct.startswith("image/"):
+            return ""
+        ext = mimetypes.guess_extension(ct) or ".jpg"
+        if ext == ".jpe":
+            ext = ".jpg"
+        path = f"{APP_NAME}/events/{uuid.uuid4().hex}{ext}"
+        save_object(path, img_res.content)
+        return f"/api/files/{path}"
+    except Exception as e:
+        logger.info(f"import-url image download failed: {e}")
+        return ""
+
+
+@api_router.post("/admin/import-url")
+async def admin_import_url(inp: ImportUrlInput, admin: dict = Depends(require_admin)):
+    """Extract event data from a URL.
+
+    Strategy (in order):
+      1) Parse deterministic patterns (e.g. Fourvenues URL structure) — works even if Cloudflare-blocked.
+      2) Fetch HTML with browser fingerprint / crawler UA fallbacks.
+      3) Read OpenGraph / Twitter meta tags.
+      4) Download the og:image to local storage (no hotlink).
+    """
+    import re as _re  # local alias to avoid shadowing
+    url = inp.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="URL inválida")
+
+    parsed = _parse_fourvenues_url(url)
+    html = _fetch_html_best_effort(url)
+    og = _extract_og(html) if html else {}
+
+    # For Fourvenues venue-only URLs, don't use OG title (it's just "Fourvenues")
+    is_generic_title = og.get("title", "").strip().lower() in {"fourvenues", "xceed", "instagram", "facebook", ""}
+    parsed_has_event = bool(parsed.get("name"))
+
+    # Merge: URL parser wins for structured fields, OG wins for descriptive fields
+    if parsed_has_event:
+        name = parsed["name"]
+    elif not is_generic_title:
+        name = og.get("title", "").strip()
+    else:
+        name = ""
+    if name:
+        # Clean up common suffixes like " - Fourvenues" / " | Sitename"
+        name = _re.sub(r"\s*[|\-–—]\s*(Fourvenues|Xceed|DICE|Instagram|Facebook)\s*$", "", name)[:120]
+
+    image_url = _download_image(og.get("image", ""), url) if og.get("image") else ""
+
+    result = {
+        "name": name,
+        "description": (og.get("description") or "")[:280],
         "image_url": image_url,
         "more_info_url": url,
+        "venue": parsed.get("venue", ""),
+        "date": parsed.get("date", ""),
+        "has_commission": parsed.get("has_commission", False),
+        "commission_url": parsed.get("commission_url", "") if parsed.get("has_commission") else "",
     }
+    return result
 
 
 @api_router.post("/upload/avatar")

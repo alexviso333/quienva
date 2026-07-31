@@ -38,10 +38,20 @@ function EventForm({ initial, onSaved }) {
       setForm((f) => ({
         ...f,
         name: data.name || f.name,
+        venue: data.venue || f.venue,
+        date: data.date || f.date,
         image_url: data.image_url || f.image_url,
         more_info_url: data.more_info_url || f.more_info_url,
+        has_commission: data.has_commission ?? f.has_commission,
+        commission_url: data.commission_url || f.commission_url,
       }));
-      toast.success(data.image_url ? "Datos e imagen importados" : "Datos importados (sin imagen)");
+      const bits = [];
+      if (data.name) bits.push("nombre");
+      if (data.venue) bits.push("local");
+      if (data.date) bits.push("fecha");
+      if (data.image_url) bits.push("imagen");
+      if (bits.length) toast.success(`Importado: ${bits.join(", ")}`);
+      else toast.info("URL guardada, rellena el resto a mano");
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "No se pudo importar");
     } finally {
