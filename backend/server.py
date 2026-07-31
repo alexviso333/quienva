@@ -19,6 +19,7 @@ import requests
 import json
 import asyncio
 from datetime import datetime, timezone, timedelta, date
+from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pywebpush import webpush, WebPushException
 
@@ -374,6 +375,13 @@ async def friendship_status_map(user_id: str) -> dict:
     return result
 
 
+async def mutual_friends_count(my_friend_ids: List[str], other_id: str) -> int:
+    if not my_friend_ids:
+        return 0
+    other_ids = set(await accepted_friend_ids(other_id))
+    return len(other_ids.intersection(my_friend_ids))
+
+
 @api_router.get("/users/search")
 async def search_users(q: str, user: dict = Depends(get_current_user)):
     q = q.strip().lower()
@@ -387,11 +395,13 @@ async def search_users(q: str, user: dict = Depends(get_current_user)):
         ],
     }, {"_id": 0}).limit(20)
     fmap = await friendship_status_map(user["user_id"])
+    my_friends = await accepted_friend_ids(user["user_id"])
     out = []
     async for u in cursor:
         pu = public_user(u)
         rel = fmap.get(u["user_id"])
         pu["relationship"] = rel or {"status": "none"}
+        pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
         out.append(pu)
     return out
 
@@ -404,6 +414,8 @@ async def get_by_username(username: str, user: dict = Depends(get_current_user))
     pu = public_user(u)
     fmap = await friendship_status_map(user["user_id"])
     pu["relationship"] = fmap.get(u["user_id"]) or {"status": "none"}
+    my_friends = await accepted_friend_ids(user["user_id"])
+    pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
     return pu
 
 
@@ -496,10 +508,13 @@ async def list_friends(user: dict = Depends(get_current_user)):
 @api_router.get("/friends/requests")
 async def list_requests(user: dict = Depends(get_current_user)):
     incoming = []
+    my_friends = await accepted_friend_ids(user["user_id"])
     async for f in db.friendships.find({"addressee_id": user["user_id"], "status": "pending"}):
         requester = await db.users.find_one({"user_id": f["requester_id"]}, {"_id": 0})
         if requester:
-            incoming.append({"request_id": f["id"], "user": public_user(requester)})
+            pu = public_user(requester)
+            pu["mutual_count"] = await mutual_friends_count(my_friends, requester["user_id"])
+            incoming.append({"request_id": f["id"], "user": pu})
     return incoming
 
 
@@ -522,7 +537,10 @@ def date_in_filter(event_date_str: str, flt: str) -> bool:
         return fri <= d <= sun
     if flt == "semana":
         return today <= d <= today + timedelta(days=7)
-    return True
+    if flt == "pasados":
+        return d < today
+    # "all" (default) = upcoming events (today and future)
+    return d >= today
 
 
 async def serialize_event(ev: dict, user: dict, friend_ids: List[str]) -> dict:
@@ -533,6 +551,7 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str]) -> dict:
     my_status = None
     friends_going = []
     friends_interested = []
+    friends_attended = []
     for it in interests:
         if it["user_id"] == user["user_id"]:
             my_status = it["status"]
@@ -544,6 +563,8 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str]) -> dict:
                     friends_going.append(entry)
                 elif it["status"] == "me_interesa":
                     friends_interested.append(entry)
+                elif it["status"] == "estuve":
+                    friends_attended.append(entry)
 
     return {
         "id": ev["id"],
@@ -561,8 +582,10 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str]) -> dict:
         "my_status": my_status,
         "friends_going": friends_going,
         "friends_interested": friends_interested,
+        "friends_attended": friends_attended,
         "total_going": sum(1 for it in interests if it["status"] == "voy"),
         "total_interested": sum(1 for it in interests if it["status"] == "me_interesa"),
+        "total_attended": sum(1 for it in interests if it["status"] == "estuve"),
     }
 
 
@@ -572,9 +595,10 @@ async def list_events(user: dict = Depends(get_current_user),
                       genre: str = Query("all")):
     friend_ids = await accepted_friend_ids(user["user_id"])
     query = {"city": user.get("city", "Palma de Mallorca")}
+    sort_dir = -1 if date_filter == "pasados" else 1
     events = []
-    async for ev in db.events.find(query, {"_id": 0}).sort("date", 1):
-        if date_filter != "all" and not date_in_filter(ev["date"], date_filter):
+    async for ev in db.events.find(query, {"_id": 0}).sort("date", sort_dir):
+        if not date_in_filter(ev["date"], date_filter):
             continue
         if genre != "all" and ev.get("genre") != genre:
             continue
@@ -602,7 +626,7 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
-    if inp.status not in ("voy", "me_interesa", "none"):
+    if inp.status not in ("voy", "me_interesa", "estuve", "none"):
         raise HTTPException(status_code=400, detail="Estado inválido")
 
     existing = await db.interests.find_one({"user_id": user["user_id"], "event_id": event_id})
@@ -878,6 +902,51 @@ async def trigger_weekly_digest(admin: dict = Depends(require_admin)):
     return {"sent": sent}
 
 
+# ---------------------------------------------------------------------------
+# Event reminders (a few hours before an event, for those who marked "voy")
+# ---------------------------------------------------------------------------
+PALMA_TZ = ZoneInfo("Europe/Madrid")
+
+
+async def generate_event_reminders() -> int:
+    now = datetime.now(PALMA_TZ)
+    horizon = now + timedelta(hours=3)
+    sent = 0
+    async for ev in db.events.find({}, {"_id": 0}):
+        t = ev.get("time")
+        if not t:
+            continue
+        try:
+            start = datetime.fromisoformat(f"{ev['date']}T{t}:00").replace(tzinfo=PALMA_TZ)
+        except Exception:
+            continue
+        if not (now <= start <= horizon):
+            continue
+        async for it in db.interests.find({"event_id": ev["id"], "status": "voy"}):
+            already = await db.notifications.find_one({
+                "user_id": it["user_id"],
+                "type": "event_reminder",
+                "data.event_id": ev["id"],
+            })
+            if already:
+                continue
+            await create_notification(
+                it["user_id"], "event_reminder",
+                f"¡Tu plan empieza pronto! {ev['name']} en {ev['venue']} a las {t}",
+                {"event_id": ev["id"]},
+            )
+            sent += 1
+    if sent:
+        logger.info(f"Recordatorios enviados: {sent}")
+    return sent
+
+
+@api_router.post("/admin/trigger-reminders")
+async def trigger_reminders(admin: dict = Depends(require_admin)):
+    sent = await generate_event_reminders()
+    return {"sent": sent}
+
+
 @api_router.get("/")
 async def root():
     return {"message": "¿Quién va? API"}
@@ -974,8 +1043,10 @@ async def on_startup():
         # Friday at 12:00 (Palma time) — weekly plans digest
         scheduler.add_job(generate_weekly_digest, "cron", day_of_week="fri", hour=12, minute=0,
                           id="weekly_digest", replace_existing=True)
+        scheduler.add_job(generate_event_reminders, "interval", minutes=30,
+                          id="event_reminders", replace_existing=True)
         scheduler.start()
-        logger.info("Scheduler iniciado (resumen semanal viernes 12:00)")
+        logger.info("Scheduler iniciado (resumen semanal viernes 12:00 + recordatorios cada 30 min)")
     except Exception as e:
         logger.error(f"Scheduler init falló: {e}")
 

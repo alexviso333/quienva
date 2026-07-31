@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 3 features fully validated. Backend: 8/8 new pytest cases pass (test_iteration3.py) covering date_in_filter (all=upcoming, pasados=only-past-desc), 'estuve' interest status + friends_attended in serialize_event, mutual_count in /users/search + /users/by-username + /friends/requests, and /api/admin/trigger-reminders (admin-only, notification creation, and dedupe on second run). Full backend suite 34/34 passes with no regressions. Frontend Playwright (mobile viewport 390x844): dense feed renders 6 compact cards for user 'a', share button (event-share-btn-<id>) and Voy button present on upcoming card; Recuerdos filter switches heading to 'Recuerdos.' and shows seeded 'Techno Underground' (ds(0), now past) with only the Estuve button and NO voy/ticket/info; clicking Estuve triggers toast 'Guardado en tus recuerdos ✨' and persists my_status='estuve' via API. Deep-link /feed?event=<id> scrolls to card and the ?event param is stripped from the URL afterward. Amigos search shows '· 1 en común' when A searches B given A-C and B-C friendships. Voy/Me-interesa mutual-exclusive toggle regression confirmed via API roundtrip (my_status flips voy→me_interesa).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "EventCard image banner", "issues": ["When event.image_url is empty, <img> is rendered with src=\"\" (via mediaUrl('')) — Chrome logs a warning 'An empty string was passed to the src attribute'. Not user-visible but noisy. Fix: skip the <img> or pass a placeholder when image_url is falsy."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3.py",
+    "/app/test_reports/pytest/iteration3_results.xml",
+    "/app/test_reports/pytest/all_results.xml"
+  ],
+  "action_items": [
+    "Cosmetic: don't render <img src=\"\"> in EventCard when image_url is empty (see mediaUrl usage) to eliminate the console warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py now 1068 lines — still >700 line threshold. Splitting into routers (auth, friends, events, admin, notifications, push, digest, reminders) is overdue.",
+    "serialize_event() runs O(events × interests × user-lookups) per /events call — friend user lookups inside the inner loop repeat across events. For 6 seeded events it's fine, but consider batching: fetch all interested user docs in one $in query, keyed by id.",
+    "mutual_friends_count() is called per-user in /users/search and /friends/requests, each doing its own accepted_friend_ids() (2 queries per candidate). For 20 search results that's ~40 extra Mongo round-trips. Preload all my friends once (already done) and batch other_ids similarly, or cache.",
+    "generate_event_reminders() dedup relies on a filter 'data.event_id': ev['id']; if create_notification is later refactored to change the data schema, dedup silently breaks. Consider a unique compound index on (user_id, type, data.event_id) with sparse.",
+    "EventCard passes mediaUrl(event.image_url) which produces '' when input is '' — causes browser warning; also the <img> then triggers a whole-page refetch per React's warning.",
+    "Feed.js deep-link useEffect depends on [events] only, so if the ?event param is present on first mount before events load, it fires correctly; but if the user changes filters while the param is still in the URL (edge case), the effect re-runs and re-scrolls. Minor.",
+    "Server time is UTC but generate_event_reminders() uses Europe/Madrid on the event start — good. However date_in_filter uses UTC 'today' — during Palma late-night hours between 00:00 and 02:00 local, 'hoy'/'all' may show yesterday's events as past (or hide them for a couple of hours). Consider using PALMA_TZ for date_in_filter too for consistency."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration3.py"],
+  "success_rate": { "backend": "100% (34/34)", "frontend": "100% of testable flows" },
+  "test_credentials": "Admin admin@quienva.app / QuienVa2026! confirmed. UI test users uif_{a,b,c}_<uniq> auto-created (kept in DB for now).",
+  "seed_data_creation": "Iteration 3 test data: test_i3{a,b}, test_i3m{A,B,C}, test_i3r{A,B,C}, test_i3rem, test_i3rem event, TEST_I3_PAST_ event (auto-deleted), TEST_I3_REM_ event (auto-deleted). UI test: uif_{a,b,c}_<uniq> users left in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 3 feature suite in /app/backend/tests/test_iteration3.py; 4 test classes: TestDateFilter, TestEstuve, TestMutualFriends, TestReminders. All pytest xml at /app/test_reports/pytest/. UI login: form has two elements named 'Entrar' — a tab (top) and a submit button (bottom) — always use page.locator('button:has-text(\"Entrar\")').last for submit. Server date filters use UTC 'today'; Recuerdos may or may not include Techno Underground depending on wall-clock time (it's seeded ds(0) so it flips to past after UTC midnight).",
+  "rca_of_the_issue": "N/A — no bugs found."
+}

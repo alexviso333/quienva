@@ -110,7 +110,12 @@ export default function Friends() {
                     <AvatarCircle name={u.name} picture={u.picture} size={44} ring={false} />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold truncate">{u.name}</p>
-                      <p className="text-white/40 text-sm truncate">@{u.username}</p>
+                      <p className="text-white/40 text-sm truncate">
+                        @{u.username}
+                        {u.mutual_count > 0 && (
+                          <span className="text-qv-secondary"> · {u.mutual_count} en común</span>
+                        )}
+                      </p>
                     </div>
                     <button
                       data-testid={`friend-action-${u.username}`}
@@ -142,7 +147,12 @@ export default function Friends() {
                 <AvatarCircle name={r.user.name} picture={r.user.picture} size={44} ring={false} />
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{r.user.name}</p>
-                  <p className="text-white/40 text-sm truncate">@{r.user.username}</p>
+                  <p className="text-white/40 text-sm truncate">
+                    @{r.user.username}
+                    {r.user.mutual_count > 0 && (
+                      <span className="text-qv-secondary"> · {r.user.mutual_count} en común</span>
+                    )}
+                  </p>
                 </div>
                 <button
                   data-testid={`accept-${r.user.username}`}
