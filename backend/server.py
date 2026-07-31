@@ -772,27 +772,106 @@ async def my_streak(user: dict = Depends(get_current_user)):
 # =========================
 
 BADGES_CATALOG = [
-    {"id": "first_step", "name": "Primer paso", "desc": "Te apuntaste a tu primera fiesta", "emoji": "🎉", "tier": "bronze"},
-    {"id": "night_owl", "name": "Búho nocturno", "desc": "Estuviste en 5 fiestas", "emoji": "🌙", "tier": "silver"},
-    {"id": "party_veteran", "name": "Veterano", "desc": "Estuviste en 20 fiestas", "emoji": "🏆", "tier": "gold"},
-    {"id": "legend", "name": "Leyenda", "desc": "Estuviste en 50 fiestas", "emoji": "👑", "tier": "platinum"},
-    {"id": "week_streak_2", "name": "Racha en marcha", "desc": "2 semanas seguidas de salir", "emoji": "🔥", "tier": "bronze"},
-    {"id": "week_streak_5", "name": "Imparable", "desc": "5 semanas seguidas saliendo", "emoji": "⚡", "tier": "silver"},
-    {"id": "week_streak_10", "name": "Máquina", "desc": "10 semanas seguidas", "emoji": "🚀", "tier": "gold"},
-    {"id": "day_streak_3", "name": "Finde entero", "desc": "3 días seguidos saliendo", "emoji": "🌈", "tier": "bronze"},
-    {"id": "day_streak_7", "name": "Semana intensa", "desc": "7 días seguidos saliendo", "emoji": "💫", "tier": "gold"},
-    {"id": "social_5", "name": "Con amigos", "desc": "5 amigos aceptados", "emoji": "🤝", "tier": "bronze"},
-    {"id": "social_20", "name": "Círculo grande", "desc": "20 amigos aceptados", "emoji": "🌍", "tier": "silver"},
-    {"id": "explorer", "name": "Explorador", "desc": "Fuiste a 5 géneros distintos", "emoji": "🧭", "tier": "silver"},
-    {"id": "weekday_warrior", "name": "Guerrero entre semana", "desc": "3 fiestas de lunes a jueves", "emoji": "🗡️", "tier": "silver"},
-    {"id": "early_bird", "name": "Madrugador", "desc": "Te apuntaste a un evento con >1 semana de antelación", "emoji": "🐦", "tier": "bronze"},
-    {"id": "trendsetter", "name": "Marcaste el rumbo", "desc": "3 amigos fueron a un evento después que tú", "emoji": "💡", "tier": "gold"},
-    {"id": "loyal_venue", "name": "Cliente fiel", "desc": "3 fiestas en el mismo local", "emoji": "🏛️", "tier": "silver"},
-    {"id": "sunday_survivor", "name": "Sobrevivir domingo", "desc": "Saliste un domingo", "emoji": "☀️", "tier": "bronze"},
-    {"id": "storyteller", "name": "Cuentacuentos", "desc": "Subiste 3 stories", "emoji": "📸", "tier": "bronze"},
+    # ===== ASISTENCIA =====
+    {"id": "first_step", "name": "Primer paso", "desc": "Te apuntaste a tu primera fiesta", "emoji": "🎉", "tier": "bronze", "cat": "asistencia", "points": 10},
+    {"id": "attended_1", "name": "Debut", "desc": "Marcaste 'estuve' en tu primera fiesta", "emoji": "🎊", "tier": "bronze", "cat": "asistencia", "points": 15},
+    {"id": "night_owl", "name": "Búho nocturno", "desc": "Estuviste en 5 fiestas", "emoji": "🌙", "tier": "silver", "cat": "asistencia", "points": 30},
+    {"id": "party_pro", "name": "Habitual", "desc": "Estuviste en 10 fiestas", "emoji": "🍻", "tier": "silver", "cat": "asistencia", "points": 50},
+    {"id": "party_veteran", "name": "Veterano", "desc": "Estuviste en 20 fiestas", "emoji": "🏆", "tier": "gold", "cat": "asistencia", "points": 100},
+    {"id": "party_master", "name": "Maestro de la noche", "desc": "Estuviste en 35 fiestas", "emoji": "🎭", "tier": "gold", "cat": "asistencia", "points": 175},
+    {"id": "legend", "name": "Leyenda", "desc": "Estuviste en 50 fiestas", "emoji": "👑", "tier": "platinum", "cat": "asistencia", "points": 300},
+    {"id": "immortal", "name": "Inmortal", "desc": "Estuviste en 100 fiestas", "emoji": "💎", "tier": "platinum", "cat": "asistencia", "points": 600},
+
+    # ===== RACHAS DE DÍAS SEGUIDOS =====
+    {"id": "day_streak_2", "name": "Dos noches", "desc": "2 días seguidos saliendo", "emoji": "🌗", "tier": "bronze", "cat": "racha", "points": 15},
+    {"id": "day_streak_3", "name": "Finde entero", "desc": "3 días seguidos saliendo", "emoji": "🌈", "tier": "bronze", "cat": "racha", "points": 25},
+    {"id": "day_streak_5", "name": "Cinco a fondo", "desc": "5 días seguidos saliendo", "emoji": "🔥", "tier": "silver", "cat": "racha", "points": 60},
+    {"id": "day_streak_7", "name": "Semana intensa", "desc": "7 días seguidos saliendo", "emoji": "💫", "tier": "gold", "cat": "racha", "points": 120},
+    {"id": "day_streak_10", "name": "Sin freno", "desc": "10 días seguidos saliendo", "emoji": "⚡", "tier": "gold", "cat": "racha", "points": 200},
+    {"id": "day_streak_15", "name": "Modo bestia", "desc": "15 días seguidos saliendo", "emoji": "🦁", "tier": "platinum", "cat": "racha", "points": 350},
+
+    # ===== RACHAS DE SEMANAS =====
+    {"id": "week_streak_2", "name": "Racha en marcha", "desc": "2 semanas seguidas de salir", "emoji": "🔥", "tier": "bronze", "cat": "racha", "points": 20},
+    {"id": "week_streak_4", "name": "Un mes al pie del cañón", "desc": "4 semanas seguidas saliendo", "emoji": "🌟", "tier": "silver", "cat": "racha", "points": 60},
+    {"id": "week_streak_8", "name": "Imparable", "desc": "8 semanas seguidas saliendo", "emoji": "🚀", "tier": "silver", "cat": "racha", "points": 120},
+    {"id": "week_streak_12", "name": "Máquina", "desc": "12 semanas seguidas saliendo", "emoji": "🤖", "tier": "gold", "cat": "racha", "points": 200},
+    {"id": "week_streak_26", "name": "Medio año fiestero", "desc": "26 semanas seguidas", "emoji": "🏅", "tier": "platinum", "cat": "racha", "points": 500},
+
+    # ===== ENTRE SEMANA =====
+    {"id": "weekday_1", "name": "Miércoles rebelde", "desc": "1 fiesta entre semana", "emoji": "🗡️", "tier": "bronze", "cat": "temporal", "points": 15},
+    {"id": "weekday_warrior", "name": "Guerrero entre semana", "desc": "3 fiestas de lunes a jueves", "emoji": "⚔️", "tier": "silver", "cat": "temporal", "points": 40},
+    {"id": "weekday_boss", "name": "Jefe entre semana", "desc": "10 fiestas de lunes a jueves", "emoji": "🛡️", "tier": "gold", "cat": "temporal", "points": 100},
+    {"id": "sunday_survivor", "name": "Sobrevivir domingo", "desc": "Saliste un domingo", "emoji": "☀️", "tier": "bronze", "cat": "temporal", "points": 15},
+    {"id": "sunday_lover", "name": "Enamorado del domingo", "desc": "3 domingos de fiesta", "emoji": "🌞", "tier": "silver", "cat": "temporal", "points": 50},
+    {"id": "monday_king", "name": "Rey del lunes", "desc": "Saliste un lunes", "emoji": "🎩", "tier": "silver", "cat": "temporal", "points": 40},
+
+    # ===== SOCIAL =====
+    {"id": "social_1", "name": "Primer amigo", "desc": "Aceptaste tu primera amistad", "emoji": "👋", "tier": "bronze", "cat": "social", "points": 10},
+    {"id": "social_5", "name": "Con amigos", "desc": "5 amigos aceptados", "emoji": "🤝", "tier": "bronze", "cat": "social", "points": 20},
+    {"id": "social_10", "name": "Grupito", "desc": "10 amigos aceptados", "emoji": "👯", "tier": "silver", "cat": "social", "points": 40},
+    {"id": "social_20", "name": "Círculo grande", "desc": "20 amigos aceptados", "emoji": "🌍", "tier": "silver", "cat": "social", "points": 80},
+    {"id": "social_50", "name": "Rey/Reina social", "desc": "50 amigos aceptados", "emoji": "👑", "tier": "gold", "cat": "social", "points": 200},
+    {"id": "social_100", "name": "Influencer", "desc": "100 amigos aceptados", "emoji": "📣", "tier": "platinum", "cat": "social", "points": 500},
+    {"id": "trendsetter", "name": "Marcaste el rumbo", "desc": "3 amigos fueron a un evento después que tú", "emoji": "💡", "tier": "gold", "cat": "social", "points": 80},
+    {"id": "party_starter", "name": "Iniciador", "desc": "Fuiste el primero en apuntarte a 5 eventos", "emoji": "🎬", "tier": "silver", "cat": "social", "points": 60},
+
+    # ===== REFERIDOS =====
+    {"id": "referral_1", "name": "Trajiste a alguien", "desc": "Invitaste a 1 amigo/a que se registró", "emoji": "🎁", "tier": "bronze", "cat": "referido", "points": 100},
+    {"id": "referral_3", "name": "Reclutador", "desc": "3 amigos se registraron con tu link", "emoji": "📣", "tier": "silver", "cat": "referido", "points": 250},
+    {"id": "referral_5", "name": "Embajador", "desc": "5 amigos se registraron con tu link", "emoji": "🌟", "tier": "gold", "cat": "referido", "points": 500},
+    {"id": "referral_10", "name": "Embajador dorado", "desc": "10 amigos se registraron con tu link", "emoji": "🏆", "tier": "platinum", "cat": "referido", "points": 1200},
+
+    # ===== ENTRADAS COMPRADAS =====
+    {"id": "ticket_1", "name": "Primera entrada", "desc": "Compraste 1 entrada desde la app", "emoji": "🎟️", "tier": "bronze", "cat": "entrada", "points": 50},
+    {"id": "ticket_5", "name": "VIP", "desc": "Compraste 5 entradas desde la app", "emoji": "🎫", "tier": "silver", "cat": "entrada", "points": 250},
+    {"id": "ticket_15", "name": "Super VIP", "desc": "Compraste 15 entradas desde la app", "emoji": "💳", "tier": "gold", "cat": "entrada", "points": 750},
+
+    # ===== EXPLORADOR (GÉNEROS / LOCALES) =====
+    {"id": "explorer_3", "name": "Curioso", "desc": "Fuiste a 3 géneros distintos", "emoji": "🔍", "tier": "bronze", "cat": "exploracion", "points": 20},
+    {"id": "explorer", "name": "Explorador", "desc": "Fuiste a 5 géneros distintos", "emoji": "🧭", "tier": "silver", "cat": "exploracion", "points": 50},
+    {"id": "explorer_10", "name": "Aventurero", "desc": "Fuiste a 10 géneros distintos", "emoji": "🗺️", "tier": "gold", "cat": "exploracion", "points": 150},
+    {"id": "loyal_venue", "name": "Cliente fiel", "desc": "3 fiestas en el mismo local", "emoji": "🏛️", "tier": "silver", "cat": "exploracion", "points": 40},
+    {"id": "super_fan", "name": "Super fan", "desc": "10 fiestas en el mismo local", "emoji": "💖", "tier": "gold", "cat": "exploracion", "points": 150},
+    {"id": "venue_hopper", "name": "Trotalocales", "desc": "Fuiste a 5 locales diferentes", "emoji": "🏃", "tier": "silver", "cat": "exploracion", "points": 60},
+
+    # ===== CAPTURAS (fotos del momento) =====
+    {"id": "capture_1", "name": "Primera captura", "desc": "Subiste tu primera captura", "emoji": "📸", "tier": "bronze", "cat": "captura", "points": 15},
+    {"id": "capture_ontime", "name": "A tiempo", "desc": "Subiste una captura a tiempo (dentro del rango)", "emoji": "⏱️", "tier": "bronze", "cat": "captura", "points": 30},
+    {"id": "capture_5", "name": "Reportero", "desc": "5 capturas subidas", "emoji": "📷", "tier": "silver", "cat": "captura", "points": 60},
+    {"id": "capture_ontime_5", "name": "Puntual", "desc": "5 capturas a tiempo", "emoji": "⏰", "tier": "silver", "cat": "captura", "points": 120},
+    {"id": "capture_20", "name": "Fotógrafo/a oficial", "desc": "20 capturas subidas", "emoji": "🎥", "tier": "gold", "cat": "captura", "points": 200},
+    {"id": "storyteller", "name": "Cuentacuentos", "desc": "Subiste 3 historias", "emoji": "🎙️", "tier": "bronze", "cat": "captura", "points": 20},
+    {"id": "storyteller_10", "name": "Narrador", "desc": "Subiste 10 historias", "emoji": "🎞️", "tier": "silver", "cat": "captura", "points": 60},
+    {"id": "story_star", "name": "Estrella de las stories", "desc": "Subiste 30 historias", "emoji": "🌠", "tier": "gold", "cat": "captura", "points": 200},
+
+    # ===== ÁLBUMES (multimedia por evento) =====
+    {"id": "album_contributor", "name": "Colaborador de álbum", "desc": "Subiste 1 foto/vídeo a un álbum", "emoji": "🖼️", "tier": "bronze", "cat": "album", "points": 10},
+    {"id": "album_pro", "name": "Editor del álbum", "desc": "10 archivos subidos a álbumes", "emoji": "📀", "tier": "silver", "cat": "album", "points": 80},
+    {"id": "album_master", "name": "Maestro del álbum", "desc": "50 archivos subidos a álbumes", "emoji": "💽", "tier": "gold", "cat": "album", "points": 300},
+
+    # ===== VARIOS =====
+    {"id": "early_bird", "name": "Madrugador", "desc": "Te apuntaste a un evento con >1 semana de antelación", "emoji": "🐦", "tier": "bronze", "cat": "otros", "points": 15},
+    {"id": "night_marathon", "name": "Maratón nocturno", "desc": "2 eventos en el mismo día", "emoji": "🏁", "tier": "gold", "cat": "otros", "points": 80},
+    {"id": "solo_traveler", "name": "En solitario", "desc": "Fuiste a un evento donde no había amigos apuntados", "emoji": "🧍", "tier": "silver", "cat": "otros", "points": 30},
+    {"id": "group_leader", "name": "Líder de grupo", "desc": "5+ amigos coincidieron contigo en un evento", "emoji": "👥", "tier": "gold", "cat": "otros", "points": 100},
+    {"id": "profile_complete", "name": "Perfil top", "desc": "Perfil con foto y bio completos", "emoji": "✅", "tier": "bronze", "cat": "otros", "points": 10},
+    {"id": "og", "name": "OG", "desc": "Fue de los primeros 100 usuarios", "emoji": "🥇", "tier": "platinum", "cat": "otros", "points": 200},
 ]
 
 BADGES_BY_ID = {b["id"]: b for b in BADGES_CATALOG}
+
+# Points awarded per action (in addition to badge points)
+ACTION_POINTS = {
+    "voy": 5,
+    "estuve": 10,
+    "friend_accepted": 2,
+    "story_upload": 3,
+    "album_upload": 5,
+    "capture_ontime": 30,       # extra points for uploading the "moment" on time
+    "capture_late": 5,          # small points for late captures
+    "referral_signup": 100,     # both referrer and referred get this
+    "ticket_purchase": 50,      # confirmed ticket purchase in-app
+}
 
 
 async def _compute_user_stats(user_id: str) -> dict:
@@ -804,7 +883,9 @@ async def _compute_user_stats(user_id: str) -> dict:
     venue_counts = {}
     weekday_count = 0
     sunday_count = 0
+    monday_count = 0
     dates = set()
+    dates_list = []  # to detect same-day multiple events
     early_bird = False
 
     async for it in db.interests.find({"user_id": user_id}):
@@ -825,10 +906,13 @@ async def _compute_user_stats(user_id: str) -> dict:
             d = date.fromisoformat(ev["date"])
             if it["status"] in ("voy", "estuve"):
                 dates.add(d)
+                dates_list.append(d)
                 if d.weekday() < 4:  # Mon-Thu
                     weekday_count += 1
                 if d.weekday() == 6:  # Sunday
                     sunday_count += 1
+                if d.weekday() == 0:  # Monday
+                    monday_count += 1
                 # Early bird: signed up voy more than 7 days before event
                 if it["status"] == "voy" and it.get("created_at"):
                     try:
@@ -854,6 +938,19 @@ async def _compute_user_stats(user_id: str) -> dict:
             day_streak += 1
             cursor -= timedelta(days=1)
 
+    # Best day streak (longest consecutive run ever)
+    best_day_streak = 0
+    if dates:
+        sorted_dates = sorted(dates)
+        run = 1
+        for i in range(1, len(sorted_dates)):
+            if (sorted_dates[i] - sorted_dates[i - 1]).days == 1:
+                run += 1
+                best_day_streak = max(best_day_streak, run)
+            else:
+                run = 1
+        best_day_streak = max(best_day_streak, run)
+
     # Week streak (reuse logic)
     mondays = {d - timedelta(days=d.weekday()) for d in dates}
     this_monday = today - timedelta(days=today.weekday())
@@ -863,6 +960,24 @@ async def _compute_user_stats(user_id: str) -> dict:
         week_streak += 1
         anchor -= timedelta(days=7)
 
+    # Best week streak ever
+    best_week_streak = 0
+    if mondays:
+        sorted_mondays = sorted(mondays)
+        run = 1
+        for i in range(1, len(sorted_mondays)):
+            if (sorted_mondays[i] - sorted_mondays[i - 1]).days == 7:
+                run += 1
+                best_week_streak = max(best_week_streak, run)
+            else:
+                run = 1
+        best_week_streak = max(best_week_streak, run)
+
+    # Same-day multiple events (night marathon)
+    from collections import Counter
+    date_counts = Counter(dates_list)
+    night_marathon = any(c >= 2 for c in date_counts.values())
+
     # Friends count (accepted)
     friend_ids = await accepted_friend_ids(user_id)
     friends_count = len(friend_ids)
@@ -870,20 +985,74 @@ async def _compute_user_stats(user_id: str) -> dict:
     # Stories count
     stories_count = await db.stories.count_documents({"user_id": user_id})
 
-    # Trendsetter: for any voy event, did 3+ friends join AFTER user?
+    # Album uploads (captures) count
+    captures_count = await db.captures.count_documents({"user_id": user_id})
+    captures_ontime = await db.captures.count_documents({"user_id": user_id, "on_time": True})
+    album_uploads = await db.album_uploads.count_documents({"user_id": user_id})
+
+    # Referrals: how many people signed up with your code
+    referrals_count = await db.users.count_documents({"referred_by": user_id})
+
+    # Tickets purchased (confirmed)
+    tickets_count = await db.ticket_purchases.count_documents({"user_id": user_id, "confirmed": True})
+
+    # Trendsetter + party_starter: for any voy event, did N+ friends join AFTER user?
     trendsetter = False
-    async for it in db.interests.find({"user_id": user_id, "status": "voy"}):
+    party_starter_count = 0
+    async for it in db.interests.find({"user_id": user_id, "status": {"$in": ["voy", "estuve"]}}):
         my_time = it.get("created_at", "")
         cnt = 0
-        async for other in db.interests.find({"event_id": it["event_id"], "status": "voy", "user_id": {"$in": list(friend_ids)}}):
+        was_first = True
+        async for other in db.interests.find({"event_id": it["event_id"], "status": {"$in": ["voy", "estuve"]}}):
+            if other["user_id"] == user_id:
+                continue
             if other.get("created_at", "") > my_time:
-                cnt += 1
+                if other["user_id"] in friend_ids:
+                    cnt += 1
+            else:
+                was_first = False
         if cnt >= 3:
             trendsetter = True
+        if was_first:
+            party_starter_count += 1
+
+    # Solo traveler: attended an event with 0 friends
+    solo_traveler = False
+    async for it in db.interests.find({"user_id": user_id, "status": "estuve"}):
+        friends_at_event = await db.interests.count_documents({
+            "event_id": it["event_id"],
+            "status": {"$in": ["voy", "estuve"]},
+            "user_id": {"$in": list(friend_ids)},
+        })
+        if friends_at_event == 0:
+            solo_traveler = True
             break
+
+    # Group leader: at least one event with 5+ friends
+    group_leader = False
+    async for it in db.interests.find({"user_id": user_id, "status": {"$in": ["voy", "estuve"]}}):
+        friends_at_event = await db.interests.count_documents({
+            "event_id": it["event_id"],
+            "status": {"$in": ["voy", "estuve"]},
+            "user_id": {"$in": list(friend_ids)},
+        })
+        if friends_at_event >= 5:
+            group_leader = True
+            break
+
+    # Profile complete
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    profile_complete = bool(u and u.get("picture") and u.get("bio"))
+
+    # OG: was in the first 100 registered users
+    is_og = False
+    if u and u.get("created_at"):
+        earlier = await db.users.count_documents({"created_at": {"$lt": u["created_at"]}})
+        is_og = earlier < 100
 
     top_venue = max(venue_counts.values()) if venue_counts else 0
     top_venue_name = max(venue_counts, key=venue_counts.get) if venue_counts else ""
+    venues_count = len(venue_counts)
 
     return {
         "attended": attended,
@@ -892,59 +1061,134 @@ async def _compute_user_stats(user_id: str) -> dict:
         "total_events": attended + going,
         "week_streak": week_streak,
         "day_streak": day_streak,
+        "best_week_streak": best_week_streak,
+        "best_day_streak": best_day_streak,
         "genres_count": len(genres_seen),
         "genres": sorted(genres_seen),
         "friends_count": friends_count,
         "weekday_count": weekday_count,
         "sunday_count": sunday_count,
+        "monday_count": monday_count,
         "stories_count": stories_count,
+        "captures_count": captures_count,
+        "captures_ontime": captures_ontime,
+        "album_uploads": album_uploads,
+        "referrals_count": referrals_count,
+        "tickets_count": tickets_count,
         "early_bird": early_bird,
         "trendsetter": trendsetter,
+        "party_starter_count": party_starter_count,
+        "night_marathon": night_marathon,
+        "solo_traveler": solo_traveler,
+        "group_leader": group_leader,
+        "profile_complete": profile_complete,
+        "is_og": is_og,
         "top_venue": top_venue_name,
         "top_venue_count": top_venue,
+        "venues_count": venues_count,
     }
 
 
 def _award_badges(stats: dict) -> list:
     """Given user stats, return list of earned badge ids."""
     earned = []
-    if stats["going"] + stats["attended"] >= 1:
-        earned.append("first_step")
-    if stats["attended"] >= 5 or stats["going"] >= 5:
-        earned.append("night_owl")
-    if stats["attended"] + stats["going"] >= 20:
-        earned.append("party_veteran")
-    if stats["attended"] + stats["going"] >= 50:
-        earned.append("legend")
-    if stats["week_streak"] >= 2:
-        earned.append("week_streak_2")
-    if stats["week_streak"] >= 5:
-        earned.append("week_streak_5")
-    if stats["week_streak"] >= 10:
-        earned.append("week_streak_10")
-    if stats["day_streak"] >= 3:
-        earned.append("day_streak_3")
-    if stats["day_streak"] >= 7:
-        earned.append("day_streak_7")
-    if stats["friends_count"] >= 5:
-        earned.append("social_5")
-    if stats["friends_count"] >= 20:
-        earned.append("social_20")
-    if stats["genres_count"] >= 5:
-        earned.append("explorer")
-    if stats["weekday_count"] >= 3:
-        earned.append("weekday_warrior")
-    if stats["early_bird"]:
-        earned.append("early_bird")
-    if stats["trendsetter"]:
-        earned.append("trendsetter")
-    if stats["top_venue_count"] >= 3:
-        earned.append("loyal_venue")
-    if stats["sunday_count"] >= 1:
-        earned.append("sunday_survivor")
-    if stats["stories_count"] >= 3:
-        earned.append("storyteller")
+    total = stats["attended"] + stats["going"]
+    # asistencia
+    if total >= 1: earned.append("first_step")
+    if stats["attended"] >= 1: earned.append("attended_1")
+    if stats["attended"] >= 5 or stats["going"] >= 5: earned.append("night_owl")
+    if total >= 10: earned.append("party_pro")
+    if total >= 20: earned.append("party_veteran")
+    if total >= 35: earned.append("party_master")
+    if total >= 50: earned.append("legend")
+    if total >= 100: earned.append("immortal")
+    # rachas día
+    if stats["best_day_streak"] >= 2 or stats["day_streak"] >= 2: earned.append("day_streak_2")
+    if stats["best_day_streak"] >= 3 or stats["day_streak"] >= 3: earned.append("day_streak_3")
+    if stats["best_day_streak"] >= 5 or stats["day_streak"] >= 5: earned.append("day_streak_5")
+    if stats["best_day_streak"] >= 7 or stats["day_streak"] >= 7: earned.append("day_streak_7")
+    if stats["best_day_streak"] >= 10 or stats["day_streak"] >= 10: earned.append("day_streak_10")
+    if stats["best_day_streak"] >= 15 or stats["day_streak"] >= 15: earned.append("day_streak_15")
+    # rachas semana
+    if stats["best_week_streak"] >= 2 or stats["week_streak"] >= 2: earned.append("week_streak_2")
+    if stats["best_week_streak"] >= 4 or stats["week_streak"] >= 4: earned.append("week_streak_4")
+    if stats["best_week_streak"] >= 8 or stats["week_streak"] >= 8: earned.append("week_streak_8")
+    if stats["best_week_streak"] >= 12 or stats["week_streak"] >= 12: earned.append("week_streak_12")
+    if stats["best_week_streak"] >= 26 or stats["week_streak"] >= 26: earned.append("week_streak_26")
+    # temporal
+    if stats["weekday_count"] >= 1: earned.append("weekday_1")
+    if stats["weekday_count"] >= 3: earned.append("weekday_warrior")
+    if stats["weekday_count"] >= 10: earned.append("weekday_boss")
+    if stats["sunday_count"] >= 1: earned.append("sunday_survivor")
+    if stats["sunday_count"] >= 3: earned.append("sunday_lover")
+    if stats["monday_count"] >= 1: earned.append("monday_king")
+    # social
+    if stats["friends_count"] >= 1: earned.append("social_1")
+    if stats["friends_count"] >= 5: earned.append("social_5")
+    if stats["friends_count"] >= 10: earned.append("social_10")
+    if stats["friends_count"] >= 20: earned.append("social_20")
+    if stats["friends_count"] >= 50: earned.append("social_50")
+    if stats["friends_count"] >= 100: earned.append("social_100")
+    if stats["trendsetter"]: earned.append("trendsetter")
+    if stats["party_starter_count"] >= 5: earned.append("party_starter")
+    # referidos
+    if stats["referrals_count"] >= 1: earned.append("referral_1")
+    if stats["referrals_count"] >= 3: earned.append("referral_3")
+    if stats["referrals_count"] >= 5: earned.append("referral_5")
+    if stats["referrals_count"] >= 10: earned.append("referral_10")
+    # entradas
+    if stats["tickets_count"] >= 1: earned.append("ticket_1")
+    if stats["tickets_count"] >= 5: earned.append("ticket_5")
+    if stats["tickets_count"] >= 15: earned.append("ticket_15")
+    # exploración
+    if stats["genres_count"] >= 3: earned.append("explorer_3")
+    if stats["genres_count"] >= 5: earned.append("explorer")
+    if stats["genres_count"] >= 10: earned.append("explorer_10")
+    if stats["top_venue_count"] >= 3: earned.append("loyal_venue")
+    if stats["top_venue_count"] >= 10: earned.append("super_fan")
+    if stats["venues_count"] >= 5: earned.append("venue_hopper")
+    # capturas
+    if stats["captures_count"] >= 1: earned.append("capture_1")
+    if stats["captures_ontime"] >= 1: earned.append("capture_ontime")
+    if stats["captures_count"] >= 5: earned.append("capture_5")
+    if stats["captures_ontime"] >= 5: earned.append("capture_ontime_5")
+    if stats["captures_count"] >= 20: earned.append("capture_20")
+    if stats["stories_count"] >= 3: earned.append("storyteller")
+    if stats["stories_count"] >= 10: earned.append("storyteller_10")
+    if stats["stories_count"] >= 30: earned.append("story_star")
+    # álbum
+    if stats["album_uploads"] >= 1: earned.append("album_contributor")
+    if stats["album_uploads"] >= 10: earned.append("album_pro")
+    if stats["album_uploads"] >= 50: earned.append("album_master")
+    # varios
+    if stats["early_bird"]: earned.append("early_bird")
+    if stats["night_marathon"]: earned.append("night_marathon")
+    if stats["solo_traveler"]: earned.append("solo_traveler")
+    if stats["group_leader"]: earned.append("group_leader")
+    if stats["profile_complete"]: earned.append("profile_complete")
+    if stats["is_og"]: earned.append("og")
     return earned
+
+
+def _compute_points(stats: dict, earned_ids: list) -> dict:
+    """Compute total points: badge points + action points."""
+    badge_points = sum(BADGES_BY_ID[bid]["points"] for bid in earned_ids if bid in BADGES_BY_ID)
+    action_points = (
+        stats["going"] * ACTION_POINTS["voy"]
+        + stats["attended"] * ACTION_POINTS["estuve"]
+        + stats["friends_count"] * ACTION_POINTS["friend_accepted"]
+        + stats["stories_count"] * ACTION_POINTS["story_upload"]
+        + stats["album_uploads"] * ACTION_POINTS["album_upload"]
+        + stats["captures_ontime"] * ACTION_POINTS["capture_ontime"]
+        + max(0, stats["captures_count"] - stats["captures_ontime"]) * ACTION_POINTS["capture_late"]
+        + stats["referrals_count"] * ACTION_POINTS["referral_signup"]
+        + stats["tickets_count"] * ACTION_POINTS["ticket_purchase"]
+    )
+    return {
+        "badge_points": badge_points,
+        "action_points": action_points,
+        "total": badge_points + action_points,
+    }
 
 
 @api_router.get("/badges/catalog")
@@ -956,8 +1200,10 @@ async def badges_catalog():
 async def my_badges(user: dict = Depends(get_current_user)):
     stats = await _compute_user_stats(user["user_id"])
     earned_ids = _award_badges(stats)
+    points = _compute_points(stats, earned_ids)
     return {
         "stats": stats,
+        "points": points,
         "earned": [BADGES_BY_ID[b] for b in earned_ids if b in BADGES_BY_ID],
         "locked": [b for b in BADGES_CATALOG if b["id"] not in earned_ids],
     }
@@ -975,12 +1221,152 @@ async def user_badges(user_id: str, viewer: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     stats = await _compute_user_stats(user_id)
     earned_ids = _award_badges(stats)
+    points = _compute_points(stats, earned_ids)
     return {
         "user": {"user_id": target["user_id"], "name": target["name"], "picture": target.get("picture", "")},
         "stats": stats,
+        "points": points,
         "earned": [BADGES_BY_ID[b] for b in earned_ids if b in BADGES_BY_ID],
         "locked": [b for b in BADGES_CATALOG if b["id"] not in earned_ids],
     }
+
+
+# =========================
+# RANKINGS
+# =========================
+async def _points_for_user(user_id: str) -> int:
+    stats = await _compute_user_stats(user_id)
+    earned_ids = _award_badges(stats)
+    return _compute_points(stats, earned_ids)["total"]
+
+
+async def _build_ranking(candidate_user_ids: list, limit: int = 100) -> list:
+    """Given a list of user_ids, compute their points and return sorted ranking."""
+    if not candidate_user_ids:
+        return []
+    entries = []
+    async for u in db.users.find({"user_id": {"$in": candidate_user_ids}}, {"_id": 0}):
+        pts = await _points_for_user(u["user_id"])
+        entries.append({
+            "user_id": u["user_id"],
+            "name": u["name"],
+            "username": u.get("username", ""),
+            "picture": u.get("picture", ""),
+            "city": u.get("city", ""),
+            "points": pts,
+        })
+    entries.sort(key=lambda e: -e["points"])
+    for i, e in enumerate(entries[:limit]):
+        e["rank"] = i + 1
+    return entries[:limit]
+
+
+@api_router.get("/rankings/friends")
+async def ranking_friends(user: dict = Depends(get_current_user)):
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    ids = friend_ids + [user["user_id"]]
+    return await _build_ranking(ids, limit=100)
+
+
+@api_router.get("/rankings/city")
+async def ranking_city(user: dict = Depends(get_current_user), city: str = Query("")):
+    target_city = city or user.get("city", "Palma de Mallorca")
+    ids = []
+    async for u in db.users.find({"city": target_city}, {"_id": 0, "user_id": 1}):
+        ids.append(u["user_id"])
+    return await _build_ranking(ids, limit=100)
+
+
+@api_router.get("/rankings/world")
+async def ranking_world(user: dict = Depends(get_current_user)):
+    ids = []
+    async for u in db.users.find({}, {"_id": 0, "user_id": 1}):
+        ids.append(u["user_id"])
+    return await _build_ranking(ids, limit=100)
+
+
+# =========================
+# STREAK — full data for the feed banner
+# =========================
+@api_router.get("/me/streak-full")
+async def my_streak_full(user: dict = Depends(get_current_user)):
+    """Full streak info: current day + week streaks, best, and next milestone."""
+    stats = await _compute_user_stats(user["user_id"])
+    milestones_day = [2, 3, 5, 7, 10, 15, 30]
+    milestones_week = [2, 4, 8, 12, 26, 52]
+    next_day = next((m for m in milestones_day if m > stats["day_streak"]), None)
+    next_week = next((m for m in milestones_week if m > stats["week_streak"]), None)
+    return {
+        "day_streak": stats["day_streak"],
+        "week_streak": stats["week_streak"],
+        "best_day_streak": stats["best_day_streak"],
+        "best_week_streak": stats["best_week_streak"],
+        "next_day_milestone": next_day,
+        "next_week_milestone": next_week,
+        "total_events": stats["total_events"],
+    }
+
+
+# =========================
+# REFERIDOS
+# =========================
+def _make_referral_code(username: str) -> str:
+    base = re.sub(r"[^a-z0-9]", "", (username or "user").lower())[:10]
+    suffix = secrets.token_hex(3).upper()
+    return f"{base}-{suffix}" if base else suffix
+
+
+@api_router.get("/me/referral")
+async def my_referral(user: dict = Depends(get_current_user)):
+    """Return current user's referral code + link + stats. Creates one if missing."""
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    code = u.get("referral_code")
+    if not code:
+        code = _make_referral_code(u.get("username", ""))
+        # Ensure uniqueness
+        while await db.users.find_one({"referral_code": code}):
+            code = _make_referral_code(u.get("username", ""))
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"referral_code": code}})
+    referred_count = await db.users.count_documents({"referred_by": user["user_id"]})
+    return {
+        "code": code,
+        "share_url_hint": f"?ref={code}",
+        "referred_count": referred_count,
+        "points_per_referral": ACTION_POINTS["referral_signup"],
+    }
+
+
+class ClaimReferralInput(BaseModel):
+    code: str
+
+
+@api_router.post("/me/claim-referral")
+async def claim_referral(inp: ClaimReferralInput, user: dict = Depends(get_current_user)):
+    """Called right after signup to link the new user to whoever invited them.
+    Only works if the current user was created within the last 24h and hasn't already claimed."""
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if u.get("referred_by"):
+        raise HTTPException(status_code=400, detail="Ya usaste un código")
+    # Ensure account is recent (<24h) to prevent abuse
+    try:
+        created = datetime.fromisoformat(u["created_at"])
+        if (datetime.now(timezone.utc) - created).total_seconds() > 24 * 3600:
+            raise HTTPException(status_code=400, detail="Solo puedes usar un código en las primeras 24h")
+    except Exception:
+        pass
+    code = inp.code.strip()
+    referrer = await db.users.find_one({"referral_code": code}, {"_id": 0})
+    if not referrer:
+        raise HTTPException(status_code=404, detail="Código no válido")
+    if referrer["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="No puedes usarte a ti mismo")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"referred_by": referrer["user_id"]}})
+    await create_notification(
+        referrer["user_id"], "referral",
+        f"¡{u['name']} se registró con tu código! +{ACTION_POINTS['referral_signup']} puntos 🎁",
+        {"user_id": user["user_id"]},
+    )
+    return {"ok": True, "points": ACTION_POINTS["referral_signup"]}
 
 
 @api_router.get("/events/discover")
@@ -1952,6 +2338,717 @@ async def trigger_weekend_recap(admin: dict = Depends(require_admin)):
 @api_router.get("/")
 async def root():
     return {"message": "¿Quién va? API"}
+
+
+# =========================================================================
+# CHATS — DMs (1-on-1) + Group chats + Group management
+# =========================================================================
+
+class DMSendInput(BaseModel):
+    to_user_id: str
+    text: str
+
+
+class GroupCreateInput(BaseModel):
+    name: str
+    member_ids: List[str] = []
+    picture: str = ""
+
+
+class GroupUpdateInput(BaseModel):
+    name: Optional[str] = None
+    picture: Optional[str] = None
+
+
+class GroupMemberInput(BaseModel):
+    user_id: str
+
+
+class GroupMessageInput(BaseModel):
+    text: str
+
+
+def _dm_key(a: str, b: str) -> str:
+    return "|".join(sorted([a, b]))
+
+
+async def _dm_thread_summary(other_id: str, my_id: str) -> dict:
+    other = await db.users.find_one({"user_id": other_id}, {"_id": 0})
+    if not other:
+        return None
+    key = _dm_key(my_id, other_id)
+    last = None
+    async for m in db.dm_messages.find({"thread_key": key}, {"_id": 0}).sort("created_at", -1).limit(1):
+        last = m
+    unread = await db.dm_messages.count_documents({
+        "thread_key": key, "to_user_id": my_id, "read": False,
+    })
+    return {
+        "user": {"user_id": other["user_id"], "name": other["name"],
+                 "username": other.get("username", ""), "picture": other.get("picture", "")},
+        "last_message": last["text"] if last else "",
+        "last_at": last["created_at"] if last else "",
+        "unread": unread,
+    }
+
+
+@api_router.get("/dm/threads")
+async def list_dm_threads(user: dict = Depends(get_current_user)):
+    """List DM threads — one per friend, most recent first."""
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    threads = []
+    for fid in friend_ids:
+        summary = await _dm_thread_summary(fid, user["user_id"])
+        if summary:
+            threads.append(summary)
+    # Sort: unread first, then by last_at desc
+    threads.sort(key=lambda t: (-t["unread"], t["last_at"] or "", ""), reverse=True)
+    return threads
+
+
+@api_router.get("/dm/{other_user_id}/messages")
+async def get_dm_messages(other_user_id: str, user: dict = Depends(get_current_user)):
+    """Get all messages between me and another user (must be friend)."""
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    if other_user_id not in friend_ids and other_user_id != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Solo puedes hablar con amigos")
+    key = _dm_key(user["user_id"], other_user_id)
+    msgs = []
+    async for m in db.dm_messages.find({"thread_key": key}, {"_id": 0}).sort("created_at", 1):
+        m["is_mine"] = m["from_user_id"] == user["user_id"]
+        msgs.append(m)
+    # Mark received as read
+    await db.dm_messages.update_many(
+        {"thread_key": key, "to_user_id": user["user_id"], "read": False},
+        {"$set": {"read": True}},
+    )
+    return msgs
+
+
+@api_router.post("/dm/send")
+async def send_dm(inp: DMSendInput, user: dict = Depends(get_current_user)):
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    if inp.to_user_id not in friend_ids:
+        raise HTTPException(status_code=403, detail="Solo puedes hablar con amigos")
+    text = inp.text.strip()[:1000]
+    if not text:
+        raise HTTPException(status_code=400, detail="Escribe un mensaje")
+    msg = {
+        "id": str(uuid.uuid4()),
+        "thread_key": _dm_key(user["user_id"], inp.to_user_id),
+        "from_user_id": user["user_id"],
+        "to_user_id": inp.to_user_id,
+        "text": text,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.dm_messages.insert_one(msg)
+    msg.pop("_id", None)
+    await create_notification(
+        inp.to_user_id, "dm",
+        f"{user['name']}: {text[:60]}",
+        {"user_id": user["user_id"], "type": "dm"},
+    )
+    return {**msg, "is_mine": True}
+
+
+@api_router.get("/dm/unread-count")
+async def dm_unread_count(user: dict = Depends(get_current_user)):
+    count = await db.dm_messages.count_documents({"to_user_id": user["user_id"], "read": False})
+    return {"count": count}
+
+
+# ---- GROUPS ----
+async def _group_or_404(group_id: str, user_id: str) -> dict:
+    g = await db.groups.find_one({"id": group_id}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    if user_id not in g.get("member_ids", []):
+        raise HTTPException(status_code=403, detail="No perteneces a este grupo")
+    return g
+
+
+def _serialize_group(g: dict, members_map: dict, viewer_id: str, last_msg: dict = None, unread: int = 0) -> dict:
+    return {
+        "id": g["id"],
+        "name": g["name"],
+        "picture": g.get("picture", ""),
+        "member_ids": g.get("member_ids", []),
+        "members": [
+            {"user_id": mid, "name": members_map.get(mid, {}).get("name", ""),
+             "picture": members_map.get(mid, {}).get("picture", ""),
+             "username": members_map.get(mid, {}).get("username", "")}
+            for mid in g.get("member_ids", [])
+        ],
+        "created_by": g.get("created_by"),
+        "created_at": g.get("created_at"),
+        "last_message": last_msg["text"] if last_msg else "",
+        "last_at": last_msg["created_at"] if last_msg else "",
+        "unread": unread,
+        "is_admin": g.get("created_by") == viewer_id,
+    }
+
+
+@api_router.post("/groups")
+async def create_group(inp: GroupCreateInput, user: dict = Depends(get_current_user)):
+    name = inp.name.strip()[:60]
+    if not name:
+        raise HTTPException(status_code=400, detail="Escribe un nombre")
+    friend_ids = set(await accepted_friend_ids(user["user_id"]))
+    invalid = [mid for mid in inp.member_ids if mid != user["user_id"] and mid not in friend_ids]
+    if invalid:
+        raise HTTPException(status_code=400, detail="Solo puedes añadir amigos")
+    members = list(set([user["user_id"]] + list(inp.member_ids)))
+    g = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "picture": inp.picture,
+        "member_ids": members,
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.groups.insert_one(g)
+    g.pop("_id", None)
+    # Notify members
+    for mid in members:
+        if mid != user["user_id"]:
+            await create_notification(
+                mid, "group_invite",
+                f"{user['name']} te añadió al grupo '{name}'",
+                {"group_id": g["id"]},
+            )
+    return g
+
+
+@api_router.get("/groups")
+async def list_groups(user: dict = Depends(get_current_user)):
+    groups = []
+    async for g in db.groups.find({"member_ids": user["user_id"]}, {"_id": 0}):
+        groups.append(g)
+    if not groups:
+        return []
+    # Preload members
+    all_ids = set()
+    for g in groups:
+        all_ids.update(g.get("member_ids", []))
+    members_map = {}
+    async for u in db.users.find({"user_id": {"$in": list(all_ids)}}, {"_id": 0}):
+        members_map[u["user_id"]] = u
+    # Preload last message + unread per group
+    out = []
+    for g in groups:
+        last = None
+        async for m in db.group_messages.find({"group_id": g["id"]}, {"_id": 0}).sort("created_at", -1).limit(1):
+            last = m
+        unread = await db.group_messages.count_documents({
+            "group_id": g["id"],
+            "read_by": {"$nin": [user["user_id"]]},
+            "user_id": {"$ne": user["user_id"]},
+        })
+        out.append(_serialize_group(g, members_map, user["user_id"], last, unread))
+    out.sort(key=lambda x: x["last_at"] or x["created_at"], reverse=True)
+    return out
+
+
+@api_router.get("/groups/{group_id}")
+async def get_group(group_id: str, user: dict = Depends(get_current_user)):
+    g = await _group_or_404(group_id, user["user_id"])
+    members_map = {}
+    async for u in db.users.find({"user_id": {"$in": g.get("member_ids", [])}}, {"_id": 0}):
+        members_map[u["user_id"]] = u
+    return _serialize_group(g, members_map, user["user_id"])
+
+
+@api_router.put("/groups/{group_id}")
+async def update_group(group_id: str, inp: GroupUpdateInput, user: dict = Depends(get_current_user)):
+    g = await _group_or_404(group_id, user["user_id"])
+    if g.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Solo el creador puede editar el grupo")
+    updates = {}
+    if inp.name is not None:
+        updates["name"] = inp.name.strip()[:60]
+    if inp.picture is not None:
+        updates["picture"] = inp.picture
+    if updates:
+        await db.groups.update_one({"id": group_id}, {"$set": updates})
+    return {"ok": True}
+
+
+@api_router.post("/groups/{group_id}/add-member")
+async def add_group_member(group_id: str, inp: GroupMemberInput, user: dict = Depends(get_current_user)):
+    g = await _group_or_404(group_id, user["user_id"])
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    if inp.user_id not in friend_ids:
+        raise HTTPException(status_code=400, detail="Solo puedes añadir amigos")
+    if inp.user_id in g.get("member_ids", []):
+        return {"ok": True}
+    await db.groups.update_one({"id": group_id}, {"$addToSet": {"member_ids": inp.user_id}})
+    await create_notification(
+        inp.user_id, "group_invite",
+        f"{user['name']} te añadió al grupo '{g['name']}'",
+        {"group_id": group_id},
+    )
+    return {"ok": True}
+
+
+@api_router.post("/groups/{group_id}/leave")
+async def leave_group(group_id: str, user: dict = Depends(get_current_user)):
+    g = await _group_or_404(group_id, user["user_id"])
+    await db.groups.update_one({"id": group_id}, {"$pull": {"member_ids": user["user_id"]}})
+    # If empty, delete the group
+    remaining = await db.groups.find_one({"id": group_id}, {"_id": 0})
+    if remaining and not remaining.get("member_ids"):
+        await db.groups.delete_one({"id": group_id})
+        await db.group_messages.delete_many({"group_id": group_id})
+    return {"ok": True}
+
+
+@api_router.delete("/groups/{group_id}/members/{member_id}")
+async def kick_group_member(group_id: str, member_id: str, user: dict = Depends(get_current_user)):
+    g = await _group_or_404(group_id, user["user_id"])
+    if g.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Solo el creador puede expulsar miembros")
+    await db.groups.update_one({"id": group_id}, {"$pull": {"member_ids": member_id}})
+    return {"ok": True}
+
+
+@api_router.get("/groups/{group_id}/messages")
+async def list_group_messages(group_id: str, user: dict = Depends(get_current_user)):
+    await _group_or_404(group_id, user["user_id"])
+    msgs = []
+    async for m in db.group_messages.find({"group_id": group_id}, {"_id": 0}).sort("created_at", 1).limit(300):
+        au = await db.users.find_one({"user_id": m["user_id"]}, {"_id": 0})
+        m["author"] = _msg_author(au)
+        m["is_mine"] = m["user_id"] == user["user_id"]
+        msgs.append(m)
+    # Mark as read
+    await db.group_messages.update_many(
+        {"group_id": group_id, "read_by": {"$nin": [user["user_id"]]}},
+        {"$addToSet": {"read_by": user["user_id"]}},
+    )
+    return msgs
+
+
+@api_router.post("/groups/{group_id}/messages")
+async def send_group_message(group_id: str, inp: GroupMessageInput, user: dict = Depends(get_current_user)):
+    g = await _group_or_404(group_id, user["user_id"])
+    text = inp.text.strip()[:1000]
+    if not text:
+        raise HTTPException(status_code=400, detail="Escribe algo")
+    msg = {
+        "id": str(uuid.uuid4()),
+        "group_id": group_id,
+        "user_id": user["user_id"],
+        "text": text,
+        "read_by": [user["user_id"]],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.group_messages.insert_one(msg)
+    msg.pop("_id", None)
+    for mid in g.get("member_ids", []):
+        if mid != user["user_id"]:
+            await create_notification(
+                mid, "group_message",
+                f"{g['name']} · {user['name']}: {text[:60]}",
+                {"group_id": group_id, "type": "group_message"},
+            )
+    return {**msg, "author": _msg_author(user), "is_mine": True}
+
+
+# =========================================================================
+# ALBUM — shared multimedia per event (photos + videos)
+# =========================================================================
+
+async def _can_access_album(event_id: str, user_id: str) -> bool:
+    """User can upload/view album if they have any interest (voy, me_interesa, estuve)."""
+    it = await db.interests.find_one({"event_id": event_id, "user_id": user_id})
+    return it is not None
+
+
+@api_router.post("/events/{event_id}/album/upload")
+async def album_upload(event_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    if not await _can_access_album(event_id, user["user_id"]):
+        raise HTTPException(status_code=403, detail="Solo asistentes al evento pueden subir")
+    data = await file.read()
+    if len(data) > 50 * 1024 * 1024:  # 50MB max
+        raise HTTPException(status_code=400, detail="Máximo 50MB")
+    ct = file.content_type or "application/octet-stream"
+    is_video = ct.startswith("video/")
+    is_image = ct.startswith("image/")
+    if not (is_video or is_image):
+        raise HTTPException(status_code=400, detail="Solo fotos o vídeos")
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else ("mp4" if is_video else "jpg")
+    path = f"{APP_NAME}/albums/{event_id}/{uuid.uuid4().hex}.{ext}"
+    save_object(path, data)
+    await db.files.insert_one({
+        "id": str(uuid.uuid4()),
+        "storage_path": path,
+        "content_type": ct,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    upload = {
+        "id": str(uuid.uuid4()),
+        "event_id": event_id,
+        "user_id": user["user_id"],
+        "media_url": f"/api/files/{path}",
+        "media_type": "video" if is_video else "image",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.album_uploads.insert_one(upload)
+    upload.pop("_id", None)
+    return upload
+
+
+@api_router.get("/events/{event_id}/album")
+async def album_list(event_id: str, user: dict = Depends(get_current_user)):
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    # Anyone who was interested/going/attended can view
+    if not await _can_access_album(event_id, user["user_id"]):
+        # But allow view if friend went
+        friend_ids = await accepted_friend_ids(user["user_id"])
+        has_friend = await db.interests.find_one({"event_id": event_id, "user_id": {"$in": friend_ids}})
+        if not has_friend:
+            raise HTTPException(status_code=403, detail="Sin acceso al álbum")
+    items = []
+    async for a in db.album_uploads.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1):
+        au = await db.users.find_one({"user_id": a["user_id"]}, {"_id": 0})
+        a["author"] = _msg_author(au)
+        a["is_mine"] = a["user_id"] == user["user_id"]
+        items.append(a)
+    return {"event": {"id": ev["id"], "name": ev["name"], "date": ev["date"], "venue": ev["venue"]},
+            "items": items, "total": len(items)}
+
+
+@api_router.delete("/events/{event_id}/album/{upload_id}")
+async def album_delete(event_id: str, upload_id: str, user: dict = Depends(get_current_user)):
+    a = await db.album_uploads.find_one({"id": upload_id, "event_id": event_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    if a["user_id"] != user["user_id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Solo puedes borrar tus propias subidas")
+    await db.album_uploads.delete_one({"id": upload_id})
+    return {"ok": True}
+
+
+# =========================================================================
+# CAPTURA DEL MOMENTO (like BeReal but branded as "El Momento")
+# =========================================================================
+# A random 2-hour prompt window per event; users who are "going" get notified,
+# and captures within 2 minutes of the prompt count as "on time" (extra points).
+
+class MomentPromptInput(BaseModel):
+    event_id: str
+
+
+@api_router.get("/events/{event_id}/moment/status")
+async def moment_status(event_id: str, user: dict = Depends(get_current_user)):
+    """Get info about the current 'moment' prompt for an event."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    prompt = await db.moment_prompts.find_one({"event_id": event_id}, {"_id": 0})
+    my_capture = await db.captures.find_one({"event_id": event_id, "user_id": user["user_id"]}, {"_id": 0})
+    return {
+        "prompt": prompt,  # {sent_at, expires_at, on_time_deadline}
+        "my_capture": my_capture,
+        "can_capture": bool(prompt),
+    }
+
+
+@api_router.post("/admin/events/{event_id}/moment/trigger")
+async def admin_trigger_moment(event_id: str, admin: dict = Depends(require_admin)):
+    """Admin triggers the moment prompt manually. Sends push to all 'voy' users."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    now = datetime.now(timezone.utc)
+    prompt = {
+        "id": str(uuid.uuid4()),
+        "event_id": event_id,
+        "sent_at": now.isoformat(),
+        "on_time_deadline": (now + timedelta(minutes=2)).isoformat(),
+        "expires_at": (now + timedelta(hours=6)).isoformat(),
+        "triggered_by": admin["user_id"],
+    }
+    await db.moment_prompts.update_one({"event_id": event_id}, {"$set": prompt}, upsert=True)
+    # Notify all voy users
+    sent = 0
+    async for it in db.interests.find({"event_id": event_id, "status": "voy"}):
+        await create_notification(
+            it["user_id"], "moment_prompt",
+            f"⚡ Es EL MOMENTO en {ev['name']}. ¡Sube una foto ya! (2 min para +30 puntos)",
+            {"event_id": event_id, "type": "moment"},
+        )
+        sent += 1
+    return {"prompt": prompt, "notified": sent}
+
+
+@api_router.post("/events/{event_id}/moment/upload")
+async def moment_upload(event_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    prompt = await db.moment_prompts.find_one({"event_id": event_id}, {"_id": 0})
+    if not prompt:
+        raise HTTPException(status_code=400, detail="No hay un momento activo para este evento")
+    # Only 1 capture per user per event
+    existing = await db.captures.find_one({"event_id": event_id, "user_id": user["user_id"]})
+    if existing:
+        raise HTTPException(status_code=400, detail="Ya subiste tu momento")
+    ct = file.content_type or "image/jpeg"
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Solo fotos")
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Máximo 10MB")
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "jpg"
+    path = f"{APP_NAME}/moments/{event_id}/{uuid.uuid4().hex}.{ext}"
+    save_object(path, data)
+    now = datetime.now(timezone.utc)
+    deadline = datetime.fromisoformat(prompt["on_time_deadline"].replace("Z", "+00:00"))
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    on_time = now <= deadline
+    capture = {
+        "id": str(uuid.uuid4()),
+        "event_id": event_id,
+        "user_id": user["user_id"],
+        "image_url": f"/api/files/{path}",
+        "on_time": on_time,
+        "seconds_late": max(0, int((now - deadline).total_seconds())),
+        "created_at": now.isoformat(),
+    }
+    await db.captures.insert_one(capture)
+    capture.pop("_id", None)
+    return capture
+
+
+@api_router.get("/events/{event_id}/moment/gallery")
+async def moment_gallery(event_id: str, user: dict = Depends(get_current_user)):
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    # Must have uploaded or be attendee
+    my_capture = await db.captures.find_one({"event_id": event_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not my_capture:
+        raise HTTPException(status_code=403, detail="Debes subir tu momento para ver los de los demás")
+    # Only show friends' captures + own
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    allowed = friend_ids + [user["user_id"]]
+    items = []
+    async for c in db.captures.find({"event_id": event_id, "user_id": {"$in": allowed}}, {"_id": 0}).sort("created_at", 1):
+        au = await db.users.find_one({"user_id": c["user_id"]}, {"_id": 0})
+        c["author"] = _msg_author(au)
+        c["is_mine"] = c["user_id"] == user["user_id"]
+        items.append(c)
+    return items
+
+
+# =========================================================================
+# CALENDAR — past events with multimedia grouped by day
+# =========================================================================
+
+@api_router.get("/me/calendar")
+async def my_calendar(user: dict = Depends(get_current_user),
+                      start: str = Query(""),
+                      end: str = Query("")):
+    """Return events grouped by day where I or my friends had activity."""
+    try:
+        end_d = date.fromisoformat(end) if end else datetime.now(ZoneInfo("Europe/Madrid")).date()
+        start_d = date.fromisoformat(start) if start else (end_d - timedelta(days=90))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Fechas inválidas")
+
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    allowed_users = friend_ids + [user["user_id"]]
+
+    # All interests within date range for me or friends
+    days = {}  # date_iso -> {events: [], photos: [], videos: [], my_events: []}
+    interests_by_event = {}
+    async for it in db.interests.find({"user_id": {"$in": allowed_users},
+                                        "status": {"$in": ["voy", "estuve"]}}):
+        interests_by_event.setdefault(it["event_id"], []).append(it)
+
+    for event_id, its in interests_by_event.items():
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        if not ev:
+            continue
+        try:
+            d = date.fromisoformat(ev["date"])
+        except Exception:
+            continue
+        if not (start_d <= d <= end_d):
+            continue
+        # Album items
+        album_items = []
+        async for a in db.album_uploads.find({"event_id": event_id, "user_id": {"$in": allowed_users}}, {"_id": 0}):
+            album_items.append(a)
+        moments = []
+        async for c in db.captures.find({"event_id": event_id, "user_id": {"$in": allowed_users}}, {"_id": 0}):
+            moments.append(c)
+        my_status = next((i["status"] for i in its if i["user_id"] == user["user_id"]), None)
+        friend_names = []
+        for i in its:
+            if i["user_id"] == user["user_id"]:
+                continue
+            fu = await db.users.find_one({"user_id": i["user_id"]}, {"_id": 0, "name": 1, "picture": 1})
+            if fu:
+                friend_names.append({"name": fu["name"], "picture": fu.get("picture", "")})
+        key = d.isoformat()
+        days.setdefault(key, {"date": key, "events": []})
+        days[key]["events"].append({
+            "id": ev["id"], "name": ev["name"], "venue": ev["venue"], "genre": ev.get("genre", ""),
+            "image_url": ev.get("image_url", ""),
+            "my_status": my_status,
+            "friends": friend_names,
+            "photos": [a for a in album_items if a["media_type"] == "image"],
+            "videos": [a for a in album_items if a["media_type"] == "video"],
+            "moments": moments,
+        })
+
+    return sorted(days.values(), key=lambda x: x["date"], reverse=True)
+
+
+# =========================================================================
+# TICKETS — track in-app ticket purchases (for points/badges)
+# =========================================================================
+
+class TicketPurchaseInput(BaseModel):
+    event_id: str
+
+
+@api_router.post("/tickets/click")
+async def ticket_click(inp: TicketPurchaseInput, user: dict = Depends(get_current_user)):
+    """User clicked the 'Conseguir entrada' button — record for future confirmation."""
+    ev = await db.events.find_one({"id": inp.event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    click = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["user_id"],
+        "event_id": inp.event_id,
+        "confirmed": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.ticket_purchases.insert_one(click)
+    return {"ok": True, "id": click["id"]}
+
+
+class TicketConfirmInput(BaseModel):
+    purchase_id: str
+    confirmed: bool = True
+
+
+@api_router.post("/admin/tickets/confirm")
+async def admin_confirm_ticket(inp: TicketConfirmInput, admin: dict = Depends(require_admin)):
+    """Admin confirms a ticket purchase → user gets points."""
+    p = await db.ticket_purchases.find_one({"id": inp.purchase_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    await db.ticket_purchases.update_one(
+        {"id": inp.purchase_id},
+        {"$set": {"confirmed": inp.confirmed, "confirmed_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if inp.confirmed:
+        await create_notification(
+            p["user_id"], "ticket_confirmed",
+            f"¡Compra confirmada! +{ACTION_POINTS['ticket_purchase']} puntos 🎟️",
+            {"event_id": p["event_id"]},
+        )
+    return {"ok": True}
+
+
+# =========================================================================
+# ADMIN — extended dashboard (activity chart + top users by points)
+# =========================================================================
+
+@api_router.get("/admin/dashboard")
+async def admin_dashboard(admin: dict = Depends(require_admin)):
+    """Extended admin dashboard: activity by day + top users by points."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    start = today - timedelta(days=29)  # 30-day window
+    activity = {d.isoformat(): {"date": d.isoformat(), "signups": 0, "voys": 0, "stories": 0, "captures": 0}
+                for d in [start + timedelta(days=i) for i in range(30)]}
+
+    async for u in db.users.find({"created_at": {"$gte": start.isoformat()}}, {"_id": 0}):
+        try:
+            d = datetime.fromisoformat(u["created_at"]).date().isoformat()
+            if d in activity:
+                activity[d]["signups"] += 1
+        except Exception:
+            pass
+
+    async for it in db.interests.find({"status": "voy", "created_at": {"$gte": start.isoformat()}}, {"_id": 0}):
+        try:
+            d = datetime.fromisoformat(it["created_at"]).date().isoformat()
+            if d in activity:
+                activity[d]["voys"] += 1
+        except Exception:
+            pass
+
+    async for s in db.stories.find({"created_at": {"$gte": start.isoformat()}}, {"_id": 0}):
+        try:
+            d = datetime.fromisoformat(s["created_at"]).date().isoformat()
+            if d in activity:
+                activity[d]["stories"] += 1
+        except Exception:
+            pass
+
+    async for c in db.captures.find({"created_at": {"$gte": start.isoformat()}}, {"_id": 0}):
+        try:
+            d = datetime.fromisoformat(c["created_at"]).date().isoformat()
+            if d in activity:
+                activity[d]["captures"] += 1
+        except Exception:
+            pass
+
+    activity_list = sorted(activity.values(), key=lambda x: x["date"])
+
+    # Top 10 users by points (world)
+    ids = []
+    async for u in db.users.find({}, {"_id": 0, "user_id": 1}):
+        ids.append(u["user_id"])
+    top_users = await _build_ranking(ids, limit=10)
+
+    # Groups + DMs count
+    total_groups = await db.groups.count_documents({})
+    total_group_msgs = await db.group_messages.count_documents({})
+    total_dms = await db.dm_messages.count_documents({})
+    total_album = await db.album_uploads.count_documents({})
+    total_captures = await db.captures.count_documents({})
+    pending_tickets = await db.ticket_purchases.count_documents({"confirmed": False})
+
+    return {
+        "activity_30d": activity_list,
+        "top_users": top_users,
+        "extras": {
+            "groups": total_groups,
+            "group_messages": total_group_msgs,
+            "dms": total_dms,
+            "album_items": total_album,
+            "captures": total_captures,
+            "pending_tickets": pending_tickets,
+        },
+    }
+
+
+@api_router.get("/admin/tickets")
+async def admin_list_tickets(admin: dict = Depends(require_admin),
+                              status: str = Query("pending")):
+    q = {"confirmed": False} if status == "pending" else {"confirmed": True}
+    out = []
+    async for p in db.ticket_purchases.find(q, {"_id": 0}).sort("created_at", -1).limit(200):
+        u = await db.users.find_one({"user_id": p["user_id"]}, {"_id": 0})
+        ev = await db.events.find_one({"id": p["event_id"]}, {"_id": 0})
+        p["user"] = {"name": u["name"] if u else "-", "email": u.get("email", "") if u else ""}
+        p["event"] = {"name": ev["name"] if ev else "-", "date": ev.get("date", "") if ev else ""}
+        out.append(p)
+    return out
 
 
 # ---------------------------------------------------------------------------

@@ -5,12 +5,13 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, LayoutDashboard } from "lucide-react";
+import { LogOut, Camera, Share2, Shield, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, LayoutDashboard, Trophy, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 import { StoriesArchive } from "@/components/Stories";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import { BadgesPanel } from "@/components/BadgesPanel";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Profile() {
   const { user, setUser, logout, refreshUser } = useAuth();
@@ -80,17 +81,30 @@ export default function Profile() {
   };
 
   const shareInvite = async () => {
-    const link = `${window.location.origin}/login?add=${user?.username}`;
-    const text = `Únete a mí en ¿Quién va? y te añado como amigo: ${link}`;
+    const code = referral?.code || "";
+    const url = `${window.location.origin}/login?ref=${code}`;
+    const text = `Únete a mí en ¿Quién va? y ambos ganamos +100 puntos. Mi código: ${code} · ${url}`;
     try {
-      if (navigator.share) await navigator.share({ title: "¿Quién va?", text, url: link });
+      if (navigator.share) await navigator.share({ title: "¿Quién va?", text, url });
       else {
-        await navigator.clipboard.writeText(link);
+        await navigator.clipboard.writeText(text);
         toast.success("Enlace de invitación copiado");
       }
     } catch {
       /* share cancelled */
     }
+  };
+
+  const { data: referral } = useQuery({
+    queryKey: ["referral"],
+    queryFn: async () => (await api.get("/me/referral")).data,
+    staleTime: 5 * 60_000,
+  });
+
+  const copyCode = async () => {
+    if (!referral?.code) return;
+    await navigator.clipboard.writeText(referral.code);
+    toast.success("Código copiado");
   };
 
   return (
@@ -154,7 +168,28 @@ export default function Profile() {
           onClick={shareInvite}
           className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
         >
-          <Share2 className="w-4 h-4" /> Invitar amigos
+          <Share2 className="w-4 h-4" /> Invitar amigos {referral && <span className="text-qv-secondary text-xs">(+{referral.points_per_referral} pts)</span>}
+        </button>
+
+        {referral && (
+          <button
+            data-testid="referral-code"
+            onClick={copyCode}
+            className="h-12 rounded-2xl bg-qv-secondary/10 border border-qv-secondary/30 text-white font-semibold flex items-center justify-between px-4 active:scale-95 transition-transform"
+          >
+            <span className="flex items-center gap-2 text-white/70 text-sm">
+              <Copy className="w-4 h-4 text-qv-secondary" /> Tu código
+            </span>
+            <span className="font-mono text-qv-secondary font-bold">{referral.code}</span>
+          </button>
+        )}
+
+        <button
+          data-testid="rankings-btn"
+          onClick={() => navigate("/top")}
+          className="h-12 rounded-2xl bg-yellow-300/10 border border-yellow-300/30 text-yellow-200 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+        >
+          <Trophy className="w-4 h-4" /> Ranking de puntos
         </button>
 
         <button

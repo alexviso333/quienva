@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { BadgesPanel } from "@/components/BadgesPanel";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, MessageSquare } from "lucide-react";
 
 export default function UserProfile() {
   const { userId } = useParams();
@@ -53,6 +53,13 @@ export default function UserProfile() {
         <p className="text-white/50 text-sm">
           {stats.total_events} fiestas · {stats.friends_count} amigos
         </p>
+        <button
+          data-testid="userprofile-message-btn"
+          onClick={() => navigate(`/chats/dm/${userId}`)}
+          className="h-11 px-5 rounded-full bg-qv-primary text-white font-bold flex items-center gap-2 active:scale-95 transition-transform"
+        >
+          <MessageSquare className="w-4 h-4" /> Enviar mensaje
+        </button>
       </div>
 
       <div className="px-5 mt-6 pb-24">

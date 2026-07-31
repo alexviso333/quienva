@@ -13,6 +13,9 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import EventDetail from "@/pages/EventDetail";
 import Onboarding from "@/pages/Onboarding";
 import UserProfile from "@/pages/UserProfile";
+import Chats from "@/pages/Chats";
+import ChatThread from "@/pages/ChatThread";
+import Rankings from "@/pages/Rankings";
 import { Loader2 } from "lucide-react";
 
 function LoadingScreen() {
@@ -48,6 +51,10 @@ function AppRouter() {
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/users/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+      <Route path="/chats" element={<ProtectedRoute><Chats /></ProtectedRoute>} />
+      <Route path="/chats/dm/:id" element={<ProtectedRoute><ChatThread kind="dm" /></ProtectedRoute>} />
+      <Route path="/chats/group/:id" element={<ProtectedRoute><ChatThread kind="group" /></ProtectedRoute>} />
+      <Route path="/top" element={<ProtectedRoute><Rankings /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
       <Route path="/admin/dashboard" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/feed" replace />} />

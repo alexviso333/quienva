@@ -23,6 +23,12 @@ export default function Login() {
       setInvitedBy(uname);
       setMode("register");
     }
+    const ref = params.get("ref");
+    if (ref) {
+      localStorage.setItem("qv_pending_ref", ref.trim());
+      setInvitedBy(`código ${ref.trim()}`);
+      setMode("register");
+    }
   }, []);
 
   const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -40,6 +46,17 @@ export default function Login() {
           return;
         }
         await register(form);
+        // Claim referral if there is a pending code
+        const pendingRef = localStorage.getItem("qv_pending_ref");
+        if (pendingRef) {
+          try {
+            await api.post("/me/claim-referral", { code: pendingRef });
+            toast.success("¡Código aplicado! +100 puntos");
+          } catch (err) {
+            /* ignore */
+          }
+          localStorage.removeItem("qv_pending_ref");
+        }
       }
       const onboarded = localStorage.getItem("qv_onboarded") === "1";
       navigate(onboarded ? "/feed" : "/onboarding");

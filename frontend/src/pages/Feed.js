@@ -7,6 +7,7 @@ import { EventCard } from "@/components/EventCard";
 import { CompactEventCard } from "@/components/CompactEventCard";
 import { EventCarousel } from "@/components/EventCarousel";
 import { StoriesBar } from "@/components/Stories";
+import { StreakBanner } from "@/components/StreakBanner";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { useAuth } from "@/context/AuthContext";
 import { useCompactMode } from "@/hooks/useCompactMode";
@@ -108,6 +109,10 @@ export default function Feed() {
       </header>
 
       <StoriesBar />
+
+      <div className="px-4 pb-3">
+        <StreakBanner />
+      </div>
 
       <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-2" data-testid="date-filters">
         {DATE_FILTERS.map((f) => (
