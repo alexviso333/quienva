@@ -61,7 +61,11 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
     >
       {/* Image banner */}
       <div className="relative h-40">
-        <img src={mediaUrl(event.image_url)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
+        {event.image_url ? (
+          <img src={mediaUrl(event.image_url)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-[#2a0a1a] via-[#121215] to-[#0a1a1f]" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#121215] via-[#121215]/40 to-transparent" />
 
         {event.genre && (

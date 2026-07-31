@@ -526,7 +526,7 @@ def date_in_filter(event_date_str: str, flt: str) -> bool:
         d = date.fromisoformat(event_date_str)
     except Exception:
         return True
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
     if flt == "hoy":
         return d == today
     if flt == "finde":
