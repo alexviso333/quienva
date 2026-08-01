@@ -4004,6 +4004,16 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/luna-palma"},
     {"name": "Palma Events", "slug": "palma-events",
      "url": "https://site.fourvenues.com/es/palma-events"},
+    {"name": "Velvet", "slug": "velvet-club",
+     "url": "https://site.fourvenues.com/es/velvet-club"},
+    {"name": "Megasport", "slug": "megasport",
+     "url": "https://site.fourvenues.com/es/megasport"},
+    {"name": "Boomerang", "slug": "boomerang",
+     "url": "https://site.fourvenues.com/es/boomerang"},
+    {"name": "BCM Planet Dance", "slug": "bcm-mallorca", "city": "Magaluf",
+     "url": "https://site.fourvenues.com/es/bcm-mallorca"},
+    {"name": "Tabana", "slug": "tabana-mallorca",
+     "url": "https://site.fourvenues.com/es/tabana-mallorca"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")
