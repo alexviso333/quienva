@@ -12,7 +12,7 @@ import { NextBadgeBanner } from "@/components/NextBadgeBanner";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { useAuth } from "@/context/AuthContext";
 import { useCompactMode } from "@/hooks/useCompactMode";
-import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
 const DATE_FILTERS = [
@@ -100,13 +100,24 @@ export default function Feed() {
   return (
     <AppShell>
       <header className="px-5 pt-8 pb-3">
-        <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">
-          {user?.city || "Palma de Mallorca"}
-        </p>
-        <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
-          {isPastView ? "Recuerdos" : isDiscover ? "Para ti" : "Los planes"}<span className="text-qv-primary">.</span>
-        </h1>
-        {isDiscover && <p className="text-white/50 text-sm mt-1">Según los géneros a los que más vas.</p>}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">
+              {user?.city || "Palma de Mallorca"}
+            </p>
+            <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
+              {isPastView ? "Recuerdos" : isDiscover ? "Para ti" : "Los planes"}<span className="text-qv-primary">.</span>
+            </h1>
+            {isDiscover && <p className="text-white/50 text-sm mt-1">Según los géneros a los que más vas.</p>}
+          </div>
+          <button
+            onClick={() => navigate("/locales")}
+            className="mt-1 flex-shrink-0 flex items-center gap-1.5 text-xs font-bold text-white bg-white/10 border border-white/10 rounded-full px-3 py-2 active:scale-95"
+            data-testid="feed-locales-btn"
+          >
+            <Building2 className="w-4 h-4 text-qv-secondary" /> Locales
+          </button>
+        </div>
       </header>
 
       <StoriesBar />

@@ -1564,3 +1564,133 @@ Please verify with admin login:
         
         Test file: /app/fourvenues_test.py
         Test credentials used: admin@quienva.app / admin123 + fresh test user
+
+## Venue Directory + more FourVenues venues (2026-08-01, part 2)
+
+### Backend changes
+1. Added FourVenues venue **danzu** (Danzû, Can Picafort promoter) to scraper seed → now 13 scraper sources.
+2. **New venue directory** (collection `venues`, seeded with 27 locales across Palma/Magaluf/Alcúdia/
+   Can Picafort/Cala Rajada/Santa Ponsa). Fields: name, zone, city, type (discoteca|pub|beach_club|
+   promotor), scraper_slug (links to a FourVenues scraper for events), free_entry, open_days (0=Mon..6=Sun),
+   instagram, address, image_url, active, order.
+3. **Endpoints**:
+   - GET /api/venues (auth) ?zone= &type= → list active; each includes upcoming_events count (from linked
+     scraper_venue_id, date>=today).
+   - GET /api/venues/{id} (auth) → venue + its upcoming events (up to 30) with current_price/sale_state.
+   - GET /api/venues/meta/zones (auth) → {zones:[...]}.
+   - Admin CRUD: POST/PUT/DELETE /api/admin/venues (admin only).
+   - seed_venue_directory() idempotent on startup.
+
+### Manual verification done
+- GET /api/venues returns 27 locales; Amok upcoming_events=76, Fitz=26, Over Club=14 (linked correctly).
+- Frontend /locales page renders cards with open-days chips, Cómo llegar (maps), Instagram, and expandable
+  event lists with prices. Admin venues panel added to AdminDashboard.
+
+### Testing required (backend, focused)
+- GET /api/venues as authenticated user → 200, array of 27, each has upcoming_events (int), open_days (array),
+  type, zone. Unauthenticated → 401.
+- GET /api/venues?zone=Magaluf → only Magaluf venues. ?type=pub → only pubs.
+- GET /api/venues/{id} for a linked venue (Amok) → includes events array with current_price/sale_state.
+- GET /api/venues/meta/zones → {zones:[...]}.
+- Admin CRUD: POST /api/admin/venues (admin) creates; PUT updates open_days; DELETE removes; non-admin → 403;
+  non-existent id on PUT/DELETE → 404. Clean up created test venue.
+- Confirm danzu venue present in GET /api/admin/scrapers (adapter_type=fourvenues_api, slug=danzu).
+- Quick regression: GET /api/events still returns scraped events with price_tiers/sale_state; /api/health ok.
+- Admin: admin@quienva.app / admin123.
+
+## agent_communication:
+    - agent: "main"
+      message: "Added danzu FourVenues source + a full venue directory (27 locales, collection 'venues') with public GET endpoints and admin CRUD. Directory links to scraper events for upcoming counts. Please test the new /api/venues* endpoints + admin CRUD and a light regression. Admin: admin@quienva.app/admin123."
+
+    - agent: "testing"
+      message: |
+        BACKEND TESTING COMPLETE - Venue Directory + Danzu Scraper
+        
+        🎉 ALL TESTS PASSED - 79/79 (100% pass rate)
+        
+        ✅ VENUE DIRECTORY ENDPOINTS (ALL WORKING):
+        
+        1. GET /api/venues (authenticated) ✅ (20 tests)
+           - As authenticated normal user → 200 with JSON array of 27 venues ✓
+           - Each venue has all required fields:
+             * id ✓
+             * name ✓
+             * zone ✓
+             * city ✓
+             * type ✓
+             * scraper_slug ✓
+             * free_entry (boolean) ✓
+             * open_days (array of integers 0-6) ✓
+             * upcoming_events (integer) ✓
+           - Unauthenticated (no token) → 401 ✓
+        
+        2. GET /api/venues with filters ✅ (6 tests)
+           - GET /api/venues?zone=Magaluf → 200 with ONLY Magaluf venues (3 venues) ✓
+           - All returned venues have zone="Magaluf" ✓
+           - GET /api/venues?type=pub → 200 with ONLY pubs (4 venues) ✓
+           - All returned venues have type="pub" ✓
+        
+        3. Verify linkage: Amok venue ✅ (2 tests)
+           - Found Amok venue in GET /api/venues ✓
+           - Amok has scraper_slug='amok' ✓
+           - Amok has upcoming_events > 0 (verified linkage to scraper) ✓
+        
+        4. GET /api/venues/{id} for Amok venue ✅ (11 tests)
+           - Returns 200 with venue details ✓
+           - Response has 'events' array ✓
+           - Events array is non-empty (Amok has events) ✓
+           - Each event has required fields:
+             * id ✓
+             * name ✓
+             * date ✓
+             * current_price (number or null) ✓
+             * sale_state (valid enum: a_la_venta/pocas_entradas/agotado/no_a_la_venta) ✓
+        
+        5. GET /api/venues/{id} for Shamrock (no scraper) ✅ (3 tests)
+           - Found Shamrock venue with scraper_slug='' ✓
+           - Returns 200 ✓
+           - Events array is empty (no scraper linked) ✓
+        
+        6. GET /api/venues/meta/zones ✅ (5 tests)
+           - As authenticated user → 200 ✓
+           - Response has 'zones' field ✓
+           - zones is non-empty array ✓
+           - zones are sorted alphabetically ✓
+           - Found 10 zones: Cala Rajada, Can Picafort, Magaluf, Mallorca, Palma, Palma · Dàrsena, Palma · Marítimo, Palma · Porto Pi, Port d'Alcúdia, Santa Ponsa ✓
+        
+        7. Admin CRUD on /api/admin/venues ✅ (18 tests)
+           - POST /api/admin/venues as admin → 200 with created venue (all fields match) ✓
+           - POST as non-admin → 403 ✓
+           - PUT /api/admin/venues/{id} as admin → 200 with updated venue ✓
+           - Updated venue reflects changes in GET /api/venues list ✓
+           - PUT on non-existent id → 404 ✓
+           - PUT as non-admin → 403 ✓
+           - DELETE /api/admin/venues/{id} as admin → 200 with {ok: true} ✓
+           - DELETE again on same id → 404 ✓
+           - DELETE as non-admin → 403 ✓
+           - Test venue cleaned up successfully ✓
+        
+        8. Confirm danzu scraper ✅ (4 tests)
+           - GET /api/admin/scrapers returns array ✓
+           - Found danzu scraper with name='Danzû (Can Picafort)' ✓
+           - danzu has adapter_type='fourvenues_api' ✓
+           - danzu has slug='danzu' ✓
+        
+        9. Light regression: GET /api/events ✅ (7 tests)
+           - Returns 200 ✓
+           - Response is JSON array ✓
+           - Returns events (non-empty) ✓
+           - Found 172 events with price_tiers ✓
+           - Events have price_tiers array ✓
+           - Price tiers have name and price fields ✓
+           - Events have valid sale_state enum ✓
+        
+        10. Light regression: GET /api/health ✅ (2 tests)
+            - Returns 200 ✓
+            - Response has {ok: true} ✓
+        
+        🎯 CONCLUSION:
+        All venue directory endpoints are working perfectly with correct authorization checks (401 for unauthenticated, 403 for non-admin on admin endpoints). The venue-to-scraper linkage is working correctly (Amok has 76+ upcoming events from the amok scraper). Zone and type filters work correctly. The danzu scraper is properly seeded with adapter_type='fourvenues_api'. Admin CRUD operations work with proper validation (404 for non-existent IDs). ZERO regressions found - events and health endpoints still working correctly.
+        
+        Test file: /app/backend_test.py
+        Test credentials used: admin@quienva.app / admin123 + fresh test user

@@ -3740,6 +3740,10 @@ async def on_startup():
         await seed_scraped_venues()
     except Exception as _:
         pass
+    try:
+        await seed_venue_directory()
+    except Exception as _:
+        pass
     await seed_events()
     global scheduler
     try:
@@ -4014,6 +4018,8 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/bcm-mallorca"},
     {"name": "Tabana", "slug": "tabana-mallorca",
      "url": "https://site.fourvenues.com/es/tabana-mallorca"},
+    {"name": "Danzû (Can Picafort)", "slug": "danzu", "city": "Can Picafort",
+     "url": "https://site.fourvenues.com/es/danzu"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")
@@ -4350,6 +4356,235 @@ async def admin_run_all_scrapers(admin: dict = Depends(require_admin)):
         "total_updated": sum(r["updated"] for r in results),
         "results": results,
     }
+
+
+# =========================================================================
+# VENUE DIRECTORY — "Locales de Mallorca" (discotecas/pubs, con o sin FourVenues)
+# =========================================================================
+# order: Palma clubs first, then pueblos. type: discoteca|pub|beach_club|promotor
+# open_days: 0=Lun ... 6=Dom. scraper_slug links to a FourVenues scraper (events).
+_SEED_DIRECTORY = [
+    # --- Palma / Paseo Marítimo (FourVenues) ---
+    {"name": "Amok", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "amok", "free_entry": False, "open_days": [2, 4, 5], "instagram": "amokmallorca",
+     "address": "Camí Can Capó, 4, 07199 Palma"},
+    {"name": "Fitz Mallorca", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "fitz-mallorca", "free_entry": False, "open_days": [3, 4, 5], "instagram": "fitzmallorca",
+     "address": "Passeig Marítim, Palma"},
+    {"name": "Mar Salada", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "mar-salada", "free_entry": False, "open_days": [4, 5], "instagram": "marsaladaclub",
+     "address": "Passeig Marítim, Palma"},
+    {"name": "Tabana", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "tabana-mallorca", "free_entry": False, "open_days": [4, 5], "instagram": "tabanamallorca",
+     "address": "Passeig Marítim, Palma"},
+    {"name": "Velvet", "zone": "Palma · Porto Pi", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "velvet-club", "free_entry": False, "open_days": [4, 5], "instagram": "velvetclubpalma",
+     "address": "Carrer de Porto Pi, 4, 07015 Palma"},
+    {"name": "Over Club", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "over-club", "free_entry": False, "open_days": [4, 5], "instagram": "overclubmallorca",
+     "address": "Palma de Mallorca"},
+    {"name": "Lunita", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "lunita", "free_entry": False, "open_days": [4, 5, 6], "instagram": "discolunita",
+     "address": "Palma de Mallorca"},
+    {"name": "Luna Palma", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "luna-palma", "free_entry": False, "open_days": [4, 5], "instagram": "",
+     "address": "Palma de Mallorca"},
+    {"name": "Megasport", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "megasport", "free_entry": False, "open_days": [4, 5], "instagram": "megasportpalma",
+     "address": "Carrer dels Fertilitzants, 8, 07011 Palma"},
+    {"name": "Boomerang", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "boomerang", "free_entry": False, "open_days": [4, 5], "instagram": "",
+     "address": "Carrer Gremi Teixidors, 27, 07009 Palma"},
+    {"name": "Palma Events", "zone": "Palma", "city": "Palma de Mallorca", "type": "promotor",
+     "scraper_slug": "palma-events", "free_entry": False, "open_days": [], "instagram": "palmaevents",
+     "address": "Palma de Mallorca"},
+    # --- Palma pubs / free ---
+    {"name": "Shamrock", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "shamrockpalma",
+     "address": "Passeig Marítim, 8, Palma"},
+    {"name": "Garito Café", "zone": "Palma · Dàrsena", "city": "Palma de Mallorca", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [3, 4, 5, 6], "instagram": "garitocafe",
+     "address": "Dàrsena de Can Barbarà, Palma"},
+    {"name": "Social Club", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "socialclubmallorca",
+     "address": "Passeig Marítim, Palma"},
+    {"name": "Brassclub", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [1, 2, 3, 4, 5], "instagram": "brassclub",
+     "address": "Av. Gabriel Roca, 4, Palma"},
+    # --- Magaluf / Calvià ---
+    {"name": "BCM Planet Dance", "zone": "Magaluf", "city": "Magaluf", "type": "discoteca",
+     "scraper_slug": "bcm-mallorca", "free_entry": False, "open_days": [1, 3, 4, 5], "instagram": "bcmplanetdance",
+     "address": "Avinguda de l'Olivera, 14, 07181 Calvià"},
+    {"name": "Tokio Joe's", "zone": "Magaluf", "city": "Magaluf", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "tokiojoesmagaluf",
+     "address": "Punta Ballena, Magaluf"},
+    {"name": "Carwash NightClub", "zone": "Magaluf", "city": "Magaluf", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [3, 4, 5, 6], "instagram": "carwashmagaluf",
+     "address": "Punta Ballena, Magaluf"},
+    # --- Alcúdia / Port d'Alcúdia ---
+    {"name": "Banana Club", "zone": "Port d'Alcúdia", "city": "Alcúdia", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [1, 3, 4, 5], "instagram": "bananaclubmallorca",
+     "address": "Port d'Alcúdia (también Magaluf y Cala Rajada)"},
+    {"name": "Menta Disco", "zone": "Port d'Alcúdia", "city": "Alcúdia", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [], "instagram": "mentadisco",
+     "address": "Port d'Alcúdia · (cerrada esta temporada)"},
+    # --- Can Picafort ---
+    {"name": "Danzû", "zone": "Can Picafort", "city": "Can Picafort", "type": "promotor",
+     "scraper_slug": "danzu", "free_entry": False, "open_days": [4, 5], "instagram": "danzu.events",
+     "address": "Can Picafort"},
+    {"name": "Skau", "zone": "Can Picafort", "city": "Can Picafort", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [4, 5, 6], "instagram": "skaudisco",
+     "address": "Can Picafort"},
+    {"name": "Charly's", "zone": "Can Picafort", "city": "Can Picafort", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "",
+     "address": "Can Picafort"},
+    # --- Cala Rajada ---
+    {"name": "Keops", "zone": "Cala Rajada", "city": "Cala Rajada", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [3, 4, 5, 6], "instagram": "keopsclub",
+     "address": "Cala Rajada"},
+    {"name": "Angel's", "zone": "Cala Rajada", "city": "Cala Rajada", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [4, 5, 6], "instagram": "",
+     "address": "Cala Rajada"},
+    # --- Santa Ponsa ---
+    {"name": "Disco Inferno", "zone": "Santa Ponsa", "city": "Santa Ponsa", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [4, 5, 6], "instagram": "",
+     "address": "Santa Ponsa"},
+    # --- Otros conocidos ---
+    {"name": "Club Milano", "zone": "Mallorca", "city": "Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "clubmilano",
+     "address": "Mallorca"},
+]
+
+
+async def seed_venue_directory():
+    """Idempotent seed of the 'venues' directory collection."""
+    try:
+        for i, v in enumerate(_SEED_DIRECTORY):
+            existing = await db.venues.find_one({"name": v["name"], "zone": v["zone"]})
+            if existing:
+                continue
+            doc = {
+                "id": str(uuid.uuid4()),
+                "order": i,
+                "active": True,
+                "image_url": "",
+                "description": "",
+                **v,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.venues.insert_one(doc)
+        logger.info(f"Seeded venue directory: {len(_SEED_DIRECTORY)} locales")
+    except Exception as e:
+        logger.warning(f"seed_venue_directory failed: {e}")
+
+
+class VenueInput(BaseModel):
+    name: str
+    zone: str = "Mallorca"
+    city: str = "Mallorca"
+    type: str = "discoteca"          # discoteca | pub | beach_club | promotor
+    scraper_slug: str = ""
+    free_entry: bool = False
+    open_days: List[int] = []
+    instagram: str = ""
+    address: str = ""
+    image_url: str = ""
+    description: str = ""
+    active: bool = True
+    order: int = 100
+
+
+async def _venue_event_counts() -> dict:
+    """Map scraper_venue_id -> count of upcoming events (date >= today)."""
+    today = date.today().isoformat()
+    counts = {}
+    try:
+        pipeline = [
+            {"$match": {"date": {"$gte": today}, "scraper_venue_id": {"$ne": None}}},
+            {"$group": {"_id": "$scraper_venue_id", "n": {"$sum": 1}}},
+        ]
+        async for r in db.events.aggregate(pipeline):
+            counts[r["_id"]] = r["n"]
+    except Exception:
+        pass
+    return counts
+
+
+@app.get("/api/venues")
+async def list_venues(zone: str = None, type: str = None, user: dict = Depends(get_current_user)):
+    q = {"active": True}
+    if zone:
+        q["zone"] = zone
+    if type:
+        q["type"] = type
+    venues = []
+    async for v in db.venues.find(q, {"_id": 0}).sort([("order", 1), ("name", 1)]):
+        venues.append(v)
+    # link fourvenues slug -> scraper venue id -> upcoming events count
+    slug_to_id = {}
+    async for s in db.scraped_venues.find({}, {"_id": 0, "slug": 1, "id": 1}):
+        if s.get("slug"):
+            slug_to_id[s["slug"]] = s["id"]
+    counts = await _venue_event_counts()
+    for v in venues:
+        vid = slug_to_id.get(v.get("scraper_slug") or "")
+        v["upcoming_events"] = counts.get(vid, 0) if vid else 0
+    return venues
+
+
+@app.get("/api/venues/{venue_id}")
+async def get_venue(venue_id: str, user: dict = Depends(get_current_user)):
+    v = await db.venues.find_one({"id": venue_id}, {"_id": 0})
+    if not v:
+        raise HTTPException(status_code=404, detail="Local no encontrado")
+    events = []
+    slug = v.get("scraper_slug") or ""
+    if slug:
+        sv = await db.scraped_venues.find_one({"slug": slug}, {"_id": 0, "id": 1})
+        if sv:
+            today = date.today().isoformat()
+            async for e in db.events.find(
+                {"scraper_venue_id": sv["id"], "date": {"$gte": today}}, {"_id": 0}
+            ).sort("date", 1).limit(30):
+                events.append({
+                    "id": e["id"], "name": e["name"], "date": e["date"], "time": e.get("time", ""),
+                    "image_url": e.get("image_url", ""), "sale_state": e.get("sale_state"),
+                    "current_price": next((t.get("price") for t in (e.get("price_tiers") or []) if not t.get("sold_out")), None),
+                })
+    v["events"] = events
+    v["upcoming_events"] = len(events)
+    return v
+
+
+@app.get("/api/venues/meta/zones")
+async def venue_zones(user: dict = Depends(get_current_user)):
+    zones = await db.venues.distinct("zone", {"active": True})
+    return {"zones": sorted(zones)}
+
+
+@app.post("/api/admin/venues")
+async def admin_create_venue(inp: VenueInput, admin: dict = Depends(require_admin)):
+    doc = {"id": str(uuid.uuid4()), **inp.model_dump(),
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.venues.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@app.put("/api/admin/venues/{venue_id}")
+async def admin_update_venue(venue_id: str, inp: VenueInput, admin: dict = Depends(require_admin)):
+    r = await db.venues.update_one({"id": venue_id}, {"$set": inp.model_dump()})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Local no encontrado")
+    return await db.venues.find_one({"id": venue_id}, {"_id": 0})
+
+
+@app.delete("/api/admin/venues/{venue_id}")
+async def admin_delete_venue(venue_id: str, admin: dict = Depends(require_admin)):
+    r = await db.venues.delete_one({"id": venue_id})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Local no encontrado")
+    return {"ok": True}
 
 
 # =========================================================================

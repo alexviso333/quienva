@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import AdminMomentPanel from "@/components/AdminMomentPanel";
 import AdminScrapersPanel from "@/components/AdminScrapersPanel";
+import AdminVenuesPanel from "@/components/AdminVenuesPanel";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
@@ -111,6 +112,7 @@ export default function AdminDashboard() {
 
       {/* Scrapers — automatic event ingestion */}
       <AdminScrapersPanel />
+      <AdminVenuesPanel />
 
       {/* Activity chart */}
       {dashboard?.activity_30d && (
