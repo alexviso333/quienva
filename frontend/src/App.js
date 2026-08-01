@@ -19,6 +19,8 @@ import ChatThread from "@/pages/ChatThread";
 import Rankings from "@/pages/Rankings";
 import Memories from "@/pages/Memories";
 import Locales from "@/pages/Locales";
+import MapPage from "@/pages/MapPage";
+import NotifPrefs from "@/pages/NotifPrefs";
 import { Loader2 } from "lucide-react";
 
 function LoadingScreen() {
@@ -61,6 +63,8 @@ function AppRouter() {
       <Route path="/top" element={<ProtectedRoute><Rankings /></ProtectedRoute>} />
       <Route path="/memories" element={<ProtectedRoute><Memories /></ProtectedRoute>} />
       <Route path="/locales" element={<ProtectedRoute><Locales /></ProtectedRoute>} />
+      <Route path="/mapa" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
+      <Route path="/ajustes/avisos" element={<ProtectedRoute><NotifPrefs /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
       <Route path="/admin/dashboard" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/feed" replace />} />

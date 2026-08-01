@@ -267,6 +267,14 @@ export default function Profile() {
         )}
 
         <button
+          data-testid="notif-prefs-btn"
+          onClick={() => navigate("/ajustes/avisos")}
+          className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform mt-2"
+        >
+          <Bell className="w-4 h-4" /> Ajustes de avisos
+        </button>
+
+        <button
           data-testid="logout-btn"
           onClick={async () => {
             await logout();

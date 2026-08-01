@@ -1,10 +1,11 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { Home, Users, MessageCircle, Bell, User } from "lucide-react";
+import { Home, Users, MessageCircle, Bell, User, Map } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 
 const items = [
   { to: "/feed", icon: Home, label: "Planes", testid: "nav-feed" },
+  { to: "/mapa", icon: Map, label: "Mapa", testid: "nav-mapa" },
   { to: "/friends", icon: Users, label: "Amigos", testid: "nav-friends" },
   { to: "/chats", icon: MessageCircle, label: "Chats", testid: "nav-chats" },
   { to: "/notifications", icon: Bell, label: "Avisos", testid: "nav-notifications" },
@@ -32,7 +33,7 @@ export function BottomNav() {
       className="qv-glass fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-50 border-t border-white/10"
       data-testid="bottom-nav"
     >
-      <div className="grid grid-cols-5 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="grid grid-cols-6 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {items.map(({ to, icon: Icon, label, testid }) => {
           const badgeCount = to === "/notifications" ? unread : to === "/chats" ? dmUnread : 0;
           return (

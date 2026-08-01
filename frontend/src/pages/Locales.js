@@ -26,7 +26,13 @@ function VenueCard({ v }) {
   const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.name + " " + (v.address || v.city))}`;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3" data-testid={`venue-${v.id}`}>
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] overflow-hidden" data-testid={`venue-${v.id}`}>
+      {v.image_url && (
+        <div className="h-24 w-full bg-cover bg-center" style={{ backgroundImage: `url(${v.image_url})` }}>
+          <div className="h-full w-full bg-gradient-to-t from-[#12040a] via-transparent to-transparent" />
+        </div>
+      )}
+      <div className="p-3">
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -128,6 +134,7 @@ function VenueCard({ v }) {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

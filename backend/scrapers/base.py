@@ -22,6 +22,9 @@ class ScrapedEvent:
     sale_state: str = "a_la_venta"   # a_la_venta | pocas_entradas | agotado | no_a_la_venta
     currency: str = "EUR"
     description: str = ""
+    lat: Optional[float] = None      # venue latitude (from source geo)
+    lng: Optional[float] = None      # venue longitude
+    venue_image: str = ""            # organization/venue cover image
 
     def to_dict(self) -> dict:
         return asdict(self)

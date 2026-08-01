@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pywebpush import webpush, WebPushException
 import httpx
+import hashlib
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -2272,7 +2273,20 @@ async def serve_file(path: str):
 # ---------------------------------------------------------------------------
 # Notifications
 # ---------------------------------------------------------------------------
+_NOTIF_PREF_KEYS = [
+    "new_event", "tickets_on_sale", "tickets_low_stock", "tickets_sold_out",
+    "tickets_price_down", "tickets_price_up", "friend_going",
+]
+DEFAULT_NOTIF_PREFS = {k: True for k in _NOTIF_PREF_KEYS}
+
+
 async def create_notification(user_id: str, ntype: str, message: str, data: dict):
+    # Respect per-user notification preferences for gated categories.
+    if ntype in _NOTIF_PREF_KEYS:
+        u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "notif_prefs": 1})
+        prefs = (u or {}).get("notif_prefs") or {}
+        if prefs.get(ntype) is False:
+            return
     await db.notifications.insert_one({
         "id": str(uuid.uuid4()),
         "user_id": user_id,
@@ -2351,6 +2365,24 @@ async def mark_read(notif_id: str, user: dict = Depends(get_current_user)):
 async def mark_all_read(user: dict = Depends(get_current_user)):
     await db.notifications.update_many({"user_id": user["user_id"]}, {"$set": {"read": True}})
     return {"ok": True}
+
+
+class NotifPrefsInput(BaseModel):
+    prefs: dict
+
+
+@api_router.get("/me/notif-prefs")
+async def get_notif_prefs(user: dict = Depends(get_current_user)):
+    prefs = {**DEFAULT_NOTIF_PREFS, **(user.get("notif_prefs") or {})}
+    return {"prefs": prefs, "keys": _NOTIF_PREF_KEYS}
+
+
+@api_router.put("/me/notif-prefs")
+async def set_notif_prefs(inp: NotifPrefsInput, user: dict = Depends(get_current_user)):
+    clean = {k: bool(v) for k, v in (inp.prefs or {}).items() if k in _NOTIF_PREF_KEYS}
+    merged = {**DEFAULT_NOTIF_PREFS, **(user.get("notif_prefs") or {}), **clean}
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"notif_prefs": merged}})
+    return {"prefs": merged}
 
 
 # ---------------------------------------------------------------------------
@@ -3744,6 +3776,10 @@ async def on_startup():
         await seed_venue_directory()
     except Exception as _:
         pass
+    try:
+        await enrich_venue_directory()
+    except Exception as _:
+        pass
     await seed_events()
     global scheduler
     try:
@@ -4010,8 +4046,6 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/palma-events"},
     {"name": "Velvet", "slug": "velvet-club",
      "url": "https://site.fourvenues.com/es/velvet-club"},
-    {"name": "Megasport", "slug": "megasport",
-     "url": "https://site.fourvenues.com/es/megasport"},
     {"name": "Boomerang", "slug": "boomerang",
      "url": "https://site.fourvenues.com/es/boomerang"},
     {"name": "BCM Planet Dance", "slug": "bcm-mallorca", "city": "Magaluf",
@@ -4031,6 +4065,11 @@ async def seed_scraped_venues():
     """Idempotent seed of the venues collection. Also migrates the two original
     venues (Fitz/Amok) to the universal fourvenues_api adapter + slug."""
     try:
+        # Cleanup: Megasport is a gym, not a club — remove it and its events.
+        _ms = await db.scraped_venues.find_one({"slug": "megasport"})
+        if _ms:
+            await db.events.delete_many({"scraper_venue_id": _ms["id"]})
+            await db.scraped_venues.delete_one({"id": _ms["id"]})
         # Migrate legacy Fitz/Amok docs to the new universal adapter.
         _migrations = {
             "Fitz Mallorca": {"slug": "fitz-mallorca", "url": "https://site.fourvenues.com/es/fitz-mallorca"},
@@ -4102,6 +4141,9 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
             "source": "scraper",
             "external_id": se.external_id,
             "scraper_venue_id": venue.get("id"),
+            "lat": getattr(se, "lat", None),
+            "lng": getattr(se, "lng", None),
+            "venue_image": getattr(se, "venue_image", "") or "",
             "created_at": now_iso,
             "last_scraped_at": now_iso,
         }
@@ -4128,6 +4170,11 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
         patch["time"] = se.time
     if se.image_url and not existing.get("image_url"):
         patch["image_url"] = se.image_url
+    if getattr(se, "lat", None) is not None and existing.get("lat") is None:
+        patch["lat"] = se.lat
+        patch["lng"] = se.lng
+    if getattr(se, "venue_image", "") and not existing.get("venue_image"):
+        patch["venue_image"] = se.venue_image
     if se.ticket_url and not existing.get("commission_url"):
         patch["commission_url"] = se.ticket_url
         patch["has_commission"] = True
@@ -4221,6 +4268,10 @@ async def run_all_scrapers():
     total_new = sum(r["created"] for r in results)
     total_upd = sum(r["updated"] for r in results)
     logger.info(f"[scrapers] Completed: {len(results)} venues, {total_new} new events, {total_upd} updated")
+    try:
+        await enrich_venue_directory()
+    except Exception:
+        pass
     return results
 
 
@@ -4389,9 +4440,6 @@ _SEED_DIRECTORY = [
     {"name": "Luna Palma", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
      "scraper_slug": "luna-palma", "free_entry": False, "open_days": [4, 5], "instagram": "",
      "address": "Palma de Mallorca"},
-    {"name": "Megasport", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
-     "scraper_slug": "megasport", "free_entry": False, "open_days": [4, 5], "instagram": "megasportpalma",
-     "address": "Carrer dels Fertilitzants, 8, 07011 Palma"},
     {"name": "Boomerang", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
      "scraper_slug": "boomerang", "free_entry": False, "open_days": [4, 5], "instagram": "",
      "address": "Carrer Gremi Teixidors, 27, 07009 Palma"},
@@ -4459,6 +4507,7 @@ _SEED_DIRECTORY = [
 async def seed_venue_directory():
     """Idempotent seed of the 'venues' directory collection."""
     try:
+        await db.venues.delete_many({"name": "Megasport"})
         for i, v in enumerate(_SEED_DIRECTORY):
             existing = await db.venues.find_one({"name": v["name"], "zone": v["zone"]})
             if existing:
@@ -4478,6 +4527,70 @@ async def seed_venue_directory():
         logger.warning(f"seed_venue_directory failed: {e}")
 
 
+_ZONE_COORDS = {
+    "Palma · Marítimo": (39.5628, 2.6289),
+    "Palma · Porto Pi": (39.5556, 2.6217),
+    "Palma · Dàrsena": (39.5606, 2.6300),
+    "Palma": (39.5696, 2.6502),
+    "Magaluf": (39.5089, 2.5330),
+    "Port d'Alcúdia": (39.8386, 3.1206),
+    "Can Picafort": (39.7656, 3.1568),
+    "Cala Rajada": (39.7095, 3.4630),
+    "Santa Ponsa": (39.5111, 2.4790),
+    "Mallorca": (39.6953, 3.0176),
+}
+
+
+async def enrich_venue_directory():
+    """Derive coords, cover image and opening days for directory venues from
+    their scraped events. open_days is only auto-set when not manually edited."""
+    try:
+        slug_to_id = {}
+        async for s in db.scraped_venues.find({}, {"_id": 0, "slug": 1, "id": 1}):
+            if s.get("slug"):
+                slug_to_id[s["slug"]] = s["id"]
+        today = date.today().isoformat()
+        async for v in db.venues.find({}):
+            patch = {}
+            sid = slug_to_id.get(v.get("scraper_slug") or "")
+            # Coordinates
+            if v.get("lat") is None:
+                lat = lng = None
+                if sid:
+                    e = await db.events.find_one({"scraper_venue_id": sid, "lat": {"$ne": None}},
+                                                 {"_id": 0, "lat": 1, "lng": 1})
+                    if e:
+                        lat, lng = e.get("lat"), e.get("lng")
+                if lat is None:
+                    base = _ZONE_COORDS.get(v.get("zone")) or _ZONE_COORDS["Mallorca"]
+                    # Deterministic small jitter so venues in the same zone don't stack.
+                    h = int(hashlib.md5((v.get("name") or v["id"]).encode()).hexdigest(), 16)
+                    lat = base[0] + ((h % 100) - 50) / 12000.0
+                    lng = base[1] + (((h // 100) % 100) - 50) / 12000.0
+                patch["lat"], patch["lng"] = lat, lng
+            # Cover image
+            if not v.get("image_url") and sid:
+                e = await db.events.find_one({"scraper_venue_id": sid, "venue_image": {"$nin": ["", None]}},
+                                             {"_id": 0, "venue_image": 1})
+                if e and e.get("venue_image"):
+                    patch["image_url"] = e["venue_image"]
+            # Auto opening days from upcoming events (unless admin edited)
+            if not v.get("open_days_manual") and sid:
+                days = set()
+                async for e in db.events.find({"scraper_venue_id": sid, "date": {"$gte": today}},
+                                              {"_id": 0, "date": 1}):
+                    try:
+                        days.add(datetime.strptime(e["date"], "%Y-%m-%d").weekday())
+                    except Exception:
+                        pass
+                if days:
+                    patch["open_days"] = sorted(days)
+            if patch:
+                await db.venues.update_one({"id": v["id"]}, {"$set": patch})
+    except Exception as e:
+        logger.warning(f"enrich_venue_directory failed: {e}")
+
+
 class VenueInput(BaseModel):
     name: str
     zone: str = "Mallorca"
@@ -4486,10 +4599,13 @@ class VenueInput(BaseModel):
     scraper_slug: str = ""
     free_entry: bool = False
     open_days: List[int] = []
+    open_days_manual: bool = False
     instagram: str = ""
     address: str = ""
     image_url: str = ""
     description: str = ""
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     active: bool = True
     order: int = 100
 
@@ -4573,7 +4689,9 @@ async def admin_create_venue(inp: VenueInput, admin: dict = Depends(require_admi
 
 @app.put("/api/admin/venues/{venue_id}")
 async def admin_update_venue(venue_id: str, inp: VenueInput, admin: dict = Depends(require_admin)):
-    r = await db.venues.update_one({"id": venue_id}, {"$set": inp.model_dump()})
+    data = inp.model_dump()
+    data["open_days_manual"] = True  # admin took control of opening days
+    r = await db.venues.update_one({"id": venue_id}, {"$set": data})
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Local no encontrado")
     return await db.venues.find_one({"id": venue_id}, {"_id": 0})

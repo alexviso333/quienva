@@ -10,6 +10,7 @@ import { StoriesBar } from "@/components/Stories";
 import { StreakBanner } from "@/components/StreakBanner";
 import { NextBadgeBanner } from "@/components/NextBadgeBanner";
 import { AvatarCircle } from "@/components/AvatarCircle";
+import FeedPlans from "@/components/FeedPlans";
 import { useAuth } from "@/context/AuthContext";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2 } from "lucide-react";
@@ -234,35 +235,52 @@ export default function Feed() {
           <div className="flex justify-center py-20">
             <Loader2 className="w-7 h-7 text-qv-primary animate-spin" />
           </div>
-        ) : events && events.length > 0 ? (
-          compact ? (
-            <div className="grid grid-cols-2 gap-3" data-testid="feed-compact-grid">
-              {events.map((ev, i) => (
-                <CompactEventCard key={ev.id} event={ev} index={i} />
-              ))}
-            </div>
+        ) : isPastView || isDiscover ? (
+          events && events.length > 0 ? (
+            compact ? (
+              <div className="grid grid-cols-2 gap-3" data-testid="feed-compact-grid">
+                {events.map((ev, i) => (
+                  <CompactEventCard key={ev.id} event={ev} index={i} />
+                ))}
+              </div>
+            ) : (
+              events.map((ev, i) => (
+                <EventCard
+                  key={ev.id}
+                  event={ev}
+                  index={i}
+                  highlight={highlightId === ev.id}
+                  cardRef={(el) => (cardRefs.current[ev.id] = el)}
+                  pending={setStatus.isPending}
+                  onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
+                />
+              ))
+            )
           ) : (
-            events.map((ev, i) => (
-              <EventCard
-                key={ev.id}
-                event={ev}
-                index={i}
-                highlight={highlightId === ev.id}
-                cardRef={(el) => (cardRefs.current[ev.id] = el)}
-                pending={setStatus.isPending}
-                onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
-              />
-            ))
+            <div className="text-center py-20 px-6" data-testid="feed-empty">
+              <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
+              <p className="text-white/60">
+                {isPastView ? "Aún no hay recuerdos guardados." : "No hay planes con estos filtros."}
+              </p>
+              <p className="text-white/40 text-sm mt-1">
+                {isPastView ? "Marca 'Estuve aquí' en eventos pasados." : "Prueba a cambiar la fecha o el género."}
+              </p>
+            </div>
           )
+        ) : events && events.length > 0 ? (
+          <FeedPlans
+            events={events}
+            compact={compact}
+            highlightId={highlightId}
+            cardRefs={cardRefs}
+            pending={setStatus.isPending}
+            onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
+          />
         ) : (
           <div className="text-center py-20 px-6" data-testid="feed-empty">
             <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
-            <p className="text-white/60">
-              {isPastView ? "Aún no hay recuerdos guardados." : "No hay planes con estos filtros."}
-            </p>
-            <p className="text-white/40 text-sm mt-1">
-              {isPastView ? "Marca 'Estuve aquí' en eventos pasados." : "Prueba a cambiar la fecha o el género."}
-            </p>
+            <p className="text-white/60">No hay planes con estos filtros.</p>
+            <p className="text-white/40 text-sm mt-1">Prueba a cambiar la fecha o el género.</p>
           </div>
         )}
       </div>

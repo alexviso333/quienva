@@ -179,6 +179,25 @@ class FourVenuesApiScraper(Scraper):
         loc = it.get("location") or {}
         address = str(loc.get("addressComplete") or "")
 
+        # Geo coordinates (for the map) — be defensive about the shape.
+        lat = lng = None
+        geo = loc.get("geo") or loc.get("coordinates") or {}
+        if isinstance(geo, dict):
+            lat = geo.get("lat") or geo.get("latitude")
+            lng = geo.get("lng") or geo.get("lon") or geo.get("longitude")
+        elif isinstance(geo, (list, tuple)) and len(geo) == 2:
+            lat, lng = geo[1], geo[0]
+        if lat is None:
+            lat = loc.get("lat") or loc.get("latitude")
+        if lng is None:
+            lng = loc.get("lng") or loc.get("longitude")
+        try:
+            lat = float(lat) if lat is not None else None
+            lng = float(lng) if lng is not None else None
+        except Exception:
+            lat = lng = None
+        venue_image = str(org.get("cover") or org.get("image") or org.get("logo") or "")
+
         ticket_url = f"{SITE_BASE}/{self.slug}/events/{code}" if code else self.url
 
         price_tiers, sale_state = self._pricing(tickets)
@@ -196,6 +215,9 @@ class FourVenuesApiScraper(Scraper):
             sale_state=sale_state,
             currency="EUR",
             description=str(it.get("description") or "")[:1000],
+            lat=lat,
+            lng=lng,
+            venue_image=venue_image,
         )
 
     def _pricing(self, tickets: Optional[list]) -> tuple[list, str]:
