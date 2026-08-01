@@ -8,6 +8,7 @@ import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff
 import { toast } from "sonner";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import AdminMomentPanel from "@/components/AdminMomentPanel";
+import AdminScrapersPanel from "@/components/AdminScrapersPanel";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
@@ -107,6 +108,9 @@ export default function AdminDashboard() {
 
       {/* El Momento — admin controls */}
       <AdminMomentPanel />
+
+      {/* Scrapers — automatic event ingestion */}
+      <AdminScrapersPanel />
 
       {/* Activity chart */}
       {dashboard?.activity_30d && (

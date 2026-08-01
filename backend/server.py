@@ -3714,9 +3714,17 @@ async def on_startup():
         await db.ticket_purchases.create_index([("user_id", 1), ("confirmed", 1)])
         await db.event_follows.create_index([("user_id", 1), ("event_id", 1)], unique=True)
         await db.event_follows.create_index("event_id")
+        await db.scraped_venues.create_index("name")
+        await db.scraped_venues.create_index("active")
+        await db.events.create_index("external_id")
+        await db.events.create_index("source")
     except Exception as e:
         logger.warning(f"Index warn: {e}")
     await seed_admin()
+    try:
+        await seed_scraped_venues()
+    except Exception as _:
+        pass
     await seed_events()
     global scheduler
     try:
@@ -3735,8 +3743,13 @@ async def on_startup():
         # every day, assigns 01:00-06:00 slot to today's events not yet scheduled.
         scheduler.add_job(daily_randomize_moments, "cron", hour=18, minute=0,
                           id="daily_randomize_moments", replace_existing=True)
+        # Scrapers — refresh all active venues every 30 min. First run 60s after
+        # startup so a fresh deploy warms up the events feed quickly.
+        scheduler.add_job(run_all_scrapers, "interval", minutes=30,
+                          id="scrapers_all", replace_existing=True,
+                          next_run_time=datetime.now(timezone.utc) + timedelta(seconds=60))
         scheduler.start()
-        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00)")
+        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00 + scrapers cada 30min)")
     except Exception as e:
         logger.error(f"Scheduler init falló: {e}")
 
@@ -3925,6 +3938,275 @@ async def next_badges(user: dict = Depends(get_current_user), limit: int = Query
     return out[:limit]
 
 app.include_router(api_router)
+
+
+# =========================================================================
+# SCRAPERS — automatic event ingestion from public club websites
+# =========================================================================
+from scrapers import build_scraper as _build_scraper, ScrapedEvent as _ScrapedEvent
+from scrapers.base import normalize_venue_key as _norm_venue
+
+# Preseeded list of venues (Palma de Mallorca). Admin can add more via UI.
+# Only clubs with a working public scraper are included. Others need manual mode.
+_SEED_VENUES = [
+    {
+        "name": "Fitz Mallorca",
+        "city": "Palma de Mallorca",
+        "adapter_type": "fourvenues_public_api",
+        "url": "https://fitzmallorca.com",
+        "active": True,
+    },
+    {
+        "name": "Amok Mallorca",
+        "city": "Palma de Mallorca",
+        "adapter_type": "nextjs_html",
+        "url": "https://www.amokmallorca.com",
+        "active": True,
+    },
+]
+
+
+async def seed_scraped_venues():
+    """Idempotent seed of the venues collection."""
+    try:
+        for v in _SEED_VENUES:
+            existing = await db.scraped_venues.find_one({"name": v["name"]})
+            if existing:
+                continue
+            doc = {**v, "id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat(),
+                   "last_run_at": None, "last_run_ok": None, "last_run_events": 0,
+                   "last_run_new": 0, "last_run_updated": 0, "last_run_error": None}
+            await db.scraped_venues.insert_one(doc)
+        logger.info(f"Seeded scraped_venues: {len(_SEED_VENUES)} venues")
+    except Exception as e:
+        logger.warning(f"seed_scraped_venues failed: {e}")
+
+
+async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
+    """Diff a single scraped event against the DB and apply changes:
+    - CREATE if not found → fires "new event" push to city.
+    - UPDATE fields if found; if sale_state transitioned or price went up,
+      fires the corresponding notification (same logic as manual admin).
+    Returns: 'created' | 'updated' | 'unchanged' | 'skipped'.
+    """
+    venue_name = venue.get("name") or ""
+    city = venue.get("city") or "Palma de Mallorca"
+    # 1) Lookup by external_id (most reliable)
+    existing = await db.events.find_one({"external_id": se.external_id}, {"_id": 0})
+    # 2) Fallback: venue + date (user might have created it manually)
+    if not existing:
+        # Match by normalized venue name + date
+        norm = _norm_venue(venue_name)
+        async for c in db.events.find({"date": se.date}, {"_id": 0}):
+            if _norm_venue(c.get("venue", "")) == norm:
+                existing = c
+                break
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if not existing:
+        # CREATE
+        ev = {
+            "id": str(uuid.uuid4()),
+            "name": se.name,
+            "venue": venue_name or se.venue,
+            "address": "",
+            "date": se.date,
+            "time": se.time or "",
+            "image_url": se.image_url,
+            "genre": (se.genre or "").split(",")[0].strip()[:40],
+            "city": city,
+            "has_commission": bool(se.ticket_url),
+            "commission_url": se.ticket_url or "",
+            "more_info_url": "",
+            "price_tiers": se.price_tiers or [],
+            "sale_state": se.sale_state or "no_a_la_venta",
+            "currency": se.currency or "EUR",
+            "source": "scraper",
+            "external_id": se.external_id,
+            "scraper_venue_id": venue.get("id"),
+            "created_at": now_iso,
+            "last_scraped_at": now_iso,
+        }
+        await db.events.insert_one(ev)
+        _invalidate_stats_cache()
+        # Fire "new event" push (fire-and-forget)
+        try:
+            asyncio.create_task(_notify_new_event_city(ev))
+        except Exception:
+            pass
+        return "created"
+
+    # UPDATE — merge scraped fields but respect admin's manual overrides where
+    # sensible. We DO overwrite: name, date, time, image_url (only if empty),
+    # commission_url (only if empty), price_tiers, sale_state.
+    old_state = existing.get("sale_state", "no_a_la_venta")
+    old_tiers = existing.get("price_tiers", []) or []
+    patch = {"last_scraped_at": now_iso, "external_id": se.external_id}
+    if not existing.get("source"):
+        patch["source"] = "scraper"
+    if se.name and se.name != existing.get("name"):
+        patch["name"] = se.name
+    if se.time and se.time != existing.get("time"):
+        patch["time"] = se.time
+    if se.image_url and not existing.get("image_url"):
+        patch["image_url"] = se.image_url
+    if se.ticket_url and not existing.get("commission_url"):
+        patch["commission_url"] = se.ticket_url
+        patch["has_commission"] = True
+    if se.genre and not existing.get("genre"):
+        patch["genre"] = se.genre.split(",")[0].strip()[:40]
+    # Pricing
+    if se.price_tiers != old_tiers:
+        patch["price_tiers"] = se.price_tiers
+    if se.sale_state and se.sale_state != old_state:
+        patch["sale_state"] = se.sale_state
+    if len(patch) == 2:  # only meta fields (last_scraped_at, external_id)
+        await db.events.update_one({"id": existing["id"]}, {"$set": patch})
+        return "unchanged"
+    await db.events.update_one({"id": existing["id"]}, {"$set": patch})
+    _invalidate_stats_cache()
+    # Fire notifications on transitions (same rules as manual pricing endpoint)
+    new_state = patch.get("sale_state", old_state)
+    new_tiers = patch.get("price_tiers", old_tiers)
+    transition = _describe_sale_transition(old_state, new_state)
+    if transition:
+        kind, tmpl = transition
+        body = tmpl.format(name=existing["name"])
+        await _notify_event_audience(existing["id"], kind, existing["name"], body)
+    new_price = _detect_price_increase(old_tiers, new_tiers)
+    if new_price is not None and new_state == "a_la_venta":
+        body = f"📈 Nueva fase de precios en {existing['name']}: ahora {int(new_price)}€."
+        await _notify_event_audience(existing["id"], "tickets_price_up", existing["name"], body)
+    return "updated"
+
+
+async def run_scraper_for_venue(venue: dict) -> dict:
+    """Run one venue's scraper and apply diffs. Returns a summary."""
+    start = time.time()
+    summary = {"venue_id": venue.get("id"), "venue_name": venue.get("name"), "ok": False,
+               "events": 0, "created": 0, "updated": 0, "unchanged": 0, "error": None,
+               "duration_ms": 0}
+    try:
+        scraper = _build_scraper(
+            venue["adapter_type"], venue["url"],
+            venue_name=venue.get("name", ""),
+            city=venue.get("city", "Palma de Mallorca"),
+        )
+        events = await scraper.fetch()
+        summary["events"] = len(events)
+        for se in events:
+            try:
+                r = await _apply_scraped_event(venue, se)
+                if r in summary:
+                    summary[r] += 1
+            except Exception as e:
+                logger.warning(f"[scraper {venue.get('name')}] apply failed for {se.external_id}: {e}")
+        summary["ok"] = True
+    except Exception as e:
+        summary["error"] = str(e)[:400]
+        logger.error(f"[scraper] {venue.get('name')} failed: {e}")
+    summary["duration_ms"] = int((time.time() - start) * 1000)
+    # Save summary to venue doc
+    try:
+        await db.scraped_venues.update_one(
+            {"id": venue["id"]},
+            {"$set": {
+                "last_run_at": datetime.now(timezone.utc).isoformat(),
+                "last_run_ok": summary["ok"],
+                "last_run_events": summary["events"],
+                "last_run_new": summary["created"],
+                "last_run_updated": summary["updated"],
+                "last_run_error": summary["error"],
+                "last_run_duration_ms": summary["duration_ms"],
+            }},
+        )
+    except Exception:
+        pass
+    return summary
+
+
+async def run_all_scrapers():
+    """Run every active venue in parallel. Called by scheduler + admin trigger."""
+    venues = []
+    async for v in db.scraped_venues.find({"active": True}, {"_id": 0}):
+        venues.append(v)
+    if not venues:
+        return []
+    results = await asyncio.gather(*(run_scraper_for_venue(v) for v in venues), return_exceptions=False)
+    total_new = sum(r["created"] for r in results)
+    total_upd = sum(r["updated"] for r in results)
+    logger.info(f"[scrapers] Completed: {len(results)} venues, {total_new} new events, {total_upd} updated")
+    return results
+
+
+# ---- Admin endpoints for scraper management ----
+class ScrapedVenueInput(BaseModel):
+    name: str
+    city: str = "Palma de Mallorca"
+    adapter_type: str      # 'fourvenues_public_api' | 'nextjs_html'
+    url: str
+    active: bool = True
+
+
+@app.get("/api/admin/scrapers")
+async def admin_list_scrapers(admin: dict = Depends(require_admin)):
+    out = []
+    async for v in db.scraped_venues.find({}, {"_id": 0}).sort("name", 1):
+        out.append(v)
+    return out
+
+
+@app.post("/api/admin/scrapers")
+async def admin_create_scraper(inp: ScrapedVenueInput, admin: dict = Depends(require_admin)):
+    if inp.adapter_type not in ("fourvenues_public_api", "nextjs_html"):
+        raise HTTPException(status_code=400, detail="adapter_type inválido")
+    doc = {
+        "id": str(uuid.uuid4()),
+        **inp.model_dump(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "last_run_at": None, "last_run_ok": None, "last_run_events": 0,
+        "last_run_new": 0, "last_run_updated": 0, "last_run_error": None,
+    }
+    await db.scraped_venues.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@app.put("/api/admin/scrapers/{venue_id}")
+async def admin_update_scraper(venue_id: str, inp: ScrapedVenueInput, admin: dict = Depends(require_admin)):
+    if inp.adapter_type not in ("fourvenues_public_api", "nextjs_html"):
+        raise HTTPException(status_code=400, detail="adapter_type inválido")
+    r = await db.scraped_venues.update_one({"id": venue_id}, {"$set": inp.model_dump()})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Venue no encontrado")
+    v = await db.scraped_venues.find_one({"id": venue_id}, {"_id": 0})
+    return v
+
+
+@app.delete("/api/admin/scrapers/{venue_id}")
+async def admin_delete_scraper(venue_id: str, admin: dict = Depends(require_admin)):
+    r = await db.scraped_venues.delete_one({"id": venue_id})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Venue no encontrado")
+    return {"ok": True}
+
+
+@app.post("/api/admin/scrapers/{venue_id}/run")
+async def admin_run_scraper(venue_id: str, admin: dict = Depends(require_admin)):
+    v = await db.scraped_venues.find_one({"id": venue_id}, {"_id": 0})
+    if not v:
+        raise HTTPException(status_code=404, detail="Venue no encontrado")
+    return await run_scraper_for_venue(v)
+
+
+@app.post("/api/admin/scrapers/run-all")
+async def admin_run_all_scrapers(admin: dict = Depends(require_admin)):
+    results = await run_all_scrapers()
+    return {
+        "venues_run": len(results),
+        "total_new": sum(r["created"] for r in results),
+        "total_updated": sum(r["updated"] for r in results),
+        "results": results,
+    }
 
 
 # =========================================================================

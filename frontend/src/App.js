@@ -51,6 +51,7 @@ function AppRouter() {
       <Route path="/event/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
       <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+      <Route path="/novedades" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/users/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/chats" element={<ProtectedRoute><Chats /></ProtectedRoute>} />
