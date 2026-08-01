@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck, Trophy, MessageCircle, Images, Zap, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from "recharts";
+import AdminMomentPanel from "@/components/AdminMomentPanel";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
@@ -103,6 +104,9 @@ export default function AdminDashboard() {
         <StatBox icon={Users} value={stats?.totals.friendships} label="amistades" color="text-green-300" />
         <StatBox icon={TrendingUp} value={stats?.totals.events} label="total fiestas" color="text-pink-300" />
       </div>
+
+      {/* El Momento — admin controls */}
+      <AdminMomentPanel />
 
       {/* Activity chart */}
       {dashboard?.activity_30d && (

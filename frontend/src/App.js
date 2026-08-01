@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import PushPermissionGate from "@/components/PushPermissionGate";
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import Feed from "@/pages/Feed";
@@ -71,6 +72,7 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <AppRouter />
+          <PushPermissionGate />
         </BrowserRouter>
         <Toaster position="top-center" theme="dark" richColors />
       </AuthProvider>

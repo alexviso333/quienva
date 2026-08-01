@@ -2933,26 +2933,154 @@ async def admin_trigger_moment(event_id: str, admin: dict = Depends(require_admi
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
-    now = datetime.now(timezone.utc)
-    prompt = {
-        "id": str(uuid.uuid4()),
-        "event_id": event_id,
-        "sent_at": now.isoformat(),
-        "on_time_deadline": (now + timedelta(minutes=2)).isoformat(),
-        "expires_at": (now + timedelta(hours=6)).isoformat(),
-        "triggered_by": admin["user_id"],
+    # Un-cancel it in case it had been paused, since the admin is explicitly firing it.
+    if ev.get("moment_cancelled"):
+        await db.events.update_one({"id": event_id}, {"$set": {"moment_cancelled": False}})
+    result = await _fire_moment(ev, triggered_by=admin["user_id"])
+    return {"prompt": result["prompt"], "notified": result["notified"]}
+
+
+# =========================================================================
+# ADMIN: EL MOMENTO — daily scheduling controls
+# =========================================================================
+def _random_moment_time(event_date_iso: str) -> str:
+    """Generate a random datetime (ISO) between 01:00 and 05:59 on the night
+    of the event (i.e., calendar day after event_date)."""
+    ed = date.fromisoformat(event_date_iso)
+    party_night = ed + timedelta(days=1)
+    hour = 1 + secrets.randbelow(5)
+    minute = secrets.randbelow(60)
+    return datetime.combine(party_night, dtime(hour, minute), tzinfo=ZoneInfo("Europe/Madrid")).isoformat()
+
+
+async def _moment_event_view(ev: dict) -> dict:
+    """Return a compact view of an event for the admin moment panel."""
+    prompt = await db.moment_prompts.find_one({"event_id": ev["id"]}, {"_id": 0})
+    voy_count = await db.interests.count_documents({"event_id": ev["id"], "status": "voy"})
+    captures_count = await db.captures.count_documents({"event_id": ev["id"]})
+    return {
+        "id": ev["id"],
+        "name": ev["name"],
+        "venue": ev.get("venue", ""),
+        "date": ev["date"],
+        "time": ev.get("time", ""),
+        "planned_moment_at": ev.get("planned_moment_at"),
+        "moment_cancelled": bool(ev.get("moment_cancelled")),
+        "has_fired": bool(prompt),
+        "fired_at": prompt.get("sent_at") if prompt else None,
+        "voy_count": voy_count,
+        "captures_count": captures_count,
     }
-    await db.moment_prompts.update_one({"event_id": event_id}, {"$set": prompt}, upsert=True)
-    # Notify all voy users
-    sent = 0
-    async for it in db.interests.find({"event_id": event_id, "status": "voy"}):
-        await create_notification(
-            it["user_id"], "moment_prompt",
-            f"⚡ Es EL MOMENTO en {ev['name']}. ¡Sube una foto ya! (2 min para +30 puntos)",
-            {"event_id": event_id, "type": "moment"},
+
+
+@api_router.get("/admin/moments")
+async def admin_moments_list(admin: dict = Depends(require_admin)):
+    """List all events for tonight's "moment window": today + yesterday (for
+    after-midnight parties). Ordered by planned_moment_at (unscheduled first).
+    """
+    now = datetime.now(ZoneInfo("Europe/Madrid"))
+    today = now.date().isoformat()
+    yesterday = (now.date() - timedelta(days=1)).isoformat()
+    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    out = []
+    async for ev in db.events.find(
+        {"date": {"$in": [yesterday, today, tomorrow]}}, {"_id": 0}
+    ).sort("date", 1):
+        out.append(await _moment_event_view(ev))
+    # Sort: no time first, then earliest planned time
+    out.sort(key=lambda e: (e["planned_moment_at"] or "9999"))
+    return out
+
+
+class MomentTimeInput(BaseModel):
+    hour: int
+    minute: int = 0
+
+
+def _validate_moment_time(hour: int, minute: int):
+    if not (1 <= hour <= 5):
+        raise HTTPException(status_code=400, detail="La hora debe estar entre 01 y 05 (h)")
+    if hour == 5 and minute > 59:
+        raise HTTPException(status_code=400, detail="Máximo permitido: 05:59")
+    if not (0 <= minute <= 59):
+        raise HTTPException(status_code=400, detail="Minuto inválido")
+
+
+@api_router.put("/admin/moments/{event_id}")
+async def admin_moment_set_time(event_id: str, inp: MomentTimeInput, admin: dict = Depends(require_admin)):
+    """Set a specific planned time for the moment. Must be 01:00-05:59."""
+    _validate_moment_time(inp.hour, inp.minute)
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    party_night = date.fromisoformat(ev["date"]) + timedelta(days=1)
+    planned_dt = datetime.combine(party_night, dtime(inp.hour, inp.minute), tzinfo=ZoneInfo("Europe/Madrid"))
+    await db.events.update_one(
+        {"id": event_id},
+        {"$set": {"planned_moment_at": planned_dt.isoformat(), "moment_cancelled": False}},
+    )
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return await _moment_event_view(ev)
+
+
+@api_router.post("/admin/moments/{event_id}/randomize")
+async def admin_moment_randomize(event_id: str, admin: dict = Depends(require_admin)):
+    """Assign a new random 01:00-05:59 time to a single event."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    planned = _random_moment_time(ev["date"])
+    await db.events.update_one(
+        {"id": event_id},
+        {"$set": {"planned_moment_at": planned, "moment_cancelled": False}},
+    )
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return await _moment_event_view(ev)
+
+
+@api_router.post("/admin/moments/randomize-all")
+async def admin_moment_randomize_all(admin: dict = Depends(require_admin)):
+    """Assign a random 01:00-05:59 time to ALL events in the current window
+    (yesterday, today, tomorrow) that haven't fired yet."""
+    now = datetime.now(ZoneInfo("Europe/Madrid"))
+    today = now.date().isoformat()
+    yesterday = (now.date() - timedelta(days=1)).isoformat()
+    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    count = 0
+    async for ev in db.events.find({"date": {"$in": [yesterday, today, tomorrow]}}, {"_id": 0}):
+        # Skip if already fired
+        existing = await db.moment_prompts.find_one({"event_id": ev["id"]})
+        if existing:
+            continue
+        planned = _random_moment_time(ev["date"])
+        await db.events.update_one(
+            {"id": ev["id"]},
+            {"$set": {"planned_moment_at": planned, "moment_cancelled": False}},
         )
-        sent += 1
-    return {"prompt": prompt, "notified": sent}
+        count += 1
+    return {"updated": count}
+
+
+@api_router.post("/admin/moments/{event_id}/cancel")
+async def admin_moment_cancel(event_id: str, admin: dict = Depends(require_admin)):
+    """Pause/cancel the moment for this event tonight — it won't be triggered."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    await db.events.update_one({"id": event_id}, {"$set": {"moment_cancelled": True}})
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return await _moment_event_view(ev)
+
+
+@api_router.post("/admin/moments/{event_id}/uncancel")
+async def admin_moment_uncancel(event_id: str, admin: dict = Depends(require_admin)):
+    """Undo a previous pause — the moment will be triggered at planned_moment_at."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    await db.events.update_one({"id": event_id}, {"$set": {"moment_cancelled": False}})
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return await _moment_event_view(ev)
 
 
 @api_router.post("/events/{event_id}/moment/upload")
@@ -3375,17 +3503,22 @@ async def on_startup():
         # Auto-trigger "El Momento" every 10 minutes for events happening right now
         scheduler.add_job(auto_trigger_moments, "interval", minutes=10,
                           id="auto_moments", replace_existing=True)
+        # Daily randomizer for El Momento planned times — runs at 18:00 (Palma time)
+        # every day, assigns 01:00-06:00 slot to today's events not yet scheduled.
+        scheduler.add_job(daily_randomize_moments, "cron", hour=18, minute=0,
+                          id="daily_randomize_moments", replace_existing=True)
         scheduler.start()
-        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min)")
+        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00)")
     except Exception as e:
         logger.error(f"Scheduler init falló: {e}")
 
 
 async def auto_trigger_moments():
     """Automatically trigger 'El Momento' for events happening right now.
-    For each event whose time window is active (start_time to start_time+5h),
-    if it has 'voy' users and no prompt yet, schedule a random moment within
-    60–180 min after event start."""
+    The planned time is a random datetime between 01:00 and 06:00 on the NIGHT
+    of the event (i.e., 01:00-06:00 of event_date + 1 day, since parties peak
+    after midnight). Admin can override via /api/admin/moments/... endpoints.
+    Skips events with moment_cancelled=True."""
     try:
         now = datetime.now(ZoneInfo("Europe/Madrid"))
         today = now.date().isoformat()
@@ -3396,6 +3529,9 @@ async def auto_trigger_moments():
             candidates.append(ev)
         for ev in candidates:
             try:
+                # Skip if cancelled by admin
+                if ev.get("moment_cancelled"):
+                    continue
                 # If already has a prompt, skip
                 existing = await db.moment_prompts.find_one({"event_id": ev["id"]})
                 if existing:
@@ -3404,21 +3540,16 @@ async def auto_trigger_moments():
                 voy_count = await db.interests.count_documents({"event_id": ev["id"], "status": "voy"})
                 if voy_count == 0:
                     continue
-                # Parse event start datetime
-                start_str = ev.get("time") or "22:00"
-                try:
-                    hh, mm = start_str.split(":")[:2]
-                    hh, mm = int(hh), int(mm)
-                except Exception:
-                    hh, mm = 22, 0
                 event_date = date.fromisoformat(ev["date"])
-                event_start = datetime.combine(event_date, dtime(hh, mm), tzinfo=ZoneInfo("Europe/Madrid"))
                 # Check if we plan a moment time; store it in the event doc so it's deterministic
                 planned = ev.get("planned_moment_at")
                 if not planned:
-                    # Pick a random offset between 60 and 180 minutes after start
-                    offset_min = secrets.randbelow(121) + 60
-                    planned_dt = event_start + timedelta(minutes=offset_min)
+                    # Pick a random datetime between 01:00 and 06:00 on the party NIGHT
+                    # (calendar day AFTER event_date; parties peak after midnight)
+                    party_night = event_date + timedelta(days=1)
+                    hour = 1 + secrets.randbelow(5)  # 1, 2, 3, 4, or 5 (i.e. 01:00–05:59)
+                    minute = secrets.randbelow(60)
+                    planned_dt = datetime.combine(party_night, dtime(hour, minute), tzinfo=ZoneInfo("Europe/Madrid"))
                     planned = planned_dt.isoformat()
                     await db.events.update_one({"id": ev["id"]}, {"$set": {"planned_moment_at": planned}})
                 planned_dt = datetime.fromisoformat(planned)
@@ -3426,29 +3557,63 @@ async def auto_trigger_moments():
                     planned_dt = planned_dt.replace(tzinfo=ZoneInfo("Europe/Madrid"))
                 # Trigger if we've reached planned_dt and we're not more than 4h past it
                 if planned_dt <= now <= planned_dt + timedelta(hours=4):
-                    now_utc = datetime.now(timezone.utc)
-                    prompt = {
-                        "id": str(uuid.uuid4()),
-                        "event_id": ev["id"],
-                        "sent_at": now_utc.isoformat(),
-                        "on_time_deadline": (now_utc + timedelta(minutes=2)).isoformat(),
-                        "expires_at": (now_utc + timedelta(hours=6)).isoformat(),
-                        "triggered_by": "auto",
-                    }
-                    await db.moment_prompts.insert_one(prompt)
-                    notified = 0
-                    async for it in db.interests.find({"event_id": ev["id"], "status": "voy"}):
-                        await create_notification(
-                            it["user_id"], "moment_prompt",
-                            f"⚡ Es EL MOMENTO en {ev['name']}. ¡Sube una foto ya! (2 min para +30 puntos)",
-                            {"event_id": ev["id"], "type": "moment"},
-                        )
-                        notified += 1
-                    logger.info(f"Auto moment triggered for {ev['name']} → {notified} users")
+                    await _fire_moment(ev, triggered_by="auto")
+                    logger.info(f"Auto moment triggered for {ev['name']}")
             except Exception as e:
                 logger.warning(f"auto_moment inner failed for event {ev.get('id')}: {e}")
     except Exception as e:
         logger.error(f"auto_trigger_moments failed: {e}")
+
+
+async def _fire_moment(ev: dict, triggered_by: str = "auto") -> dict:
+    """Create the moment prompt for an event and notify all 'voy' users
+    (both in-app and web push). Idempotent-ish (upserts the prompt)."""
+    now_utc = datetime.now(timezone.utc)
+    prompt = {
+        "id": str(uuid.uuid4()),
+        "event_id": ev["id"],
+        "sent_at": now_utc.isoformat(),
+        "on_time_deadline": (now_utc + timedelta(minutes=2)).isoformat(),
+        "expires_at": (now_utc + timedelta(hours=6)).isoformat(),
+        "triggered_by": triggered_by,
+    }
+    await db.moment_prompts.update_one({"event_id": ev["id"]}, {"$set": prompt}, upsert=True)
+    notified = 0
+    async for it in db.interests.find({"event_id": ev["id"], "status": "voy"}):
+        await create_notification(
+            it["user_id"], "moment_prompt",
+            f"⚡ Es EL MOMENTO en {ev['name']}. ¡Sube una foto ya! (2 min para +30 puntos)",
+            {"event_id": ev["id"], "type": "moment"},
+        )
+        notified += 1
+    return {"prompt": prompt, "notified": notified}
+
+
+async def daily_randomize_moments():
+    """Runs once daily (18:00). Assigns random planned_moment_at (01:00-06:00
+    on the night of the event) to today's events that don't have one yet and
+    haven't been cancelled by admin. Idempotent — won't overwrite existing times."""
+    try:
+        now = datetime.now(ZoneInfo("Europe/Madrid"))
+        today = now.date().isoformat()
+        count = 0
+        async for ev in db.events.find({"date": today}, {"_id": 0}):
+            if ev.get("moment_cancelled"):
+                continue
+            if ev.get("planned_moment_at"):
+                continue
+            party_night = date.fromisoformat(ev["date"]) + timedelta(days=1)
+            hour = 1 + secrets.randbelow(5)
+            minute = secrets.randbelow(60)
+            planned_dt = datetime.combine(party_night, dtime(hour, minute), tzinfo=ZoneInfo("Europe/Madrid"))
+            await db.events.update_one(
+                {"id": ev["id"]},
+                {"$set": {"planned_moment_at": planned_dt.isoformat()}},
+            )
+            count += 1
+        logger.info(f"daily_randomize_moments: assigned times to {count} events for {today}")
+    except Exception as e:
+        logger.error(f"daily_randomize_moments failed: {e}")
 
 
 # =========================================================================
