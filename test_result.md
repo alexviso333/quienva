@@ -1034,3 +1034,162 @@ Please verify:
         
         Test file: /app/backend_test.py
         Test credentials used: admin@quienva.app / admin123 + fresh test user
+
+## Event Pricing + Follow + Auto-Notifications (2026-08-01)
+
+### Backend changes:
+1. **New Pydantic models**:
+   - `PriceTier { name: str, price: float, sold_out: bool }`
+   - Extended `EventInput` with: `price_tiers: List[PriceTier]`, `sale_state: str` (default "no_a_la_venta"), `currency: str` (default "EUR").
+   - New `EventPricingInput { price_tiers, sale_state, silent: bool }`.
+2. **Extended `serialize_event`** to include: `price_tiers`, `sale_state`, `currency`, `current_price` (first non-sold-out tier), and `is_following` (bool if user follows the event). Callers `/api/events` and `/api/events/carousels` now bulk-load `event_follows` and pass `follows_set` to serialize_event.
+3. **New collection `event_follows`** (unique index on `user_id+event_id`, + secondary on `event_id`).
+4. **New endpoints**:
+   - `POST /api/events/{event_id}/follow` — idempotent follow (upsert).
+   - `DELETE /api/events/{event_id}/follow` — unfollow.
+   - `GET /api/events/{event_id}/follow-status` — `{following: bool}`.
+   - `PUT /api/admin/events/{event_id}/pricing` — updates `price_tiers` + `sale_state`. Auto-notifies followers + interested users on transitions:
+     - → `a_la_venta` → "🎟️ Entradas a la venta"
+     - → `pocas_entradas` → "⚡ Quedan pocas entradas"
+     - → `agotado` → "🔒 Entradas agotadas"
+     - Effective price went up (previous tier sold_out, new one active) → "📈 Nueva fase de precios"
+     - Supports `silent: true` to update without notifying.
+     - Returns `{event, notifications_sent}`.
+   - `POST /api/admin/events/{event_id}/notify-low-stock` — manual "pocas entradas" push without state change.
+5. **`POST /api/admin/events` (create)** now fires a "🆕 Nueva fiesta" push to all users in the same city (fire-and-forget via `asyncio.create_task`).
+6. **`DELETE /api/admin/events/{id}`** now also cleans `event_follows`.
+7. Validation: invalid `sale_state` → 400 with clear error.
+
+### Frontend changes:
+1. **EventCard**: new PriceBadge showing "12€ · A la venta" (or Pocas entradas / Agotado) in the image header, next to the genre chip. Added a Bell button (top-right) that toggles follow via `POST/DELETE /api/events/{id}/follow` with optimistic invalidation.
+2. **Admin event form (`Admin.js`)**: new "Entradas y precios" section with:
+   - Dropdown for sale_state (4 options with color coding)
+   - Currency dropdown (EUR/USD/GBP)
+   - Dynamic list of price tiers with name + price + sold-out toggle + remove button
+   - "Añadir fase" button
+   - When editing: checkbox "Enviar notificación push cuando cambie el estado" (default true → maps to `silent=false`)
+3. On CREATE: single POST to `/admin/events` (pricing embedded).
+4. On EDIT: PUT `/admin/events/{id}` for basic fields THEN PUT `/admin/events/{id}/pricing` (which fires notifs based on transitions).
+
+### Manual smoke tests already passed:
+- follow / unfollow / follow-status → 200 with correct shape
+- `is_following: true` in `GET /api/events` response after follow
+- `PUT /api/admin/events/{id}/pricing` with a_la_venta + 2 tiers → 1 user notified (the follower)
+- transition → pocas_entradas → 1 user notified
+- `notify-low-stock` → 1 user notified
+- Invalid sale_state → 400
+- All other endpoints still return 200
+
+### Testing required:
+Please regression-test:
+- Auth (login, register, logout, me)
+- Events list + carousels (verify new fields present: `price_tiers`, `sale_state`, `currency`, `current_price`, `is_following`)
+- Interests (voy/me_interesa/none/estuve)
+- Friends + rankings + badges (no changes but validate no regression)
+- Admin moment endpoints (previous iteration — should still work)
+
+New endpoints to test in depth:
+- POST/DELETE/GET /api/events/{id}/follow (idempotent, correct state)
+- PUT /api/admin/events/{id}/pricing (validate state transitions fire correct notifications; silent flag disables notifications; invalid sale_state returns 400; response includes notifications_sent)
+- POST /api/admin/events/{id}/notify-low-stock
+- POST /api/admin/events (should fire "new event" push to all users in the same city — verify a notification is created for a second user in the same city)
+
+Test credentials: admin@quienva.app / admin123. Register a second user (same city) to verify follow + city notifications.
+
+## agent_communication:
+    - agent: "main"
+      message: "Added event pricing (multi-tier), sale state, follow/unfollow endpoints, and auto-notifications on state transitions. Also on new event creation, fires push to city. Frontend has pricing UI in admin form and bell button + price badge on event cards. Backend smoke-tested via curl (all endpoints returning correct data). Need regression test + validation of new endpoints with special attention to notification firing on transitions."
+    - agent: "testing"
+      message: |
+        BACKEND TESTING COMPLETE - Event Pricing + Follow + Auto-Notifications
+        
+        🎉 ALL TESTS PASSED - 100% SUCCESS RATE
+        
+        ✅ NEW FEATURES TESTED (5/5 PASSED):
+        
+        1. Follow Endpoints ✅ (8 tests)
+           - POST /api/events/{event_id}/follow → 200 with {ok: true, following: true} ✓
+           - Second POST call idempotent (still 200, still following) ✓
+           - DELETE /api/events/{event_id}/follow → 200 with {ok: true, following: false} ✓
+           - Second DELETE call idempotent ✓
+           - GET /api/events/{event_id}/follow-status returns {following: bool} matching state ✓
+           - Non-existent event_id → 404 on POST ✓
+           - Unauthenticated → 401 ✓
+           - All follow endpoints working correctly ✓
+        
+        2. Extended Event Serialization ✅ (2 tests)
+           - GET /api/events returns events with all new fields:
+             * is_following: true (after following) ✓
+             * price_tiers: [] (array) ✓
+             * sale_state: "no_a_la_venta" (default) ✓
+             * currency: "EUR" (default) ✓
+             * current_price: null (when no tiers) ✓
+           - GET /api/events/carousels includes all new fields in all carousel events ✓
+        
+        3. Pricing Endpoint (Admin Only) ✅ (10 tests)
+           - PUT /api/admin/events/{id}/pricing with valid tiers → 200 with {event, notifications_sent} ✓
+           - notifications_sent > 0 when followers exist ✓
+           - State transition notifications verified:
+             * no_a_la_venta → a_la_venta: "tickets_on_sale" notification sent ✓
+             * a_la_venta → pocas_entradas: "tickets_low_stock" notification sent ✓
+             * pocas_entradas → agotado: "tickets_sold_out" notification sent ✓
+             * Setting same state twice → NO new notification (notifications_sent=0) ✓
+           - Price increase detection working:
+             * First tier sold_out, effective price 12€→18€ → "tickets_price_up" notification sent ✓
+           - silent: true flag prevents notifications (notifications_sent=0) ✓
+           - Invalid sale_state "basura" → 400 ✓
+           - Non-existent event → 404 ✓
+           - Non-admin user → 403 ✓
+        
+        4. Low Stock Manual Notification ✅ (2 tests)
+           - POST /api/admin/events/{id}/notify-low-stock as admin → 200 with {notified: <int>} ✓
+           - Follower receives "tickets_low_stock" notification ✓
+           - Non-admin → 403 ✓
+        
+        5. New Event Auto-Notification ✅ (1 test)
+           - POST /api/admin/events with new event in "Palma de Mallorca" ✓
+           - After 3 seconds (async task completion), all users in city receive "new_event" notification ✓
+           - Verified with fresh user3 in same city ✓
+        
+        ✅ ZERO REGRESSIONS - ALL EXISTING ENDPOINTS WORKING (9/9 PASSED):
+        
+        Auth Endpoints:
+        - POST /auth/login ✓
+        - GET /auth/me ✓
+        - POST /auth/logout ✓
+        
+        Events Endpoints:
+        - GET /events (all filters: all, hoy, finde, semana, pasados) ✓
+        - GET /events/carousels (top_weekend, friends_going, discover_new) ✓
+        - GET /events/top-weekend ✓
+        - GET /events/genres ✓
+        
+        Interests:
+        - POST /events/{id}/interest with all statuses (voy, me_interesa, none, estuve) ✓
+        
+        Friends:
+        - GET /friends ✓
+        - GET /friends/requests ✓
+        
+        Badges:
+        - GET /me/badges ✓
+        - GET /badges/catalog ✓
+        
+        Rankings:
+        - GET /rankings/friends ✓
+        - GET /rankings/city ✓
+        - GET /rankings/world ✓
+        
+        Health & Performance:
+        - GET /api/health (no auth required) ✓
+        - GZip middleware active on large responses (≥500 bytes) ✓
+        
+        Admin Moments (Previous Iteration):
+        - GET /admin/moments ✓
+        
+        🎯 CONCLUSION:
+        All new event pricing, follow, and auto-notification features are working perfectly with correct authorization checks, idempotent operations, state transition logic, and notification delivery. All notification types verified (tickets_on_sale, tickets_low_stock, tickets_sold_out, tickets_price_up, new_event). ZERO regressions found - all existing functionality remains intact.
+        
+        Test file: /app/backend_test.py
+        Test credentials used: admin@quienva.app / admin123 + 3 fresh test users in Palma de Mallorca
+

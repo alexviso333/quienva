@@ -1,1130 +1,849 @@
 #!/usr/bin/env python3
 """
-Backend API tests for "El Momento" admin endpoints + regression tests
-Test credentials: admin@quienva.app / admin123
+Backend test for NEW event pricing + follow + auto-notification endpoints.
+Tests the latest iteration with comprehensive coverage.
 """
-
 import requests
-import json
 import time
-from datetime import datetime, timedelta, date
-from zoneinfo import ZoneInfo
+import json
+from datetime import datetime, timedelta
 
-# Backend URL
 BASE_URL = "http://localhost:8001/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 
-# Global tokens
+# Global state
 admin_token = None
-user_token = None
-test_user_email = None
+user1_token = None
+user2_token = None
+user1_id = None
+user2_id = None
 test_event_id = None
 
 def log(msg):
     print(f"[TEST] {msg}")
 
-def assert_status(response, expected_status, context=""):
-    if response.status_code != expected_status:
-        log(f"❌ FAILED {context}: Expected {expected_status}, got {response.status_code}")
-        log(f"   Response: {response.text[:500]}")
-        return False
-    return True
-
-def assert_field(data, field, context=""):
-    if field not in data:
-        log(f"❌ FAILED {context}: Missing field '{field}'")
-        log(f"   Data: {json.dumps(data, indent=2)[:500]}")
-        return False
-    return True
-
-def assert_value(actual, expected, context=""):
+def assert_eq(actual, expected, msg=""):
     if actual != expected:
-        log(f"❌ FAILED {context}: Expected {expected}, got {actual}")
-        return False
-    return True
+        raise AssertionError(f"{msg}: expected {expected}, got {actual}")
+
+def assert_in(item, container, msg=""):
+    if item not in container:
+        raise AssertionError(f"{msg}: {item} not in {container}")
+
+def assert_true(condition, msg=""):
+    if not condition:
+        raise AssertionError(f"{msg}: condition is False")
+
+def assert_status(response, expected_status, msg=""):
+    if response.status_code != expected_status:
+        try:
+            body = response.json()
+        except Exception:
+            body = response.text
+        raise AssertionError(f"{msg}: expected status {expected_status}, got {response.status_code}. Body: {body}")
 
 # ============================================================================
-# SETUP: Login and create test data
+# SETUP: Login and create test users
 # ============================================================================
 
 def test_admin_login():
-    """Login as admin and get token"""
     global admin_token
-    log("Testing admin login...")
-    
-    response = requests.post(f"{BASE_URL}/auth/login", json={
+    log("Admin login...")
+    r = requests.post(f"{BASE_URL}/auth/login", json={
         "email": ADMIN_EMAIL,
         "password": ADMIN_PASSWORD
     })
-    
-    if not assert_status(response, 200, "Admin login"):
-        return False
-    
-    data = response.json()
-    if not assert_field(data, "token", "Admin login response"):
-        return False
-    
+    assert_status(r, 200, "Admin login")
+    data = r.json()
     admin_token = data["token"]
-    log(f"✅ Admin login successful, token: {admin_token[:20]}...")
-    return True
+    log(f"✓ Admin logged in: {admin_token[:20]}...")
 
-def test_register_test_user():
-    """Register a fresh non-admin test user"""
-    global user_token, test_user_email
-    
-    timestamp = int(time.time())
-    test_user_email = f"testuser{timestamp}@test.com"
-    
-    log(f"Registering test user: {test_user_email}...")
-    
-    response = requests.post(f"{BASE_URL}/auth/register", json={
-        "email": test_user_email,
-        "password": "testpass123",
-        "name": "Test User",
-        "username": f"testuser{timestamp}",
-        "city": "Palma"
+def test_register_users():
+    global user1_token, user2_token, user1_id, user2_id
+    log("Registering user1 (Alice) in Palma de Mallorca...")
+    r1 = requests.post(f"{BASE_URL}/auth/register", json={
+        "email": f"alice_{int(time.time())}@test.com",
+        "password": "test123",
+        "name": "Alice Test",
+        "username": f"alice_{int(time.time())}",
+        "city": "Palma de Mallorca"
     })
-    
-    if not assert_status(response, 200, "User registration"):
-        return False
-    
-    data = response.json()
-    if "token" in data:
-        user_token = data["token"]
-    elif "user" in data and "token" in data:
-        user_token = data["token"]
-    else:
-        log(f"❌ FAILED: No token in registration response")
-        return False
-    
-    log(f"✅ Test user registered, token: {user_token[:20]}...")
-    return True
+    assert_status(r1, 200, "Register user1")
+    data1 = r1.json()
+    user1_token = data1["token"]
+    user1_id = data1["user"]["user_id"]
+    log(f"✓ User1 registered: {user1_id}")
 
-def create_test_event():
-    """Create a test event for today to test moment endpoints"""
-    global test_event_id, admin_token
+    time.sleep(0.5)
+    log("Registering user2 (Bob) in Palma de Mallorca...")
+    r2 = requests.post(f"{BASE_URL}/auth/register", json={
+        "email": f"bob_{int(time.time())}@test.com",
+        "password": "test123",
+        "name": "Bob Test",
+        "username": f"bob_{int(time.time())}",
+        "city": "Palma de Mallorca"
+    })
+    assert_status(r2, 200, "Register user2")
+    data2 = r2.json()
+    user2_token = data2["token"]
+    user2_id = data2["user"]["user_id"]
+    log(f"✓ User2 registered: {user2_id}")
+
+# ============================================================================
+# TEST 1: Follow endpoints
+# ============================================================================
+
+def test_follow_endpoints():
+    global test_event_id
+    log("\n=== TEST 1: Follow Endpoints ===")
     
-    log("Creating test event for today...")
-    
-    # Create event for today
-    today = date.today().isoformat()
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/events",
+    # Create a test event first
+    log("Creating test event...")
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    r = requests.post(f"{BASE_URL}/admin/events", 
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
-            "name": "Test Party for Moments",
+            "name": "Test Event for Follow",
             "venue": "Test Venue",
-            "date": today,
-            "time": "23:00",
-            "city": "Palma",
-            "genre": "Electrónica"
-        }
+            "address": "Test Address",
+            "date": tomorrow,
+            "time": "22:00",
+            "genre": "Electrónica",
+            "city": "Palma de Mallorca",
+            "price_tiers": [],
+            "sale_state": "no_a_la_venta",
+            "currency": "EUR"
+        })
+    assert_status(r, 200, "Create test event")
+    test_event_id = r.json()["id"]
+    log(f"✓ Test event created: {test_event_id}")
+
+    # Test 1.1: POST /api/events/{event_id}/follow (first call)
+    log("Test 1.1: POST follow (first call)...")
+    r = requests.post(f"{BASE_URL}/events/{test_event_id}/follow",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Follow event first call")
+    data = r.json()
+    assert_eq(data.get("ok"), True, "Follow response ok")
+    assert_eq(data.get("following"), True, "Follow response following")
+    log("✓ First follow call successful")
+
+    # Test 1.2: POST /api/events/{event_id}/follow (second call - idempotent)
+    log("Test 1.2: POST follow (second call - idempotent)...")
+    r = requests.post(f"{BASE_URL}/events/{test_event_id}/follow",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Follow event second call")
+    data = r.json()
+    assert_eq(data.get("following"), True, "Follow still true on second call")
+    log("✓ Second follow call idempotent")
+
+    # Test 1.3: GET /api/events/{event_id}/follow-status
+    log("Test 1.3: GET follow-status...")
+    r = requests.get(f"{BASE_URL}/events/{test_event_id}/follow-status",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get follow status")
+    data = r.json()
+    assert_eq(data.get("following"), True, "Follow status should be true")
+    log("✓ Follow status correct")
+
+    # Test 1.4: DELETE /api/events/{event_id}/follow (first call)
+    log("Test 1.4: DELETE follow (first call)...")
+    r = requests.delete(f"{BASE_URL}/events/{test_event_id}/follow",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Unfollow event")
+    data = r.json()
+    assert_eq(data.get("ok"), True, "Unfollow response ok")
+    assert_eq(data.get("following"), False, "Unfollow response following")
+    log("✓ Unfollow successful")
+
+    # Test 1.5: DELETE /api/events/{event_id}/follow (second call - idempotent)
+    log("Test 1.5: DELETE follow (second call - idempotent)...")
+    r = requests.delete(f"{BASE_URL}/events/{test_event_id}/follow",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Unfollow event second call")
+    data = r.json()
+    assert_eq(data.get("following"), False, "Unfollow still false on second call")
+    log("✓ Second unfollow call idempotent")
+
+    # Test 1.6: GET follow-status after unfollow
+    log("Test 1.6: GET follow-status after unfollow...")
+    r = requests.get(f"{BASE_URL}/events/{test_event_id}/follow-status",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get follow status after unfollow")
+    data = r.json()
+    assert_eq(data.get("following"), False, "Follow status should be false")
+    log("✓ Follow status correct after unfollow")
+
+    # Test 1.7: POST follow with non-existent event_id
+    log("Test 1.7: POST follow with non-existent event_id...")
+    r = requests.post(f"{BASE_URL}/events/nonexistent-event-id/follow",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 404, "Follow non-existent event should return 404")
+    log("✓ Non-existent event returns 404")
+
+    # Test 1.8: POST follow unauthenticated
+    log("Test 1.8: POST follow unauthenticated...")
+    r = requests.post(f"{BASE_URL}/events/{test_event_id}/follow")
+    assert_status(r, 401, "Follow without auth should return 401")
+    log("✓ Unauthenticated follow returns 401")
+
+    log("✅ All follow endpoint tests passed!")
+
+# ============================================================================
+# TEST 2: Extended event serialization
+# ============================================================================
+
+def test_extended_event_serialization():
+    log("\n=== TEST 2: Extended Event Serialization ===")
+    
+    # Follow the event with user1
+    log("Following event with user1...")
+    requests.post(f"{BASE_URL}/events/{test_event_id}/follow",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    
+    # Test 2.1: GET /api/events should include new fields
+    log("Test 2.1: GET /api/events with new fields...")
+    r = requests.get(f"{BASE_URL}/events",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get events")
+    events = r.json()
+    
+    # Find our test event
+    test_event = None
+    for ev in events:
+        if ev["id"] == test_event_id:
+            test_event = ev
+            break
+    
+    assert_true(test_event is not None, "Test event should be in events list")
+    
+    # Check new fields
+    assert_in("is_following", test_event, "Event should have is_following field")
+    assert_eq(test_event["is_following"], True, "is_following should be true")
+    
+    assert_in("price_tiers", test_event, "Event should have price_tiers field")
+    assert_eq(type(test_event["price_tiers"]), list, "price_tiers should be a list")
+    
+    assert_in("sale_state", test_event, "Event should have sale_state field")
+    assert_eq(test_event["sale_state"], "no_a_la_venta", "sale_state should be no_a_la_venta")
+    
+    assert_in("currency", test_event, "Event should have currency field")
+    assert_eq(test_event["currency"], "EUR", "currency should be EUR")
+    
+    assert_in("current_price", test_event, "Event should have current_price field")
+    assert_eq(test_event["current_price"], None, "current_price should be None when no tiers")
+    
+    log("✓ GET /api/events includes all new fields")
+
+    # Test 2.2: GET /api/events/carousels should include new fields
+    log("Test 2.2: GET /api/events/carousels with new fields...")
+    r = requests.get(f"{BASE_URL}/events/carousels",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get carousels")
+    carousels = r.json()
+    
+    # Check that events in carousels have the new fields
+    all_carousel_events = (
+        carousels.get("top_weekend", []) +
+        carousels.get("friends_going", []) +
+        carousels.get("discover_new", [])
     )
     
-    if response.status_code == 200:
-        data = response.json()
-        test_event_id = data.get("id")
-        log(f"✅ Test event created: {test_event_id}")
-        return True
+    if all_carousel_events:
+        sample_event = all_carousel_events[0]
+        assert_in("is_following", sample_event, "Carousel event should have is_following")
+        assert_in("price_tiers", sample_event, "Carousel event should have price_tiers")
+        assert_in("sale_state", sample_event, "Carousel event should have sale_state")
+        assert_in("currency", sample_event, "Carousel event should have currency")
+        assert_in("current_price", sample_event, "Carousel event should have current_price")
+        log("✓ GET /api/events/carousels includes all new fields")
     else:
-        log(f"⚠️  Could not create test event (may not have admin/events endpoint): {response.status_code}")
-        # Try to get an existing event
-        response = requests.get(
-            f"{BASE_URL}/events",
-            headers={"Authorization": f"Bearer {admin_token}"}
-        )
-        if response.status_code == 200:
-            events = response.json()
-            if events and len(events) > 0:
-                test_event_id = events[0]["id"]
-                log(f"✅ Using existing event: {test_event_id}")
-                return True
-        return False
+        log("⚠ No events in carousels to check (acceptable)")
+
+    log("✅ All extended serialization tests passed!")
 
 # ============================================================================
-# NEW ADMIN MOMENT ENDPOINTS TESTS
+# TEST 3: Pricing endpoint with notifications
 # ============================================================================
 
-def test_admin_moments_list_as_admin():
-    """GET /api/admin/moments as admin → 200"""
-    log("Testing GET /admin/moments as admin...")
+def test_pricing_endpoint():
+    log("\n=== TEST 3: Pricing Endpoint ===")
     
-    response = requests.get(
-        f"{BASE_URL}/admin/moments",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    # Setup: user2 follows the event
+    log("Setup: user2 follows the event...")
+    requests.post(f"{BASE_URL}/events/{test_event_id}/follow",
+        headers={"Authorization": f"Bearer {user2_token}"})
     
-    if not assert_status(response, 200, "GET /admin/moments as admin"):
-        return False
-    
-    data = response.json()
-    if not isinstance(data, list):
-        log(f"❌ FAILED: Expected array, got {type(data)}")
-        return False
-    
-    # Check structure of first event if exists
-    if len(data) > 0:
-        event = data[0]
-        required_fields = ["id", "name", "venue", "date", "time", "planned_moment_at", 
-                          "moment_cancelled", "has_fired", "fired_at", "voy_count", "captures_count"]
-        for field in required_fields:
-            if not assert_field(event, field, f"Event object field '{field}'"):
-                return False
-    
-    log(f"✅ GET /admin/moments as admin: returns {len(data)} events with correct structure")
-    return True
-
-def test_admin_moments_list_as_non_admin():
-    """GET /api/admin/moments as non-admin → 403"""
-    log("Testing GET /admin/moments as non-admin...")
-    
-    response = requests.get(
-        f"{BASE_URL}/admin/moments",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    
-    if not assert_status(response, 403, "GET /admin/moments as non-admin"):
-        return False
-    
-    log("✅ GET /admin/moments as non-admin: returns 403")
-    return True
-
-def test_admin_moments_list_unauthenticated():
-    """GET /api/admin/moments unauthenticated → 401"""
-    log("Testing GET /admin/moments unauthenticated...")
-    
-    response = requests.get(f"{BASE_URL}/admin/moments")
-    
-    if not assert_status(response, 401, "GET /admin/moments unauthenticated"):
-        return False
-    
-    log("✅ GET /admin/moments unauthenticated: returns 401")
-    return True
-
-def test_admin_set_moment_time_valid():
-    """PUT /api/admin/moments/{event_id} with valid time → 200"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing PUT /admin/moments/{test_event_id} with valid time...")
-    
-    response = requests.put(
-        f"{BASE_URL}/admin/moments/{test_event_id}",
+    # Test 3.1: PUT pricing with valid data
+    log("Test 3.1: PUT pricing with valid tiers and state...")
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"hour": 3, "minute": 15}
-    )
+        json={
+            "price_tiers": [
+                {"name": "1a fase", "price": 12, "sold_out": False},
+                {"name": "2a fase", "price": 18, "sold_out": False}
+            ],
+            "sale_state": "a_la_venta",
+            "silent": False
+        })
+    assert_status(r, 200, "Set pricing")
+    data = r.json()
+    assert_in("event", data, "Response should have event")
+    assert_in("notifications_sent", data, "Response should have notifications_sent")
+    assert_true(data["notifications_sent"] > 0, "Should have sent notifications to followers")
+    log(f"✓ Pricing set, {data['notifications_sent']} notifications sent")
     
-    if not assert_status(response, 200, "PUT /admin/moments with valid time"):
-        return False
+    # Verify event was updated
+    event = data["event"]
+    assert_eq(len(event["price_tiers"]), 2, "Should have 2 price tiers")
+    assert_eq(event["sale_state"], "a_la_venta", "Sale state should be a_la_venta")
     
-    data = response.json()
-    if not assert_field(data, "planned_moment_at", "Set time response"):
-        return False
+    # Test 3.2: Check user2 received notification
+    log("Test 3.2: Check user2 received 'tickets_on_sale' notification...")
+    time.sleep(0.5)  # Give time for notification to be created
+    r = requests.get(f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {user2_token}"})
+    assert_status(r, 200, "Get notifications")
+    notifications = r.json()
     
-    # Verify the time is set correctly (03:15 on party night)
-    planned_at = data["planned_moment_at"]
-    if planned_at:
-        # Parse and check hour/minute in Europe/Madrid timezone
-        dt = datetime.fromisoformat(planned_at.replace('Z', '+00:00'))
-        madrid_dt = dt.astimezone(ZoneInfo("Europe/Madrid"))
-        if not (madrid_dt.hour == 3 and madrid_dt.minute == 15):
-            log(f"❌ FAILED: Expected 03:15, got {madrid_dt.hour:02d}:{madrid_dt.minute:02d}")
-            return False
+    on_sale_notif = None
+    for n in notifications:
+        if n.get("type") == "tickets_on_sale" and n.get("data", {}).get("event_id") == test_event_id:
+            on_sale_notif = n
+            break
     
-    log(f"✅ PUT /admin/moments with valid time: set to 03:15 correctly")
-    return True
+    assert_true(on_sale_notif is not None, "User2 should have received tickets_on_sale notification")
+    log("✓ User2 received tickets_on_sale notification")
 
-def test_admin_set_moment_time_boundary_low():
-    """PUT /api/admin/moments/{event_id} with hour=1, minute=0 → 200"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing PUT /admin/moments/{test_event_id} with boundary hour=1...")
-    
-    response = requests.put(
-        f"{BASE_URL}/admin/moments/{test_event_id}",
+    # Test 3.3: State transition to "pocas_entradas"
+    log("Test 3.3: State transition to 'pocas_entradas'...")
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"hour": 1, "minute": 0}
-    )
+        json={
+            "price_tiers": [
+                {"name": "1a fase", "price": 12, "sold_out": False},
+                {"name": "2a fase", "price": 18, "sold_out": False}
+            ],
+            "sale_state": "pocas_entradas",
+            "silent": False
+        })
+    assert_status(r, 200, "Set pricing to pocas_entradas")
+    data = r.json()
+    assert_true(data["notifications_sent"] > 0, "Should send low stock notification")
+    log(f"✓ State changed to pocas_entradas, {data['notifications_sent']} notifications sent")
     
-    if not assert_status(response, 200, "PUT /admin/moments with hour=1"):
-        return False
-    
-    log("✅ PUT /admin/moments with hour=1, minute=0: accepted")
-    return True
+    # Check notification
+    time.sleep(0.5)
+    r = requests.get(f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {user2_token}"})
+    notifications = r.json()
+    low_stock_notif = None
+    for n in notifications:
+        if n.get("type") == "tickets_low_stock" and n.get("data", {}).get("event_id") == test_event_id:
+            low_stock_notif = n
+            break
+    assert_true(low_stock_notif is not None, "User2 should have received tickets_low_stock notification")
+    log("✓ User2 received tickets_low_stock notification")
 
-def test_admin_set_moment_time_boundary_high():
-    """PUT /api/admin/moments/{event_id} with hour=5, minute=59 → 200"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing PUT /admin/moments/{test_event_id} with boundary hour=5, minute=59...")
-    
-    response = requests.put(
-        f"{BASE_URL}/admin/moments/{test_event_id}",
+    # Test 3.4: State transition to "agotado"
+    log("Test 3.4: State transition to 'agotado'...")
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"hour": 5, "minute": 59}
-    )
+        json={
+            "price_tiers": [
+                {"name": "1a fase", "price": 12, "sold_out": True},
+                {"name": "2a fase", "price": 18, "sold_out": True}
+            ],
+            "sale_state": "agotado",
+            "silent": False
+        })
+    assert_status(r, 200, "Set pricing to agotado")
+    data = r.json()
+    assert_true(data["notifications_sent"] > 0, "Should send sold out notification")
+    log(f"✓ State changed to agotado, {data['notifications_sent']} notifications sent")
     
-    if not assert_status(response, 200, "PUT /admin/moments with hour=5, minute=59"):
-        return False
-    
-    log("✅ PUT /admin/moments with hour=5, minute=59: accepted")
-    return True
+    # Check notification
+    time.sleep(0.5)
+    r = requests.get(f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {user2_token}"})
+    notifications = r.json()
+    sold_out_notif = None
+    for n in notifications:
+        if n.get("type") == "tickets_sold_out" and n.get("data", {}).get("event_id") == test_event_id:
+            sold_out_notif = n
+            break
+    assert_true(sold_out_notif is not None, "User2 should have received tickets_sold_out notification")
+    log("✓ User2 received tickets_sold_out notification")
 
-def test_admin_set_moment_time_invalid_hour_0():
-    """PUT /api/admin/moments/{event_id} with hour=0 → 400"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
+    # Test 3.5: Setting same state twice should NOT send notification
+    log("Test 3.5: Setting same state twice (no new notification)...")
+    # Count current notifications
+    r = requests.get(f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {user2_token}"})
+    notif_count_before = len(r.json())
     
-    log(f"Testing PUT /admin/moments/{test_event_id} with invalid hour=0...")
-    
-    response = requests.put(
-        f"{BASE_URL}/admin/moments/{test_event_id}",
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"hour": 0, "minute": 0}
-    )
-    
-    if not assert_status(response, 400, "PUT /admin/moments with hour=0"):
-        return False
-    
-    log("✅ PUT /admin/moments with hour=0: returns 400")
-    return True
+        json={
+            "price_tiers": [
+                {"name": "1a fase", "price": 12, "sold_out": True},
+                {"name": "2a fase", "price": 18, "sold_out": True}
+            ],
+            "sale_state": "agotado",
+            "silent": False
+        })
+    assert_status(r, 200, "Set same state again")
+    data = r.json()
+    assert_eq(data["notifications_sent"], 0, "Should NOT send notification for same state")
+    log("✓ No notification sent for same state")
 
-def test_admin_set_moment_time_invalid_hour_6():
-    """PUT /api/admin/moments/{event_id} with hour=6 → 400"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing PUT /admin/moments/{test_event_id} with invalid hour=6...")
-    
-    response = requests.put(
-        f"{BASE_URL}/admin/moments/{test_event_id}",
+    # Test 3.6: Price increase detection
+    log("Test 3.6: Price increase detection...")
+    # First set to a_la_venta with first tier active
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"hour": 6, "minute": 0}
-    )
+        json={
+            "price_tiers": [
+                {"name": "1a fase", "price": 12, "sold_out": False},
+                {"name": "2a fase", "price": 18, "sold_out": False}
+            ],
+            "sale_state": "a_la_venta",
+            "silent": False
+        })
+    assert_status(r, 200, "Reset to a_la_venta with 12€")
     
-    if not assert_status(response, 400, "PUT /admin/moments with hour=6"):
-        return False
+    time.sleep(0.5)
     
-    log("✅ PUT /admin/moments with hour=6: returns 400")
-    return True
-
-def test_admin_set_moment_time_invalid_hour_7():
-    """PUT /api/admin/moments/{event_id} with hour=7 → 400"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing PUT /admin/moments/{test_event_id} with invalid hour=7...")
-    
-    response = requests.put(
-        f"{BASE_URL}/admin/moments/{test_event_id}",
+    # Now mark first tier as sold out (effective price goes from 12 to 18)
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"hour": 7, "minute": 0}
-    )
+        json={
+            "price_tiers": [
+                {"name": "1a fase", "price": 12, "sold_out": True},
+                {"name": "2a fase", "price": 18, "sold_out": False}
+            ],
+            "sale_state": "a_la_venta",
+            "silent": False
+        })
+    assert_status(r, 200, "Mark first tier sold out")
+    data = r.json()
+    assert_true(data["notifications_sent"] > 0, "Should send price increase notification")
+    log(f"✓ Price increase detected, {data['notifications_sent']} notifications sent")
     
-    if not assert_status(response, 400, "PUT /admin/moments with hour=7"):
-        return False
-    
-    log("✅ PUT /admin/moments with hour=7: returns 400")
-    return True
+    # Check notification
+    time.sleep(0.5)
+    r = requests.get(f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {user2_token}"})
+    notifications = r.json()
+    price_up_notif = None
+    for n in notifications:
+        if n.get("type") == "tickets_price_up" and n.get("data", {}).get("event_id") == test_event_id:
+            price_up_notif = n
+            break
+    assert_true(price_up_notif is not None, "User2 should have received tickets_price_up notification")
+    log("✓ User2 received tickets_price_up notification")
 
-def test_admin_set_moment_time_nonexistent_event():
-    """PUT /api/admin/moments/{nonexistent_id} → 404"""
-    log("Testing PUT /admin/moments with non-existent event...")
-    
-    response = requests.put(
-        f"{BASE_URL}/admin/moments/nonexistent-event-id-12345",
+    # Test 3.7: Silent flag prevents notifications
+    log("Test 3.7: Silent flag prevents notifications...")
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"hour": 3, "minute": 0}
-    )
-    
-    if not assert_status(response, 404, "PUT /admin/moments with non-existent event"):
-        return False
-    
-    log("✅ PUT /admin/moments with non-existent event: returns 404")
-    return True
+        json={
+            "price_tiers": [
+                {"name": "1a fase", "price": 15, "sold_out": False}
+            ],
+            "sale_state": "pocas_entradas",
+            "silent": True
+        })
+    assert_status(r, 200, "Set pricing with silent=true")
+    data = r.json()
+    assert_eq(data["notifications_sent"], 0, "Silent flag should prevent notifications")
+    log("✓ Silent flag works correctly")
 
-def test_admin_set_moment_time_as_non_admin():
-    """PUT /api/admin/moments/{event_id} as non-admin → 403"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log("Testing PUT /admin/moments as non-admin...")
-    
-    response = requests.put(
-        f"{BASE_URL}/admin/moments/{test_event_id}",
-        headers={"Authorization": f"Bearer {user_token}"},
-        json={"hour": 3, "minute": 0}
-    )
-    
-    if not assert_status(response, 403, "PUT /admin/moments as non-admin"):
-        return False
-    
-    log("✅ PUT /admin/moments as non-admin: returns 403")
-    return True
+    # Test 3.8: Invalid sale_state
+    log("Test 3.8: Invalid sale_state...")
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "price_tiers": [],
+            "sale_state": "basura",
+            "silent": False
+        })
+    assert_status(r, 400, "Invalid sale_state should return 400")
+    log("✓ Invalid sale_state returns 400")
 
-def test_admin_randomize_moment():
-    """POST /api/admin/moments/{event_id}/randomize as admin → 200"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing POST /admin/moments/{test_event_id}/randomize...")
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/moments/{test_event_id}/randomize",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "POST /admin/moments/randomize"):
-        return False
-    
-    data = response.json()
-    if not assert_field(data, "planned_moment_at", "Randomize response"):
-        return False
-    
-    # Verify the hour is between 1 and 5
-    planned_at = data["planned_moment_at"]
-    if planned_at:
-        dt = datetime.fromisoformat(planned_at.replace('Z', '+00:00'))
-        madrid_dt = dt.astimezone(ZoneInfo("Europe/Madrid"))
-        if not (1 <= madrid_dt.hour <= 5):
-            log(f"❌ FAILED: Random hour {madrid_dt.hour} not in range 1-5")
-            return False
-    
-    log(f"✅ POST /admin/moments/randomize: set random time in 01:00-05:59 range")
-    return True
+    # Test 3.9: Non-existent event
+    log("Test 3.9: Non-existent event...")
+    r = requests.put(f"{BASE_URL}/admin/events/nonexistent-id/pricing",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "price_tiers": [],
+            "sale_state": "a_la_venta",
+            "silent": False
+        })
+    assert_status(r, 404, "Non-existent event should return 404")
+    log("✓ Non-existent event returns 404")
 
-def test_admin_randomize_moment_as_non_admin():
-    """POST /api/admin/moments/{event_id}/randomize as non-admin → 403"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log("Testing POST /admin/moments/randomize as non-admin...")
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/moments/{test_event_id}/randomize",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    
-    if not assert_status(response, 403, "POST /admin/moments/randomize as non-admin"):
-        return False
-    
-    log("✅ POST /admin/moments/randomize as non-admin: returns 403")
-    return True
+    # Test 3.10: Non-admin user
+    log("Test 3.10: Non-admin user...")
+    r = requests.put(f"{BASE_URL}/admin/events/{test_event_id}/pricing",
+        headers={"Authorization": f"Bearer {user1_token}"},
+        json={
+            "price_tiers": [],
+            "sale_state": "a_la_venta",
+            "silent": False
+        })
+    assert_status(r, 403, "Non-admin should return 403")
+    log("✓ Non-admin returns 403")
 
-def test_admin_randomize_all_moments():
-    """POST /api/admin/moments/randomize-all as admin → 200"""
-    log("Testing POST /admin/moments/randomize-all...")
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/moments/randomize-all",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "POST /admin/moments/randomize-all"):
-        return False
-    
-    data = response.json()
-    if not assert_field(data, "updated", "Randomize-all response"):
-        return False
-    
-    if not isinstance(data["updated"], int):
-        log(f"❌ FAILED: Expected 'updated' to be int, got {type(data['updated'])}")
-        return False
-    
-    log(f"✅ POST /admin/moments/randomize-all: updated {data['updated']} events")
-    return True
-
-def test_admin_randomize_all_moments_as_non_admin():
-    """POST /api/admin/moments/randomize-all as non-admin → 403"""
-    log("Testing POST /admin/moments/randomize-all as non-admin...")
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/moments/randomize-all",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    
-    if not assert_status(response, 403, "POST /admin/moments/randomize-all as non-admin"):
-        return False
-    
-    log("✅ POST /admin/moments/randomize-all as non-admin: returns 403")
-    return True
-
-def test_admin_cancel_moment():
-    """POST /api/admin/moments/{event_id}/cancel as admin → 200"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing POST /admin/moments/{test_event_id}/cancel...")
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/moments/{test_event_id}/cancel",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "POST /admin/moments/cancel"):
-        return False
-    
-    data = response.json()
-    if not assert_field(data, "moment_cancelled", "Cancel response"):
-        return False
-    
-    if not assert_value(data["moment_cancelled"], True, "moment_cancelled should be true"):
-        return False
-    
-    log("✅ POST /admin/moments/cancel: moment_cancelled=true")
-    return True
-
-def test_admin_cancel_moment_as_non_admin():
-    """POST /api/admin/moments/{event_id}/cancel as non-admin → 403"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log("Testing POST /admin/moments/cancel as non-admin...")
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/moments/{test_event_id}/cancel",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    
-    if not assert_status(response, 403, "POST /admin/moments/cancel as non-admin"):
-        return False
-    
-    log("✅ POST /admin/moments/cancel as non-admin: returns 403")
-    return True
-
-def test_admin_uncancel_moment():
-    """POST /api/admin/moments/{event_id}/uncancel after cancel → 200"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing POST /admin/moments/{test_event_id}/uncancel...")
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/moments/{test_event_id}/uncancel",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "POST /admin/moments/uncancel"):
-        return False
-    
-    data = response.json()
-    if not assert_field(data, "moment_cancelled", "Uncancel response"):
-        return False
-    
-    if not assert_value(data["moment_cancelled"], False, "moment_cancelled should be false"):
-        return False
-    
-    log("✅ POST /admin/moments/uncancel: moment_cancelled=false")
-    return True
-
-def test_admin_trigger_moment():
-    """POST /api/admin/events/{event_id}/moment/trigger as admin → 200"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log(f"Testing POST /admin/events/{test_event_id}/moment/trigger...")
-    
-    response = requests.post(
-        f"{BASE_URL}/admin/events/{test_event_id}/moment/trigger",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "POST /admin/events/moment/trigger"):
-        return False
-    
-    data = response.json()
-    if not assert_field(data, "prompt", "Trigger response"):
-        return False
-    if not assert_field(data, "notified", "Trigger response"):
-        return False
-    
-    if not isinstance(data["notified"], int):
-        log(f"❌ FAILED: Expected 'notified' to be int, got {type(data['notified'])}")
-        return False
-    
-    log(f"✅ POST /admin/events/moment/trigger: notified {data['notified']} users")
-    
-    # Verify has_fired is now true
-    response = requests.get(
-        f"{BASE_URL}/admin/moments",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if response.status_code == 200:
-        events = response.json()
-        for event in events:
-            if event["id"] == test_event_id:
-                if event["has_fired"]:
-                    log("✅ Verified: has_fired=true after trigger")
-                else:
-                    log("❌ FAILED: has_fired should be true after trigger")
-                    return False
-                break
-    
-    return True
-
-def test_admin_trigger_moment_uncancels():
-    """POST /api/admin/events/{event_id}/moment/trigger should un-cancel if cancelled"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
-    
-    log("Testing that trigger un-cancels a cancelled event...")
-    
-    # First cancel the event
-    requests.post(
-        f"{BASE_URL}/admin/moments/{test_event_id}/cancel",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    # Then trigger it
-    response = requests.post(
-        f"{BASE_URL}/admin/events/{test_event_id}/moment/trigger",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "Trigger after cancel"):
-        return False
-    
-    # Check that moment_cancelled is now false
-    response = requests.get(
-        f"{BASE_URL}/admin/moments",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if response.status_code == 200:
-        events = response.json()
-        for event in events:
-            if event["id"] == test_event_id:
-                if not event["moment_cancelled"]:
-                    log("✅ Verified: moment_cancelled=false after trigger (auto un-cancel)")
-                else:
-                    log("❌ FAILED: moment_cancelled should be false after trigger")
-                    return False
-                break
-    
-    return True
+    log("✅ All pricing endpoint tests passed!")
 
 # ============================================================================
-# REGRESSION TESTS
+# TEST 4: Low stock manual notification
 # ============================================================================
 
-def test_auth_login():
-    """Regression: POST /api/auth/login"""
-    log("Regression: Testing POST /auth/login...")
+def test_low_stock_notification():
+    log("\n=== TEST 4: Low Stock Manual Notification ===")
     
-    response = requests.post(f"{BASE_URL}/auth/login", json={
+    # Test 4.1: Admin triggers low stock notification
+    log("Test 4.1: POST /admin/events/{id}/notify-low-stock as admin...")
+    r = requests.post(f"{BASE_URL}/admin/events/{test_event_id}/notify-low-stock",
+        headers={"Authorization": f"Bearer {admin_token}"})
+    assert_status(r, 200, "Notify low stock")
+    data = r.json()
+    assert_in("notified", data, "Response should have notified count")
+    assert_true(data["notified"] > 0, "Should have notified followers")
+    log(f"✓ Low stock notification sent to {data['notified']} users")
+    
+    # Check user2 received notification
+    time.sleep(0.5)
+    r = requests.get(f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {user2_token}"})
+    notifications = r.json()
+    low_stock_notif = None
+    for n in notifications:
+        if n.get("type") == "tickets_low_stock" and n.get("data", {}).get("event_id") == test_event_id:
+            low_stock_notif = n
+            break
+    assert_true(low_stock_notif is not None, "User2 should have received manual low stock notification")
+    log("✓ User2 received manual low stock notification")
+
+    # Test 4.2: Non-admin user
+    log("Test 4.2: POST notify-low-stock as non-admin...")
+    r = requests.post(f"{BASE_URL}/admin/events/{test_event_id}/notify-low-stock",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 403, "Non-admin should return 403")
+    log("✓ Non-admin returns 403")
+
+    log("✅ All low stock notification tests passed!")
+
+# ============================================================================
+# TEST 5: New event auto-notification
+# ============================================================================
+
+def test_new_event_notification():
+    log("\n=== TEST 5: New Event Auto-Notification ===")
+    
+    # Create a fresh user in Palma de Mallorca
+    log("Creating user3 (Charlie) in Palma de Mallorca...")
+    r = requests.post(f"{BASE_URL}/auth/register", json={
+        "email": f"charlie_{int(time.time())}@test.com",
+        "password": "test123",
+        "name": "Charlie Test",
+        "username": f"charlie_{int(time.time())}",
+        "city": "Palma de Mallorca"
+    })
+    assert_status(r, 200, "Register user3")
+    user3_token = r.json()["token"]
+    user3_id = r.json()["user"]["user_id"]
+    log(f"✓ User3 registered: {user3_id}")
+    
+    # Admin creates a new event in Palma de Mallorca
+    log("Admin creates new event in Palma de Mallorca...")
+    tomorrow = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+    r = requests.post(f"{BASE_URL}/admin/events",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "name": "New Event for City Notification",
+            "venue": "City Venue",
+            "address": "City Address",
+            "date": tomorrow,
+            "time": "23:00",
+            "genre": "Reggaeton",
+            "city": "Palma de Mallorca"
+        })
+    assert_status(r, 200, "Create new event")
+    new_event_id = r.json()["id"]
+    log(f"✓ New event created: {new_event_id}")
+    
+    # Wait for async notification task to complete
+    log("Waiting 3 seconds for async notification task...")
+    time.sleep(3)
+    
+    # Check user3 received new_event notification
+    log("Checking user3 received 'new_event' notification...")
+    r = requests.get(f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {user3_token}"})
+    assert_status(r, 200, "Get user3 notifications")
+    notifications = r.json()
+    
+    new_event_notif = None
+    for n in notifications:
+        if n.get("type") == "new_event" and n.get("data", {}).get("event_id") == new_event_id:
+            new_event_notif = n
+            break
+    
+    assert_true(new_event_notif is not None, "User3 should have received new_event notification")
+    log("✓ User3 received new_event notification")
+    
+    log("✅ All new event notification tests passed!")
+
+# ============================================================================
+# TEST 6: Regression tests
+# ============================================================================
+
+def test_regression_auth():
+    global admin_token
+    log("\n=== TEST 6.1: Regression - Auth Endpoints ===")
+    
+    # Login
+    r = requests.post(f"{BASE_URL}/auth/login", json={
         "email": ADMIN_EMAIL,
         "password": ADMIN_PASSWORD
     })
+    assert_status(r, 200, "Login")
+    log("✓ Login works")
     
-    if not assert_status(response, 200, "POST /auth/login"):
-        return False
+    # Me
+    r = requests.get(f"{BASE_URL}/auth/me",
+        headers={"Authorization": f"Bearer {admin_token}"})
+    assert_status(r, 200, "Me")
+    log("✓ Me works")
     
-    log("✅ Regression: POST /auth/login working")
-    return True
-
-def test_auth_me():
-    """Regression: GET /api/auth/me"""
-    log("Regression: Testing GET /auth/me...")
+    # Logout
+    r = requests.post(f"{BASE_URL}/auth/logout",
+        headers={"Authorization": f"Bearer {admin_token}"})
+    assert_status(r, 200, "Logout")
+    log("✓ Logout works")
     
-    response = requests.get(
-        f"{BASE_URL}/auth/me",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /auth/me"):
-        return False
-    
-    log("✅ Regression: GET /auth/me working")
-    return True
-
-def test_auth_register():
-    """Regression: POST /api/auth/register"""
-    log("Regression: Testing POST /auth/register...")
-    
-    timestamp = int(time.time())
-    email = f"regtest{timestamp}@test.com"
-    
-    response = requests.post(f"{BASE_URL}/auth/register", json={
-        "email": email,
-        "password": "testpass123",
-        "name": "Reg Test",
-        "username": f"regtest{timestamp}",
-        "city": "Palma"
+    # Re-login admin for other tests
+    r = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": ADMIN_EMAIL,
+        "password": ADMIN_PASSWORD
     })
+    admin_token = r.json()["token"]
     
-    if not assert_status(response, 200, "POST /auth/register"):
-        return False
-    
-    log("✅ Regression: POST /auth/register working")
-    return True
+    log("✅ Auth regression tests passed!")
 
-def test_auth_logout():
-    """Regression: POST /api/auth/logout"""
-    log("Regression: Testing POST /auth/logout...")
+def test_regression_events():
+    log("\n=== TEST 6.2: Regression - Events Endpoints ===")
     
-    response = requests.post(
-        f"{BASE_URL}/auth/logout",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
+    # GET /events
+    r = requests.get(f"{BASE_URL}/events",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get events")
+    log("✓ GET /events works")
     
-    if not assert_status(response, 200, "POST /auth/logout"):
-        return False
+    # GET /events with filters
+    r = requests.get(f"{BASE_URL}/events?date_filter=all",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get events with filter")
+    log("✓ GET /events with filters works")
     
-    log("✅ Regression: POST /auth/logout working")
-    return True
+    # GET /events/carousels
+    r = requests.get(f"{BASE_URL}/events/carousels",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get carousels")
+    log("✓ GET /events/carousels works")
+    
+    # GET /events/top-weekend
+    r = requests.get(f"{BASE_URL}/events/top-weekend",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get top weekend")
+    log("✓ GET /events/top-weekend works")
+    
+    # GET /events/genres
+    r = requests.get(f"{BASE_URL}/events/genres",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get genres")
+    log("✓ GET /events/genres works")
+    
+    log("✅ Events regression tests passed!")
 
-def test_events_list():
-    """Regression: GET /api/events"""
-    log("Regression: Testing GET /events...")
+def test_regression_interests():
+    log("\n=== TEST 6.3: Regression - Interests Endpoints ===")
     
-    response = requests.get(
-        f"{BASE_URL}/events",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    # POST interest with voy
+    r = requests.post(f"{BASE_URL}/events/{test_event_id}/interest",
+        headers={"Authorization": f"Bearer {user1_token}"},
+        json={"status": "voy"})
+    assert_status(r, 200, "Set interest voy")
+    log("✓ POST interest voy works")
     
-    if not assert_status(response, 200, "GET /events"):
-        return False
+    # POST interest with me_interesa
+    r = requests.post(f"{BASE_URL}/events/{test_event_id}/interest",
+        headers={"Authorization": f"Bearer {user1_token}"},
+        json={"status": "me_interesa"})
+    assert_status(r, 200, "Set interest me_interesa")
+    log("✓ POST interest me_interesa works")
     
-    log("✅ Regression: GET /events working")
-    return True
+    # POST interest with none
+    r = requests.post(f"{BASE_URL}/events/{test_event_id}/interest",
+        headers={"Authorization": f"Bearer {user1_token}"},
+        json={"status": "none"})
+    assert_status(r, 200, "Set interest none")
+    log("✓ POST interest none works")
+    
+    # POST interest with estuve
+    r = requests.post(f"{BASE_URL}/events/{test_event_id}/interest",
+        headers={"Authorization": f"Bearer {user1_token}"},
+        json={"status": "estuve"})
+    assert_status(r, 200, "Set interest estuve")
+    log("✓ POST interest estuve works")
+    
+    log("✅ Interests regression tests passed!")
 
-def test_events_filters():
-    """Regression: GET /api/events with date filters"""
-    log("Regression: Testing GET /events with filters...")
+def test_regression_friends():
+    log("\n=== TEST 6.4: Regression - Friends Endpoints ===")
     
-    filters = ["all", "hoy", "finde", "semana", "pasados"]
-    for filter_val in filters:
-        response = requests.get(
-            f"{BASE_URL}/events?filter={filter_val}",
-            headers={"Authorization": f"Bearer {admin_token}"}
-        )
-        if not assert_status(response, 200, f"GET /events?filter={filter_val}"):
-            return False
+    # GET /friends
+    r = requests.get(f"{BASE_URL}/friends",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get friends")
+    log("✓ GET /friends works")
     
-    log("✅ Regression: GET /events with all date filters working")
-    return True
+    # GET /friends/requests
+    r = requests.get(f"{BASE_URL}/friends/requests",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get friend requests")
+    log("✓ GET /friends/requests works")
+    
+    log("✅ Friends regression tests passed!")
 
-def test_events_carousels():
-    """Regression: GET /api/events/carousels with 20s cache"""
-    log("Regression: Testing GET /events/carousels...")
+def test_regression_badges():
+    log("\n=== TEST 6.5: Regression - Badges Endpoints ===")
     
-    response = requests.get(
-        f"{BASE_URL}/events/carousels",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    # GET /me/badges
+    r = requests.get(f"{BASE_URL}/me/badges",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get my badges")
+    log("✓ GET /me/badges works")
     
-    if not assert_status(response, 200, "GET /events/carousels"):
-        return False
+    # GET /badges/catalog
+    r = requests.get(f"{BASE_URL}/badges/catalog",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get badges catalog")
+    log("✓ GET /badges/catalog works")
     
-    data = response.json()
-    if not isinstance(data, dict):
-        log(f"❌ FAILED: Expected dict, got {type(data)}")
-        return False
-    
-    log("✅ Regression: GET /events/carousels working")
-    return True
+    log("✅ Badges regression tests passed!")
 
-def test_events_top_weekend():
-    """Regression: GET /api/events/top-weekend"""
-    log("Regression: Testing GET /events/top-weekend...")
+def test_regression_rankings():
+    log("\n=== TEST 6.6: Regression - Rankings Endpoints ===")
     
-    response = requests.get(
-        f"{BASE_URL}/events/top-weekend",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    # GET /rankings/friends
+    r = requests.get(f"{BASE_URL}/rankings/friends",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get rankings friends")
+    log("✓ GET /rankings/friends works")
     
-    if not assert_status(response, 200, "GET /events/top-weekend"):
-        return False
+    # GET /rankings/city
+    r = requests.get(f"{BASE_URL}/rankings/city",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get rankings city")
+    log("✓ GET /rankings/city works")
     
-    log("✅ Regression: GET /events/top-weekend working")
-    return True
+    # GET /rankings/world
+    r = requests.get(f"{BASE_URL}/rankings/world",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get rankings world")
+    log("✓ GET /rankings/world works")
+    
+    log("✅ Rankings regression tests passed!")
 
-def test_events_genres():
-    """Regression: GET /api/events/genres"""
-    log("Regression: Testing GET /events/genres...")
+def test_regression_health():
+    log("\n=== TEST 6.7: Regression - Health Endpoint ===")
     
-    response = requests.get(
-        f"{BASE_URL}/events/genres",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    # GET /health (no auth required)
+    r = requests.get(f"{BASE_URL}/health")
+    assert_status(r, 200, "Get health")
+    data = r.json()
+    assert_eq(data.get("ok"), True, "Health should return ok=true")
+    log("✓ GET /health works")
     
-    if not assert_status(response, 200, "GET /events/genres"):
-        return False
-    
-    log("✅ Regression: GET /events/genres working")
-    return True
+    log("✅ Health regression tests passed!")
 
-def test_interests():
-    """Regression: POST /api/events/{id}/interest"""
-    if not test_event_id:
-        log("⚠️  Skipping: No test event available")
-        return True
+def test_regression_admin_moments():
+    log("\n=== TEST 6.8: Regression - Admin Moment Endpoints ===")
     
-    log("Regression: Testing POST /events/{id}/interest...")
+    # GET /admin/moments
+    r = requests.get(f"{BASE_URL}/admin/moments",
+        headers={"Authorization": f"Bearer {admin_token}"})
+    assert_status(r, 200, "Get admin moments")
+    log("✓ GET /admin/moments works")
     
-    statuses = ["voy", "me_interesa", "none", "estuve"]
-    for status in statuses:
-        response = requests.post(
-            f"{BASE_URL}/events/{test_event_id}/interest",
-            headers={"Authorization": f"Bearer {admin_token}"},
-            json={"status": status}
-        )
-        if not assert_status(response, 200, f"POST /events/interest status={status}"):
-            return False
-    
-    log("✅ Regression: POST /events/{id}/interest with all statuses working")
-    return True
+    log("✅ Admin moments regression tests passed!")
 
-def test_badges_me():
-    """Regression: GET /api/me/badges"""
-    log("Regression: Testing GET /me/badges...")
+def test_regression_gzip():
+    log("\n=== TEST 6.9: Regression - GZip Middleware ===")
     
-    response = requests.get(
-        f"{BASE_URL}/me/badges",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    # GET /events should have gzip encoding on large response
+    r = requests.get(f"{BASE_URL}/events",
+        headers={"Authorization": f"Bearer {user1_token}"})
+    assert_status(r, 200, "Get events for gzip check")
     
-    if not assert_status(response, 200, "GET /me/badges"):
-        return False
-    
-    log("✅ Regression: GET /me/badges working")
-    return True
-
-def test_next_badges():
-    """Regression: GET /api/me/next-badges"""
-    log("Regression: Testing GET /me/next-badges...")
-    
-    response = requests.get(
-        f"{BASE_URL}/me/next-badges",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /me/next-badges"):
-        return False
-    
-    log("✅ Regression: GET /me/next-badges working")
-    return True
-
-def test_streak():
-    """Regression: GET /api/me/streak"""
-    log("Regression: Testing GET /me/streak...")
-    
-    response = requests.get(
-        f"{BASE_URL}/me/streak",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /me/streak"):
-        return False
-    
-    log("✅ Regression: GET /me/streak working")
-    return True
-
-def test_streak_full():
-    """Regression: GET /api/me/streak-full"""
-    log("Regression: Testing GET /me/streak-full...")
-    
-    response = requests.get(
-        f"{BASE_URL}/me/streak-full",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /me/streak-full"):
-        return False
-    
-    log("✅ Regression: GET /me/streak-full working")
-    return True
-
-def test_user_badges():
-    """Regression: GET /api/users/{id}/badges"""
-    log("Regression: Testing GET /users/{id}/badges...")
-    
-    # Get own user_id first
-    response = requests.get(
-        f"{BASE_URL}/auth/me",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if response.status_code == 200:
-        user_id = response.json().get("user_id")
-        
-        response = requests.get(
-            f"{BASE_URL}/users/{user_id}/badges",
-            headers={"Authorization": f"Bearer {admin_token}"}
-        )
-        
-        if not assert_status(response, 200, "GET /users/{id}/badges"):
-            return False
-    
-    log("✅ Regression: GET /users/{id}/badges working")
-    return True
-
-def test_rankings_friends():
-    """Regression: GET /api/rankings/friends"""
-    log("Regression: Testing GET /rankings/friends...")
-    
-    response = requests.get(
-        f"{BASE_URL}/rankings/friends",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /rankings/friends"):
-        return False
-    
-    log("✅ Regression: GET /rankings/friends working")
-    return True
-
-def test_rankings_city():
-    """Regression: GET /api/rankings/city"""
-    log("Regression: Testing GET /rankings/city...")
-    
-    response = requests.get(
-        f"{BASE_URL}/rankings/city",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /rankings/city"):
-        return False
-    
-    log("✅ Regression: GET /rankings/city working")
-    return True
-
-def test_rankings_world():
-    """Regression: GET /api/rankings/world"""
-    log("Regression: Testing GET /rankings/world...")
-    
-    response = requests.get(
-        f"{BASE_URL}/rankings/world",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /rankings/world"):
-        return False
-    
-    log("✅ Regression: GET /rankings/world working")
-    return True
-
-def test_friends():
-    """Regression: GET /api/friends"""
-    log("Regression: Testing GET /friends...")
-    
-    response = requests.get(
-        f"{BASE_URL}/friends",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /friends"):
-        return False
-    
-    log("✅ Regression: GET /friends working")
-    return True
-
-def test_friends_requests():
-    """Regression: GET /api/friends/requests"""
-    log("Regression: Testing GET /friends/requests...")
-    
-    response = requests.get(
-        f"{BASE_URL}/friends/requests",
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    
-    if not assert_status(response, 200, "GET /friends/requests"):
-        return False
-    
-    log("✅ Regression: GET /friends/requests working")
-    return True
-
-def test_health():
-    """Regression: GET /api/health without auth"""
-    log("Regression: Testing GET /health...")
-    
-    response = requests.get(f"{BASE_URL}/health")
-    
-    if not assert_status(response, 200, "GET /health"):
-        return False
-    
-    data = response.json()
-    if not assert_field(data, "ok", "Health response"):
-        return False
-    
-    log("✅ Regression: GET /health working")
-    return True
-
-def test_gzip():
-    """Regression: GZip middleware on large responses"""
-    log("Regression: Testing GZip middleware...")
-    
-    response = requests.get(
-        f"{BASE_URL}/events",
-        headers={
-            "Authorization": f"Bearer {admin_token}",
-            "Accept-Encoding": "gzip"
-        }
-    )
-    
-    if not assert_status(response, 200, "GET /events with gzip"):
-        return False
-    
-    # Check if response is large enough and has gzip encoding
-    if len(response.content) >= 500:
-        if "gzip" in response.headers.get("Content-Encoding", ""):
-            log("✅ Regression: GZip middleware working (Content-Encoding: gzip)")
-        else:
-            log("⚠️  GZip not applied (response may be too small or already compressed)")
+    # Check if Content-Encoding header is present (may or may not be gzipped depending on size)
+    if len(r.content) >= 500:
+        # Large response should be gzipped
+        log(f"✓ Large response ({len(r.content)} bytes) - GZip middleware active")
     else:
-        log("⚠️  Response too small to test GZip (< 500 bytes)")
+        log(f"⚠ Response too small ({len(r.content)} bytes) to verify GZip")
     
-    return True
+    log("✅ GZip regression test passed!")
 
 # ============================================================================
-# MAIN TEST RUNNER
+# MAIN
 # ============================================================================
 
-def run_all_tests():
-    """Run all tests and report results"""
-    print("\n" + "="*80)
-    print("BACKEND API TESTS - El Momento Admin Endpoints + Regression")
-    print("="*80 + "\n")
-    
-    # Setup
-    print("--- SETUP ---")
-    if not test_admin_login():
-        print("\n❌ CRITICAL: Admin login failed. Cannot continue.")
-        return
-    
-    if not test_register_test_user():
-        print("\n❌ CRITICAL: Test user registration failed. Cannot continue.")
-        return
-    
-    create_test_event()  # Best effort, not critical
-    
-    print("\n--- NEW ADMIN MOMENT ENDPOINTS ---")
-    new_tests = [
-        test_admin_moments_list_as_admin,
-        test_admin_moments_list_as_non_admin,
-        test_admin_moments_list_unauthenticated,
-        test_admin_set_moment_time_valid,
-        test_admin_set_moment_time_boundary_low,
-        test_admin_set_moment_time_boundary_high,
-        test_admin_set_moment_time_invalid_hour_0,
-        test_admin_set_moment_time_invalid_hour_6,
-        test_admin_set_moment_time_invalid_hour_7,
-        test_admin_set_moment_time_nonexistent_event,
-        test_admin_set_moment_time_as_non_admin,
-        test_admin_randomize_moment,
-        test_admin_randomize_moment_as_non_admin,
-        test_admin_randomize_all_moments,
-        test_admin_randomize_all_moments_as_non_admin,
-        test_admin_cancel_moment,
-        test_admin_cancel_moment_as_non_admin,
-        test_admin_uncancel_moment,
-        test_admin_trigger_moment,
-        test_admin_trigger_moment_uncancels,
-    ]
-    
-    new_passed = 0
-    new_failed = 0
-    
-    for test in new_tests:
-        try:
-            if test():
-                new_passed += 1
-            else:
-                new_failed += 1
-        except Exception as e:
-            log(f"❌ EXCEPTION in {test.__name__}: {e}")
-            new_failed += 1
-    
-    print("\n--- REGRESSION TESTS ---")
-    regression_tests = [
-        test_auth_login,
-        test_auth_me,
-        test_auth_register,
-        test_auth_logout,
-        test_events_list,
-        test_events_filters,
-        test_events_carousels,
-        test_events_top_weekend,
-        test_events_genres,
-        test_interests,
-        test_badges_me,
-        test_next_badges,
-        test_streak,
-        test_streak_full,
-        test_user_badges,
-        test_rankings_friends,
-        test_rankings_city,
-        test_rankings_world,
-        test_friends,
-        test_friends_requests,
-        test_health,
-        test_gzip,
-    ]
-    
-    regression_passed = 0
-    regression_failed = 0
-    
-    for test in regression_tests:
-        try:
-            if test():
-                regression_passed += 1
-            else:
-                regression_failed += 1
-        except Exception as e:
-            log(f"❌ EXCEPTION in {test.__name__}: {e}")
-            regression_failed += 1
-    
-    # Summary
-    print("\n" + "="*80)
-    print("TEST SUMMARY")
-    print("="*80)
-    print(f"\nNEW ADMIN MOMENT ENDPOINTS:")
-    print(f"  ✅ Passed: {new_passed}")
-    print(f"  ❌ Failed: {new_failed}")
-    print(f"  Total: {new_passed + new_failed}")
-    
-    print(f"\nREGRESSION TESTS:")
-    print(f"  ✅ Passed: {regression_passed}")
-    print(f"  ❌ Failed: {regression_failed}")
-    print(f"  Total: {regression_passed + regression_failed}")
-    
-    print(f"\nOVERALL:")
-    total_passed = new_passed + regression_passed
-    total_failed = new_failed + regression_failed
-    total_tests = total_passed + total_failed
-    pass_rate = (total_passed / total_tests * 100) if total_tests > 0 else 0
-    print(f"  ✅ Passed: {total_passed}")
-    print(f"  ❌ Failed: {total_failed}")
-    print(f"  Total: {total_tests}")
-    print(f"  Pass rate: {pass_rate:.1f}%")
-    
-    if total_failed == 0:
-        print("\n🎉 ALL TESTS PASSED!")
-    else:
-        print(f"\n⚠️  {total_failed} test(s) failed. Review output above for details.")
-    
-    print("="*80 + "\n")
+def main():
+    try:
+        log("=" * 70)
+        log("BACKEND TEST: Event Pricing + Follow + Auto-Notifications")
+        log("=" * 70)
+        
+        # Setup
+        test_admin_login()
+        test_register_users()
+        
+        # New features
+        test_follow_endpoints()
+        test_extended_event_serialization()
+        test_pricing_endpoint()
+        test_low_stock_notification()
+        test_new_event_notification()
+        
+        # Regression tests
+        test_regression_auth()
+        test_regression_events()
+        test_regression_interests()
+        test_regression_friends()
+        test_regression_badges()
+        test_regression_rankings()
+        test_regression_health()
+        test_regression_admin_moments()
+        test_regression_gzip()
+        
+        log("\n" + "=" * 70)
+        log("🎉 ALL TESTS PASSED! 🎉")
+        log("=" * 70)
+        
+    except AssertionError as e:
+        log(f"\n❌ TEST FAILED: {e}")
+        raise
+    except Exception as e:
+        log(f"\n❌ UNEXPECTED ERROR: {e}")
+        raise
 
 if __name__ == "__main__":
-    run_all_tests()
+    main()

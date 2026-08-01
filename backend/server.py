@@ -147,6 +147,12 @@ class FriendRespondInput(BaseModel):
     accept: bool
 
 
+class PriceTier(BaseModel):
+    name: str = ""              # "1a fase", "Early bird", "General"…
+    price: float = 0.0          # in EUR
+    sold_out: bool = False
+
+
 class EventInput(BaseModel):
     name: str
     venue: str
@@ -159,6 +165,18 @@ class EventInput(BaseModel):
     has_commission: bool = False
     commission_url: str = ""
     more_info_url: str = ""
+    # Pricing
+    price_tiers: List[PriceTier] = Field(default_factory=list)
+    sale_state: str = "no_a_la_venta"   # no_a_la_venta | a_la_venta | pocas_entradas | agotado
+    currency: str = "EUR"
+
+
+class EventPricingInput(BaseModel):
+    price_tiers: List[PriceTier] = Field(default_factory=list)
+    sale_state: str
+    # Optional flag: if True, don't send push notifications for these changes
+    # (useful when admin is bulk-updating without wanting to spam users).
+    silent: bool = False
 
 
 class InterestInput(BaseModel):
@@ -581,7 +599,8 @@ def date_in_filter(event_date_str: str, flt: str) -> bool:
 
 
 async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map: dict | None = None,
-                          interests_by_event: dict | None = None) -> dict:
+                          interests_by_event: dict | None = None,
+                          follows_set: set | None = None) -> dict:
     if interests_by_event is not None:
         interests = interests_by_event.get(ev["id"], [])
     else:
@@ -628,7 +647,14 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "has_commission": ev.get("has_commission", False),
         "commission_url": ev.get("commission_url", ""),
         "more_info_url": ev.get("more_info_url", ""),
+        # Pricing
+        "price_tiers": ev.get("price_tiers", []),
+        "sale_state": ev.get("sale_state", "no_a_la_venta"),
+        "currency": ev.get("currency", "EUR"),
+        "current_price": _current_price(ev),
+        # Social
         "my_status": my_status,
+        "is_following": (ev["id"] in follows_set) if follows_set is not None else None,
         "friends_going": friends_going,
         "friends_interested": friends_interested,
         "friends_attended": friends_attended,
@@ -636,6 +662,20 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "total_interested": sum(1 for it in interests if it["status"] == "me_interesa"),
         "total_attended": sum(1 for it in interests if it["status"] == "estuve"),
     }
+
+
+def _current_price(ev: dict) -> Optional[float]:
+    """The 'active' price shown on the event card. If no tiers, return None.
+    Picks the first non-sold-out tier; if all tiers are sold out, returns the
+    price of the last tier (so users can still see the last known price)."""
+    tiers = ev.get("price_tiers") or []
+    if not tiers:
+        return None
+    for t in tiers:
+        if not t.get("sold_out"):
+            return float(t.get("price", 0))
+    # All sold out — show the last one
+    return float(tiers[-1].get("price", 0))
 
 
 @api_router.get("/events")
@@ -668,9 +708,18 @@ async def list_events(user: dict = Depends(get_current_user),
         async for it in db.interests.find({"event_id": {"$in": event_ids}}):
             interests_by_event.setdefault(it["event_id"], []).append(it)
 
+    # Load user's followed events (for is_following flag)
+    follows_set: set = set()
+    if event_ids:
+        async for f in db.event_follows.find(
+            {"user_id": user["user_id"], "event_id": {"$in": event_ids}},
+            {"_id": 0, "event_id": 1},
+        ):
+            follows_set.add(f["event_id"])
+
     events = []
     for ev in filtered_events:
-        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event))
+        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set))
     return events
 
 
@@ -742,6 +791,15 @@ async def event_carousels(user: dict = Depends(get_current_user)):
         async for it in db.interests.find({"event_id": {"$in": upcoming_ids}}):
             interests_by_event.setdefault(it["event_id"], []).append(it)
 
+    # Load user's followed events (for is_following flag)
+    follows_set: set = set()
+    if upcoming_ids:
+        async for f in db.event_follows.find(
+            {"user_id": user["user_id"], "event_id": {"$in": upcoming_ids}},
+            {"_id": 0, "event_id": 1},
+        ):
+            follows_set.add(f["event_id"])
+
     # BULK LOAD user's own interests once (for discover_new "my_genres")
     my_interests = []
     async for it in db.interests.find({"user_id": user["user_id"]}):
@@ -755,7 +813,7 @@ async def event_carousels(user: dict = Depends(get_current_user)):
     # ---- Top del finde: upcoming Fri-Sun (or next 7 days) sorted by attendance ----
     week_end = today + timedelta(days=7)
     weekend_serialized = [
-        await serialize_event(ev, user, friend_ids, users_map, interests_by_event)
+        await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set)
         for d, ev in all_upcoming if d <= week_end
     ]
     top_weekend_list = sorted(
@@ -767,7 +825,7 @@ async def event_carousels(user: dict = Depends(get_current_user)):
     friends_going_list = []
     if friend_ids:
         for d, ev in all_upcoming:
-            se = await serialize_event(ev, user, friend_ids, users_map, interests_by_event)
+            se = await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set)
             if (len(se["friends_going"]) + len(se["friends_interested"])) > 0:
                 friends_going_list.append(se)
         friends_going_list = sorted(
@@ -786,7 +844,7 @@ async def event_carousels(user: dict = Depends(get_current_user)):
         g = ev.get("genre")
         if not g or g in my_genres:
             continue
-        discover_new.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event))
+        discover_new.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set))
         if len(discover_new) >= 8:
             break
 
@@ -1634,6 +1692,11 @@ async def create_event(inp: EventInput, admin: dict = Depends(require_admin)):
     ev["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.events.insert_one(ev)
     ev.pop("_id", None)
+    # Fire "new event" push to all users in the same city (fire-and-forget)
+    try:
+        asyncio.create_task(_notify_new_event_city(ev))
+    except Exception as e:
+        logger.warning(f"new_event notify failed: {e}")
     return ev
 
 
@@ -1651,8 +1714,171 @@ async def delete_event(event_id: str, admin: dict = Depends(require_admin)):
     await db.events.delete_one({"id": event_id})
     await db.interests.delete_many({"event_id": event_id})
     await db.event_messages.delete_many({"event_id": event_id})
+    await db.event_follows.delete_many({"event_id": event_id})
     await db.notifications.delete_many({"data.event_id": event_id})
     return {"ok": True}
+
+
+# =========================
+# EVENT FOLLOWS ("avísame cuando salgan entradas")
+# =========================
+@api_router.post("/events/{event_id}/follow")
+async def follow_event(event_id: str, user: dict = Depends(get_current_user)):
+    """Follow an event to receive push notifications about ticket sales,
+    price changes, low stock and sold-out. Idempotent."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    await db.event_follows.update_one(
+        {"user_id": user["user_id"], "event_id": event_id},
+        {"$set": {"user_id": user["user_id"], "event_id": event_id,
+                  "created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    _invalidate_stats_cache(user["user_id"])
+    return {"ok": True, "following": True}
+
+
+@api_router.delete("/events/{event_id}/follow")
+async def unfollow_event(event_id: str, user: dict = Depends(get_current_user)):
+    await db.event_follows.delete_one({"user_id": user["user_id"], "event_id": event_id})
+    _invalidate_stats_cache(user["user_id"])
+    return {"ok": True, "following": False}
+
+
+@api_router.get("/events/{event_id}/follow-status")
+async def follow_status(event_id: str, user: dict = Depends(get_current_user)):
+    f = await db.event_follows.find_one({"user_id": user["user_id"], "event_id": event_id})
+    return {"following": bool(f)}
+
+
+# =========================
+# EVENT PRICING (admin) + auto-notifications
+# =========================
+VALID_SALE_STATES = {"no_a_la_venta", "a_la_venta", "pocas_entradas", "agotado"}
+
+
+async def _notify_event_audience(event_id: str, kind: str, title: str, body: str, url: str = ""):
+    """Send in-app + web push notification to everyone interested in the event:
+    followers + users with 'voy' or 'me_interesa' interest. De-duplicates users."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        return 0
+    target_ids = set()
+    async for f in db.event_follows.find({"event_id": event_id}, {"_id": 0, "user_id": 1}):
+        target_ids.add(f["user_id"])
+    async for it in db.interests.find(
+        {"event_id": event_id, "status": {"$in": ["voy", "me_interesa"]}},
+        {"_id": 0, "user_id": 1},
+    ):
+        target_ids.add(it["user_id"])
+    for uid in target_ids:
+        await create_notification(uid, kind, body, {"event_id": event_id, "type": kind})
+    logger.info(f"[notify] event={event_id} kind={kind} → {len(target_ids)} users")
+    return len(target_ids)
+
+
+async def _notify_new_event_city(event: dict):
+    """When a new event is created, notify all users in the same city."""
+    city = event.get("city") or "Palma de Mallorca"
+    body = f"🆕 Nueva fiesta: {event['name']} · {event.get('venue', '')} ({event['date']})"
+    count = 0
+    async for u in db.users.find({"city": city}, {"_id": 0, "user_id": 1}):
+        await create_notification(
+            u["user_id"], "new_event", body,
+            {"event_id": event["id"], "type": "new_event"},
+        )
+        count += 1
+    logger.info(f"[notify] new_event {event['id']} → {count} users in {city}")
+    return count
+
+
+def _describe_sale_transition(old: str, new: str) -> Optional[tuple]:
+    """Return (kind, body_template) for a sale state transition, or None if
+    the transition doesn't warrant a notification."""
+    if old == new:
+        return None
+    if new == "a_la_venta":
+        return ("tickets_on_sale", "🎟️ ¡Entradas a la venta ya para {name}!")
+    if new == "pocas_entradas":
+        return ("tickets_low_stock", "⚡ Quedan pocas entradas para {name}. ¡Corre!")
+    if new == "agotado":
+        return ("tickets_sold_out", "🔒 {name}: entradas agotadas.")
+    return None
+
+
+def _detect_price_increase(old_tiers: list, new_tiers: list) -> Optional[float]:
+    """If a new phase with a higher price than the previous max was added,
+    or a sold-out flag flipped moving the effective price up, return the new price."""
+    def eff(tiers):
+        for t in tiers:
+            if not t.get("sold_out"):
+                return float(t.get("price", 0))
+        return None
+
+    old_p = eff(old_tiers or [])
+    new_p = eff(new_tiers or [])
+    if old_p is not None and new_p is not None and new_p > old_p + 0.001:
+        return new_p
+    return None
+
+
+@api_router.put("/admin/events/{event_id}/pricing")
+async def admin_set_pricing(event_id: str, inp: EventPricingInput, admin: dict = Depends(require_admin)):
+    """Update price tiers and sale state. Automatically sends push notifications
+    to followers + interested users on meaningful transitions:
+    - sale_state → a_la_venta
+    - sale_state → pocas_entradas
+    - sale_state → agotado
+    - effective price went up (previous phase sold out, new phase active)
+    Set silent=true to update without notifying (bulk edits, corrections)."""
+    if inp.sale_state not in VALID_SALE_STATES:
+        raise HTTPException(status_code=400, detail=f"Estado inválido. Válidos: {', '.join(VALID_SALE_STATES)}")
+
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+
+    old_state = ev.get("sale_state", "no_a_la_venta")
+    old_tiers = ev.get("price_tiers", [])
+    new_tiers = [t.model_dump() for t in inp.price_tiers]
+
+    await db.events.update_one(
+        {"id": event_id},
+        {"$set": {"price_tiers": new_tiers, "sale_state": inp.sale_state}},
+    )
+    # Invalidate caches so the feed reflects the change
+    _invalidate_stats_cache()
+
+    notifications_sent = 0
+    if not inp.silent:
+        # 1) State transition notification
+        transition = _describe_sale_transition(old_state, inp.sale_state)
+        if transition:
+            kind, template = transition
+            body = template.format(name=ev["name"])
+            notifications_sent += await _notify_event_audience(event_id, kind, ev["name"], body)
+        # 2) Price increase notification (independent of state transition)
+        new_price = _detect_price_increase(old_tiers, new_tiers)
+        if new_price is not None and inp.sale_state == "a_la_venta":
+            body = f"📈 Nueva fase de precios en {ev['name']}: ahora {int(new_price)}€. Aprovecha antes de la siguiente subida."
+            notifications_sent += await _notify_event_audience(event_id, "tickets_price_up", ev["name"], body)
+
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return {"event": ev, "notifications_sent": notifications_sent}
+
+
+@api_router.post("/admin/events/{event_id}/notify-low-stock")
+async def admin_notify_low_stock(event_id: str, admin: dict = Depends(require_admin)):
+    """Manually fire the 'pocas entradas' notification without changing the sale
+    state (useful when Forvenues shows 'few tickets left' but you don't want to
+    change the state)."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    body = f"⚡ Quedan pocas entradas para {ev['name']}. ¡Corre!"
+    count = await _notify_event_audience(event_id, "tickets_low_stock", ev["name"], body)
+    return {"notified": count}
 
 
 # =========================
@@ -3486,6 +3712,8 @@ async def on_startup():
         await db.events.create_index("date")
         await db.moment_prompts.create_index("event_id", unique=True)
         await db.ticket_purchases.create_index([("user_id", 1), ("confirmed", 1)])
+        await db.event_follows.create_index([("user_id", 1), ("event_id", 1)], unique=True)
+        await db.event_follows.create_index("event_id")
     except Exception as e:
         logger.warning(f"Index warn: {e}")
     await seed_admin()

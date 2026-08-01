@@ -1,9 +1,11 @@
 import { useNavigate } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info } from "lucide-react";
+import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { mediaUrl } from "@/lib/api";
+import api, { mediaUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 
 function friendsText(friends, verb) {
   if (!friends || friends.length === 0) return null;
@@ -39,9 +41,35 @@ const todayStr = () => {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 };
 
+const SALE_STATE_META = {
+  no_a_la_venta: { label: "Próximamente", cls: "bg-white/10 text-white/70", icon: Clock },
+  a_la_venta:    { label: "A la venta",   cls: "bg-emerald-400/20 text-emerald-300", icon: Ticket },
+  pocas_entradas:{ label: "Pocas entradas", cls: "bg-orange-400/25 text-orange-200", icon: Flame },
+  agotado:       { label: "Agotado",      cls: "bg-white/10 text-white/50", icon: Lock },
+};
+
+function PriceBadge({ event }) {
+  const state = event.sale_state || "no_a_la_venta";
+  const meta = SALE_STATE_META[state] || SALE_STATE_META.no_a_la_venta;
+  const Icon = meta.icon;
+  const price = event.current_price;
+  const currency = event.currency || "EUR";
+  const symbol = currency === "EUR" ? "€" : currency;
+  if (!price && state === "no_a_la_venta") return null;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm ${meta.cls}`}>
+      <Icon className="w-3 h-3" />
+      {price ? `${Math.round(price)}${symbol}` : ""}
+      {price && state !== "no_a_la_venta" ? " · " : ""}
+      {meta.label}
+    </span>
+  );
+}
+
 export function EventCard({ event, index = 0, onSetStatus, pending, highlight, cardRef }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const qc = useQueryClient();
   const isPast = event.date < todayStr();
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
@@ -50,6 +78,22 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const isVoy = event.my_status === "voy";
   const isInteresa = event.my_status === "me_interesa";
   const isEstuve = event.my_status === "estuve";
+  const isFollowing = !!event.is_following;
+
+  // Toggle follow — optimistic update, then invalidate.
+  const toggleFollow = useMutation({
+    mutationFn: async () => {
+      if (isFollowing) return (await api.delete(`/events/${event.id}/follow`)).data;
+      return (await api.post(`/events/${event.id}/follow`)).data;
+    },
+    onSuccess: (d) => {
+      toast.success(d.following ? "Te avisaremos cuando salgan 🔔" : "Notificaciones desactivadas");
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["carousels"] });
+      qc.invalidateQueries({ queryKey: ["top-weekend"] });
+    },
+    onError: () => toast.error("Error"),
+  });
 
   // Build preview list including "yo" if I'm going/interested/attended
   const meEntry = user ? { user_id: "me", name: "Tú", picture: user.picture || "" } : null;
@@ -94,23 +138,45 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#121215] via-[#121215]/40 to-transparent" />
 
-        {event.genre && (
-          <span
-            data-testid={`event-genre-${event.id}`}
-            className="absolute top-3 left-3 qv-glass text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border border-white/15"
-          >
-            {event.genre}
-          </span>
+        {(event.genre || event.sale_state) && (
+          <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+            {event.genre && (
+              <span
+                data-testid={`event-genre-${event.id}`}
+                className="qv-glass text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border border-white/15"
+              >
+                {event.genre}
+              </span>
+            )}
+            <PriceBadge event={event} />
+          </div>
         )}
 
-        <button
-          data-testid={`event-share-btn-${event.id}`}
-          onClick={shareWhatsApp}
-          aria-label="Compartir por WhatsApp"
-          className="absolute top-3 right-3 w-8 h-8 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
-        >
-          <Send className="w-4 h-4" />
-        </button>
+        <div className="absolute top-3 right-3 flex items-center gap-1.5">
+          {!isPast && (
+            <button
+              data-testid={`event-follow-btn-${event.id}`}
+              onClick={(e) => { e.stopPropagation(); toggleFollow.mutate(); }}
+              disabled={toggleFollow.isPending}
+              aria-label={isFollowing ? "Dejar de recibir avisos" : "Avísame cuando salgan entradas"}
+              className={`w-8 h-8 rounded-full border flex items-center justify-center active:scale-90 transition-transform ${
+                isFollowing
+                  ? "bg-qv-secondary text-black border-qv-secondary shadow-[0_0_14px_rgba(0,240,255,0.5)]"
+                  : "qv-glass text-white border-white/15"
+              }`}
+            >
+              {isFollowing ? <Bell className="w-4 h-4" fill="currentColor" /> : <Bell className="w-4 h-4" />}
+            </button>
+          )}
+          <button
+            data-testid={`event-share-btn-${event.id}`}
+            onClick={shareWhatsApp}
+            aria-label="Compartir por WhatsApp"
+            className="w-8 h-8 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
 
         <div className="absolute bottom-0 w-full p-3 z-10">
           <h2 className="font-display text-lg font-bold tracking-tight text-white leading-tight line-clamp-1">
