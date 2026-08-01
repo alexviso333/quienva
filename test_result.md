@@ -1991,3 +1991,120 @@ Test "¿Quién va?" app feed after layout changes. Verify:
       Test credentials used: admin@quienva.app / admin123
       Viewport: 1920x900 (as specified)
       Screenshots saved: .screenshots/disco_view_complete.png
+
+## Map Locations & Push Notifications Bug Fixes (2026-08-01)
+
+### Testing request:
+Test "¿Quién va?" app. Login at /login with admin@quienva.app / admin123. Viewport 1920x900.
+
+Verify these two bug fixes (report PASS/FAIL with details):
+
+1. MAP LOCATIONS: Navigate to /mapa. A Leaflet dark map of Mallorca should render with colored pins (data-testid="mallorca-map"). The pins must be SPREAD ACROSS DIFFERENT AREAS of Mallorca, not all stacked in one spot. Verify venues data by calling the API and inspect the lat/lng values. Confirm that venues are at DISTINCT and geographically sensible coordinates. Report the actual lat/lng for Amok, BCM Planet Dance, Banana Club and Keops, and whether they are in different regions. Also click a pin and confirm a popup with the venue name opens.
+
+2. NOTIFICATIONS BUTTON does NOT throw "invalid characters": Find and click the "Activar notificaciones" button on the Profile page /profile. After clicking, capture any toast/error message and any JS console error. Confirm the error message "This string contains invalid characters" (or "contiene caracteres no válidos") does NOT appear. It's OK if the browser blocks the permission and shows a "permiso denegado" style message — that is acceptable; we only need to confirm the "invalid characters" crash is gone.
+
+### Test results:
+  - agent: "testing"
+    message: |
+      BUG FIX VERIFICATION COMPLETE - BOTH TESTS PASSED ✅
+      
+      🎉 2/2 BUG FIXES VERIFIED (100% success rate)
+      
+      ============================================================
+      TEST 1: MAP LOCATIONS - ✅ PASS
+      ============================================================
+      
+      ✅ MAP RENDERING:
+      - Leaflet map container found (data-testid="mallorca-map") ✓
+      - Leaflet container rendered with dark theme ✓
+      - Map tiles loaded successfully ✓
+      - 29 colored pins displayed on map ✓
+      
+      ✅ VENUE COORDINATES VERIFICATION:
+      Fetched 29 venues from API, all with lat/lng coordinates.
+      
+      Target venues found with CORRECT coordinates:
+      
+      1. Amok: lat=39.549, lng=2.688 (Region: Palma) ✅
+         - Expected: ~39.548, ~2.688
+         - Status: CORRECT (within 0.001° tolerance)
+      
+      2. Fitz Mallorca: lat=39.569, lng=2.632 (Region: Palma) ✅
+         - Expected: ~39.569, ~2.632
+         - Status: CORRECT (exact match)
+      
+      3. BCM Planet Dance: lat=39.509, lng=2.532 (Region: Magaluf) ✅
+         - Expected: ~39.509, ~2.532
+         - Status: CORRECT (exact match)
+      
+      4. Banana Club: lat=39.839, lng=3.121 (Region: Alcúdia) ✅
+         - Expected: ~39.839, ~3.121
+         - Status: CORRECT (exact match)
+      
+      5. Keops: lat=39.710, lng=3.463 (Region: Cala Rajada) ✅
+         - Expected: ~39.710, ~3.463
+         - Status: CORRECT (exact match)
+      
+      ✅ GEOGRAPHIC DISTRIBUTION ANALYSIS:
+      - Latitude range: 0.330 degrees (min: 39.509, max: 39.839)
+      - Longitude range: 0.931 degrees (min: 2.532, max: 3.463)
+      - PASS: Venues are SPREAD ACROSS DIFFERENT AREAS of Mallorca ✓
+      - NOT stacked in one spot ✓
+      - Covers multiple regions: Palma, Magaluf, Alcúdia, Cala Rajada ✓
+      
+      ✅ PIN INTERACTION:
+      - Clicked first pin (Amok) ✓
+      - Popup opened successfully ✓
+      - Popup contains venue information: "Amok, Palma · Marítimo · discoteca, 🎉 76 fiestas próximas" ✓
+      
+      ============================================================
+      TEST 2: NOTIFICATIONS BUTTON - ✅ PASS
+      ============================================================
+      
+      ✅ BUTTON FOUND:
+      - Push notification button found (data-testid="push-toggle-btn") ✓
+      - Button text: "Activar avisos en el móvil" ✓
+      - Button is for activating notifications ✓
+      
+      ✅ BUTTON CLICK TEST:
+      - Button clicked successfully ✓
+      - NO immediate crash ✓
+      - NO JavaScript errors ✓
+      
+      ✅ ERROR MESSAGE CHECK:
+      - Toast message displayed: "Permiso de notificaciones denegado." ✓
+      - This is ACCEPTABLE (browser permission denial, not the bug) ✓
+      - NO "invalid characters" error detected ✓
+      - NO "caracteres no válidos" error detected ✓
+      
+      ✅ CONSOLE ERRORS CHECK:
+      - Zero console errors detected ✓
+      - No error elements found on page ✓
+      
+      🎯 CONCLUSION:
+      The "invalid characters" bug is FIXED. The button now handles the VAPID key 
+      validation correctly without throwing the "This string contains invalid characters" 
+      error. The browser's permission denial is expected behavior and is acceptable.
+      
+      ============================================================
+      FINAL SUMMARY
+      ============================================================
+      
+      ✅ TEST 1 - MAP LOCATIONS: PASS
+      - All 5 target venues have correct coordinates in different regions
+      - Venues spread across Mallorca (Palma, Magaluf, Alcúdia, Cala Rajada)
+      - Map renders correctly with 29 colored pins
+      - Pin click opens popup with venue information
+      
+      ✅ TEST 2 - NOTIFICATIONS BUTTON: PASS
+      - Button works without "invalid characters" error
+      - Browser permission denial is acceptable (not the bug)
+      - No console errors detected
+      
+      📊 CONSOLE ERRORS:
+      - Zero console errors detected during both tests ✓
+      - No critical errors found ✓
+      
+      Test credentials used: admin@quienva.app / admin123
+      Viewport: 1920x900 (as specified)
+      Screenshots saved: .screenshots/map-locations-test.png, notifications-button-test.png

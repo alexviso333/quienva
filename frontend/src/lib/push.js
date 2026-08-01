@@ -1,9 +1,18 @@
 import api from "@/lib/api";
 
 function urlB64ToUint8Array(base64String) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = window.atob(base64);
+  const clean = (base64String || "").trim();
+  if (!clean || !/^[A-Za-z0-9\-_]+={0,2}$/.test(clean)) {
+    throw new Error("La clave de notificaciones del servidor no es válida. Configura VAPID_PUBLIC_KEY en el backend.");
+  }
+  const padding = "=".repeat((4 - (clean.length % 4)) % 4);
+  const base64 = (clean + padding).replace(/-/g, "+").replace(/_/g, "/");
+  let raw;
+  try {
+    raw = window.atob(base64);
+  } catch (e) {
+    throw new Error("La clave de notificaciones del servidor no es válida. Configura VAPID_PUBLIC_KEY en el backend.");
+  }
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
@@ -58,6 +67,8 @@ export async function unsubscribeFromPush() {
       await api.post("/push/unsubscribe", sub.toJSON());
       await sub.unsubscribe();
     }
-  } catch {}
+  } catch (e) {
+    // ignore unsubscribe errors
+  }
   return false;
 }

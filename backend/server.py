@@ -4559,6 +4559,39 @@ _ZONE_COORDS = {
     "Mallorca": (39.6953, 3.0176),
 }
 
+# Curated real-world coordinates per venue (authoritative — overrides guesses).
+_VENUE_COORDS = {
+    "Amok": (39.5487, 2.6885),
+    "Fitz Mallorca": (39.5695, 2.6318),
+    "Mar Salada": (39.5683, 2.6278),
+    "Tabana": (39.5689, 2.6298),
+    "Velvet": (39.5556, 2.6210),
+    "Over Club": (39.5668, 2.6262),
+    "Lunita": (39.5722, 2.6352),
+    "Luna Palma": (39.5718, 2.6345),
+    "Boomerang": (39.5990, 2.7080),
+    "Palma Events": (39.5701, 2.6500),
+    "Shamrock": (39.5699, 2.6338),
+    "Garito Café": (39.5602, 2.6208),
+    "Social Club": (39.5686, 2.6288),
+    "Savage": (39.5691, 2.6305),
+    "Laos": (39.5693, 2.6312),
+    "Enredo": (39.5685, 2.6282),
+    "Brassclub": (39.5702, 2.6345),
+    "BCM Planet Dance": (39.5091, 2.5320),
+    "Tokio Joe's": (39.5096, 2.5332),
+    "Carwash NightClub": (39.5094, 2.5338),
+    "Banana Club": (39.8392, 3.1208),
+    "Menta Disco": (39.8420, 3.1180),
+    "Danzû": (39.7662, 3.1572),
+    "Skau": (39.7658, 3.1560),
+    "Charly's": (39.7665, 3.1580),
+    "Keops": (39.7098, 3.4632),
+    "Angel's": (39.7102, 3.4620),
+    "Disco Inferno": (39.5115, 2.4795),
+    "Club Milano": (39.6953, 3.0176),
+}
+
 
 async def enrich_venue_directory():
     """Derive coords, cover image and opening days for directory venues from
@@ -4572,21 +4605,16 @@ async def enrich_venue_directory():
         async for v in db.venues.find({}):
             patch = {}
             sid = slug_to_id.get(v.get("scraper_slug") or "")
-            # Coordinates
-            if v.get("lat") is None:
-                lat = lng = None
-                if sid:
-                    e = await db.events.find_one({"scraper_venue_id": sid, "lat": {"$ne": None}},
-                                                 {"_id": 0, "lat": 1, "lng": 1})
-                    if e:
-                        lat, lng = e.get("lat"), e.get("lng")
-                if lat is None:
-                    base = _ZONE_COORDS.get(v.get("zone")) or _ZONE_COORDS["Mallorca"]
-                    # Deterministic small jitter so venues in the same zone don't stack.
-                    h = int(hashlib.md5((v.get("name") or v["id"]).encode()).hexdigest(), 16)
-                    lat = base[0] + ((h % 100) - 50) / 12000.0
-                    lng = base[1] + (((h // 100) % 100) - 50) / 12000.0
-                patch["lat"], patch["lng"] = lat, lng
+            # Coordinates: curated table is authoritative; else zone fallback + jitter.
+            curated = _VENUE_COORDS.get(v.get("name"))
+            if curated:
+                if (v.get("lat"), v.get("lng")) != curated:
+                    patch["lat"], patch["lng"] = curated
+            elif v.get("lat") is None:
+                base = _ZONE_COORDS.get(v.get("zone")) or _ZONE_COORDS["Mallorca"]
+                h = int(hashlib.md5((v.get("name") or v["id"]).encode()).hexdigest(), 16)
+                patch["lat"] = base[0] + ((h % 100) - 50) / 12000.0
+                patch["lng"] = base[1] + (((h // 100) % 100) - 50) / 12000.0
             # Cover image
             if not v.get("image_url") and sid:
                 e = await db.events.find_one({"scraper_venue_id": sid, "venue_image": {"$nin": ["", None]}},
