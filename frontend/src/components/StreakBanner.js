@@ -1,7 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
-import { Flame, Calendar, ChevronRight, Trophy } from "lucide-react";
+import { Flame, Calendar, ChevronRight, Trophy, Sparkles } from "lucide-react";
+
+const _BADGE_HINT = {
+  total_events: (r) => `Ve a ${r} fiesta${r === 1 ? "" : "s"} más`,
+  day_streak: (r) => `Sal ${r} día${r === 1 ? "" : "s"} más seguidos`,
+  week_streak: (r) => `${r} semana${r === 1 ? "" : "s"} más de fiesta`,
+  friends_count: (r) => `Añade ${r} amigo${r === 1 ? "" : "s"} más`,
+  tickets_count: (r) => `Compra ${r} entrada${r === 1 ? "" : "s"} más`,
+  venues_count: (r) => `Ve a ${r} local${r === 1 ? "" : "es"} nuevo${r === 1 ? "" : "s"}`,
+};
 
 /**
  * Prominent streak + points banner on top of the Feed.
@@ -20,6 +29,12 @@ export function StreakBanner() {
     queryFn: async () => (await api.get("/me/badges")).data,
     staleTime: 60_000,
   });
+  const { data: nextList = [] } = useQuery({
+    queryKey: ["next-badges"],
+    queryFn: async () => (await api.get("/me/next-badges?limit=1")).data,
+    staleTime: 60_000,
+  });
+  const nextBadge = nextList[0];
 
   if (!streak) return null;
 
@@ -101,6 +116,28 @@ export function StreakBanner() {
 
         {isCold && (
           <p className="relative text-white/50 text-[11px] mt-2 italic">Marca &apos;Voy&apos; a un plan para empezar tu racha.</p>
+        )}
+
+        {nextBadge && (
+          <div className="relative flex items-center gap-2.5 mt-3 pt-3 border-t border-white/10" data-testid="next-badge-inline">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-300 flex items-center justify-center text-lg shrink-0">
+              {nextBadge.emoji}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] uppercase tracking-widest text-qv-secondary font-bold flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> A punto de desbloquear
+              </p>
+              <p className="text-white text-xs font-bold truncate">
+                {nextBadge.name} <span className="text-yellow-300">+{nextBadge.points}</span>
+              </p>
+              <div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-qv-primary to-qv-secondary" style={{ width: `${Math.min(100, nextBadge.progress)}%` }} />
+              </div>
+            </div>
+            <span className="text-[10px] text-white/50 shrink-0">
+              {(_BADGE_HINT[nextBadge.stat_key] || ((r) => `${r} más`))(nextBadge.remaining)}
+            </span>
+          </div>
         )}
       </div>
     </button>

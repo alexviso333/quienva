@@ -1922,3 +1922,72 @@ Test the "¿Quién va?" nightlife app frontend after bug fixes. Verify specific 
         
         Test credentials used: admin@quienva.app / admin123
         Viewport: 1920x800 (mobile-style as specified)
+
+## Feed Layout Verification After Changes (2026-08-01)
+
+### Testing request:
+Test "¿Quién va?" app feed after layout changes. Verify:
+1. STREAK PANEL contains the next-badge inline (NOT separate banner)
+2. ORDER: streak panel → view selector → sale filters → date filters → party list → carousels BELOW
+3. COMPLETENESS: Discoteca view shows AMOK with MANY events (20+), count AMOK and FITZ MALLORCA
+4. No JavaScript console errors
+
+### Test results:
+  - agent: "testing"
+    message: |
+      FEED LAYOUT VERIFICATION COMPLETE - ALL TESTS PASSED ✅
+      
+      🎉 4/4 TESTS PASSED (100% success rate)
+      
+      ✅ TEST 1: STREAK PANEL CONTAINS NEXT-BADGE INLINE
+      - next-badge-inline found INSIDE streak-banner (data-testid="next-badge-inline") ✓
+      - Contains "A PUNTO DE DESBLOQUEAR" text ✓
+      - Progress bar present ✓
+      - NO separate next-badge-banner exists (data-testid="next-badge-banner" not found) ✓
+      - Badge shows: "🎁 Trajiste a alguien +100" with progress bar
+      
+      ✅ TEST 2: ELEMENT ORDER CORRECT
+      - Streak panel position: 214.5px ✓
+      - View selector position: 456.5px ✓
+      - Sale filters position: 506.5px ✓
+      - Date filters position: 548.5px ✓
+      - Order verified: Streak → View → Sale → Date ✓
+      - Carousels found at bottom (position: 56315.5px, after party list) ✓
+      - All three carousels present: "Top del finde", "Lo que va tu grupo", "Prueba algo nuevo" ✓
+      
+      ✅ TEST 3: COMPLETENESS - DISCOTECA VIEW EVENT COUNTS
+      - AMOK: 76 events (PASS - well above expected 20+) ✓
+      - FITZ MALLORCA: 31 events ✓
+      - Total venues found: 17 venues with events
+      - All venues displaying correctly with event counts:
+        * AMOK: 76 events
+        * FITZ MALLORCA: 31 events
+        * PALMA EVENTS: 17 events
+        * OVERCLUB: 10 events
+        * Mar Salada by Crudo: 4 events
+        * PARAO: 4 events
+        * BCM Mallorca, BCM Planet Dance, BOOMERANG, Discoteca Lunita, Es Gremi, 
+          Purobeach, Sala Focus, Social Club, Tito's Palma, ZENOX: 1 event each
+      - Events fully scraped and displaying correctly ✓
+      
+      ✅ TEST 4: NO CONSOLE ERRORS
+      - Zero JavaScript console errors detected ✓
+      - No blocking errors found ✓
+      - Application running cleanly ✓
+      
+      📊 EXACT COUNTS OBSERVED:
+      - AMOK: 76 events (expected 20+) ✅
+      - FITZ MALLORCA: 31 events ✅
+      
+      🎯 CONCLUSION:
+      All layout changes verified and working perfectly. The next-badge is correctly integrated 
+      INSIDE the streak panel (not as a separate banner at the bottom). Element order is correct 
+      with streak panel at top, followed by view selector, sale filters, date filters, then the 
+      party list, with curated carousels appearing BELOW the party list as intended. Discoteca 
+      view shows complete event data with AMOK having 76 events (well above the 20+ requirement) 
+      and FITZ MALLORCA having 31 events, proving events are fully scraped. No JavaScript errors 
+      detected. Layout changes are production-ready.
+      
+      Test credentials used: admin@quienva.app / admin123
+      Viewport: 1920x900 (as specified)
+      Screenshots saved: .screenshots/disco_view_complete.png

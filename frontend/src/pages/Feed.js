@@ -8,7 +8,6 @@ import { CompactEventCard } from "@/components/CompactEventCard";
 import { EventCarousel } from "@/components/EventCarousel";
 import { StoriesBar } from "@/components/Stories";
 import { StreakBanner } from "@/components/StreakBanner";
-import { NextBadgeBanner } from "@/components/NextBadgeBanner";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import FeedPlans, { FeedPlansControls } from "@/components/FeedPlans";
 import { useAuth } from "@/context/AuthContext";
@@ -177,32 +176,6 @@ export default function Feed() {
       )}
 
       <div className="flex flex-col gap-4 px-4 pt-1">
-        {!isPastView && !isDiscover && isDefaultView && carousels && (
-          <div className="-mx-4">
-            <EventCarousel
-              testId="carousel-top-weekend"
-              title="Top del finde"
-              subtitle="Los planes con más movida"
-              icon={Flame}
-              events={carousels.top_weekend}
-            />
-            <EventCarousel
-              testId="carousel-friends-going"
-              title="Lo que va tu grupo"
-              subtitle="Donde están tus amigos"
-              icon={Users}
-              events={carousels.friends_going}
-            />
-            <EventCarousel
-              testId="carousel-discover-new"
-              title="Prueba algo nuevo"
-              subtitle="Géneros que aún no exploras"
-              icon={Sparkles}
-              events={carousels.discover_new}
-            />
-          </div>
-        )}
-
         {!isPastView && !isDiscover && !isDefaultView && topEvent && (topEvent.friends_going || []).length > 0 && (
           <button
             data-testid="top-weekend-banner"
@@ -289,13 +262,34 @@ export default function Feed() {
             <p className="text-white/40 text-sm mt-1">Prueba a cambiar la fecha o el género.</p>
           </div>
         )}
-      </div>
 
-      {!isPastView && !isDiscover && (
-        <div className="px-4 pt-4">
-          <NextBadgeBanner />
-        </div>
-      )}
+        {/* Curated carousels — below the main list so the parties come first */}
+        {!isPastView && !isDiscover && isDefaultView && carousels && (
+          <div className="-mx-4 pt-2">
+            <EventCarousel
+              testId="carousel-top-weekend"
+              title="Top del finde"
+              subtitle="Los planes con más movida"
+              icon={Flame}
+              events={carousels.top_weekend}
+            />
+            <EventCarousel
+              testId="carousel-friends-going"
+              title="Lo que va tu grupo"
+              subtitle="Donde están tus amigos"
+              icon={Users}
+              events={carousels.friends_going}
+            />
+            <EventCarousel
+              testId="carousel-discover-new"
+              title="Prueba algo nuevo"
+              subtitle="Géneros que aún no exploras"
+              icon={Sparkles}
+              events={carousels.discover_new}
+            />
+          </div>
+        )}
+      </div>
     </AppShell>
   );
 }
