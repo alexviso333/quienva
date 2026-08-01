@@ -31,9 +31,7 @@ function dayLabel(iso) {
   return `${wd} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
 }
 
-export default function FeedPlans({ events, compact, onSetStatus, pending, highlightId, cardRefs }) {
-  const [view, setView] = useState("dia");
-  const [sale, setSale] = useState("all");
+export default function FeedPlans({ events, compact, onSetStatus, pending, highlightId, cardRefs, view = "dia", sale = "all" }) {
   const [monthCursor, setMonthCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [selDay, setSelDay] = useState(null);
 
@@ -93,38 +91,6 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
 
   return (
     <div className="flex flex-col gap-3">
-      {/* View selector */}
-      <div className="grid grid-cols-3 gap-1.5 bg-white/[0.04] border border-white/10 rounded-2xl p-1" data-testid="feed-view-selector">
-        {VIEWS.map((v) => {
-          const Icon = v.icon;
-          const on = view === v.key;
-          return (
-            <button
-              key={v.key}
-              onClick={() => setView(v.key)}
-              data-testid={`view-${v.key}`}
-              className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-colors ${on ? "bg-qv-primary text-black" : "text-white/70"}`}
-            >
-              <Icon className="w-3.5 h-3.5" /> {v.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Sale-state filter */}
-      <div className="flex overflow-x-auto hide-scrollbar gap-2" data-testid="sale-filters">
-        {SALE_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setSale(f.key)}
-            data-testid={`filter-sale-${f.key}`}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap ${sale === f.key ? "bg-qv-secondary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
       {shown.length === 0 && (
         <div className="text-center py-16 px-6" data-testid="feed-empty">
           <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
@@ -201,3 +167,39 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
     </div>
   );
 }
+
+export function FeedPlansControls({ view, setView, sale, setSale }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-3 gap-1.5 bg-white/[0.04] border border-white/10 rounded-2xl p-1" data-testid="feed-view-selector">
+        {VIEWS.map((v) => {
+          const Icon = v.icon;
+          const on = view === v.key;
+          return (
+            <button
+              key={v.key}
+              onClick={() => setView(v.key)}
+              data-testid={`view-${v.key}`}
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-colors ${on ? "bg-qv-primary text-black" : "text-white/70"}`}
+            >
+              <Icon className="w-3.5 h-3.5" /> {v.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex overflow-x-auto hide-scrollbar gap-2" data-testid="sale-filters">
+        {SALE_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setSale(f.key)}
+            data-testid={`filter-sale-${f.key}`}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap ${sale === f.key ? "bg-qv-secondary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+

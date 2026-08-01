@@ -10,7 +10,7 @@ import { StoriesBar } from "@/components/Stories";
 import { StreakBanner } from "@/components/StreakBanner";
 import { NextBadgeBanner } from "@/components/NextBadgeBanner";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import FeedPlans from "@/components/FeedPlans";
+import FeedPlans, { FeedPlansControls } from "@/components/FeedPlans";
 import { useAuth } from "@/context/AuthContext";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2 } from "lucide-react";
@@ -32,6 +32,8 @@ export default function Feed() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [dateFilter, setDateFilter] = useState("all");
   const [genre, setGenre] = useState("all");
+  const [view, setView] = useState("dia");
+  const [sale, setSale] = useState("all");
   const [highlightId, setHighlightId] = useState(null);
   const [compact] = useCompactMode();
   const cardRefs = useRef({});
@@ -127,9 +129,11 @@ export default function Feed() {
         <StreakBanner />
       </div>
 
-      <div className="px-4 pb-3">
-        <NextBadgeBanner />
-      </div>
+      {!isPastView && !isDiscover && (
+        <div className="px-4 pb-3">
+          <FeedPlansControls view={view} setView={setView} sale={sale} setSale={setSale} />
+        </div>
+      )}
 
       <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-2" data-testid="date-filters">
         {DATE_FILTERS.map((f) => (
@@ -275,6 +279,8 @@ export default function Feed() {
             cardRefs={cardRefs}
             pending={setStatus.isPending}
             onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
+            view={view}
+            sale={sale}
           />
         ) : (
           <div className="text-center py-20 px-6" data-testid="feed-empty">
@@ -284,6 +290,12 @@ export default function Feed() {
           </div>
         )}
       </div>
+
+      {!isPastView && !isDiscover && (
+        <div className="px-4 pt-4">
+          <NextBadgeBanner />
+        </div>
+      )}
     </AppShell>
   );
 }

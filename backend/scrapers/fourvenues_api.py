@@ -40,6 +40,17 @@ UA = (
 )
 MADRID = ZoneInfo("Europe/Madrid")
 
+
+def _fix_img(u: str) -> str:
+    """Normalize FourVenues image URLs: use www (avoids a 301 redirect that
+    some browsers drop for <img>) and request a lighter width."""
+    if not u:
+        return ""
+    u = u.replace("https://fourvenues.com/", "https://www.fourvenues.com/")
+    u = u.replace("http://fourvenues.com/", "https://www.fourvenues.com/")
+    u = re.sub(r"/w=\d+$", "/w=640", u)
+    return u
+
 # How far ahead to look for events, and cap on per-run detail fetches.
 LOOKAHEAD_DAYS = 120
 LOOKBACK_DAYS = 1
@@ -175,7 +186,7 @@ class FourVenuesApiScraper(Scraper):
         elif isinstance(genres, str):
             genre = genres
 
-        image = str(it.get("image") or org.get("cover") or "")
+        image = _fix_img(str(it.get("image") or org.get("cover") or ""))
         loc = it.get("location") or {}
         address = str(loc.get("addressComplete") or "")
 
@@ -196,7 +207,7 @@ class FourVenuesApiScraper(Scraper):
             lng = float(lng) if lng is not None else None
         except Exception:
             lat = lng = None
-        venue_image = str(org.get("cover") or org.get("image") or org.get("logo") or "")
+        venue_image = _fix_img(str(org.get("cover") or org.get("image") or org.get("logo") or ""))
 
         ticket_url = f"{SITE_BASE}/{self.slug}/events/{code}" if code else self.url
 

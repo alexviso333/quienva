@@ -4054,6 +4054,10 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/tabana-mallorca"},
     {"name": "Danzû (Can Picafort)", "slug": "danzu", "city": "Can Picafort",
      "url": "https://site.fourvenues.com/es/danzu"},
+    {"name": "Savage", "slug": "savage-mallorca",
+     "url": "https://site.fourvenues.com/es/savage-mallorca"},
+    {"name": "Laos", "slug": "laos-club",
+     "url": "https://site.fourvenues.com/es/laos-club"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")
@@ -4125,7 +4129,7 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
         ev = {
             "id": str(uuid.uuid4()),
             "name": se.name,
-            "venue": venue_name or se.venue,
+            "venue": se.venue or venue_name,
             "address": "",
             "date": se.date,
             "time": se.time or "",
@@ -4166,6 +4170,12 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
         patch["source"] = "scraper"
     if se.name and se.name != existing.get("name"):
         patch["name"] = se.name
+    if existing.get("source") == "scraper":
+        # keep real venue name + latest poster in sync for scraped events
+        if se.venue and se.venue != existing.get("venue"):
+            patch["venue"] = se.venue
+        if se.image_url and se.image_url != existing.get("image_url"):
+            patch["image_url"] = se.image_url
     if se.time and se.time != existing.get("time"):
         patch["time"] = se.time
     if se.image_url and not existing.get("image_url"):
@@ -4455,6 +4465,15 @@ _SEED_DIRECTORY = [
      "address": "Dàrsena de Can Barbarà, Palma"},
     {"name": "Social Club", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
      "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "socialclubmallorca",
+     "address": "Passeig Marítim, Palma"},
+    {"name": "Savage", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "savage-mallorca", "free_entry": False, "open_days": [4, 5], "instagram": "savagemallorca",
+     "address": "Passeig Marítim, Palma"},
+    {"name": "Laos", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "laos-club", "free_entry": False, "open_days": [4, 5], "instagram": "laosclub",
+     "address": "Passeig Marítim, Palma"},
+    {"name": "Enredo", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "enredomallorca",
      "address": "Passeig Marítim, Palma"},
     {"name": "Brassclub", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "pub",
      "scraper_slug": "", "free_entry": True, "open_days": [1, 2, 3, 4, 5], "instagram": "brassclub",

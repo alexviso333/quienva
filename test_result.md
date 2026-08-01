@@ -1800,3 +1800,125 @@ Please verify with admin login:
         
         Test file: /app/batch3_test.py
         Test credentials used: admin@quienva.app / admin123 + fresh test user
+
+
+
+## Frontend Bug Fixes Testing (2026-08-01)
+
+### User Request
+Test the "¿Quién va?" nightlife app frontend after bug fixes. Verify specific layout fixes, view modes, filters, image loading, directory, and map functionality.
+
+### Testing Scope
+- Feed layout order verification
+- View selector functionality (Día, Discoteca, Calendario)
+- Sale filters
+- Image loading (Bonitx event)
+- Directory page (Savage and Laos venues)
+- Map page (Leaflet with pins)
+
+## agent_communication:
+    - agent: "main"
+      message: "Frontend bug fixes completed. Need testing of: (1) Feed layout order (streak banner → view selector → sale filters → date filters), (2) Next badge banner at bottom, (3) Día view with day grouping, (4) Discoteca view with venue grouping showing real club names (AMOK, FITZ, etc.), (5) Calendario view with month grid, (6) Sale filters working, (7) Bonitx image loading, (8) Directory showing Savage and Laos venues, (9) Map with Leaflet pins. Test credentials: admin@quienva.app / admin123. Viewport: 1920x800."
+
+    - agent: "testing"
+      message: |
+        FRONTEND TESTING COMPLETE - Bug Fixes Verification
+        
+        🎉 ALL 9 TESTS PASSED (100% success rate)
+        
+        ✅ TEST RESULTS:
+        
+        1. FEED LAYOUT ORDER ✅
+           - Page header "Los planes" found at y=52
+           - Streak banner found at y=214.5
+             * Shows "DÍAS SEGUIDOS" ✓
+             * Shows "SEMANAS" ✓
+             * Shows "PUNTOS" ✓
+           - View selector (Día/Discoteca/Calendario) found at y=394 ✓
+           - Sale filters (Todas/A la venta/Pocas/Agotadas) found at y=444 ✓
+           - Date filters (Todos/Descubrir/Hoy/etc.) found at y=486 ✓
+           - Layout order CORRECT: streak < view < sale < date ✓
+           - View selector appears BELOW streak/points banner as required ✓
+        
+        2. NEXT BADGE BANNER POSITION ✅
+           - Banner found at absolute y=56774 (page height: 56979)
+           - Position: 99.6% down the page (near bottom) ✓
+           - "A punto de desbloquear" banner correctly positioned far down, NOT near top ✓
+        
+        3. VIEW = DÍA ✅
+           - Found 52 day group headers ✓
+           - Headers show correct labels:
+             * "Hoy" (today)
+             * "Mañana" (tomorrow)
+             * "Lun 3 ago", "Mar 4 ago", "Mié 5 ago" (weekday + date)
+           - Events grouped by day with event counts ✓
+           - Multiple day-groups with event cards confirmed ✓
+        
+        4. VIEW = DISCOTECA ✅
+           - Found 16 venue group headers ✓
+           - REAL club names confirmed (uppercase as expected):
+             * AMOK ✓
+             * FITZ MALLORCA ✓
+             * OVERCLUB ✓
+             * PALMA EVENTS ✓
+             * Discoteca Lunita ✓
+           - Other venues: BCM Mallorca, BCM Planet Dance, BOOMERANG, Es Gremi, Mar Salada by Crudo
+           - Events regrouped by venue with venue headers ✓
+           - Amok and Fitz have MANY events (10+ each) ✓
+        
+        5. VIEW = CALENDARIO ✅
+           - Calendar month label found: "Agosto 2026" ✓
+           - Calendar grid with 7 columns (Mon-Sun) ✓
+           - Day buttons clickable ✓
+           - Highlighted days show events below when clicked ✓
+           - Month navigation arrows present ✓
+        
+        6. SALE FILTER ✅
+           - "A la venta" filter clicked → list changes ✓
+           - "Agotadas" filter clicked → list changes ✓
+           - Filters change visible events without errors ✓
+           - All 4 filter buttons working (Todas/A la venta/Pocas/Agotadas) ✓
+        
+        7. BONITX IMAGE ✅
+           - Bonitx event found in feed ✓
+           - Image element located ✓
+           - Image src: https://www.fourvenues.com/cdn-cgi/imagedelivery/... ✓
+           - naturalWidth: 640 (image loaded successfully) ✓
+           - naturalHeight: 800 ✓
+           - Image NOT broken ✓
+        
+        8. DIRECTORY (/locales) ✅
+           - Navigated to /locales successfully ✓
+           - "Savage" venue FOUND ✓
+           - "Laos" venue FOUND ✓
+           - Total venue cards: 37 ✓
+           - Venue cards render correctly ✓
+           - Some cards show cover photos (background images) ✓
+        
+        9. MAP (/mapa) ✅
+           - Navigated to /mapa successfully ✓
+           - Leaflet map container found ✓
+           - Leaflet tile pane found (map tiles loaded) ✓
+           - Found 29 colored pins on map ✓
+           - Map renders with proper styling and markers ✓
+        
+        📊 CONSOLE ERRORS CHECK:
+        - 2× 401 errors on /api/auth/me (expected before login, not an issue)
+        - 4× ERR_ABORTED on /cdn-cgi/rum (Cloudflare RUM monitoring, non-critical)
+        - NO JavaScript errors affecting functionality ✓
+        - NO blocking errors found ✓
+        
+        🎯 CONCLUSION:
+        ALL bug fixes verified and working correctly. Feed layout order is perfect with streak banner 
+        → view selector → sale filters → date filters. Next badge banner correctly positioned at 
+        bottom. All three view modes (Día, Discoteca, Calendario) work as expected with proper 
+        grouping and real venue names. Sale filters function without errors. Bonitx image loads 
+        successfully. Directory shows both Savage and Laos venues. Map renders with Leaflet and 
+        29 colored pins. Zero critical issues found.
+        
+        Screenshots saved: .screenshots/feed-initial.png, feed-dia-view.png, feed-disco-view.png, 
+        feed-calendario-view.png, feed-sale-venta.png, feed-sale-agotadas.png, bonitx-event.png, 
+        directory-page.png, map-page.png
+        
+        Test credentials used: admin@quienva.app / admin123
+        Viewport: 1920x800 (mobile-style as specified)
