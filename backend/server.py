@@ -25,6 +25,7 @@ from datetime import datetime, timezone, timedelta, date, time as dtime
 from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pywebpush import webpush, WebPushException
+import httpx
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -1819,6 +1820,20 @@ def _detect_price_increase(old_tiers: list, new_tiers: list) -> Optional[float]:
     old_p = eff(old_tiers or [])
     new_p = eff(new_tiers or [])
     if old_p is not None and new_p is not None and new_p > old_p + 0.001:
+        return new_p
+    return None
+
+
+def _detect_price_decrease(old_tiers: list, new_tiers: list) -> Optional[float]:
+    """If the effective (cheapest available) price dropped between runs,
+    return the new lower price. Used to fire a 'price drop' notification."""
+    def eff(tiers):
+        avail = [float(t.get("price", 0)) for t in (tiers or []) if not t.get("sold_out")]
+        return min(avail) if avail else None
+
+    old_p = eff(old_tiers or [])
+    new_p = eff(new_tiers or [])
+    if old_p is not None and new_p is not None and new_p < old_p - 0.001:
         return new_p
     return None
 
@@ -3946,38 +3961,83 @@ app.include_router(api_router)
 from scrapers import build_scraper as _build_scraper, ScrapedEvent as _ScrapedEvent
 from scrapers.base import normalize_venue_key as _norm_venue
 
+_ALLOWED_ADAPTERS = ("fourvenues_api", "fourvenues_public_api", "nextjs_html")
+
+# FourVenues guest-token: long-lived JWT shared by every microsite. Read from an
+# app_settings override (editable in admin) first, then the env var. Cached briefly.
+_FV_TOKEN_CACHE = {"val": None, "ts": 0.0}
+
+
+async def _get_fourvenues_token() -> str:
+    now = time.time()
+    if _FV_TOKEN_CACHE["val"] is not None and now - _FV_TOKEN_CACHE["ts"] < 30:
+        return _FV_TOKEN_CACHE["val"]
+    token = ""
+    try:
+        s = await db.app_settings.find_one({"key": "fourvenues_guest_token"}, {"_id": 0})
+        if s and s.get("value"):
+            token = str(s["value"]).strip()
+    except Exception:
+        token = ""
+    if not token:
+        token = (os.environ.get("FOURVENUES_GUEST_TOKEN") or "").strip()
+    _FV_TOKEN_CACHE["val"] = token
+    _FV_TOKEN_CACHE["ts"] = now
+    return token
+
 # Preseeded list of venues (Palma de Mallorca). Admin can add more via UI.
-# Only clubs with a working public scraper are included. Others need manual mode.
+# All FourVenues-powered clubs use the universal 'fourvenues_api' adapter
+# (rich data: real prices, sold-out & few-left flags). Only the club/promoter
+# slug is needed (from site.fourvenues.com/es/<slug>).
 _SEED_VENUES = [
-    {
-        "name": "Fitz Mallorca",
-        "city": "Palma de Mallorca",
-        "adapter_type": "fourvenues_public_api",
-        "url": "https://fitzmallorca.com",
-        "active": True,
-    },
-    {
-        "name": "Amok Mallorca",
-        "city": "Palma de Mallorca",
-        "adapter_type": "nextjs_html",
-        "url": "https://www.amokmallorca.com",
-        "active": True,
-    },
+    {"name": "Fitz Mallorca", "slug": "fitz-mallorca",
+     "url": "https://site.fourvenues.com/es/fitz-mallorca"},
+    {"name": "Amok Mallorca", "slug": "amok",
+     "url": "https://site.fourvenues.com/es/amok"},
+    {"name": "Over Club Mallorca", "slug": "over-club",
+     "url": "https://site.fourvenues.com/es/over-club"},
+    {"name": "Lunita", "slug": "lunita",
+     "url": "https://site.fourvenues.com/es/lunita"},
+    {"name": "Mar Salada", "slug": "mar-salada",
+     "url": "https://site.fourvenues.com/es/mar-salada"},
+    {"name": "Luna Palma", "slug": "luna-palma",
+     "url": "https://site.fourvenues.com/es/luna-palma"},
+    {"name": "Palma Events", "slug": "palma-events",
+     "url": "https://site.fourvenues.com/es/palma-events"},
 ]
+for _v in _SEED_VENUES:
+    _v.setdefault("city", "Palma de Mallorca")
+    _v.setdefault("adapter_type", "fourvenues_api")
+    _v.setdefault("active", True)
 
 
 async def seed_scraped_venues():
-    """Idempotent seed of the venues collection."""
+    """Idempotent seed of the venues collection. Also migrates the two original
+    venues (Fitz/Amok) to the universal fourvenues_api adapter + slug."""
     try:
+        # Migrate legacy Fitz/Amok docs to the new universal adapter.
+        _migrations = {
+            "Fitz Mallorca": {"slug": "fitz-mallorca", "url": "https://site.fourvenues.com/es/fitz-mallorca"},
+            "Amok Mallorca": {"slug": "amok", "url": "https://site.fourvenues.com/es/amok"},
+        }
+        for nm, patch in _migrations.items():
+            await db.scraped_venues.update_one(
+                {"name": nm},
+                {"$set": {"adapter_type": "fourvenues_api", **patch}},
+            )
         for v in _SEED_VENUES:
             existing = await db.scraped_venues.find_one({"name": v["name"]})
             if existing:
+                # Backfill slug if missing (older docs).
+                if not existing.get("slug") and v.get("slug"):
+                    await db.scraped_venues.update_one(
+                        {"id": existing.get("id")}, {"$set": {"slug": v["slug"]}})
                 continue
             doc = {**v, "id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat(),
                    "last_run_at": None, "last_run_ok": None, "last_run_events": 0,
                    "last_run_new": 0, "last_run_updated": 0, "last_run_error": None}
             await db.scraped_venues.insert_one(doc)
-        logger.info(f"Seeded scraped_venues: {len(_SEED_VENUES)} venues")
+        logger.info(f"Seeded scraped_venues: {len(_SEED_VENUES)} venues (fourvenues_api)")
     except Exception as e:
         logger.warning(f"seed_scraped_venues failed: {e}")
 
@@ -3993,11 +4053,14 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
     city = venue.get("city") or "Palma de Mallorca"
     # 1) Lookup by external_id (most reliable)
     existing = await db.events.find_one({"external_id": se.external_id}, {"_id": 0})
-    # 2) Fallback: venue + date (user might have created it manually)
+    # 2) Fallback: venue + date (user might have created it manually). Only match
+    #    candidates WITHOUT an external_id — otherwise two scraped events at the same
+    #    venue on the same day would cannibalize each other.
     if not existing:
-        # Match by normalized venue name + date
         norm = _norm_venue(venue_name)
         async for c in db.events.find({"date": se.date}, {"_id": 0}):
+            if c.get("external_id"):
+                continue
             if _norm_venue(c.get("venue", "")) == norm:
                 existing = c
                 break
@@ -4076,6 +4139,10 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
     if new_price is not None and new_state == "a_la_venta":
         body = f"📈 Nueva fase de precios en {existing['name']}: ahora {int(new_price)}€."
         await _notify_event_audience(existing["id"], "tickets_price_up", existing["name"], body)
+    drop_price = _detect_price_decrease(old_tiers, new_tiers)
+    if drop_price is not None and new_state in ("a_la_venta", "pocas_entradas"):
+        body = f"📉 ¡Bajada de precio en {existing['name']}! Ahora desde {int(drop_price)}€."
+        await _notify_event_audience(existing["id"], "tickets_price_down", existing["name"], body)
     return "updated"
 
 
@@ -4086,11 +4153,14 @@ async def run_scraper_for_venue(venue: dict) -> dict:
                "events": 0, "created": 0, "updated": 0, "unchanged": 0, "error": None,
                "duration_ms": 0}
     try:
-        scraper = _build_scraper(
-            venue["adapter_type"], venue["url"],
+        _kwargs = dict(
             venue_name=venue.get("name", ""),
             city=venue.get("city", "Palma de Mallorca"),
         )
+        if venue.get("adapter_type") == "fourvenues_api":
+            _kwargs["slug"] = venue.get("slug") or ""
+            _kwargs["guest_token"] = await _get_fourvenues_token()
+        scraper = _build_scraper(venue["adapter_type"], venue["url"], **_kwargs)
         events = await scraper.fetch()
         summary["events"] = len(events)
         for se in events:
@@ -4142,9 +4212,66 @@ async def run_all_scrapers():
 class ScrapedVenueInput(BaseModel):
     name: str
     city: str = "Palma de Mallorca"
-    adapter_type: str      # 'fourvenues_public_api' | 'nextjs_html'
+    adapter_type: str      # 'fourvenues_api' | 'fourvenues_public_api' | 'nextjs_html'
     url: str
+    slug: str = ""
     active: bool = True
+
+
+class FourVenuesTokenInput(BaseModel):
+    token: str
+
+
+@app.get("/api/admin/scrapers/fourvenues-token")
+async def admin_get_fv_token(admin: dict = Depends(require_admin)):
+    """Return whether a FourVenues guest-token is configured (masked) and a
+    live validity check against the API."""
+    token = await _get_fourvenues_token()
+    masked = ""
+    if token:
+        masked = f"{token[:12]}…{token[-6:]}" if len(token) > 24 else "configurado"
+    valid = None
+    if token:
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.get(
+                    "https://cli-api-service.fourvenues.com/api/microsites/amok/metadata",
+                    headers={"Authorization": f"Bearer {token}",
+                             "Origin": "https://site.fourvenues.com",
+                             "User-Agent": "Mozilla/5.0"},
+                )
+            valid = r.status_code == 200
+        except Exception:
+            valid = None
+    return {"configured": bool(token), "masked": masked, "valid": valid}
+
+
+@app.put("/api/admin/scrapers/fourvenues-token")
+async def admin_set_fv_token(inp: FourVenuesTokenInput, admin: dict = Depends(require_admin)):
+    token = (inp.token or "").strip()
+    if not token or token.count(".") != 2:
+        raise HTTPException(status_code=400, detail="Token JWT inválido")
+    await db.app_settings.update_one(
+        {"key": "fourvenues_guest_token"},
+        {"$set": {"key": "fourvenues_guest_token", "value": token,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    _FV_TOKEN_CACHE["val"] = None  # bust cache
+    # Validate immediately.
+    valid = None
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://cli-api-service.fourvenues.com/api/microsites/amok/metadata",
+                headers={"Authorization": f"Bearer {token}",
+                         "Origin": "https://site.fourvenues.com",
+                         "User-Agent": "Mozilla/5.0"},
+            )
+        valid = r.status_code == 200
+    except Exception:
+        valid = None
+    return {"ok": True, "valid": valid}
 
 
 @app.get("/api/admin/scrapers")
@@ -4157,8 +4284,14 @@ async def admin_list_scrapers(admin: dict = Depends(require_admin)):
 
 @app.post("/api/admin/scrapers")
 async def admin_create_scraper(inp: ScrapedVenueInput, admin: dict = Depends(require_admin)):
-    if inp.adapter_type not in ("fourvenues_public_api", "nextjs_html"):
+    if inp.adapter_type not in _ALLOWED_ADAPTERS:
         raise HTTPException(status_code=400, detail="adapter_type inválido")
+    if inp.adapter_type == "fourvenues_api" and not (inp.slug or "").strip():
+        # Try to derive from URL; if still empty, reject.
+        from scrapers.fourvenues_api import FourVenuesApiScraper as _FV
+        derived = _FV._slug_from_url(inp.url)
+        if not derived:
+            raise HTTPException(status_code=400, detail="Falta el 'slug' de FourVenues")
     doc = {
         "id": str(uuid.uuid4()),
         **inp.model_dump(),
@@ -4173,7 +4306,7 @@ async def admin_create_scraper(inp: ScrapedVenueInput, admin: dict = Depends(req
 
 @app.put("/api/admin/scrapers/{venue_id}")
 async def admin_update_scraper(venue_id: str, inp: ScrapedVenueInput, admin: dict = Depends(require_admin)):
-    if inp.adapter_type not in ("fourvenues_public_api", "nextjs_html"):
+    if inp.adapter_type not in _ALLOWED_ADAPTERS:
         raise HTTPException(status_code=400, detail="adapter_type inválido")
     r = await db.scraped_venues.update_one({"id": venue_id}, {"$set": inp.model_dump()})
     if r.matched_count == 0:

@@ -1,24 +1,27 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { formatApiErrorDetail } from "@/lib/api";
-import { Bot, Play, Loader2, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Globe } from "lucide-react";
+import { Bot, Play, Loader2, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, Globe, KeyRound, ShieldCheck, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 const ADAPTER_LABELS = {
+  fourvenues_api: "FourVenues API (universal · precios reales)",
   fourvenues_public_api: "API pública (/api/fourvenues)",
   nextjs_html: "HTML Next.js (extrae del home)",
 };
 
 /**
  * Admin panel to manage automatic event scrapers.
- * Each venue defines its URL + adapter type. Runs auto every 30 min.
+ * Each venue defines its FourVenues slug + adapter type. Runs auto every 30 min.
  */
 export default function AdminScrapersPanel() {
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [newVenue, setNewVenue] = useState({
-    name: "", city: "Palma de Mallorca", adapter_type: "nextjs_html", url: "",
+    name: "", city: "Palma de Mallorca", adapter_type: "fourvenues_api", url: "", slug: "",
   });
+  const [tokenInput, setTokenInput] = useState("");
+  const [editingToken, setEditingToken] = useState(false);
 
   const { data: venues = [], isLoading } = useQuery({
     queryKey: ["admin-scrapers"],
@@ -27,14 +30,33 @@ export default function AdminScrapersPanel() {
     refetchInterval: 60_000,
   });
 
+  const { data: tokenStatus } = useQuery({
+    queryKey: ["admin-fv-token"],
+    queryFn: async () => (await api.get("/admin/scrapers/fourvenues-token")).data,
+    staleTime: 30_000,
+  });
+
   const inv = () => qc.invalidateQueries({ queryKey: ["admin-scrapers"] });
 
+  const saveToken = useMutation({
+    mutationFn: async () => (await api.put("/admin/scrapers/fourvenues-token", { token: tokenInput.trim() })).data,
+    onSuccess: (d) => {
+      toast[d.valid === false ? "warning" : "success"](
+        d.valid === false ? "Token guardado, pero no valida (revísalo)" : "Token guardado y validado"
+      );
+      setEditingToken(false);
+      setTokenInput("");
+      qc.invalidateQueries({ queryKey: ["admin-fv-token"] });
+    },
+    onError: (e) => toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Error"),
+  });
+
   const create = useMutation({
-    mutationFn: async () => (await api.post("/admin/scrapers", newVenue)).data,
+    mutationFn: async (payload) => (await api.post("/admin/scrapers", payload || newVenue)).data,
     onSuccess: () => {
       toast.success("Discoteca añadida");
       setAdding(false);
-      setNewVenue({ name: "", city: "Palma de Mallorca", adapter_type: "nextjs_html", url: "" });
+      setNewVenue({ name: "", city: "Palma de Mallorca", adapter_type: "fourvenues_api", url: "", slug: "" });
       inv();
     },
     onError: (e) => toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Error"),
@@ -82,6 +104,8 @@ export default function AdminScrapersPanel() {
     onSuccess: () => inv(),
   });
 
+  const isFv = newVenue.adapter_type === "fourvenues_api";
+
   return (
     <div className="px-4 mt-6" data-testid="admin-scrapers-panel">
       <div className="flex items-center gap-2 mb-2">
@@ -100,8 +124,62 @@ export default function AdminScrapersPanel() {
         </button>
       </div>
       <p className="text-white/40 text-[11px] mb-3 leading-snug">
-        Cada 30 min se sincroniza con las webs de cada club. Detecta fiestas nuevas, subidas de precio y agotados; envía push automáticas.
+        Cada 30 min se sincroniza con FourVenues. Detecta fiestas nuevas y cambios de entradas:
+        a la venta, pocas entradas, agotado, y subidas/bajadas de precio; envía push automáticas.
       </p>
+
+      {/* FourVenues guest token */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 mb-3" data-testid="fv-token-box">
+        <div className="flex items-center gap-2">
+          <KeyRound className="w-4 h-4 text-amber-300" />
+          <span className="text-sm font-bold text-white flex-1">Token FourVenues</span>
+          {tokenStatus?.valid === true && (
+            <span className="text-[10px] flex items-center gap-1 text-emerald-300"><ShieldCheck className="w-3.5 h-3.5" /> válido</span>
+          )}
+          {tokenStatus?.valid === false && (
+            <span className="text-[10px] flex items-center gap-1 text-rose-300"><ShieldAlert className="w-3.5 h-3.5" /> caducado</span>
+          )}
+          {tokenStatus && tokenStatus.valid == null && tokenStatus.configured && (
+            <span className="text-[10px] text-white/40">sin verificar</span>
+          )}
+        </div>
+        <p className="text-white/40 text-[10px] mt-1">
+          {tokenStatus?.configured ? `Configurado: ${tokenStatus.masked}` : "No configurado"} · necesario para leer FourVenues.
+        </p>
+        {!editingToken ? (
+          <button
+            onClick={() => setEditingToken(true)}
+            className="mt-2 text-[11px] font-bold text-amber-300 underline"
+          >
+            {tokenStatus?.configured ? "Actualizar token" : "Añadir token"}
+          </button>
+        ) : (
+          <div className="mt-2 flex flex-col gap-2">
+            <textarea
+              placeholder="Pega aquí el guest-token JWT (eyJ...)"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              rows={3}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-[11px] placeholder:text-white/40 break-all"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => saveToken.mutate()}
+                disabled={!tokenInput.trim() || saveToken.isPending}
+                className="flex-1 h-9 rounded-lg bg-amber-300 text-black font-bold text-xs active:scale-95 disabled:opacity-50"
+              >
+                {saveToken.isPending ? "Guardando..." : "Guardar y validar"}
+              </button>
+              <button
+                onClick={() => { setEditingToken(false); setTokenInput(""); }}
+                className="px-4 h-9 rounded-lg bg-white/10 text-white text-xs"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {isLoading && (
         <div className="py-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-white/50" /></div>
@@ -131,7 +209,7 @@ export default function AdminScrapersPanel() {
                     {!v.active && <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/50 uppercase">Off</span>}
                   </div>
                   <p className="text-white/40 text-[11px] truncate flex items-center gap-1">
-                    <Globe className="w-3 h-3" /> {v.url}
+                    <Globe className="w-3 h-3" /> {v.slug ? `slug: ${v.slug}` : v.url}
                   </p>
                   <p className="text-white/40 text-[10px] mt-0.5">
                     {ADAPTER_LABELS[v.adapter_type] || v.adapter_type}
@@ -191,20 +269,35 @@ export default function AdminScrapersPanel() {
             onChange={(e) => setNewVenue({ ...newVenue, name: e.target.value })}
             className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm placeholder:text-white/40"
           />
-          <input
-            placeholder="URL (ej. https://brujamallorca.com)"
-            value={newVenue.url}
-            onChange={(e) => setNewVenue({ ...newVenue, url: e.target.value })}
-            className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm placeholder:text-white/40"
-          />
           <select
             value={newVenue.adapter_type}
             onChange={(e) => setNewVenue({ ...newVenue, adapter_type: e.target.value })}
             className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm"
           >
-            <option value="nextjs_html" className="bg-black">HTML Next.js (Amok, Overclub...)</option>
-            <option value="fourvenues_public_api" className="bg-black">API pública Fourvenues (Fitz)</option>
+            <option value="fourvenues_api" className="bg-black">FourVenues API (universal, recomendado)</option>
+            <option value="nextjs_html" className="bg-black">HTML Next.js (webs propias)</option>
+            <option value="fourvenues_public_api" className="bg-black">API pública /api/fourvenues (legacy)</option>
           </select>
+          {isFv ? (
+            <input
+              placeholder="Slug FourVenues (ej. amok, lunita, over-club)"
+              value={newVenue.slug}
+              onChange={(e) => setNewVenue({ ...newVenue, slug: e.target.value.trim() })}
+              className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm placeholder:text-white/40"
+            />
+          ) : (
+            <input
+              placeholder="URL (ej. https://brujamallorca.com)"
+              value={newVenue.url}
+              onChange={(e) => setNewVenue({ ...newVenue, url: e.target.value })}
+              className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm placeholder:text-white/40"
+            />
+          )}
+          {isFv && (
+            <p className="text-white/40 text-[10px] -mt-1 leading-snug">
+              El slug es lo que va tras <span className="text-white/60">site.fourvenues.com/es/</span> en la web del club.
+            </p>
+          )}
           <input
             placeholder="Ciudad"
             value={newVenue.city}
@@ -213,8 +306,14 @@ export default function AdminScrapersPanel() {
           />
           <div className="flex gap-2">
             <button
-              onClick={() => create.mutate()}
-              disabled={!newVenue.name || !newVenue.url || create.isPending}
+              onClick={() => {
+                const payload = { ...newVenue };
+                if (isFv && payload.slug && !payload.url) {
+                  payload.url = `https://site.fourvenues.com/es/${payload.slug}`;
+                }
+                create.mutate(payload);
+              }}
+              disabled={!newVenue.name || (isFv ? !newVenue.slug : !newVenue.url) || create.isPending}
               className="flex-1 h-10 rounded-lg bg-qv-primary text-black font-bold text-sm active:scale-95 disabled:opacity-50"
             >
               {create.isPending ? "Guardando..." : "Añadir"}
