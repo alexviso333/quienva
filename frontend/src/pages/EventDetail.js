@@ -80,6 +80,24 @@ export default function EventDetail() {
     },
   });
 
+  const setTicket = useMutation({
+    mutationFn: async (have) => (await api.post(`/events/${id}/ticket`, { have })).data,
+    onMutate: async (have) => {
+      await qc.cancelQueries({ queryKey: ["event", id] });
+      const prev = qc.getQueryData(["event", id]);
+      qc.setQueryData(["event", id], (e) => (e ? { ...e, my_has_ticket: have } : e));
+      return { prev };
+    },
+    onSuccess: (_d, have) => {
+      if (have) toast.success("¡Guardado! 🎟️ Tus amigos verán que vas con entrada");
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
+      toast.error("No se pudo guardar");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
+  });
+
   if (isLoading || !event) {
     return (
       <div className="min-h-screen qv-app-bg flex items-center justify-center">
@@ -107,24 +125,6 @@ export default function EventDetail() {
     // Fire-and-forget tracking for the money funnel
     api.post("/tickets/click", { event_id: event.id }).catch(() => {});
   };
-
-  const setTicket = useMutation({
-    mutationFn: async (have) => (await api.post(`/events/${id}/ticket`, { have })).data,
-    onMutate: async (have) => {
-      await qc.cancelQueries({ queryKey: ["event", id] });
-      const prev = qc.getQueryData(["event", id]);
-      qc.setQueryData(["event", id], (e) => (e ? { ...e, my_has_ticket: have } : e));
-      return { prev };
-    },
-    onSuccess: (_d, have) => {
-      if (have) toast.success("¡Guardado! 🎟️ Tus amigos verán que vas con entrada");
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
-      toast.error("No se pudo guardar");
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
-  });
 
   const price = event.current_price;
   const ticketFriends = event.friends_with_ticket || [];

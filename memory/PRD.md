@@ -80,3 +80,16 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Feed simplificado: entradas (a la venta/pocas/agotadas) + géneros colapsados tras botón "Filtros" con contador de filtros activos. Selector Día/Discoteca/Calendario visible siempre. Primera fiesta visible sin scroll.
 - Verificado en pantalla (430px). Sin cambios de backend en este bloque.
 - PENDIENTE (aprobado por el usuario, siguientes bloques): #7 estado "Tengo entrada" + prueba social, #10 CTA único de compra, #5A afiliación con tracking + #8 embudo con € en panel admin, #9 retargeting push, #11-13 informes de alcance para negociar con discotecas, #14 feed de actividad de amigos, #15 recap dominical, #16 verificar push real, #17 compartir IG/WhatsApp bonito, #19 nav 5 tabs, #20 limpiar /events/discover, #21 onboarding 3 pantallas, #22 skeletons/estados vacíos.
+
+## Update 2026-08-02 f — Monetización + retención (todo el backlog aprobado)
+- #5A/#6/#10: CTA "Conseguir entrada" prominente con precio; tracking de clic (/tickets/click) también en la tarjeta del feed.
+- #7: estado "Tengo entrada" (POST /events/{id}/ticket) con prueba social (friends_with_ticket, total_tickets) en ficha.
+- #8: panel /admin/dinero (AdminMoney.js) — embudo por evento (vistas→interés→van→clics→entradas→€) con comisión estimada (10% por defecto; 0€ hasta poner precio a eventos).
+- #9: retargeting — botones "Avisar interesados" (/admin/events/{id}/notify-interested) y "Pocas entradas" (notify-low-stock).
+- #11-13: informe por local (/admin/venue-report) + botón "Copiar informe para la discoteca".
+- #14: muro de actividad de amigos (/me/activity) en el feed. #15: tarjeta recap semanal (/me/recap).
+- #16: notificaciones se activan en la última slide del onboarding (VAPID ya configurado en dev; requiere prueba en móvil real).
+- #17: compartir por WhatsApp ya existe en tarjetas/ficha (IG nativo pendiente-menor).
+- #18: filtros (entradas+géneros) colapsados tras botón "Filtros". #19: barra inferior a 5 pestañas (quitado Mapa). #20: eliminado /events/discover (404).
+- #21: onboarding de 3 slides mejorado (menciona El Momento, foto de grupo, entradas). #22: skeletons en carga del feed.
+- Backend probado: 10/10 nuevos endpoints + regresión OK. Frontend verificado en pantalla (feed, /admin/dinero, ficha). Bug de hooks en EventDetail corregido.
