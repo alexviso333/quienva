@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
-import { Loader2, MapPin, Instagram, Ticket, PartyPopper, ChevronDown, ChevronUp, DoorOpen } from "lucide-react";
+import { Loader2, MapPin, Instagram, Ticket, PartyPopper, ChevronDown, ChevronUp, DoorOpen, Map } from "lucide-react";
 
 const DAYS = ["L", "M", "X", "J", "V", "S", "D"];
 const TYPE_LABEL = { discoteca: "Discoteca", pub: "Pub", beach_club: "Beach club", promotor: "Promotor" };
@@ -141,6 +141,7 @@ function VenueCard({ v }) {
 
 export default function Locales() {
   const [zone, setZone] = useState("");
+  const navigate = useNavigate();
   const { data: venues = [], isLoading } = useQuery({
     queryKey: ["venues"],
     queryFn: async () => (await api.get("/venues")).data,
@@ -152,12 +153,21 @@ export default function Locales() {
 
   return (
     <AppShell>
-      <header className="px-5 pt-8 pb-2">
-        <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">Mallorca</p>
-        <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
-          Locales<span className="text-qv-primary">.</span>
-        </h1>
-        <p className="text-white/50 text-sm mt-1">Discotecas y pubs de la isla, con días de apertura y sus fiestas.</p>
+      <header className="px-5 pt-8 pb-2 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">Mallorca</p>
+          <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
+            Locales<span className="text-qv-primary">.</span>
+          </h1>
+          <p className="text-white/50 text-sm mt-1">Discotecas y pubs de la isla, con días de apertura y sus fiestas.</p>
+        </div>
+        <button
+          data-testid="locales-map-btn"
+          onClick={() => navigate("/mapa")}
+          className="mt-1 shrink-0 flex items-center gap-1.5 text-xs font-bold text-black bg-qv-secondary rounded-full px-3 py-2 active:scale-95"
+        >
+          <Map className="w-4 h-4" /> Mapa
+        </button>
       </header>
 
       {/* Zone filter */}
