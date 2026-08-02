@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://bereal-clone-1.preview.emergentagent.com/api"
+BASE_URL = "https://fiesta-connect-3.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
