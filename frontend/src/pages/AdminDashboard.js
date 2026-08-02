@@ -10,6 +10,7 @@ import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tool
 import AdminMomentPanel from "@/components/AdminMomentPanel";
 import AdminScrapersPanel from "@/components/AdminScrapersPanel";
 import AdminVenuesPanel from "@/components/AdminVenuesPanel";
+import AdminScrapeChangelog from "@/components/AdminScrapeChangelog";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
@@ -111,6 +112,7 @@ export default function AdminDashboard() {
       <AdminMomentPanel />
 
       {/* Scrapers — automatic event ingestion */}
+      <AdminScrapeChangelog />
       <AdminScrapersPanel />
       <AdminVenuesPanel />
 

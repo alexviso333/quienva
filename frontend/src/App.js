@@ -20,6 +20,7 @@ import Chats from "@/pages/Chats";
 import ChatThread from "@/pages/ChatThread";
 import Rankings from "@/pages/Rankings";
 import Memories from "@/pages/Memories";
+import PastParties from "@/pages/PastParties";
 import Locales from "@/pages/Locales";
 import MapPage from "@/pages/MapPage";
 import NotifPrefs from "@/pages/NotifPrefs";
@@ -65,6 +66,7 @@ function AppRouter() {
       <Route path="/chats/group/:id" element={<ProtectedRoute><ChatThread kind="group" /></ProtectedRoute>} />
       <Route path="/top" element={<ProtectedRoute><Rankings /></ProtectedRoute>} />
       <Route path="/memories" element={<ProtectedRoute><Memories /></ProtectedRoute>} />
+      <Route path="/fiestas-pasadas" element={<ProtectedRoute><PastParties /></ProtectedRoute>} />
       <Route path="/locales" element={<ProtectedRoute><Locales /></ProtectedRoute>} />
       <Route path="/mapa" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
       <Route path="/ajustes/avisos" element={<ProtectedRoute><NotifPrefs /></ProtectedRoute>} />

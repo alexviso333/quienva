@@ -201,6 +201,14 @@ export default function Profile() {
         </button>
 
         <button
+          data-testid="past-parties-btn"
+          onClick={() => navigate("/fiestas-pasadas")}
+          className="h-12 rounded-2xl bg-qv-primary/10 border border-qv-primary/30 text-qv-primary font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+        >
+          <Archive className="w-4 h-4" /> Fiestas pasadas
+        </button>
+
+        <button
           data-testid="archive-btn"
           onClick={() => setArchiveOpen(true)}
           className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"

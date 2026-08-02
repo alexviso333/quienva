@@ -516,6 +516,61 @@ backend:
         comment: "NOT TESTED: Price-drop notification requires specific scenario (event price decrease between scraper runs). Would need to manually modify event pricing or wait for real price changes. Core scraper functionality verified working, notification system verified in previous tests. Recommend testing in production or with manual price manipulation."
 
 frontend:
+  - task: "Bottom nav centered (grid-cols-5) + CompactEventCard price/sale badge"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/AppShell.js, frontend/src/components/CompactEventCard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "AppShell nav was grid-cols-6 with 5 items (off-center). Fixed to grid-cols-5 (verified centered via screenshot). CompactEventCard now shows price + sale_state badge like full EventCard."
+  - task: "Album multi-upload + multi-select share + optimized thumbs + full download"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/EventAlbum.js, frontend/src/lib/api.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Multiple file input (field 'files'), batch upload w/ progress. 'Seleccionar' mode -> share many via /album/share-batch. Grid uses mediaThumb (Cloudinary f_auto,q_auto,w); preview/lightbox download uses mediaDownload (fl_attachment original)."
+  - task: "Chat photos in DM + group (attach, display, download)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/ChatThread.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Attach button in chat input (DM+group): uploads 1-10 via /chat/upload then sends one message per image_url. Lightbox has full-quality download."
+  - task: "Fiestas pasadas page + Profile access"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/PastParties.js, frontend/src/App.js, frontend/src/pages/Profile.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New /fiestas-pasadas lists past parties (voy/estuve, past) grouped by month; tap enters /event/:id (album inside). Profile button added."
+  - task: "Admin scrape changelog panel"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/AdminScrapeChangelog.js, frontend/src/pages/AdminDashboard.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Admin-only panel: last scrape run diffs with counters + entries; tap opens event. Above scrapers panel."
   - task: "EventAlbum shared media component (photos + videos)"
     implemented: true
     working: "NA"

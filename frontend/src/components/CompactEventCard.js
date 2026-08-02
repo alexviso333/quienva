@@ -1,9 +1,36 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Flame, Users } from "lucide-react";
+import { Flame, Users, Ticket, Lock, Clock } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { mediaUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+const SALE_STATE_META = {
+  no_a_la_venta: { label: "Próx.", cls: "bg-white/15 text-white/80", icon: Clock },
+  a_la_venta: { label: "A la venta", cls: "bg-emerald-400/25 text-emerald-200", icon: Ticket },
+  pocas_entradas: { label: "Pocas", cls: "bg-orange-400/30 text-orange-100", icon: Flame },
+  agotado: { label: "Agotado", cls: "bg-white/10 text-white/50", icon: Lock },
+};
+
+function CompactPriceBadge({ event }) {
+  const state = event.sale_state || "no_a_la_venta";
+  const meta = SALE_STATE_META[state] || SALE_STATE_META.no_a_la_venta;
+  const Icon = meta.icon;
+  const price = event.current_price;
+  const currency = event.currency || "EUR";
+  const symbol = currency === "EUR" ? "€" : currency;
+  if (!price && state === "no_a_la_venta") return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full backdrop-blur-sm ${meta.cls}`}
+    >
+      <Icon className="w-2.5 h-2.5" />
+      {price ? `${Math.round(price)}${symbol}` : ""}
+      {price && state !== "no_a_la_venta" ? " · " : ""}
+      {meta.label}
+    </span>
+  );
+}
 
 function formatDate(dateStr) {
   try {
@@ -69,6 +96,9 @@ export function CompactEventCard({ event, index = 0, width }) {
           <p className="text-white/60 text-[11px] mt-0.5 truncate">
             {event.venue} · {formatDate(event.date)}
           </p>
+          <div className="mt-1">
+            <CompactPriceBadge event={event} />
+          </div>
           {previewFriends.length > 0 ? (
             <div className="flex items-center gap-1.5 mt-1.5">
               <div className="flex -space-x-1.5">

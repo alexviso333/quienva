@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl } from "@/lib/api";
+import api, { mediaUrl, mediaThumb, mediaDownload } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X, ImagePlus, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -24,9 +24,11 @@ export default function ChatThread({ kind }) {
   const qc = useQueryClient();
   const scrollRef = useRef(null);
   const photoInputRef = useRef(null);
+  const chatPhotoInputRef = useRef(null);
   const [text, setText] = useState("");
   const [showMenu, setShowMenu] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [sendingPhotos, setSendingPhotos] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const { user: me } = useAuth();
 
@@ -104,6 +106,47 @@ export default function ChatThread({ kind }) {
     },
     onError: (err) => toast.error(err.response?.data?.detail || "No se pudo enviar"),
   });
+
+  // Attach & send one or more photos inside the chat (DM or group)
+  const sendChatPhotos = useMutation({
+    mutationFn: async (files) => {
+      const form = new FormData();
+      files.forEach((f) => form.append("files", f));
+      const up = (await api.post("/chat/upload", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })).data;
+      const urls = (up.uploads || []).map((u) => u.media_url);
+      // send one message per photo, in order
+      for (const url of urls) {
+        if (kind === "dm") {
+          await api.post("/dm/send", { to_user_id: id, image_url: url });
+        } else {
+          await api.post(`/groups/${id}/messages`, { image_url: url });
+        }
+      }
+      return urls.length;
+    },
+    onSuccess: () => {
+      setSendingPhotos(false);
+      qc.invalidateQueries({ queryKey: messagesKey });
+      qc.invalidateQueries({ queryKey: kind === "dm" ? ["dm-threads"] : ["groups"] });
+    },
+    onError: (err) => {
+      setSendingPhotos(false);
+      toast.error(err.response?.data?.detail || "No se pudo enviar la foto");
+    },
+  });
+
+  const onChatPhotoPick = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.length > 10) { toast.error("Máx 10 fotos por vez"); e.target.value = ""; return; }
+    const tooBig = files.find((f) => f.size > 25 * 1024 * 1024);
+    if (tooBig) { toast.error("Cada foto máx 25MB"); e.target.value = ""; return; }
+    setSendingPhotos(true);
+    sendChatPhotos.mutate(files);
+    e.target.value = "";
+  };
 
   const leaveGroup = useMutation({
     mutationFn: async () => (await api.post(`/groups/${id}/leave`)).data,
@@ -235,7 +278,7 @@ export default function ChatThread({ kind }) {
                         className="block mb-1 rounded-xl overflow-hidden active:scale-[0.98]"
                         data-testid={`msg-photo-${m.id}`}
                       >
-                        <img src={mediaUrl(m.image_url)} alt="Foto de grupo" className="w-48 max-w-full rounded-xl" loading="lazy" />
+                        <img src={mediaThumb(m.image_url, 500)} alt="Foto" className="w-48 max-w-full rounded-xl" loading="lazy" />
                       </button>
                     )}
                     {m.text}
@@ -249,6 +292,24 @@ export default function ChatThread({ kind }) {
 
         {/* Input */}
         <div className="px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-white/10 qv-glass sticky bottom-0 flex items-center gap-2">
+          <button
+            data-testid="chat-attach"
+            onClick={() => chatPhotoInputRef.current?.click()}
+            disabled={sendingPhotos}
+            className="w-11 h-11 rounded-full bg-white/5 border border-white/15 flex items-center justify-center shrink-0 active:scale-90 disabled:opacity-40"
+            title="Enviar foto(s)"
+          >
+            {sendingPhotos ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <ImagePlus className="w-5 h-5 text-white/80" />}
+          </button>
+          <input
+            ref={chatPhotoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={onChatPhotoPick}
+            className="hidden"
+            data-testid="chat-photo-input"
+          />
           <Input
             data-testid="chat-input"
             value={text}
@@ -301,7 +362,18 @@ export default function ChatThread({ kind }) {
               >
                 <X className="w-5 h-5 text-white" />
               </button>
-              <img src={mediaUrl(lightbox)} alt="Foto de grupo" className="w-full max-h-[80vh] object-contain" />
+              <a
+                data-testid="chat-photo-download"
+                href={mediaDownload(lightbox)}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="absolute top-3 left-3 z-10 w-9 h-9 rounded-full bg-black/60 flex items-center justify-center"
+                title="Descargar en calidad completa"
+              >
+                <Download className="w-4 h-4 text-white" />
+              </a>
+              <img src={mediaThumb(lightbox, 1200)} alt="Foto" className="w-full max-h-[80vh] object-contain" />
             </div>
           )}
         </DialogContent>
