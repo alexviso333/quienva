@@ -137,34 +137,16 @@ export default function Feed() {
       </div>
 
       <div className="px-4 pb-3">
-        <FeedPlansControls view={view} setView={setView} sale={sale} setSale={setSale} />
+        <FeedPlansControls
+          view={view}
+          setView={setView}
+          sale={sale}
+          setSale={setSale}
+          genres={genres}
+          genre={genre}
+          setGenre={setGenre}
+        />
       </div>
-
-      {genres.length > 0 && (
-        <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-4" data-testid="genre-filters">
-          <button
-            data-testid="filter-genre-all"
-            onClick={() => setGenre("all")}
-            className={`rounded-full px-4 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors duration-300 ${
-              genre === "all" ? "bg-qv-secondary text-black" : "bg-white/5 border border-white/10 text-white/60"
-            }`}
-          >
-            Todo
-          </button>
-          {genres.map((g) => (
-            <button
-              key={g}
-              data-testid={`filter-genre-${g}`}
-              onClick={() => setGenre(g)}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors duration-300 ${
-                genre === g ? "bg-qv-secondary text-black" : "bg-white/5 border border-white/10 text-white/60"
-              }`}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="flex flex-col gap-4 px-4 pt-1">
         {!isDefaultView && topEvent && (topEvent.friends_going || []).length > 0 && (

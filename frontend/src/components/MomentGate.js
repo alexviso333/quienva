@@ -39,7 +39,15 @@ export default function MomentGate() {
   const onMomentoPage = location.pathname === "/momento";
   const onLogin = location.pathname === "/login" || location.pathname.startsWith("/auth");
 
-  if (!user || !moment?.active || onMomentoPage || onLogin) return null;
+  // Don't stack modals: wait until the push-permission step has been resolved.
+  const pushResolved = user ? localStorage.getItem(`qv_push_granted_${user.user_id}`) === "1" : false;
+
+  // Only *block* during real party hours (20:00–06:00 local). Otherwise the
+  // small pill is enough — no full-screen interruption in the middle of the day.
+  const hourNow = new Date().getHours();
+  const isNightWindow = hourNow >= 20 || hourNow < 6;
+
+  if (!user || !moment?.active || onMomentoPage || onLogin || !pushResolved) return null;
 
   const go = () => navigate("/momento");
   const dismiss = () => {
@@ -47,16 +55,17 @@ export default function MomentGate() {
     setDismissed(true);
   };
 
-  // Small pill on the home feed after dismissal
-  if (dismissed) {
+  // Small pill (never overlaps the header — sits above the bottom nav) when
+  // dismissed OR when it's outside the night window.
+  if (dismissed || !isNightWindow) {
     if (location.pathname !== "/feed") return null;
     return (
       <button
         onClick={go}
         data-testid="moment-pill"
-        className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-300 text-black font-display font-black text-xs shadow-lg shadow-yellow-300/30 active:scale-95 animate-pulse-slow"
+        className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-300 text-black font-display font-black text-xs shadow-lg shadow-yellow-300/30 active:scale-95 animate-pulse-slow"
       >
-        <Zap className="w-4 h-4" /> Hacer tu Momento ahora
+        <Zap className="w-4 h-4" /> Hacer tu Momento
       </button>
     );
   }

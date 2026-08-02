@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { EventCard } from "@/components/EventCard";
 import { CompactEventCard } from "@/components/CompactEventCard";
-import { CalendarDays, LayoutList, Building2, ChevronLeft, ChevronRight, PartyPopper } from "lucide-react";
+import { CalendarDays, LayoutList, Building2, ChevronLeft, ChevronRight, PartyPopper, SlidersHorizontal } from "lucide-react";
 
 const SALE_FILTERS = [
   { key: "all", label: "Todas" },
@@ -168,37 +168,81 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
   );
 }
 
-export function FeedPlansControls({ view, setView, sale, setSale }) {
+export function FeedPlansControls({ view, setView, sale, setSale, genres = [], genre = "all", setGenre }) {
+  const [open, setOpen] = useState(false);
+  const activeCount = (sale !== "all" ? 1 : 0) + (genre !== "all" ? 1 : 0);
   return (
     <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-3 gap-1.5 bg-white/[0.04] border border-white/10 rounded-2xl p-1" data-testid="feed-view-selector">
-        {VIEWS.map((v) => {
-          const Icon = v.icon;
-          const on = view === v.key;
-          return (
-            <button
-              key={v.key}
-              onClick={() => setView(v.key)}
-              data-testid={`view-${v.key}`}
-              className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-colors ${on ? "bg-qv-primary text-black" : "text-white/70"}`}
-            >
-              <Icon className="w-3.5 h-3.5" /> {v.label}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 grid grid-cols-3 gap-1.5 bg-white/[0.04] border border-white/10 rounded-2xl p-1" data-testid="feed-view-selector">
+          {VIEWS.map((v) => {
+            const Icon = v.icon;
+            const on = view === v.key;
+            return (
+              <button
+                key={v.key}
+                onClick={() => setView(v.key)}
+                data-testid={`view-${v.key}`}
+                className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-colors ${on ? "bg-qv-primary text-black" : "text-white/70"}`}
+              >
+                <Icon className="w-3.5 h-3.5" /> {v.label}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          data-testid="feed-filtros-toggle"
+          onClick={() => setOpen((o) => !o)}
+          className={`relative shrink-0 h-[42px] px-3.5 rounded-2xl border flex items-center gap-1.5 text-xs font-bold transition-colors ${
+            open || activeCount ? "bg-qv-secondary text-black border-qv-secondary" : "bg-white/[0.04] border-white/10 text-white/70"
+          }`}
+        >
+          <SlidersHorizontal className="w-4 h-4" /> Filtros
+          {activeCount > 0 && (
+            <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-black/80 text-white text-[10px] font-black flex items-center justify-center">
+              {activeCount}
+            </span>
+          )}
+        </button>
       </div>
-      <div className="flex overflow-x-auto hide-scrollbar gap-2" data-testid="sale-filters">
-        {SALE_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setSale(f.key)}
-            data-testid={`filter-sale-${f.key}`}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap ${sale === f.key ? "bg-qv-secondary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+
+      {open && (
+        <div className="flex flex-col gap-2 pt-1" data-testid="feed-filtros-panel">
+          <div className="flex overflow-x-auto hide-scrollbar gap-2" data-testid="sale-filters">
+            {SALE_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setSale(f.key)}
+                data-testid={`filter-sale-${f.key}`}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap ${sale === f.key ? "bg-qv-secondary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {genres.length > 0 && setGenre && (
+            <div className="flex overflow-x-auto hide-scrollbar gap-2" data-testid="genre-filters">
+              <button
+                data-testid="filter-genre-all"
+                onClick={() => setGenre("all")}
+                className={`rounded-full px-4 py-1.5 text-xs font-semibold whitespace-nowrap ${genre === "all" ? "bg-qv-primary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
+              >
+                Todo
+              </button>
+              {genres.map((g) => (
+                <button
+                  key={g}
+                  data-testid={`filter-genre-${g}`}
+                  onClick={() => setGenre(g)}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold whitespace-nowrap ${genre === g ? "bg-qv-primary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

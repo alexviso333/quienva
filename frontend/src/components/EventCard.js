@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import api, { mediaUrl } from "@/lib/api";
+import { timeSuffix } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
@@ -110,7 +111,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const shareWhatsApp = (e) => {
     if (e) e.stopPropagation();
     const link = `${window.location.origin}/event/${event.id}`;
-    const text = `${event.name} · ${event.venue} · ${formatDate(event.date)}${event.time ? " " + event.time : ""} — míralo en ¿Quién va? y dime si vienes 👀 ${link}`;
+    const text = `${event.name} · ${event.venue} · ${formatDate(event.date)}${timeSuffix(event.time)} — míralo en ¿Quién va? y dime si vienes 👀 ${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   };
 
@@ -188,7 +189,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
               <span className="truncate">{event.venue}</span>
             </span>
             <span className="flex items-center gap-1 shrink-0">
-              <Clock className="w-3.5 h-3.5" /> {formatDate(event.date)}{event.time ? ` · ${event.time}` : ""}
+              <Clock className="w-3.5 h-3.5" /> {formatDate(event.date)}{timeSuffix(event.time)}
             </span>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
+import { timeSuffix } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { AddStoryButton } from "@/components/Stories";
 import { EventAlbum } from "@/components/EventAlbum";
@@ -149,7 +150,7 @@ export default function EventDetail() {
         <div className="px-5 pt-4 flex flex-col gap-5">
           <div className="flex flex-col gap-2 text-white/80">
             <span className="flex items-center gap-2"><MapPin className="w-4 h-4 text-qv-secondary" /> {event.venue}{event.address ? ` · ${event.address}` : ""}</span>
-            <span className="flex items-center gap-2 capitalize"><Clock className="w-4 h-4 text-qv-secondary" /> {formatDate(event.date)}{event.time ? ` · ${event.time}` : ""}</span>
+            <span className="flex items-center gap-2 capitalize"><Clock className="w-4 h-4 text-qv-secondary" /> {formatDate(event.date)}{timeSuffix(event.time)}</span>
           </div>
 
           {/* Status */}
