@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "@/lib/api";
+import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, UserPlus } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -23,8 +23,11 @@ export default function ChatThread({ kind }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const scrollRef = useRef(null);
+  const photoInputRef = useRef(null);
   const [text, setText] = useState("");
   const [showMenu, setShowMenu] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
   const { user: me } = useAuth();
 
   const messagesKey = kind === "dm" ? ["dm-messages", id] : ["group-messages", id];
@@ -41,6 +44,43 @@ export default function ChatThread({ kind }) {
     queryFn: async () => (await api.get(`/groups/${id}`)).data,
     enabled: kind === "group",
   });
+
+  const { data: photoOp } = useQuery({
+    queryKey: ["group-photo-op", id],
+    queryFn: async () => (await api.get(`/groups/${id}/photo-op`)).data,
+    enabled: kind === "group",
+    refetchInterval: 30000,
+  });
+  const op = photoOp?.active ? photoOp.ops[0] : null;
+
+  const uploadPhoto = useMutation({
+    mutationFn: async (file) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("event_id", op.event_id);
+      return (await api.post(`/groups/${id}/photo`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })).data;
+    },
+    onSuccess: () => {
+      toast.success("¡Foto de grupo subida! 📸");
+      qc.invalidateQueries({ queryKey: messagesKey });
+      qc.invalidateQueries({ queryKey: ["group-photo-op", id] });
+      setUploadingPhoto(false);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "No se pudo subir");
+      setUploadingPhoto(false);
+    },
+  });
+
+  const onPhotoPick = (e) => {
+    const f = e.target.files?.[0];
+    if (!f || !op) return;
+    setUploadingPhoto(true);
+    uploadPhoto.mutate(f);
+    e.target.value = "";
+  };
 
   const { data: friend } = useQuery({
     queryKey: ["user-basic", id],
@@ -122,6 +162,56 @@ export default function ChatThread({ kind }) {
           )}
         </header>
 
+        {/* Group photo CTA — when 3+ members go to the same party */}
+        {kind === "group" && op && (
+          <div className="px-4 pt-3" data-testid="group-photo-cta">
+            <div className="rounded-2xl border-2 border-qv-secondary/50 bg-gradient-to-br from-qv-secondary/10 via-transparent to-transparent p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-9 h-9 rounded-full bg-qv-secondary/20 flex items-center justify-center shrink-0">
+                  <Users className="w-4.5 h-4.5 text-qv-secondary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-display font-black text-white text-sm leading-tight">
+                    Sois {op.count} en {op.event_name} 🎉
+                  </p>
+                  <p className="text-white/50 text-xs truncate">Haceos la foto de grupo de esta noche</p>
+                </div>
+                <div className="flex -space-x-2 shrink-0">
+                  {(op.members_going || []).slice(0, 3).map((m, i) => (
+                    <AvatarCircle key={i} name={m.name} picture={m.picture} size={24} />
+                  ))}
+                </div>
+              </div>
+              <button
+                data-testid="group-photo-btn"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="w-full h-11 rounded-xl bg-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
+              >
+                {uploadingPhoto ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Subiendo…</>
+                ) : (
+                  <><Camera className="w-4 h-4" /> {op.i_uploaded ? "Subir otra foto de grupo" : "Hacer la foto de grupo"}</>
+                )}
+              </button>
+              {op.photos_count > 0 && (
+                <p className="text-center text-white/40 text-[11px] mt-1.5">
+                  {op.photos_count} foto{op.photos_count > 1 ? "s" : ""} de grupo ya en el chat 👇
+                </p>
+              )}
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={onPhotoPick}
+              className="hidden"
+              data-testid="group-photo-input"
+            />
+          </div>
+        )}
+
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto hide-scrollbar px-4 py-4 flex flex-col gap-3" data-testid="chat-messages">
           {isLoading ? (
@@ -138,6 +228,15 @@ export default function ChatThread({ kind }) {
                   <div className={`rounded-2xl px-3 py-2 text-sm ${m.is_mine ? "bg-qv-primary text-white" : "bg-white/10 text-white"}`}>
                     {!m.is_mine && kind === "group" && (
                       <span className="block text-[11px] text-qv-secondary font-semibold">{m.author?.name?.split(" ")[0]}</span>
+                    )}
+                    {m.image_url && (
+                      <button
+                        onClick={() => setLightbox(m.image_url)}
+                        className="block mb-1 rounded-xl overflow-hidden active:scale-[0.98]"
+                        data-testid={`msg-photo-${m.id}`}
+                      >
+                        <img src={mediaUrl(m.image_url)} alt="Foto de grupo" className="w-48 max-w-full rounded-xl" loading="lazy" />
+                      </button>
                     )}
                     {m.text}
                   </div>
@@ -189,6 +288,22 @@ export default function ChatThread({ kind }) {
           >
             <LogOut className="w-4 h-4" /> Salir del grupo
           </button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!lightbox} onOpenChange={(o) => !o && setLightbox(null)}>
+        <DialogContent className="bg-black border-white/10 text-white max-w-md rounded-2xl p-0 overflow-hidden">
+          {lightbox && (
+            <div className="relative">
+              <button
+                onClick={() => setLightbox(null)}
+                className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/60 flex items-center justify-center"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+              <img src={mediaUrl(lightbox)} alt="Foto de grupo" className="w-full max-h-[80vh] object-contain" />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

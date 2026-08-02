@@ -3,8 +3,6 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
-import { EventCard } from "@/components/EventCard";
-import { CompactEventCard } from "@/components/CompactEventCard";
 import { EventCarousel } from "@/components/EventCarousel";
 import { StoriesBar } from "@/components/Stories";
 import { StreakBanner } from "@/components/StreakBanner";
@@ -15,19 +13,11 @@ import { useCompactMode } from "@/hooks/useCompactMode";
 import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
-const DATE_FILTERS = [
-  { key: "finde", label: "Este finde" },
-  { key: "hoy", label: "Hoy" },
-  { key: "semana", label: "Próx. semana" },
-  { key: "pasados", label: "Recuerdos" },
-];
-
 export default function Feed() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [dateFilter, setDateFilter] = useState("finde");
   const [genre, setGenre] = useState("all");
   const [view, setView] = useState("dia");
   const [sale, setSale] = useState("all");
@@ -35,8 +25,8 @@ export default function Feed() {
   const [compact] = useCompactMode();
   const cardRefs = useRef({});
 
-  const isPastView = dateFilter === "pasados";
-  const isDefaultView = dateFilter === "finde" && genre === "all";
+  // Curated carousels only decorate the default "Día" view (no genre filter).
+  const isDefaultView = view === "dia" && genre === "all";
 
   const { data: topEvent } = useQuery({
     queryKey: ["top-weekend"],
@@ -47,7 +37,7 @@ export default function Feed() {
   const { data: carousels } = useQuery({
     queryKey: ["carousels"],
     queryFn: async () => (await api.get("/events/carousels")).data,
-    enabled: isDefaultView && !isPastView,
+    enabled: isDefaultView,
     staleTime: 60_000,
   });
 
@@ -58,17 +48,14 @@ export default function Feed() {
   });
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["events", dateFilter, genre],
-    queryFn: async () => {
-      return (await api.get("/events", { params: { date_filter: dateFilter, genre } })).data;
-    },
+    queryKey: ["events", "all", genre],
+    queryFn: async () => (await api.get("/events", { params: { date_filter: "all", genre } })).data,
     staleTime: 30_000,
   });
 
   const setStatus = useMutation({
     mutationFn: async ({ eventId, status }) => (await api.post(`/events/${eventId}/interest`, { status })).data,
-    // Optimistic: flip my_status instantly across every cached list so the UI
-    // never freezes waiting for the network (fixes the Voy/Me interesa lag).
+    // Optimistic: flip my_status instantly across every cached list (no lag).
     onMutate: async ({ eventId, status }) => {
       await qc.cancelQueries({ queryKey: ["events"] });
       const patchArr = (arr) =>
@@ -96,7 +83,6 @@ export default function Feed() {
       qc.invalidateQueries({ queryKey: ["events"] });
       qc.invalidateQueries({ queryKey: ["carousels"] });
     },
-    // Re-sync counts / friend avatars in the background without blocking the UI.
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["events"] });
       qc.invalidateQueries({ queryKey: ["top-weekend"] });
@@ -131,7 +117,7 @@ export default function Feed() {
               {user?.city || "Palma de Mallorca"}
             </p>
             <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
-              {isPastView ? "Recuerdos" : "Los planes"}<span className="text-qv-primary">.</span>
+              Los planes<span className="text-qv-primary">.</span>
             </h1>
           </div>
           <button
@@ -150,28 +136,11 @@ export default function Feed() {
         <StreakBanner />
       </div>
 
-      {!isPastView && (
-        <div className="px-4 pb-3">
-          <FeedPlansControls view={view} setView={setView} sale={sale} setSale={setSale} />
-        </div>
-      )}
-
-      <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-2" data-testid="date-filters">
-        {DATE_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            data-testid={`filter-date-${f.key}`}
-            onClick={() => setDateFilter(f.key)}
-            className={`rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap transition-colors duration-300 ${
-              dateFilter === f.key ? "bg-white text-black" : "bg-white/5 border border-white/10 text-white/70"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="px-4 pb-3">
+        <FeedPlansControls view={view} setView={setView} sale={sale} setSale={setSale} />
       </div>
 
-      {genres.length > 0 && !isPastView && (
+      {genres.length > 0 && (
         <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-4" data-testid="genre-filters">
           <button
             data-testid="filter-genre-all"
@@ -198,7 +167,7 @@ export default function Feed() {
       )}
 
       <div className="flex flex-col gap-4 px-4 pt-1">
-        {!isPastView && !isDefaultView && topEvent && (topEvent.friends_going || []).length > 0 && (
+        {!isDefaultView && topEvent && (topEvent.friends_going || []).length > 0 && (
           <button
             data-testid="top-weekend-banner"
             onClick={() => navigate(`/event/${topEvent.id}`)}
@@ -234,34 +203,6 @@ export default function Feed() {
           <div className="flex justify-center py-20">
             <Loader2 className="w-7 h-7 text-qv-primary animate-spin" />
           </div>
-        ) : isPastView ? (
-          events && events.length > 0 ? (
-            compact ? (
-              <div className="grid grid-cols-2 gap-3" data-testid="feed-compact-grid">
-                {events.map((ev, i) => (
-                  <CompactEventCard key={ev.id} event={ev} index={i} />
-                ))}
-              </div>
-            ) : (
-              events.map((ev, i) => (
-                <EventCard
-                  key={ev.id}
-                  event={ev}
-                  index={i}
-                  highlight={highlightId === ev.id}
-                  cardRef={(el) => (cardRefs.current[ev.id] = el)}
-                  pending={false}
-                  onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
-                />
-              ))
-            )
-          ) : (
-            <div className="text-center py-20 px-6" data-testid="feed-empty">
-              <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
-              <p className="text-white/60">Aún no hay recuerdos guardados.</p>
-              <p className="text-white/40 text-sm mt-1">Marca 'Estuve aquí' en eventos pasados.</p>
-            </div>
-          )
         ) : events && events.length > 0 ? (
           <FeedPlans
             events={events}
@@ -276,13 +217,13 @@ export default function Feed() {
         ) : (
           <div className="text-center py-20 px-6" data-testid="feed-empty">
             <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
-            <p className="text-white/60">No hay planes con estos filtros.</p>
-            <p className="text-white/40 text-sm mt-1">Prueba a cambiar la fecha o el género.</p>
+            <p className="text-white/60">No hay planes ahora mismo.</p>
+            <p className="text-white/40 text-sm mt-1">Vuelve pronto o revisa otros géneros.</p>
           </div>
         )}
 
         {/* Curated carousels — below the main list so the parties come first */}
-        {!isPastView && isDefaultView && carousels && (
+        {isDefaultView && carousels && (
           <div className="-mx-4 pt-2">
             <EventCarousel
               testId="carousel-top-weekend"

@@ -3098,6 +3098,119 @@ async def send_group_message(group_id: str, inp: GroupMessageInput, user: dict =
 
 
 # =========================================================================
+# GROUP PHOTO — when 3+ members of a group are going to the same party
+# =========================================================================
+
+@api_router.get("/groups/{group_id}/photo-op")
+async def group_photo_op(group_id: str, user: dict = Depends(get_current_user)):
+    """Detects parties where 3+ members of this group marked 'voy'."""
+    g = await _group_or_404(group_id, user["user_id"])
+    member_ids = g.get("member_ids", [])
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    counts: dict = {}
+    async for it in db.interests.find({"user_id": {"$in": member_ids}, "status": "voy"}):
+        counts.setdefault(it["event_id"], set()).add(it["user_id"])
+    ops = []
+    for eid, uids in counts.items():
+        if len(uids) < 3:
+            continue
+        ev = await db.events.find_one({"id": eid}, {"_id": 0})
+        if not ev or ev.get("date", "") < today:
+            continue
+        members_going = []
+        async for u in db.users.find({"user_id": {"$in": list(uids)}}, {"_id": 0}):
+            members_going.append(_msg_author(u))
+        photos_count = await db.group_photos.count_documents({"group_id": group_id, "event_id": eid})
+        mine = await db.group_photos.find_one({"group_id": group_id, "event_id": eid, "user_id": user["user_id"]})
+        ops.append({
+            "event_id": eid,
+            "event_name": ev["name"],
+            "venue": ev.get("venue", ""),
+            "date": ev["date"],
+            "time": ev.get("time", ""),
+            "count": len(uids),
+            "members_going": members_going,
+            "photos_count": photos_count,
+            "i_uploaded": bool(mine),
+        })
+    ops.sort(key=lambda x: (x["date"], x.get("time", "")))
+    return {"active": len(ops) > 0, "ops": ops}
+
+
+@api_router.post("/groups/{group_id}/photo")
+async def group_photo_upload(
+    group_id: str,
+    event_id: str = Form(...),
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    g = await _group_or_404(group_id, user["user_id"])
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    ct = file.content_type or "image/jpeg"
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Solo fotos")
+    data = await file.read()
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Máximo 25MB")
+    ext = file.filename.split(".")[-1].lower() if file.filename and "." in file.filename else "jpg"
+    path = f"{APP_NAME}/group_photos/{group_id}/{uuid.uuid4().hex}.{ext}"
+    save_object(path, data)
+    await db.files.insert_one({
+        "id": str(uuid.uuid4()),
+        "storage_path": path,
+        "content_type": ct,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    photo = {
+        "id": str(uuid.uuid4()),
+        "group_id": group_id,
+        "event_id": event_id,
+        "user_id": user["user_id"],
+        "image_url": f"/api/files/{path}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.group_photos.insert_one(photo)
+    photo.pop("_id", None)
+    # Post it into the group chat as an image message
+    msg = {
+        "id": str(uuid.uuid4()),
+        "group_id": group_id,
+        "user_id": user["user_id"],
+        "text": f"📸 Foto de grupo en {ev['name']}",
+        "image_url": photo["image_url"],
+        "read_by": [user["user_id"]],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.group_messages.insert_one(msg)
+    for mid in g.get("member_ids", []):
+        if mid != user["user_id"]:
+            await create_notification(
+                mid, "group_message",
+                f"📸 {user['name']} subió la foto de grupo de {ev['name']}",
+                {"group_id": group_id, "type": "group_photo"},
+            )
+    return {**photo, "author": _msg_author(user)}
+
+
+@api_router.get("/groups/{group_id}/photos")
+async def group_photos_list(group_id: str, event_id: str = Query(None), user: dict = Depends(get_current_user)):
+    await _group_or_404(group_id, user["user_id"])
+    q = {"group_id": group_id}
+    if event_id:
+        q["event_id"] = event_id
+    out = []
+    async for p in db.group_photos.find(q, {"_id": 0}).sort("created_at", -1):
+        u = await db.users.find_one({"user_id": p["user_id"]}, {"_id": 0})
+        p["author"] = _msg_author(u)
+        p["is_mine"] = p["user_id"] == user["user_id"]
+        out.append(p)
+    return out
+
+
+
+# =========================================================================
 # ALBUM — shared multimedia per event (photos + videos)
 # =========================================================================
 
