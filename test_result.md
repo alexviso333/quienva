@@ -116,6 +116,62 @@ user_problem_statement: |
   código único y puntos para ambas partes.
 
 backend:
+  - task: "Chat photos (DM + group image_url) + /chat/upload multi"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "DMSendInput and GroupMessageInput now accept optional image_url; text may be empty if image_url present (else 400). POST /api/chat/upload accepts 1-10 image files (field name 'files'), returns {uploads:[{media_url,media_type}]}. DM/group messages store image_url; thread preview shows '📷 Foto' when last msg is image-only. >1000 chars still 400."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL CHAT PHOTO FEATURES (14 tests, 100% pass): ✅ (1) POST /chat/upload with 1 image → 200 with {uploads:[{media_url,media_type:'image'}]}. ✅ (2) POST /chat/upload with 2 images → 200 with 2 uploads. ✅ (3) Non-image file → 400. ✅ (4) Unauthenticated → 401. ✅ (5) POST /dm/send with image_url only (no text) between friends → 200 with image_url in response. ✅ (6) POST /dm/send with neither text nor image_url → 400. ✅ (7) POST /dm/send with text >1000 chars → 400. ✅ (8) Sending to non-friend → 403. ✅ (9) GET /dm/{other_user_id}/messages includes image_url field. ✅ (10) GET /dm/threads shows last_message='📷 Foto' for image-only messages. ✅ (11) POST /groups/{id}/messages with image_url only (no text) → 200 with image_url. ✅ (12) POST /groups/{id}/messages with neither text nor image_url → 400. ✅ (13) GET /groups/{id}/messages includes image_url field. All validation, authorization, and functionality working perfectly."
+  - task: "Album multi-upload + share-batch"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/events/{id}/album/upload now accepts MULTIPLE files (field name changed from 'file' to 'files', List[UploadFile], max 30). Returns single object if 1 file (backwards compat) else {uploads,count}. New POST /api/events/{id}/album/share-batch {upload_ids,user_ids,group_ids,all_friends} shares many of MY uploads at once (only my own, notifies recipients once). Requires interest to upload; only owner can share."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL ALBUM FEATURES (10 tests, 100% pass): ✅ (1) POST /events/{id}/album/upload with single file → 200, returns single object (backwards compat) with id, media_url, media_type, shared:false. ✅ (2) POST /events/{id}/album/upload with 3 files → 200 with {uploads:[...], count:3}. ✅ (3) Upload without interest (voy/estuve) → 403. ✅ (4) Non-image/video content-type → 400. ✅ (5) POST /events/{id}/album/share-batch with empty upload_ids → 400. ✅ (6) Share-batch with no audience (no user_ids/group_ids/all_friends) → 400. ✅ (7) Share-batch with valid upload_ids and all_friends:true → 200 {ok:true, shared_count:3}. ✅ (8) GET /events/{id}/album as friend shows shared uploads in 'shared' bucket (verified user1's 3 shared uploads visible to user2). ✅ (9) Trying to share another user's upload_id → 404 (only own uploads can be shared). All validation, authorization, and sharing logic working correctly."
+  - task: "GET /me/past-events + /me/activity future-only"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New GET /api/me/past-events returns parties with my status voy/estuve AND date < today (Europe/Madrid), sorted desc, includes my_photos count. /api/me/activity now filters OUT past events (only date >= today shown for going + tickets)."
+      - working: true
+        agent: "testing"
+        comment: "TESTED BOTH ENDPOINTS (9 tests, 100% pass): ✅ (1) GET /me/past-events → 200 with {items:[...]}. ✅ (2) Past event with status 'estuve' and date < today is included in list. ✅ (3) Future event with status 'voy' is NOT in past-events list. ✅ (4) Each item has required fields: id, name, venue, date, time, image_url, genre, my_status, my_photos. ✅ (5) my_photos count is accurate (1 photo uploaded). ✅ (6) GET /me/activity → 200 with {items:[...]}. ✅ (7) Activity does NOT include past events (verified past event not in list). ✅ (8) All activity items are for future events (date >= today). Both endpoints working correctly with proper date filtering."
+  - task: "Admin scrape changelog (last run diffs)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Scraper records changes into scrape_changelog (batch_id per run) for kind new/price_up/price_down/state/sold_out/on_sale. app_settings.last_scrape_batch stores latest run summary. New admin-only GET /api/admin/scrape-changelog?limit=60 returns {last_run,counts,total,entries}. TTL index 30d. Non-admin -> 403."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (3 tests, 100% pass): ✅ (1) GET /admin/scrape-changelog?limit=60 as admin → 200 with correct structure: {last_run:{...}, counts:{new,price_up,price_down,state,sold_out,on_sale}, total:<int>, entries:[...]}. All required keys present. ✅ (2) As non-admin user → 403. ✅ (3) Unauthenticated → 401. Authorization and response structure working correctly."
   - task: "Profile permission fix: /users/:id/badges public for non-friends"
     implemented: true
     working: true
@@ -666,8 +722,8 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.3"
-  test_sequence: 4
+  version: "2.5"
+  test_sequence: 6
   run_ui: false
 
 test_plan:
@@ -677,6 +733,56 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NEW ITERATION (2026-08-02 g) — test ONLY these new/changed backend endpoints (admin@quienva.app/admin123):
+      1) CHAT PHOTOS: POST /api/chat/upload with field name 'files' (1-10 images) -> {uploads:[{media_url,media_type}]}. Then POST /api/dm/send with {to_user_id, image_url} (no text) should succeed; {to_user_id} with neither text nor image -> 400; text>1000 -> 400. Same for POST /api/groups/{id}/messages with {image_url} only. GET messages should include image_url. DM threads last_message shows '📷 Foto' for image-only last msg.
+      2) ALBUM MULTI: POST /api/events/{id}/album/upload now uses field name 'files' (multipart, can send several). 1 file -> single object; many -> {uploads,count}. Needs interest to upload (else 403). New POST /api/events/{id}/album/share-batch {upload_ids:[...], all_friends:true} shares many of MY uploads at once; sharing someone else's upload_id is ignored (only mine affected); empty upload_ids -> 400; no audience -> 400.
+      3) GET /api/me/past-events -> {items:[...]} only events with my status voy/estuve AND date < today, each has my_photos count. GET /api/me/activity must NOT include past events (only future date >= today).
+      4) GET /api/admin/scrape-changelog?limit=60 as admin -> 200 {last_run,counts,total,entries}; non-admin -> 403; unauth -> 401.
+      Also quick regression: auth, /api/events, interests, /api/dm/threads, /api/groups. Test credentials in /app/memory/test_credentials.md.
+
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - Iteration 2026-08-02g (Chat Photos, Album Multi-upload, Past Events, Scrape Changelog)
+      
+      🎉 ALL TESTS PASSED: 65/65 (100% pass rate)
+      
+      ✅ FEATURE 1: CHAT PHOTOS (14 tests, 100% pass)
+      - POST /chat/upload with 1-10 images (field name 'files') → 200 with {uploads:[{media_url,media_type:'image'}]}
+      - Non-image files → 400, Unauthenticated → 401
+      - POST /dm/send with image_url only (no text) between friends → 200 with image_url in response
+      - POST /dm/send validation: neither text nor image_url → 400, text >1000 chars → 400, non-friend → 403
+      - GET /dm/{other_user_id}/messages includes image_url field
+      - GET /dm/threads shows last_message='📷 Foto' for image-only messages
+      - POST /groups/{id}/messages with image_url only → 200, with neither → 400
+      - GET /groups/{id}/messages includes image_url field
+      
+      ✅ FEATURE 2: ALBUM MULTI-UPLOAD + SHARE-BATCH (10 tests, 100% pass)
+      - POST /events/{id}/album/upload with single file → single object (backwards compat)
+      - POST /events/{id}/album/upload with multiple files → {uploads:[...], count:N}
+      - Upload without interest → 403, non-image/video → 400
+      - POST /events/{id}/album/share-batch with empty upload_ids → 400, no audience → 400
+      - Share-batch with valid upload_ids and all_friends:true → 200 {ok:true, shared_count:N}
+      - GET /events/{id}/album as friend shows shared uploads in 'shared' bucket
+      - Sharing another user's upload_id → 404 (only own uploads can be shared)
+      
+      ✅ FEATURE 3: PAST EVENTS + ACTIVITY FUTURE-ONLY (9 tests, 100% pass)
+      - GET /me/past-events → 200 with {items:[...]} only for events with my status voy/estuve AND date < today
+      - Each item has: id, name, venue, date, time, image_url, genre, my_status, my_photos
+      - Future events NOT in past-events list
+      - GET /me/activity → 200, does NOT include past events (only date >= today)
+      
+      ✅ FEATURE 4: ADMIN SCRAPE CHANGELOG (3 tests, 100% pass)
+      - GET /admin/scrape-changelog?limit=60 as admin → 200 with {last_run, counts:{new,price_up,price_down,state,sold_out,on_sale}, total, entries}
+      - As non-admin → 403, Unauthenticated → 401
+      
+      ✅ REGRESSION TESTS (6 tests, 100% pass)
+      - POST /auth/login, GET /auth/me, GET /events, POST /events/{id}/interest, GET /dm/threads, GET /groups
+      
+      All endpoints working correctly with proper validation, authorization, and data structures. No issues found.
+      Test file: /app/backend_test.py
+
   - agent: "main"
     message: |
       Big iteration. New endpoints added: /me/badges (63 badges + points), /users/:id/badges,

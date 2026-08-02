@@ -1758,23 +1758,24 @@ async def my_activity(user: dict = Depends(get_current_user)):
     fmap = {}
     async for u in db.users.find({"user_id": {"$in": friend_ids}}, {"_id": 0}):
         fmap[u["user_id"]] = u
+    today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
     items = []
-    # friends marking voy
+    # friends marking voy (only for FUTURE events — past parties drop off the wall)
     async for it in db.interests.find(
-        {"user_id": {"$in": friend_ids}, "status": "voy"}, {"_id": 0}).sort("created_at", -1).limit(30):
+        {"user_id": {"$in": friend_ids}, "status": "voy"}, {"_id": 0}).sort("created_at", -1).limit(60):
         ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
         fu = fmap.get(it["user_id"])
-        if ev and fu:
+        if ev and fu and ev.get("date", "") >= today_iso:
             items.append({
                 "type": "going", "ts": it.get("created_at", ""),
                 "user": {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")},
                 "event_id": ev["id"], "event_name": ev["name"], "venue": ev.get("venue", ""), "date": ev.get("date", ""),
             })
-    # friends who got tickets
-    async for tk in db.tickets.find({"user_id": {"$in": friend_ids}}, {"_id": 0}).sort("created_at", -1).limit(15):
+    # friends who got tickets (only for FUTURE events)
+    async for tk in db.tickets.find({"user_id": {"$in": friend_ids}}, {"_id": 0}).sort("created_at", -1).limit(30):
         ev = await db.events.find_one({"id": tk["event_id"]}, {"_id": 0})
         fu = fmap.get(tk["user_id"])
-        if ev and fu:
+        if ev and fu and ev.get("date", "") >= today_iso:
             items.append({
                 "type": "ticket", "ts": tk.get("created_at", ""),
                 "user": {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")},
@@ -1782,6 +1783,53 @@ async def my_activity(user: dict = Depends(get_current_user)):
             })
     items.sort(key=lambda x: x.get("ts", ""), reverse=True)
     return {"items": items[:25]}
+
+
+@api_router.get("/me/past-events")
+async def my_past_events(user: dict = Depends(get_current_user)):
+    """Past parties the user attended (status voy/estuve and date < today).
+    Powers the 'Fiestas pasadas' page; each item is enterable → /event/:id
+    where the shared + private album lives."""
+    uid = user["user_id"]
+    today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    # my interests that count as "went"
+    status_map = {}
+    async for it in db.interests.find(
+        {"user_id": uid, "status": {"$in": ["voy", "estuve"]}}, {"_id": 0}):
+        status_map[it["event_id"]] = it["status"]
+    if not status_map:
+        return {"items": []}
+    ev_ids = list(status_map.keys())
+    # bulk load past events
+    events = {}
+    async for ev in db.events.find(
+        {"id": {"$in": ev_ids}, "date": {"$lt": today_iso}}, {"_id": 0}):
+        events[ev["id"]] = ev
+    if not events:
+        return {"items": []}
+    # my album photo counts per event (single grouped query)
+    photo_counts = {}
+    pipeline = [
+        {"$match": {"user_id": uid, "event_id": {"$in": list(events.keys())}}},
+        {"$group": {"_id": "$event_id", "n": {"$sum": 1}}},
+    ]
+    async for row in db.album_uploads.aggregate(pipeline):
+        photo_counts[row["_id"]] = row["n"]
+    items = []
+    for eid, ev in events.items():
+        items.append({
+            "id": ev["id"],
+            "name": ev["name"],
+            "venue": ev.get("venue", ""),
+            "date": ev.get("date", ""),
+            "time": ev.get("time", ""),
+            "image_url": ev.get("image_url", ""),
+            "genre": ev.get("genre", ""),
+            "my_status": status_map.get(eid, "estuve"),
+            "my_photos": photo_counts.get(eid, 0),
+        })
+    items.sort(key=lambda x: x.get("date", ""), reverse=True)
+    return {"items": items}
 
 
 @api_router.get("/me/recap")
@@ -3009,7 +3057,8 @@ async def root():
 
 class DMSendInput(BaseModel):
     to_user_id: str
-    text: str
+    text: str = ""
+    image_url: str = ""
 
 
 class GroupCreateInput(BaseModel):
@@ -3028,7 +3077,8 @@ class GroupMemberInput(BaseModel):
 
 
 class GroupMessageInput(BaseModel):
-    text: str
+    text: str = ""
+    image_url: str = ""
 
 
 def _dm_key(a: str, b: str) -> str:
@@ -3049,7 +3099,7 @@ async def _dm_thread_summary(other_id: str, my_id: str) -> dict:
     return {
         "user": {"user_id": other["user_id"], "name": other["name"],
                  "username": other.get("username", ""), "picture": other.get("picture", "")},
-        "last_message": last["text"] if last else "",
+        "last_message": (last["text"] if (last and last.get("text")) else ("📷 Foto" if last else "")),
         "last_at": last["created_at"] if last else "",
         "unread": unread,
     }
@@ -3096,7 +3146,8 @@ async def send_dm(inp: DMSendInput, user: dict = Depends(get_current_user)):
     if len(inp.text) > 1000:
         raise HTTPException(status_code=400, detail="Mensaje demasiado largo (máx 1000)")
     text = inp.text.strip()
-    if not text:
+    image_url = (inp.image_url or "").strip()
+    if not text and not image_url:
         raise HTTPException(status_code=400, detail="Escribe un mensaje")
     msg = {
         "id": str(uuid.uuid4()),
@@ -3104,14 +3155,16 @@ async def send_dm(inp: DMSendInput, user: dict = Depends(get_current_user)):
         "from_user_id": user["user_id"],
         "to_user_id": inp.to_user_id,
         "text": text,
+        "image_url": image_url,
         "read": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.dm_messages.insert_one(msg)
     msg.pop("_id", None)
+    _preview = text[:60] if text else "📷 Foto"
     await create_notification(
         inp.to_user_id, "dm",
-        f"{user['name']}: {text[:60]}",
+        f"{user['name']}: {_preview}",
         {"user_id": user["user_id"], "type": "dm"},
     )
     return {**msg, "is_mine": True}
@@ -3298,25 +3351,28 @@ async def list_group_messages(group_id: str, user: dict = Depends(get_current_us
 async def send_group_message(group_id: str, inp: GroupMessageInput, user: dict = Depends(get_current_user)):
     g = await _group_or_404(group_id, user["user_id"])
     text = inp.text.strip()
+    image_url = (inp.image_url or "").strip()
     if len(text) > 1000:
         raise HTTPException(status_code=400, detail="Mensaje demasiado largo (máx 1000)")
-    if not text:
+    if not text and not image_url:
         raise HTTPException(status_code=400, detail="Escribe algo")
     msg = {
         "id": str(uuid.uuid4()),
         "group_id": group_id,
         "user_id": user["user_id"],
         "text": text,
+        "image_url": image_url,
         "read_by": [user["user_id"]],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.group_messages.insert_one(msg)
     msg.pop("_id", None)
+    _preview = text[:60] if text else "📷 Foto"
     for mid in g.get("member_ids", []):
         if mid != user["user_id"]:
             await create_notification(
                 mid, "group_message",
-                f"{g['name']} · {user['name']}: {text[:60]}",
+                f"{g['name']} · {user['name']}: {_preview}",
                 {"group_id": group_id, "type": "group_message"},
             )
     return {**msg, "author": _msg_author(user), "is_mine": True}
@@ -3468,45 +3524,56 @@ async def _album_visible_to(a: dict, viewer_id: str, friend_ids: List[str], my_g
 
 
 @api_router.post("/events/{event_id}/album/upload")
-async def album_upload(event_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+async def album_upload(event_id: str, files: List[UploadFile] = File(...), user: dict = Depends(get_current_user)):
+    """Upload one OR many photos/videos at once to the event album (private by default)."""
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
     if not await _can_access_album(event_id, user["user_id"]):
         raise HTTPException(status_code=403, detail="Solo asistentes al evento pueden subir")
-    data = await file.read()
-    if len(data) > 50 * 1024 * 1024:  # 50MB max
-        raise HTTPException(status_code=400, detail="Máximo 50MB")
-    ct = file.content_type or "application/octet-stream"
-    is_video = ct.startswith("video/")
-    is_image = ct.startswith("image/")
-    if not (is_video or is_image):
-        raise HTTPException(status_code=400, detail="Solo fotos o vídeos")
-    ext = file.filename.split(".")[-1].lower() if "." in file.filename else ("mp4" if is_video else "jpg")
-    path = f"{APP_NAME}/albums/{event_id}/{uuid.uuid4().hex}.{ext}"
-    _url = store_media(path, data, ct)
-    await db.files.insert_one({
-        "id": str(uuid.uuid4()),
-        "storage_path": path,
-        "content_type": ct,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    upload = {
-        "id": str(uuid.uuid4()),
-        "event_id": event_id,
-        "user_id": user["user_id"],
-        "media_url": _url,
-        "media_type": "video" if is_video else "image",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        # Private by default — the owner shares explicitly afterwards.
-        "shared": False,
-        "shared_all_friends": False,
-        "shared_with_users": [],
-        "shared_with_groups": [],
-    }
-    await db.album_uploads.insert_one(upload)
-    upload.pop("_id", None)
-    return upload
+    if not files:
+        raise HTTPException(status_code=400, detail="No hay archivos")
+    if len(files) > 30:
+        raise HTTPException(status_code=400, detail="Máximo 30 archivos por subida")
+    results = []
+    for file in files:
+        data = await file.read()
+        if len(data) > 50 * 1024 * 1024:  # 50MB max
+            raise HTTPException(status_code=400, detail="Máximo 50MB por archivo")
+        ct = file.content_type or "application/octet-stream"
+        is_video = ct.startswith("video/")
+        is_image = ct.startswith("image/")
+        if not (is_video or is_image):
+            raise HTTPException(status_code=400, detail="Solo fotos o vídeos")
+        ext = file.filename.split(".")[-1].lower() if (file.filename and "." in file.filename) else ("mp4" if is_video else "jpg")
+        path = f"{APP_NAME}/albums/{event_id}/{uuid.uuid4().hex}.{ext}"
+        _url = store_media(path, data, ct)
+        await db.files.insert_one({
+            "id": str(uuid.uuid4()),
+            "storage_path": path,
+            "content_type": ct,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        upload = {
+            "id": str(uuid.uuid4()),
+            "event_id": event_id,
+            "user_id": user["user_id"],
+            "media_url": _url,
+            "media_type": "video" if is_video else "image",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            # Private by default — the owner shares explicitly afterwards.
+            "shared": False,
+            "shared_all_friends": False,
+            "shared_with_users": [],
+            "shared_with_groups": [],
+        }
+        await db.album_uploads.insert_one(upload)
+        upload.pop("_id", None)
+        results.append(upload)
+    # Backwards-compatible: return the single object if only one file was sent.
+    if len(results) == 1:
+        return results[0]
+    return {"uploads": results, "count": len(results)}
 
 
 @api_router.get("/events/{event_id}/album")
@@ -3620,6 +3687,88 @@ async def album_unshare(event_id: str, upload_id: str, user: dict = Depends(get_
         "shared_with_users": [], "shared_with_groups": [],
     }})
     return {"ok": True, "shared": False}
+
+
+class AlbumShareBatchInput(BaseModel):
+    upload_ids: List[str] = []
+    user_ids: List[str] = []
+    group_ids: List[str] = []
+    all_friends: bool = False
+
+
+@api_router.post("/events/{event_id}/album/share-batch")
+async def album_share_batch(event_id: str, inp: AlbumShareBatchInput, user: dict = Depends(get_current_user)):
+    """Share MANY of my uploads at once with the same audience (no one-by-one)."""
+    if not inp.upload_ids:
+        raise HTTPException(status_code=400, detail="Selecciona al menos una foto")
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    clean_users = [u for u in inp.user_ids if u in friend_ids]
+    valid_groups = [g["id"] async for g in db.groups.find(
+        {"id": {"$in": inp.group_ids}, "member_ids": user["user_id"]}, {"_id": 0, "id": 1})]
+    is_shared = bool(clean_users or valid_groups or inp.all_friends)
+    if not is_shared:
+        raise HTTPException(status_code=400, detail="Elige con quién compartir")
+    # only my own uploads for this event
+    mine = [a async for a in db.album_uploads.find(
+        {"id": {"$in": inp.upload_ids}, "event_id": event_id, "user_id": user["user_id"]}, {"_id": 0})]
+    if not mine:
+        raise HTTPException(status_code=404, detail="No se encontraron tus fotos")
+    prev_recipients = set()
+    for a in mine:
+        prev_recipients.update(a.get("shared_with_users") or [])
+    await db.album_uploads.update_many(
+        {"id": {"$in": [a["id"] for a in mine]}, "user_id": user["user_id"]},
+        {"$set": {
+            "shared": is_shared,
+            "shared_all_friends": bool(inp.all_friends),
+            "shared_with_users": clean_users,
+            "shared_with_groups": valid_groups,
+        }},
+    )
+    # notify newly-added recipients ONCE (not per photo)
+    try:
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        recipients = set(clean_users)
+        if inp.all_friends:
+            recipients.update(friend_ids)
+        for gid in valid_groups:
+            g = await db.groups.find_one({"id": gid}, {"_id": 0, "member_ids": 1})
+            if g:
+                recipients.update(m for m in g.get("member_ids", []) if m != user["user_id"])
+        new_recipients = recipients - prev_recipients - {user["user_id"]}
+        n = len(mine)
+        for rid in list(new_recipients)[:60]:
+            await create_notification(
+                rid, "album_shared",
+                f"📸 {user['name']} compartió {n} foto{'s' if n != 1 else ''} de {ev['name'] if ev else 'una fiesta'}",
+                {"event_id": event_id, "type": "album_shared"},
+            )
+    except Exception as e:
+        logger.warning(f"album share-batch notify failed: {e}")
+    return {"ok": True, "shared_count": len(mine)}
+
+
+@api_router.post("/chat/upload")
+async def chat_media_upload(files: List[UploadFile] = File(...), user: dict = Depends(get_current_user)):
+    """Upload one or many images for use inside a DM / group chat message.
+    Returns a list of {media_url, media_type}. Kept separate from the album."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No hay archivos")
+    if len(files) > 10:
+        raise HTTPException(status_code=400, detail="Máximo 10 fotos por vez")
+    out = []
+    for file in files:
+        data = await file.read()
+        if len(data) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Máximo 25MB por foto")
+        ct = file.content_type or "application/octet-stream"
+        if not ct.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Solo fotos")
+        ext = file.filename.split(".")[-1].lower() if (file.filename and "." in file.filename) else "jpg"
+        path = f"{APP_NAME}/chat/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+        _url = store_media(path, data, ct)
+        out.append({"media_url": _url, "media_type": "image"})
+    return {"uploads": out}
 
 
 @api_router.delete("/events/{event_id}/album/{upload_id}")
@@ -4283,6 +4432,12 @@ async def on_startup():
         await db.event_follows.create_index("event_id")
         await db.scraped_venues.create_index("name")
         await db.scraped_venues.create_index("active")
+        await db.scrape_changelog.create_index([("batch_id", 1), ("created_at", -1)])
+        try:
+            # auto-expire changelog after 30 days so it never bloats (also serves created_at sorts)
+            await db.scrape_changelog.create_index("created_at", expireAfterSeconds=30 * 24 * 3600, name="cl_ttl")
+        except Exception:
+            pass
         await db.events.create_index("external_id")
         await db.events.create_index("source")
     except Exception as e:
@@ -4621,7 +4776,28 @@ async def seed_scraped_venues():
         logger.warning(f"seed_scraped_venues failed: {e}")
 
 
-async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
+async def _record_scrape_change(batch_id: str, kind: str, ev: dict, extra: dict = None):
+    """Log a single change detected during a scraper run (for the admin panel)."""
+    try:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "batch_id": batch_id or "",
+            "kind": kind,  # new | price_up | price_down | state | sold_out | on_sale
+            "event_id": ev.get("id", ""),
+            "event_name": ev.get("name", ""),
+            "venue": ev.get("venue", ""),
+            "date": ev.get("date", ""),
+            "city": ev.get("city", ""),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if extra:
+            doc.update(extra)
+        await db.scrape_changelog.insert_one(doc)
+    except Exception as e:
+        logger.warning(f"scrape changelog insert failed: {e}")
+
+
+async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "") -> str:
     """Diff a single scraped event against the DB and apply changes:
     - CREATE if not found → fires "new event" push to city.
     - UPDATE fields if found; if sale_state transitioned or price went up,
@@ -4678,6 +4854,10 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
             asyncio.create_task(_notify_new_event_city(ev))
         except Exception:
             pass
+        await _record_scrape_change(batch_id, "new", ev, {
+            "current_price": ev.get("price_tiers", [{}])[0].get("price") if ev.get("price_tiers") else None,
+            "sale_state": ev.get("sale_state"),
+        })
         return "created"
 
     # UPDATE — merge scraped fields but respect admin's manual overrides where
@@ -4728,19 +4908,26 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent) -> str:
         kind, tmpl = transition
         body = tmpl.format(name=existing["name"])
         await _notify_event_audience(existing["id"], kind, existing["name"], body)
+        _cl_kind = {"tickets_on_sale": "on_sale", "tickets_low_stock": "state",
+                    "tickets_sold_out": "sold_out"}.get(kind, "state")
+        await _record_scrape_change(batch_id, _cl_kind, existing, {"old_state": old_state, "new_state": new_state})
     new_price = _detect_price_increase(old_tiers, new_tiers)
     if new_price is not None and new_state == "a_la_venta":
         body = f"📈 Nueva fase de precios en {existing['name']}: ahora {int(new_price)}€."
         await _notify_event_audience(existing["id"], "tickets_price_up", existing["name"], body)
+        await _record_scrape_change(batch_id, "price_up", existing, {"new_price": new_price})
     drop_price = _detect_price_decrease(old_tiers, new_tiers)
     if drop_price is not None and new_state in ("a_la_venta", "pocas_entradas"):
         body = f"📉 ¡Bajada de precio en {existing['name']}! Ahora desde {int(drop_price)}€."
         await _notify_event_audience(existing["id"], "tickets_price_down", existing["name"], body)
+        await _record_scrape_change(batch_id, "price_down", existing, {"new_price": drop_price})
     return "updated"
 
 
-async def run_scraper_for_venue(venue: dict) -> dict:
+async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
     """Run one venue's scraper and apply diffs. Returns a summary."""
+    if not batch_id:
+        batch_id = uuid.uuid4().hex
     start = time.time()
     summary = {"venue_id": venue.get("id"), "venue_name": venue.get("name"), "ok": False,
                "events": 0, "created": 0, "updated": 0, "unchanged": 0, "error": None,
@@ -4758,7 +4945,7 @@ async def run_scraper_for_venue(venue: dict) -> dict:
         summary["events"] = len(events)
         for se in events:
             try:
-                r = await _apply_scraped_event(venue, se)
+                r = await _apply_scraped_event(venue, se, batch_id)
                 if r in summary:
                     summary[r] += 1
             except Exception as e:
@@ -4794,10 +4981,25 @@ async def run_all_scrapers():
         venues.append(v)
     if not venues:
         return []
-    results = await asyncio.gather(*(run_scraper_for_venue(v) for v in venues), return_exceptions=False)
+    batch_id = uuid.uuid4().hex
+    results = await asyncio.gather(*(run_scraper_for_venue(v, batch_id) for v in venues), return_exceptions=False)
     total_new = sum(r["created"] for r in results)
     total_upd = sum(r["updated"] for r in results)
     logger.info(f"[scrapers] Completed: {len(results)} venues, {total_new} new events, {total_upd} updated")
+    try:
+        await db.app_settings.update_one(
+            {"_id": "last_scrape_batch"},
+            {"$set": {
+                "batch_id": batch_id,
+                "at": datetime.now(timezone.utc).isoformat(),
+                "venues_run": len(results),
+                "total_new": total_new,
+                "total_updated": total_upd,
+            }},
+            upsert=True,
+        )
+    except Exception:
+        pass
     try:
         await enrich_venue_directory()
     except Exception:
@@ -4877,6 +5079,35 @@ async def admin_list_scrapers(admin: dict = Depends(require_admin)):
     async for v in db.scraped_venues.find({}, {"_id": 0}).sort("name", 1):
         out.append(v)
     return out
+
+
+@app.get("/api/admin/scrape-changelog")
+async def admin_scrape_changelog(limit: int = 60, admin: dict = Depends(require_admin)):
+    """What changed in the LAST scraper run: new parties, price up/down, sale-state
+    changes and sold-outs. Only visible to admin. Lightweight (indexed + capped)."""
+    limit = max(1, min(limit, 200))
+    last = await db.app_settings.find_one({"_id": "last_scrape_batch"}, {"_id": 0})
+    entries = []
+    q = {}
+    if last and last.get("batch_id"):
+        q = {"batch_id": last["batch_id"]}
+    async for c in db.scrape_changelog.find(q, {"_id": 0}).sort("created_at", -1).limit(limit):
+        entries.append(c)
+    # Fallback: if the last batch had zero changes, show the most recent changes overall
+    if not entries and not last:
+        async for c in db.scrape_changelog.find({}, {"_id": 0}).sort("created_at", -1).limit(limit):
+            entries.append(c)
+    counts = {"new": 0, "price_up": 0, "price_down": 0, "state": 0, "sold_out": 0, "on_sale": 0}
+    for e in entries:
+        k = e.get("kind")
+        if k in counts:
+            counts[k] += 1
+    return {
+        "last_run": last,
+        "counts": counts,
+        "total": len(entries),
+        "entries": entries,
+    }
 
 
 @app.post("/api/admin/scrapers")
