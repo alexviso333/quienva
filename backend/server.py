@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from pathlib import Path
 import os
+import io
 import time
 
 ROOT_DIR = Path(__file__).parent
@@ -79,6 +80,50 @@ def save_object(rel_path: str, data: bytes) -> str:
     full.parent.mkdir(parents=True, exist_ok=True)
     full.write_bytes(data)
     return rel_path
+
+
+# --- Cloudinary (media persistence for Render's ephemeral FS) --------------
+# Free-tier friendly. If not configured, we transparently fall back to local
+# disk so development keeps working without any keys.
+CLOUDINARY_ON = False
+try:
+    import cloudinary as _cloudinary
+    import cloudinary.uploader as _cloudinary_uploader
+    if os.environ.get("CLOUDINARY_URL"):
+        _cloudinary.config(secure=True)  # SDK reads CLOUDINARY_URL from env
+        CLOUDINARY_ON = True
+    elif os.environ.get("CLOUDINARY_CLOUD_NAME") and os.environ.get("CLOUDINARY_API_KEY") and os.environ.get("CLOUDINARY_API_SECRET"):
+        _cloudinary.config(
+            cloud_name=os.environ["CLOUDINARY_CLOUD_NAME"],
+            api_key=os.environ["CLOUDINARY_API_KEY"],
+            api_secret=os.environ["CLOUDINARY_API_SECRET"],
+            secure=True,
+        )
+        CLOUDINARY_ON = True
+except Exception as _e:  # pragma: no cover
+    CLOUDINARY_ON = False
+
+
+def store_media(rel_path: str, data: bytes, content_type: str = "") -> str:
+    """Persist a media blob and return a servable URL.
+    Uses Cloudinary when configured (survives Render restarts), else local disk.
+    """
+    if CLOUDINARY_ON:
+        try:
+            resource_type = "video" if (content_type or "").startswith("video/") else "image"
+            public_id = rel_path.rsplit(".", 1)[0]  # Cloudinary adds its own extension
+            res = _cloudinary_uploader.upload(
+                io.BytesIO(data),
+                public_id=public_id,
+                resource_type=resource_type,
+                overwrite=True,
+                invalidate=True,
+            )
+            return res.get("secure_url") or res.get("url")
+        except Exception as e:
+            logger.warning(f"Cloudinary upload failed, falling back to disk: {e}")
+    save_object(rel_path, data)
+    return f"/api/files/{rel_path}"
 
 
 def read_object(rel_path: str):
@@ -2014,14 +2059,14 @@ async def admin_upload(file: UploadFile = File(...), admin: dict = Depends(requi
     path = f"{APP_NAME}/events/{uuid.uuid4().hex}.{ext}"
     data = await file.read()
     ct = file.content_type or "image/jpeg"
-    save_object(path, data)
+    _url = store_media(path, data, ct)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
         "storage_path": path,
         "content_type": ct,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    return {"image_url": f"/api/files/{path}"}
+    return {"image_url": _url}
 
 
 def _detect_genre(name: str) -> str:
@@ -2169,8 +2214,7 @@ def _download_image(image_url: str, page_url: str) -> str:
         if ext == ".jpe":
             ext = ".jpg"
         path = f"{APP_NAME}/events/{uuid.uuid4().hex}{ext}"
-        save_object(path, img_res.content)
-        return f"/api/files/{path}"
+        return store_media(path, img_res.content, ct)
     except Exception as e:
         logger.info(f"import-url image download failed: {e}")
         return ""
@@ -2247,14 +2291,14 @@ async def upload_avatar(file: UploadFile = File(...), user: dict = Depends(get_c
     path = f"{APP_NAME}/avatars/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
     data = await file.read()
     ct = file.content_type or "image/jpeg"
-    save_object(path, data)
+    _url = store_media(path, data, ct)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
         "storage_path": path,
         "content_type": ct,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    url = f"/api/files/{path}"
+    url = _url
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": url}})
     return {"image_url": url}
 
@@ -2556,7 +2600,7 @@ async def create_story(
         if not ev:
             raise HTTPException(status_code=404, detail="Evento no encontrado")
     path = f"{APP_NAME}/stories/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
-    save_object(path, data)
+    _url = store_media(path, data, ct)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
         "storage_path": path,
@@ -2567,7 +2611,7 @@ async def create_story(
     story = {
         "id": str(uuid.uuid4()),
         "user_id": user["user_id"],
-        "image_url": f"/api/files/{path}",
+        "image_url": _url,
         "caption": caption.strip(),
         "event_id": event_id or None,
         "created_at": now.isoformat(),
@@ -3156,7 +3200,7 @@ async def group_photo_upload(
         raise HTTPException(status_code=400, detail="Máximo 25MB")
     ext = file.filename.split(".")[-1].lower() if file.filename and "." in file.filename else "jpg"
     path = f"{APP_NAME}/group_photos/{group_id}/{uuid.uuid4().hex}.{ext}"
-    save_object(path, data)
+    _url = store_media(path, data, ct)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
         "storage_path": path,
@@ -3168,7 +3212,7 @@ async def group_photo_upload(
         "group_id": group_id,
         "event_id": event_id,
         "user_id": user["user_id"],
-        "image_url": f"/api/files/{path}",
+        "image_url": _url,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.group_photos.insert_one(photo)
@@ -3259,7 +3303,7 @@ async def album_upload(event_id: str, file: UploadFile = File(...), user: dict =
         raise HTTPException(status_code=400, detail="Solo fotos o vídeos")
     ext = file.filename.split(".")[-1].lower() if "." in file.filename else ("mp4" if is_video else "jpg")
     path = f"{APP_NAME}/albums/{event_id}/{uuid.uuid4().hex}.{ext}"
-    save_object(path, data)
+    _url = store_media(path, data, ct)
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
         "storage_path": path,
@@ -3270,7 +3314,7 @@ async def album_upload(event_id: str, file: UploadFile = File(...), user: dict =
         "id": str(uuid.uuid4()),
         "event_id": event_id,
         "user_id": user["user_id"],
-        "media_url": f"/api/files/{path}",
+        "media_url": _url,
         "media_type": "video" if is_video else "image",
         "created_at": datetime.now(timezone.utc).isoformat(),
         # Private by default — the owner shares explicitly afterwards.
@@ -3671,7 +3715,7 @@ async def moment_upload(event_id: str, file: UploadFile = File(...), user: dict 
         raise HTTPException(status_code=400, detail="Máximo 10MB")
     ext = file.filename.split(".")[-1].lower() if "." in file.filename else "jpg"
     path = f"{APP_NAME}/moments/{event_id}/{uuid.uuid4().hex}.{ext}"
-    save_object(path, data)
+    _url = store_media(path, data, ct)
     now = datetime.now(timezone.utc)
     deadline = datetime.fromisoformat(prompt["on_time_deadline"].replace("Z", "+00:00"))
     if deadline.tzinfo is None:
@@ -3681,7 +3725,7 @@ async def moment_upload(event_id: str, file: UploadFile = File(...), user: dict 
         "id": str(uuid.uuid4()),
         "event_id": event_id,
         "user_id": user["user_id"],
-        "image_url": f"/api/files/{path}",
+        "image_url": _url,
         "on_time": on_time,
         "seconds_late": max(0, int((now - deadline).total_seconds())),
         "created_at": now.isoformat(),
