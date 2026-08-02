@@ -294,9 +294,10 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 href={event.commission_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="h-9 rounded-xl bg-white text-black font-bold text-sm flex items-center justify-center gap-2 transition-transform duration-300 hover:-translate-y-0.5 active:scale-95"
+                onClick={() => api.post("/tickets/click", { event_id: event.id }).catch(() => {})}
+                className="h-9 rounded-xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-2 transition-transform duration-300 hover:-translate-y-0.5 active:scale-95"
               >
-                <Ticket className="w-4 h-4" /> Conseguir entrada
+                <Ticket className="w-4 h-4" /> Conseguir entrada{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
               </a>
             ) : event.more_info_url ? (
               <a

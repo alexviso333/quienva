@@ -1,537 +1,605 @@
 #!/usr/bin/env python3
 """
-Backend test for ¿Quién va? - Album Private + Selective Sharing + Active Moment
-Testing iteration: Album redesign with private-by-default and selective sharing
+Backend test for ¿Quién va? - Monetization + Retention endpoints
+Tests new ticket tracking, activity feed, recap, admin funnel, and venue report endpoints
 """
 
 import requests
 import json
 import time
-from io import BytesIO
+from datetime import datetime, timedelta
 
 # Base URL from frontend/.env
 BASE_URL = "https://bereal-clone-1.preview.emergentagent.com/api"
 
-# Test credentials
+# Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 
-# Color codes for output
-GREEN = "\033[92m"
-RED = "\033[91m"
-YELLOW = "\033[93m"
-BLUE = "\033[94m"
-RESET = "\033[0m"
-
-def log_test(name, passed, details=""):
-    status = f"{GREEN}✅ PASS{RESET}" if passed else f"{RED}❌ FAIL{RESET}"
-    print(f"{status} - {name}")
-    if details:
-        print(f"  {details}")
-
-def log_section(name):
-    print(f"\n{BLUE}{'='*80}{RESET}")
-    print(f"{BLUE}{name}{RESET}")
-    print(f"{BLUE}{'='*80}{RESET}\n")
-
 # Test state
-test_results = {"passed": 0, "failed": 0, "tests": []}
+admin_token = None
+user_a_token = None
+user_b_token = None
+user_a_id = None
+user_b_id = None
+event_id = None
+test_timestamp = int(time.time())
 
-def register_result(name, passed, details=""):
-    test_results["tests"].append({"name": name, "passed": passed, "details": details})
-    if passed:
-        test_results["passed"] += 1
+
+def log(msg):
+    print(f"[TEST] {msg}")
+
+
+def register_user(name, email, password):
+    """Register a new user"""
+    username = email.split("@")[0]  # Use email prefix as username
+    resp = requests.post(f"{BASE_URL}/auth/register", json={
+        "name": name,
+        "email": email,
+        "password": password,
+        "username": username,
+        "city": "Palma"
+    })
+    if resp.status_code != 200:
+        log(f"❌ Register failed: {resp.status_code} {resp.text}")
+        return None, None
+    data = resp.json()
+    token = data.get("token")
+    user_id = data.get("user", {}).get("user_id") if "user" in data else data.get("user_id")
+    log(f"✅ Registered {name}: {user_id}")
+    return token, user_id
+
+
+def login(email, password):
+    """Login and return token"""
+    resp = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": email,
+        "password": password
+    })
+    if resp.status_code != 200:
+        log(f"❌ Login failed: {resp.status_code} {resp.text}")
+        return None
+    data = resp.json()
+    token = data.get("token")
+    log(f"✅ Logged in: {email}")
+    return token
+
+
+def make_friends(token_a, token_b, user_b_id):
+    """Make two users friends"""
+    # A sends friend request to B
+    resp = requests.post(f"{BASE_URL}/friends/request", 
+                        json={"user_id": user_b_id},
+                        headers={"Authorization": f"Bearer {token_a}"})
+    if resp.status_code != 200:
+        log(f"❌ Friend request failed: {resp.status_code} {resp.text}")
+        return False
+    
+    data = resp.json()
+    request_id = data.get("request_id")
+    if not request_id:
+        log(f"❌ No request_id in response: {data}")
+        return False
+    
+    # B accepts friend request
+    resp = requests.post(f"{BASE_URL}/friends/respond",
+                        json={"request_id": request_id, "accept": True},
+                        headers={"Authorization": f"Bearer {token_b}"})
+    if resp.status_code != 200:
+        log(f"❌ Friend accept failed: {resp.status_code} {resp.text}")
+        return False
+    
+    log(f"✅ Users are now friends")
+    return True
+
+
+def get_upcoming_event(token):
+    """Get an upcoming event ID"""
+    resp = requests.get(f"{BASE_URL}/events?date_filter=all",
+                       headers={"Authorization": f"Bearer {token}"})
+    if resp.status_code != 200:
+        log(f"❌ Get events failed: {resp.status_code} {resp.text}")
+        return None
+    events = resp.json()
+    if not events:
+        log(f"❌ No events found")
+        return None
+    event_id = events[0]["id"]
+    log(f"✅ Found event: {event_id} - {events[0]['name']}")
+    return event_id
+
+
+def mark_interest(token, event_id, status="voy"):
+    """Mark interest on an event"""
+    resp = requests.post(f"{BASE_URL}/events/{event_id}/interest",
+                        json={"status": status},
+                        headers={"Authorization": f"Bearer {token}"})
+    if resp.status_code != 200:
+        log(f"❌ Mark interest failed: {resp.status_code} {resp.text}")
+        return False
+    log(f"✅ Marked interest: {status}")
+    return True
+
+
+# =============================================================================
+# TEST 1: POST /api/events/{id}/ticket - Mark/unmark ticket ownership
+# =============================================================================
+def test_ticket_endpoint():
+    log("\n=== TEST 1: POST /api/events/{id}/ticket ===")
+    
+    # Test 1.1: Mark ticket as user A
+    log("Test 1.1: User A marks 'have ticket'")
+    resp = requests.post(f"{BASE_URL}/events/{event_id}/ticket",
+                        json={"have": True},
+                        headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["have"] == True, f"Expected have=true, got {data}"
+    assert data["total_tickets"] >= 1, f"Expected total_tickets >= 1, got {data['total_tickets']}"
+    initial_total = data["total_tickets"]
+    log(f"✅ User A has ticket, total_tickets={initial_total}")
+    
+    # Test 1.2: Mark ticket as user B (should increment)
+    log("Test 1.2: User B marks 'have ticket'")
+    resp = requests.post(f"{BASE_URL}/events/{event_id}/ticket",
+                        json={"have": True},
+                        headers={"Authorization": f"Bearer {user_b_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["have"] == True, f"Expected have=true, got {data}"
+    assert data["total_tickets"] == initial_total + 1, f"Expected total_tickets={initial_total + 1}, got {data['total_tickets']}"
+    log(f"✅ User B has ticket, total_tickets={data['total_tickets']}")
+    
+    # Test 1.3: Unmark ticket as user A (should decrement)
+    log("Test 1.3: User A unmarks ticket")
+    resp = requests.post(f"{BASE_URL}/events/{event_id}/ticket",
+                        json={"have": False},
+                        headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["have"] == False, f"Expected have=false, got {data}"
+    assert data["total_tickets"] == initial_total, f"Expected total_tickets={initial_total}, got {data['total_tickets']}"
+    log(f"✅ User A unmarked ticket, total_tickets={data['total_tickets']}")
+    
+    # Test 1.4: Non-existent event should return 404
+    log("Test 1.4: Non-existent event returns 404")
+    resp = requests.post(f"{BASE_URL}/events/nonexistent-event-id/ticket",
+                        json={"have": True},
+                        headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}: {resp.text}"
+    log(f"✅ Non-existent event returns 404")
+    
+    log("✅ TEST 1 PASSED: Ticket endpoint working correctly")
+
+
+# =============================================================================
+# TEST 2: GET /api/events/{id} - Event detail includes ticket fields
+# =============================================================================
+def test_event_detail_ticket_fields():
+    log("\n=== TEST 2: GET /api/events/{id} - Ticket fields ===")
+    
+    # User B has ticket, User A doesn't (from previous test)
+    # User A and B are friends and both marked 'voy'
+    
+    log("Test 2.1: User B views event detail (has ticket)")
+    resp = requests.get(f"{BASE_URL}/events/{event_id}",
+                       headers={"Authorization": f"Bearer {user_b_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    
+    # Check required fields
+    assert "my_has_ticket" in data, f"Missing my_has_ticket field"
+    assert isinstance(data["my_has_ticket"], bool), f"my_has_ticket should be bool, got {type(data['my_has_ticket'])}"
+    assert data["my_has_ticket"] == True, f"Expected my_has_ticket=true for user B, got {data['my_has_ticket']}"
+    
+    assert "total_tickets" in data, f"Missing total_tickets field"
+    assert isinstance(data["total_tickets"], int), f"total_tickets should be int, got {type(data['total_tickets'])}"
+    assert data["total_tickets"] >= 1, f"Expected total_tickets >= 1, got {data['total_tickets']}"
+    
+    assert "friends_with_ticket" in data, f"Missing friends_with_ticket field"
+    assert isinstance(data["friends_with_ticket"], list), f"friends_with_ticket should be list, got {type(data['friends_with_ticket'])}"
+    log(f"✅ User B sees: my_has_ticket={data['my_has_ticket']}, total_tickets={data['total_tickets']}, friends_with_ticket={len(data['friends_with_ticket'])} friends")
+    
+    # Test 2.2: User A views event detail (doesn't have ticket, but friend B does)
+    log("Test 2.2: User A views event detail (no ticket, but friend B has)")
+    
+    # First, mark A as having ticket so we can test friends_with_ticket
+    requests.post(f"{BASE_URL}/events/{event_id}/ticket",
+                 json={"have": True},
+                 headers={"Authorization": f"Bearer {user_a_token}"})
+    
+    resp = requests.get(f"{BASE_URL}/events/{event_id}",
+                       headers={"Authorization": f"Bearer {user_b_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    
+    # B should see A in friends_with_ticket
+    assert len(data["friends_with_ticket"]) >= 1, f"Expected at least 1 friend with ticket, got {len(data['friends_with_ticket'])}"
+    friend_ids = [f["user_id"] for f in data["friends_with_ticket"]]
+    assert user_a_id in friend_ids, f"Expected user A in friends_with_ticket, got {friend_ids}"
+    log(f"✅ User B sees friend A in friends_with_ticket")
+    
+    log("✅ TEST 2 PASSED: Event detail includes correct ticket fields")
+
+
+# =============================================================================
+# TEST 3: GET /api/events - List includes my_has_ticket
+# =============================================================================
+def test_events_list_ticket_field():
+    log("\n=== TEST 3: GET /api/events - my_has_ticket field ===")
+    
+    log("Test 3.1: Events list includes my_has_ticket")
+    resp = requests.get(f"{BASE_URL}/events?date_filter=all",
+                       headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    events = resp.json()
+    
+    # If no events in list, use the event we already have from setup
+    if len(events) == 0:
+        log(f"ℹ️  No events in list (date filter may have excluded them), checking event detail instead")
+        resp = requests.get(f"{BASE_URL}/events/{event_id}",
+                           headers={"Authorization": f"Bearer {user_a_token}"})
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        event = resp.json()
+        assert "my_has_ticket" in event, f"Missing my_has_ticket field"
+        assert isinstance(event["my_has_ticket"], bool), f"my_has_ticket should be bool, got {type(event['my_has_ticket'])}"
+        log(f"✅ Event detail includes my_has_ticket field (value: {event['my_has_ticket']})")
     else:
-        test_results["failed"] += 1
-    log_test(name, passed, details)
-
-# ============================================================================
-# SETUP: Login and create test users
-# ============================================================================
-
-log_section("SETUP: Authentication and User Creation")
-
-# Login as admin
-resp = requests.post(f"{BASE_URL}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
-if resp.status_code != 200:
-    print(f"{RED}FATAL: Admin login failed: {resp.status_code} {resp.text}{RESET}")
-    exit(1)
-
-admin_token = resp.json()["token"]
-admin_headers = {"Authorization": f"Bearer {admin_token}"}
-print(f"{GREEN}✓ Admin logged in{RESET}")
-
-# Create User A
-user_a_email = f"usera_{int(time.time())}@test.com"
-user_a_password = "password123"
-resp = requests.post(f"{BASE_URL}/auth/register", json={
-    "email": user_a_email,
-    "password": user_a_password,
-    "name": "User A",
-    "username": f"usera_{int(time.time())}",
-    "city": "Palma"
-})
-if resp.status_code != 200:
-    print(f"{RED}FATAL: User A registration failed: {resp.status_code} {resp.text}{RESET}")
-    exit(1)
-
-user_a_data = resp.json()
-user_a_token = user_a_data["token"]
-user_a_id = user_a_data["user"]["user_id"]
-user_a_headers = {"Authorization": f"Bearer {user_a_token}"}
-print(f"{GREEN}✓ User A created: {user_a_id}{RESET}")
-
-# Create User B
-user_b_email = f"userb_{int(time.time())}@test.com"
-user_b_password = "password123"
-resp = requests.post(f"{BASE_URL}/auth/register", json={
-    "email": user_b_email,
-    "password": user_b_password,
-    "name": "User B",
-    "username": f"userb_{int(time.time())}",
-    "city": "Palma"
-})
-if resp.status_code != 200:
-    print(f"{RED}FATAL: User B registration failed: {resp.status_code} {resp.text}{RESET}")
-    exit(1)
-
-user_b_data = resp.json()
-user_b_token = user_b_data["token"]
-user_b_id = user_b_data["user"]["user_id"]
-user_b_headers = {"Authorization": f"Bearer {user_b_token}"}
-print(f"{GREEN}✓ User B created: {user_b_id}{RESET}")
-
-# Create User C (non-friend)
-user_c_email = f"userc_{int(time.time())}@test.com"
-user_c_password = "password123"
-resp = requests.post(f"{BASE_URL}/auth/register", json={
-    "email": user_c_email,
-    "password": user_c_password,
-    "name": "User C",
-    "username": f"userc_{int(time.time())}",
-    "city": "Palma"
-})
-if resp.status_code != 200:
-    print(f"{RED}FATAL: User C registration failed: {resp.status_code} {resp.text}{RESET}")
-    exit(1)
-
-user_c_data = resp.json()
-user_c_token = user_c_data["token"]
-user_c_id = user_c_data["user"]["user_id"]
-user_c_headers = {"Authorization": f"Bearer {user_c_token}"}
-print(f"{GREEN}✓ User C created: {user_c_id}{RESET}")
-
-# Make A and B friends
-resp = requests.post(f"{BASE_URL}/friends/request", json={"user_id": user_b_id}, headers=user_a_headers)
-if resp.status_code != 200:
-    print(f"{RED}FATAL: Friend request failed: {resp.status_code} {resp.text}{RESET}")
-    exit(1)
-print(f"{GREEN}✓ User A sent friend request to User B{RESET}")
-
-# Get the request_id from the response
-friend_request_data = resp.json()
-request_id = friend_request_data.get("request_id")
-
-resp = requests.post(f"{BASE_URL}/friends/respond", json={"request_id": request_id, "accept": True}, headers=user_b_headers)
-if resp.status_code != 200:
-    print(f"{RED}FATAL: Friend accept failed: {resp.status_code} {resp.text}{RESET}")
-    exit(1)
-print(f"{GREEN}✓ User B accepted friend request from User A{RESET}")
-
-# Get an event to test with
-resp = requests.get(f"{BASE_URL}/events", headers=admin_headers)
-if resp.status_code != 200 or not resp.json():
-    print(f"{RED}FATAL: No events available: {resp.status_code}{RESET}")
-    exit(1)
-
-test_event = resp.json()[0]
-event_id = test_event["id"]
-print(f"{GREEN}✓ Using event: {test_event['name']} (ID: {event_id}){RESET}")
-
-# Both A and B mark interest "voy" on the event
-resp = requests.post(f"{BASE_URL}/events/{event_id}/interest", json={"status": "voy"}, headers=user_a_headers)
-register_result("User A marks 'voy' on event", resp.status_code == 200)
-
-resp = requests.post(f"{BASE_URL}/events/{event_id}/interest", json={"status": "voy"}, headers=user_b_headers)
-register_result("User B marks 'voy' on event", resp.status_code == 200)
-
-# User C also marks interest (for testing)
-resp = requests.post(f"{BASE_URL}/events/{event_id}/interest", json={"status": "voy"}, headers=user_c_headers)
-register_result("User C marks 'voy' on event", resp.status_code == 200)
-
-# ============================================================================
-# TEST 1: ALBUM PRIVATE + SELECTIVE SHARING
-# ============================================================================
-
-log_section("TEST 1: ALBUM PRIVATE + SELECTIVE SHARING")
-
-# 1.1: User A uploads a photo (should be private by default)
-print(f"\n{YELLOW}Test 1.1: User A uploads photo (private by default){RESET}")
-fake_image = BytesIO(b"fake_jpeg_data_for_testing")
-fake_image.name = "test.jpg"
-files = {"file": ("test.jpg", fake_image, "image/jpeg")}
-resp = requests.post(f"{BASE_URL}/events/{event_id}/album/upload", files=files, headers=user_a_headers)
-register_result("User A uploads photo", resp.status_code == 200)
-
-if resp.status_code == 200:
-    upload_data = resp.json()
-    upload_id = upload_data["id"]
-    register_result("Upload has 'shared=false' by default", upload_data.get("shared") == False)
-    register_result("Upload has empty sharing lists", 
-                   upload_data.get("shared_with_users") == [] and 
-                   upload_data.get("shared_with_groups") == [])
-    print(f"  Upload ID: {upload_id}")
-else:
-    print(f"{RED}  Failed to upload: {resp.text}{RESET}")
-    upload_id = None
-
-# 1.2: User without interest tries to upload (should get 403)
-print(f"\n{YELLOW}Test 1.2: User without interest tries to upload{RESET}")
-# Create a user with no interest
-user_d_email = f"userd_{int(time.time())}@test.com"
-resp = requests.post(f"{BASE_URL}/auth/register", json={
-    "email": user_d_email,
-    "password": "password123",
-    "name": "User D",
-    "username": f"userd_{int(time.time())}",
-    "city": "Palma"
-})
-user_d_token = resp.json()["token"]
-user_d_headers = {"Authorization": f"Bearer {user_d_token}"}
-
-fake_image2 = BytesIO(b"fake_jpeg_data_for_testing")
-files2 = {"file": ("test2.jpg", fake_image2, "image/jpeg")}
-resp = requests.post(f"{BASE_URL}/events/{event_id}/album/upload", files=files2, headers=user_d_headers)
-register_result("Upload without interest returns 403", resp.status_code == 403)
-
-# 1.3: User B gets album (should NOT see A's private photo)
-print(f"\n{YELLOW}Test 1.3: User B gets album (should NOT see A's private photo){RESET}")
-resp = requests.get(f"{BASE_URL}/events/{event_id}/album", headers=user_b_headers)
-register_result("User B can get album", resp.status_code == 200)
-
-if resp.status_code == 200:
-    album_data = resp.json()
-    register_result("User B's 'mine' is empty", len(album_data.get("mine", [])) == 0)
-    register_result("User B's 'shared' is empty (A's photo is private)", len(album_data.get("shared", [])) == 0)
-    register_result("Album has correct structure", 
-                   "event" in album_data and 
-                   "mine" in album_data and 
-                   "shared" in album_data and
-                   "can_upload" in album_data and
-                   "total_mine" in album_data and
-                   "total_shared" in album_data)
-
-# 1.4: User A shares with User B
-print(f"\n{YELLOW}Test 1.4: User A shares photo with User B{RESET}")
-if upload_id:
-    resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{upload_id}/share", 
-                        json={"user_ids": [user_b_id], "group_ids": [], "all_friends": False},
-                        headers=user_a_headers)
-    register_result("User A shares with User B", resp.status_code == 200)
-    
-    if resp.status_code == 200:
-        share_data = resp.json()
-        register_result("Share response has 'shared=true'", share_data.get("shared") == True)
-
-# 1.5: User B gets album again (should now see A's photo in 'shared')
-print(f"\n{YELLOW}Test 1.5: User B gets album (should now see A's photo in 'shared'){RESET}")
-resp = requests.get(f"{BASE_URL}/events/{event_id}/album", headers=user_b_headers)
-register_result("User B can get album", resp.status_code == 200)
-
-if resp.status_code == 200:
-    album_data = resp.json()
-    shared_items = album_data.get("shared", [])
-    register_result("User B sees photo in 'shared'", len(shared_items) > 0)
-    if len(shared_items) > 0:
-        shared_photo = shared_items[0]
-        register_result("Shared photo has 'is_mine=false'", shared_photo.get("is_mine") == False)
-        register_result("Shared photo has author info", "author" in shared_photo)
-
-# 1.6: User A gets album (should see photo in both 'mine' and 'shared')
-print(f"\n{YELLOW}Test 1.6: User A gets album (should see photo in 'mine' and 'shared'){RESET}")
-resp = requests.get(f"{BASE_URL}/events/{event_id}/album", headers=user_a_headers)
-register_result("User A can get album", resp.status_code == 200)
-
-if resp.status_code == 200:
-    album_data = resp.json()
-    mine_items = album_data.get("mine", [])
-    shared_items = album_data.get("shared", [])
-    register_result("User A sees photo in 'mine'", len(mine_items) > 0)
-    register_result("User A sees photo in 'shared' (own shared photo)", len(shared_items) > 0)
-    if len(mine_items) > 0:
-        my_photo = mine_items[0]
-        register_result("Photo in 'mine' has 'shared=true'", my_photo.get("shared") == True)
-
-# 1.7: User B tries to share A's upload (should get 403)
-print(f"\n{YELLOW}Test 1.7: User B tries to share A's upload (should get 403){RESET}")
-if upload_id:
-    resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{upload_id}/share",
-                        json={"user_ids": [user_c_id], "group_ids": [], "all_friends": False},
-                        headers=user_b_headers)
-    register_result("User B cannot share A's upload (403)", resp.status_code == 403)
-
-# 1.8: User B tries to delete A's upload (should get 403)
-print(f"\n{YELLOW}Test 1.8: User B tries to delete A's upload (should get 403){RESET}")
-if upload_id:
-    resp = requests.delete(f"{BASE_URL}/events/{event_id}/album/{upload_id}", headers=user_b_headers)
-    register_result("User B cannot delete A's upload (403)", resp.status_code == 403)
-
-# 1.9: User A unshares the photo
-print(f"\n{YELLOW}Test 1.9: User A unshares the photo{RESET}")
-if upload_id:
-    resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{upload_id}/unshare", headers=user_a_headers)
-    register_result("User A unshares photo", resp.status_code == 200)
-    
-    if resp.status_code == 200:
-        unshare_data = resp.json()
-        register_result("Unshare response has 'shared=false'", unshare_data.get("shared") == False)
-
-# 1.10: User B gets album (should NOT see A's photo anymore)
-print(f"\n{YELLOW}Test 1.10: User B gets album (should NOT see A's photo anymore){RESET}")
-resp = requests.get(f"{BASE_URL}/events/{event_id}/album", headers=user_b_headers)
-register_result("User B can get album", resp.status_code == 200)
-
-if resp.status_code == 200:
-    album_data = resp.json()
-    shared_items = album_data.get("shared", [])
-    register_result("User B's 'shared' is empty (photo unshared)", len(shared_items) == 0)
-
-# 1.11: Test all_friends sharing
-print(f"\n{YELLOW}Test 1.11: User A shares with all_friends=true{RESET}")
-if upload_id:
-    resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{upload_id}/share",
-                        json={"user_ids": [], "group_ids": [], "all_friends": True},
-                        headers=user_a_headers)
-    register_result("User A shares with all_friends", resp.status_code == 200)
-
-# 1.12: User B (friend) gets album (should see photo)
-print(f"\n{YELLOW}Test 1.12: User B (friend) gets album (should see photo){RESET}")
-resp = requests.get(f"{BASE_URL}/events/{event_id}/album", headers=user_b_headers)
-register_result("User B can get album", resp.status_code == 200)
-
-if resp.status_code == 200:
-    album_data = resp.json()
-    shared_items = album_data.get("shared", [])
-    register_result("User B (friend) sees photo in 'shared'", len(shared_items) > 0)
-
-# 1.13: User C (non-friend with interest) gets album (should NOT see photo)
-print(f"\n{YELLOW}Test 1.13: User C (non-friend) gets album (should NOT see photo){RESET}")
-resp = requests.get(f"{BASE_URL}/events/{event_id}/album", headers=user_c_headers)
-register_result("User C can get album", resp.status_code == 200)
-
-if resp.status_code == 200:
-    album_data = resp.json()
-    shared_items = album_data.get("shared", [])
-    register_result("User C (non-friend) does NOT see photo", len(shared_items) == 0)
-
-# 1.14: Test group sharing
-print(f"\n{YELLOW}Test 1.14: Test group sharing{RESET}")
-# Create a group with A and B
-resp = requests.post(f"{BASE_URL}/groups", 
-                    json={"name": "Test Group", "member_ids": [user_b_id]},
-                    headers=user_a_headers)
-register_result("User A creates group with User B", resp.status_code == 200)
-
-if resp.status_code == 200:
-    group_data = resp.json()
-    group_id = group_data["id"]
-    print(f"  Group ID: {group_id}")
-    
-    # Unshare first
-    if upload_id:
-        resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{upload_id}/unshare", headers=user_a_headers)
+        # Check first event has my_has_ticket field
+        event = events[0]
+        assert "my_has_ticket" in event, f"Missing my_has_ticket field in event list"
+        assert isinstance(event["my_has_ticket"], bool), f"my_has_ticket should be bool, got {type(event['my_has_ticket'])}"
+        log(f"✅ Events list includes my_has_ticket field (value: {event['my_has_ticket']})")
         
-        # Share with group
-        resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{upload_id}/share",
-                            json={"user_ids": [], "group_ids": [group_id], "all_friends": False},
-                            headers=user_a_headers)
-        register_result("User A shares with group", resp.status_code == 200)
+        # Note: total_tickets may be null in list view (that's expected per review request)
+        if "total_tickets" in event and event["total_tickets"] is not None:
+            log(f"ℹ️  total_tickets present in list: {event['total_tickets']} (optional)")
+    
+    log("✅ TEST 3 PASSED: Events list includes my_has_ticket")
+
+
+# =============================================================================
+# TEST 4: GET /api/events/{id} - View tracking doesn't break response
+# =============================================================================
+def test_view_tracking():
+    log("\n=== TEST 4: GET /api/events/{id} - View tracking ===")
+    
+    log("Test 4.1: First view succeeds")
+    resp1 = requests.get(f"{BASE_URL}/events/{event_id}",
+                        headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp1.status_code == 200, f"Expected 200, got {resp1.status_code}: {resp1.text}"
+    data1 = resp1.json()
+    assert "id" in data1, f"Response missing id field"
+    log(f"✅ First view succeeded")
+    
+    log("Test 4.2: Second view succeeds (view tracking increments internally)")
+    resp2 = requests.get(f"{BASE_URL}/events/{event_id}",
+                        headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp2.status_code == 200, f"Expected 200, got {resp2.status_code}: {resp2.text}"
+    data2 = resp2.json()
+    assert "id" in data2, f"Response missing id field"
+    assert data2["id"] == data1["id"], f"Event ID mismatch between views"
+    log(f"✅ Second view succeeded, response structure intact")
+    
+    log("✅ TEST 4 PASSED: View tracking doesn't break response")
+
+
+# =============================================================================
+# TEST 5: GET /api/me/activity - Friend activity feed
+# =============================================================================
+def test_activity_feed():
+    log("\n=== TEST 5: GET /api/me/activity - Friend activity ===")
+    
+    # User A and B are friends, both marked 'voy', B has ticket
+    
+    log("Test 5.1: User A gets activity feed (should see friend B's activity)")
+    resp = requests.get(f"{BASE_URL}/me/activity",
+                       headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert "items" in data, f"Missing items field"
+    assert isinstance(data["items"], list), f"items should be list, got {type(data['items'])}"
+    
+    # Should contain activity from friend B (marked voy)
+    assert len(data["items"]) > 0, f"Expected at least 1 activity item, got {len(data['items'])}"
+    
+    # Check structure of first item
+    item = data["items"][0]
+    assert "type" in item, f"Missing type field in activity item"
+    assert item["type"] in ["going", "ticket"], f"Invalid type: {item['type']}"
+    
+    if item["type"] == "going":
+        assert "user" in item, f"Missing user field"
+        assert "event_id" in item, f"Missing event_id field"
+        assert "event_name" in item, f"Missing event_name field"
+        log(f"✅ Activity feed contains 'going' entry: {item['user']['name']} → {item['event_name']}")
+    
+    log(f"✅ User A sees {len(data['items'])} activity items from friends")
+    
+    # Test 5.2: Fresh user with no friends should get empty array
+    log("Test 5.2: Fresh user with no friends gets empty activity")
+    fresh_token, _ = register_user(f"Fresh{test_timestamp}", f"fresh{test_timestamp}@test.com", "test123")
+    resp = requests.get(f"{BASE_URL}/me/activity",
+                       headers={"Authorization": f"Bearer {fresh_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["items"] == [], f"Expected empty items for user with no friends, got {len(data['items'])} items"
+    log(f"✅ Fresh user with no friends gets empty activity")
+    
+    log("✅ TEST 5 PASSED: Activity feed working correctly")
+
+
+# =============================================================================
+# TEST 6: GET /api/me/recap - User recap
+# =============================================================================
+def test_recap():
+    log("\n=== TEST 6: GET /api/me/recap - User recap ===")
+    
+    log("Test 6.1: User A gets recap")
+    resp = requests.get(f"{BASE_URL}/me/recap",
+                       headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    
+    # Check required fields
+    required_fields = ["went", "photos", "new_friends", "friends_plans", "has_activity"]
+    for field in required_fields:
+        assert field in data, f"Missing {field} field"
+    
+    assert isinstance(data["went"], int), f"went should be int, got {type(data['went'])}"
+    assert isinstance(data["photos"], int), f"photos should be int, got {type(data['photos'])}"
+    assert isinstance(data["new_friends"], int), f"new_friends should be int, got {type(data['new_friends'])}"
+    assert isinstance(data["friends_plans"], int), f"friends_plans should be int, got {type(data['friends_plans'])}"
+    assert isinstance(data["has_activity"], bool), f"has_activity should be bool, got {type(data['has_activity'])}"
+    
+    # User A marked 'voy' and has 1 friend (B), so friends_plans should be >= 1
+    assert data["friends_plans"] >= 1, f"Expected friends_plans >= 1 (friend B marked voy), got {data['friends_plans']}"
+    
+    log(f"✅ Recap: went={data['went']}, photos={data['photos']}, new_friends={data['new_friends']}, friends_plans={data['friends_plans']}, has_activity={data['has_activity']}")
+    log("✅ TEST 6 PASSED: Recap endpoint working correctly")
+
+
+# =============================================================================
+# TEST 7: GET /api/admin/funnel - Admin funnel report
+# =============================================================================
+def test_admin_funnel():
+    log("\n=== TEST 7: GET /api/admin/funnel - Admin funnel ===")
+    
+    log("Test 7.1: Admin gets funnel report")
+    resp = requests.get(f"{BASE_URL}/admin/funnel",
+                       headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    
+    # Check structure
+    assert "rows" in data, f"Missing rows field"
+    assert "totals" in data, f"Missing totals field"
+    assert isinstance(data["rows"], list), f"rows should be list, got {type(data['rows'])}"
+    assert isinstance(data["totals"], dict), f"totals should be dict, got {type(data['totals'])}"
+    
+    # Check totals structure
+    totals = data["totals"]
+    required_totals = ["views", "interested", "going", "clicks", "tickets", "commission"]
+    for field in required_totals:
+        assert field in totals, f"Missing {field} in totals"
+    
+    assert isinstance(totals["commission"], (int, float)), f"commission should be number, got {type(totals['commission'])}"
+    log(f"✅ Funnel totals: views={totals['views']}, interested={totals['interested']}, going={totals['going']}, clicks={totals['clicks']}, tickets={totals['tickets']}, commission={totals['commission']}")
+    
+    # Check rows structure (if any events)
+    if len(data["rows"]) > 0:
+        row = data["rows"][0]
+        required_row_fields = ["id", "name", "venue", "views", "interested", "going", "clicks", "tickets", "conversion_pct", "est_commission"]
+        for field in required_row_fields:
+            assert field in row, f"Missing {field} in row"
+        log(f"✅ Sample row: {row['name']} - views={row['views']}, going={row['going']}, tickets={row['tickets']}, commission={row['est_commission']}")
+    
+    log("Test 7.2: Non-admin gets 403")
+    resp = requests.get(f"{BASE_URL}/admin/funnel",
+                       headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 403, f"Expected 403 for non-admin, got {resp.status_code}"
+    log(f"✅ Non-admin correctly denied (403)")
+    
+    log("✅ TEST 7 PASSED: Admin funnel working correctly")
+
+
+# =============================================================================
+# TEST 8: GET /api/admin/venue-report - Admin venue report
+# =============================================================================
+def test_admin_venue_report():
+    log("\n=== TEST 8: GET /api/admin/venue-report - Venue report ===")
+    
+    log("Test 8.1: Admin gets venue report")
+    resp = requests.get(f"{BASE_URL}/admin/venue-report",
+                       headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    
+    # Check structure
+    assert "venues" in data, f"Missing venues field"
+    assert isinstance(data["venues"], list), f"venues should be list, got {type(data['venues'])}"
+    
+    # Check venue structure (if any venues)
+    if len(data["venues"]) > 0:
+        venue = data["venues"][0]
+        required_fields = ["venue", "events", "views", "going", "clicks", "tickets", "commission"]
+        for field in required_fields:
+            assert field in venue, f"Missing {field} in venue"
         
-        # User B should see it
-        resp = requests.get(f"{BASE_URL}/events/{event_id}/album", headers=user_b_headers)
-        if resp.status_code == 200:
-            album_data = resp.json()
-            shared_items = album_data.get("shared", [])
-            register_result("User B (group member) sees photo", len(shared_items) > 0)
-
-# 1.15: Test sanitization (share with non-friend)
-print(f"\n{YELLOW}Test 1.15: Test sanitization (share with non-friend){RESET}")
-if upload_id:
-    # Unshare first
-    resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{upload_id}/unshare", headers=user_a_headers)
+        assert isinstance(venue["commission"], (int, float)), f"commission should be number, got {type(venue['commission'])}"
+        log(f"✅ Sample venue: {venue['venue']} - events={venue['events']}, views={venue['views']}, going={venue['going']}, tickets={venue['tickets']}, commission={venue['commission']}")
     
-    # Try to share with User C (non-friend)
-    resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{upload_id}/share",
-                        json={"user_ids": [user_c_id], "group_ids": [], "all_friends": False},
-                        headers=user_a_headers)
-    register_result("Share request with non-friend returns 200 (sanitized)", resp.status_code == 200)
+    log("Test 8.2: Non-admin gets 403")
+    resp = requests.get(f"{BASE_URL}/admin/venue-report",
+                       headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 403, f"Expected 403 for non-admin, got {resp.status_code}"
+    log(f"✅ Non-admin correctly denied (403)")
     
-    # User C should NOT see it
-    resp = requests.get(f"{BASE_URL}/events/{event_id}/album", headers=user_c_headers)
-    if resp.status_code == 200:
-        album_data = resp.json()
-        shared_items = album_data.get("shared", [])
-        register_result("User C (non-friend) does NOT see photo (sanitized)", len(shared_items) == 0)
+    log("✅ TEST 8 PASSED: Venue report working correctly")
 
-# 1.16: Test 404 on non-existent upload
-print(f"\n{YELLOW}Test 1.16: Test 404 on non-existent upload{RESET}")
-fake_upload_id = "nonexistent-upload-id"
-resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{fake_upload_id}/share",
-                    json={"user_ids": [user_b_id], "group_ids": [], "all_friends": False},
-                    headers=user_a_headers)
-register_result("Share non-existent upload returns 404", resp.status_code == 404)
 
-resp = requests.post(f"{BASE_URL}/events/{event_id}/album/{fake_upload_id}/unshare", headers=user_a_headers)
-register_result("Unshare non-existent upload returns 404", resp.status_code == 404)
+# =============================================================================
+# TEST 9: POST /api/admin/events/{id}/notify-interested - Admin notification
+# =============================================================================
+def test_admin_notify_interested():
+    log("\n=== TEST 9: POST /api/admin/events/{id}/notify-interested ===")
+    
+    log("Test 9.1: Admin sends notification to interested users")
+    resp = requests.post(f"{BASE_URL}/admin/events/{event_id}/notify-interested",
+                        json={"message": "Test notification"},
+                        headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    
+    assert "notified" in data, f"Missing notified field"
+    assert isinstance(data["notified"], int), f"notified should be int, got {type(data['notified'])}"
+    assert data["notified"] >= 0, f"notified should be >= 0, got {data['notified']}"
+    log(f"✅ Notification sent to {data['notified']} users")
+    
+    log("Test 9.2: Non-existent event returns 404")
+    resp = requests.post(f"{BASE_URL}/admin/events/nonexistent-event-id/notify-interested",
+                        json={"message": "Test"},
+                        headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
+    log(f"✅ Non-existent event returns 404")
+    
+    log("Test 9.3: Non-admin gets 403")
+    resp = requests.post(f"{BASE_URL}/admin/events/{event_id}/notify-interested",
+                        json={"message": "Test"},
+                        headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 403, f"Expected 403 for non-admin, got {resp.status_code}"
+    log(f"✅ Non-admin correctly denied (403)")
+    
+    log("✅ TEST 9 PASSED: Admin notify-interested working correctly")
 
-resp = requests.delete(f"{BASE_URL}/events/{event_id}/album/{fake_upload_id}", headers=user_a_headers)
-register_result("Delete non-existent upload returns 404", resp.status_code == 404)
 
-# ============================================================================
-# TEST 2: GET /api/me/active-moment
-# ============================================================================
+# =============================================================================
+# TEST 10: GET /api/events/discover - Should return 404 (removed)
+# =============================================================================
+def test_discover_removed():
+    log("\n=== TEST 10: GET /api/events/discover - Should be removed ===")
+    
+    log("Test 10.1: /events/discover returns 404")
+    resp = requests.get(f"{BASE_URL}/events/discover",
+                       headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 404, f"Expected 404 (endpoint removed), got {resp.status_code}"
+    log(f"✅ /events/discover correctly returns 404 (endpoint removed)")
+    
+    log("✅ TEST 10 PASSED: Discover endpoint removed as expected")
 
-log_section("TEST 2: GET /api/me/active-moment")
 
-# 2.1: Fresh user with no interest (should return active=false)
-print(f"\n{YELLOW}Test 2.1: Fresh user with no interest{RESET}")
-user_e_email = f"usere_{int(time.time())}@test.com"
-resp = requests.post(f"{BASE_URL}/auth/register", json={
-    "email": user_e_email,
-    "password": "password123",
-    "name": "User E",
-    "username": f"usere_{int(time.time())}",
-    "city": "Palma"
-})
-user_e_token = resp.json()["token"]
-user_e_headers = {"Authorization": f"Bearer {user_e_token}"}
+# =============================================================================
+# REGRESSION TESTS
+# =============================================================================
+def test_regression():
+    log("\n=== REGRESSION TESTS ===")
+    
+    # Test login
+    log("Regression 1: POST /api/auth/login")
+    resp = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": ADMIN_EMAIL,
+        "password": ADMIN_PASSWORD
+    })
+    assert resp.status_code == 200, f"Login failed: {resp.status_code}"
+    log("✅ Login working")
+    
+    # Test events list
+    log("Regression 2: GET /api/events?date_filter=all")
+    resp = requests.get(f"{BASE_URL}/events?date_filter=all",
+                       headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200, f"Events list failed: {resp.status_code}"
+    assert isinstance(resp.json(), list), f"Events should be array"
+    log("✅ Events list working")
+    
+    # Test interest
+    log("Regression 3: POST /api/events/{id}/interest")
+    resp = requests.post(f"{BASE_URL}/events/{event_id}/interest",
+                        json={"status": "voy"},
+                        headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200, f"Interest failed: {resp.status_code}"
+    log("✅ Interest endpoint working")
+    
+    # Test ticket click (existing endpoint)
+    log("Regression 4: POST /api/tickets/click")
+    resp = requests.post(f"{BASE_URL}/tickets/click",
+                        json={"event_id": event_id},
+                        headers={"Authorization": f"Bearer {user_a_token}"})
+    assert resp.status_code == 200, f"Ticket click failed: {resp.status_code}"
+    log("✅ Ticket click working")
+    
+    # Test admin stats
+    log("Regression 5: GET /api/admin/stats")
+    resp = requests.get(f"{BASE_URL}/admin/stats",
+                       headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200, f"Admin stats failed: {resp.status_code}"
+    log("✅ Admin stats working")
+    
+    log("✅ ALL REGRESSION TESTS PASSED")
 
-resp = requests.get(f"{BASE_URL}/me/active-moment", headers=user_e_headers)
-register_result("Fresh user with no interest", resp.status_code == 200)
 
-if resp.status_code == 200:
-    moment_data = resp.json()
-    register_result("Returns active=false", moment_data.get("active") == False)
+# =============================================================================
+# MAIN TEST RUNNER
+# =============================================================================
+def main():
+    global admin_token, user_a_token, user_b_token, user_a_id, user_b_id, event_id
+    
+    log("=" * 80)
+    log("BACKEND TEST: Monetization + Retention Endpoints")
+    log("=" * 80)
+    
+    # Setup: Login as admin
+    log("\n=== SETUP ===")
+    admin_token = login(ADMIN_EMAIL, ADMIN_PASSWORD)
+    assert admin_token, "Admin login failed"
+    
+    # Register two fresh users
+    user_a_token, user_a_id = register_user(f"UserA{test_timestamp}", f"usera{test_timestamp}@test.com", "test123")
+    assert user_a_token and user_a_id, "User A registration failed"
+    
+    user_b_token, user_b_id = register_user(f"UserB{test_timestamp}", f"userb{test_timestamp}@test.com", "test123")
+    assert user_b_token and user_b_id, "User B registration failed"
+    
+    # Make them friends
+    assert make_friends(user_a_token, user_b_token, user_b_id), "Making friends failed"
+    
+    # Get an upcoming event
+    event_id = get_upcoming_event(admin_token)
+    assert event_id, "No upcoming events found"
+    
+    # Both mark 'voy' on the event
+    assert mark_interest(user_a_token, event_id, "voy"), "User A mark interest failed"
+    assert mark_interest(user_b_token, event_id, "voy"), "User B mark interest failed"
+    
+    log("✅ Setup complete: 2 users (friends), both marked 'voy' on event")
+    
+    # Run all tests
+    try:
+        test_ticket_endpoint()
+        test_event_detail_ticket_fields()
+        test_events_list_ticket_field()
+        test_view_tracking()
+        test_activity_feed()
+        test_recap()
+        test_admin_funnel()
+        test_admin_venue_report()
+        test_admin_notify_interested()
+        test_discover_removed()
+        test_regression()
+        
+        log("\n" + "=" * 80)
+        log("🎉 ALL TESTS PASSED!")
+        log("=" * 80)
+        return 0
+        
+    except AssertionError as e:
+        log(f"\n❌ TEST FAILED: {e}")
+        return 1
+    except Exception as e:
+        log(f"\n❌ UNEXPECTED ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
-# 2.2: User marks voy, admin triggers moment, check active-moment
-print(f"\n{YELLOW}Test 2.2: User marks voy, admin triggers moment{RESET}")
-# User E marks voy on event
-resp = requests.post(f"{BASE_URL}/events/{event_id}/interest", json={"status": "voy"}, headers=user_e_headers)
-register_result("User E marks 'voy' on event", resp.status_code == 200)
 
-# Admin triggers moment
-resp = requests.post(f"{BASE_URL}/admin/events/{event_id}/moment/trigger", headers=admin_headers)
-register_result("Admin triggers moment", resp.status_code == 200)
-
-# Check active-moment for User E
-resp = requests.get(f"{BASE_URL}/me/active-moment", headers=user_e_headers)
-register_result("User E gets active-moment", resp.status_code == 200)
-
-if resp.status_code == 200:
-    moment_data = resp.json()
-    register_result("Returns active=true", moment_data.get("active") == True)
-    register_result("Has event_id", "event_id" in moment_data)
-    register_result("Has event_name", "event_name" in moment_data)
-    register_result("Has prompt", "prompt" in moment_data)
-    register_result("Has on_time (bool)", isinstance(moment_data.get("on_time"), bool))
-    register_result("Has friends_captured (int)", isinstance(moment_data.get("friends_captured"), int))
-    print(f"  Active moment: {moment_data.get('event_name')}")
-    print(f"  On time: {moment_data.get('on_time')}")
-    print(f"  Friends captured: {moment_data.get('friends_captured')}")
-
-# 2.3: User uploads capture, check active-moment (should be false)
-print(f"\n{YELLOW}Test 2.3: User uploads capture, check active-moment{RESET}")
-fake_capture = BytesIO(b"fake_capture_data")
-files = {"file": ("capture.jpg", fake_capture, "image/jpeg")}
-resp = requests.post(f"{BASE_URL}/events/{event_id}/moment/upload", files=files, headers=user_e_headers)
-register_result("User E uploads capture", resp.status_code == 200)
-
-# Check active-moment again
-resp = requests.get(f"{BASE_URL}/me/active-moment", headers=user_e_headers)
-register_result("User E gets active-moment after capture", resp.status_code == 200)
-
-if resp.status_code == 200:
-    moment_data = resp.json()
-    register_result("Returns active=false after capture", moment_data.get("active") == False)
-
-# ============================================================================
-# TEST 3: REGRESSION TESTS
-# ============================================================================
-
-log_section("TEST 3: REGRESSION TESTS")
-
-# 3.1: Auth endpoints
-print(f"\n{YELLOW}Test 3.1: Auth endpoints{RESET}")
-resp = requests.post(f"{BASE_URL}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
-register_result("POST /auth/login", resp.status_code == 200)
-
-resp = requests.get(f"{BASE_URL}/auth/me", headers=admin_headers)
-register_result("GET /auth/me", resp.status_code == 200)
-
-# 3.2: Events endpoints
-print(f"\n{YELLOW}Test 3.2: Events endpoints{RESET}")
-resp = requests.get(f"{BASE_URL}/events", headers=admin_headers)
-register_result("GET /events", resp.status_code == 200)
-
-# 3.3: Interest endpoints
-print(f"\n{YELLOW}Test 3.3: Interest endpoints{RESET}")
-resp = requests.post(f"{BASE_URL}/events/{event_id}/interest", json={"status": "me_interesa"}, headers=admin_headers)
-register_result("POST /events/{id}/interest", resp.status_code == 200)
-
-# 3.4: Moment endpoints
-print(f"\n{YELLOW}Test 3.4: Moment endpoints{RESET}")
-resp = requests.get(f"{BASE_URL}/events/{event_id}/moment/status", headers=admin_headers)
-register_result("GET /events/{id}/moment/status", resp.status_code == 200)
-
-resp = requests.get(f"{BASE_URL}/events/{event_id}/moment/gallery", headers=user_e_headers)
-# Should be 200 since user E uploaded
-register_result("GET /events/{id}/moment/gallery", resp.status_code == 200)
-
-# 3.5: Groups endpoints
-print(f"\n{YELLOW}Test 3.5: Groups endpoints{RESET}")
-resp = requests.get(f"{BASE_URL}/groups", headers=admin_headers)
-register_result("GET /groups", resp.status_code == 200)
-
-# 3.6: Friends endpoints
-print(f"\n{YELLOW}Test 3.6: Friends endpoints{RESET}")
-resp = requests.get(f"{BASE_URL}/friends", headers=admin_headers)
-register_result("GET /friends", resp.status_code == 200)
-
-# 3.7: Badges endpoints
-print(f"\n{YELLOW}Test 3.7: Badges endpoints{RESET}")
-resp = requests.get(f"{BASE_URL}/me/badges", headers=admin_headers)
-register_result("GET /me/badges", resp.status_code == 200)
-
-# 3.8: Rankings endpoints
-print(f"\n{YELLOW}Test 3.8: Rankings endpoints{RESET}")
-resp = requests.get(f"{BASE_URL}/rankings/world", headers=admin_headers)
-register_result("GET /rankings/world", resp.status_code == 200)
-
-# 3.9: Health endpoint
-print(f"\n{YELLOW}Test 3.9: Health endpoint{RESET}")
-resp = requests.get(f"{BASE_URL}/health")
-register_result("GET /health", resp.status_code == 200)
-
-# ============================================================================
-# SUMMARY
-# ============================================================================
-
-log_section("TEST SUMMARY")
-
-total_tests = test_results["passed"] + test_results["failed"]
-pass_rate = (test_results["passed"] / total_tests * 100) if total_tests > 0 else 0
-
-print(f"\n{BLUE}Total Tests: {total_tests}{RESET}")
-print(f"{GREEN}Passed: {test_results['passed']}{RESET}")
-print(f"{RED}Failed: {test_results['failed']}{RESET}")
-print(f"{BLUE}Pass Rate: {pass_rate:.1f}%{RESET}\n")
-
-if test_results["failed"] > 0:
-    print(f"{RED}FAILED TESTS:{RESET}")
-    for test in test_results["tests"]:
-        if not test["passed"]:
-            print(f"  ❌ {test['name']}")
-            if test["details"]:
-                print(f"     {test['details']}")
-
-print(f"\n{BLUE}{'='*80}{RESET}\n")
+if __name__ == "__main__":
+    exit(main())

@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { EventCarousel } from "@/components/EventCarousel";
 import { StoriesBar } from "@/components/Stories";
 import { StreakBanner } from "@/components/StreakBanner";
+import { FriendsActivity, RecapCard } from "@/components/FeedExtras";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import FeedPlans, { FeedPlansControls } from "@/components/FeedPlans";
 import { useAuth } from "@/context/AuthContext";
@@ -105,7 +106,7 @@ export default function Feed() {
       searchParams.delete("event");
       setSearchParams(searchParams, { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [events]);
 
   return (
@@ -132,9 +133,13 @@ export default function Feed() {
 
       <StoriesBar />
 
+      <FriendsActivity />
+
       <div className="px-4 pb-3">
         <StreakBanner />
       </div>
+
+      <RecapCard />
 
       <div className="px-4 pb-3">
         <FeedPlansControls
@@ -182,8 +187,19 @@ export default function Feed() {
         )}
 
         {isLoading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-7 h-7 text-qv-primary animate-spin" />
+          <div className="flex flex-col gap-4" data-testid="feed-skeleton">
+            {[0, 1, 2].map((k) => (
+              <div key={k} className="rounded-2xl overflow-hidden bg-[#121215] border border-white/10">
+                <div className="h-40 bg-white/[0.06] animate-pulse" />
+                <div className="p-3 flex flex-col gap-2.5">
+                  <div className="h-8 w-2/3 bg-white/[0.06] rounded animate-pulse" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="h-10 bg-white/[0.06] rounded-xl animate-pulse" />
+                    <div className="h-10 bg-white/[0.06] rounded-xl animate-pulse" />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : events && events.length > 0 ? (
           <FeedPlans

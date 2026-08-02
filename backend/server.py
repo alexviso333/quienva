@@ -647,7 +647,8 @@ def date_in_filter(event_date_str: str, flt: str) -> bool:
 
 async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map: dict | None = None,
                           interests_by_event: dict | None = None,
-                          follows_set: set | None = None) -> dict:
+                          follows_set: set | None = None,
+                          my_ticket_ids: set | None = None) -> dict:
     if interests_by_event is not None:
         interests = interests_by_event.get(ev["id"], [])
     else:
@@ -681,6 +682,25 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
                 elif it["status"] == "estuve":
                     friends_attended.append(entry)
 
+    # Ticket ownership (social proof + conversion). Cheap in bulk via my_ticket_ids;
+    # full counts only when serializing a single event (event detail).
+    if my_ticket_ids is not None:
+        my_has_ticket = ev["id"] in my_ticket_ids
+        total_tickets = None
+        friends_with_ticket = []
+    else:
+        tks = [t async for t in db.tickets.find({"event_id": ev["id"]}, {"_id": 0})]
+        my_has_ticket = any(t["user_id"] == user["user_id"] for t in tks)
+        total_tickets = len(tks)
+        friends_with_ticket = []
+        for t in tks:
+            if t["user_id"] in friend_ids and t["user_id"] != user["user_id"]:
+                fu = users_map.get(t["user_id"]) if users_map else None
+                if not fu:
+                    fu = await db.users.find_one({"user_id": t["user_id"]}, {"_id": 0})
+                if fu:
+                    friends_with_ticket.append({"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")})
+
     return {
         "id": ev["id"],
         "name": ev["name"],
@@ -708,6 +728,10 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "total_going": sum(1 for it in interests if it["status"] == "voy"),
         "total_interested": sum(1 for it in interests if it["status"] == "me_interesa"),
         "total_attended": sum(1 for it in interests if it["status"] == "estuve"),
+        # Tickets
+        "my_has_ticket": my_has_ticket,
+        "total_tickets": total_tickets,
+        "friends_with_ticket": friends_with_ticket,
     }
 
 
@@ -764,9 +788,10 @@ async def list_events(user: dict = Depends(get_current_user),
         ):
             follows_set.add(f["event_id"])
 
+    my_ticket_ids = set(await db.tickets.distinct("event_id", {"user_id": user["user_id"]}))
     events = []
     for ev in filtered_events:
-        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set))
+        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids))
     return events
 
 
@@ -857,10 +882,12 @@ async def event_carousels(user: dict = Depends(get_current_user)):
         async for ev in db.events.find({"id": {"$in": my_event_ids}}, {"_id": 0, "id": 1, "genre": 1}):
             my_events_map[ev["id"]] = ev
 
+    my_ticket_ids = set(await db.tickets.distinct("event_id", {"user_id": user["user_id"]}))
+
     # ---- Top del finde: upcoming Fri-Sun (or next 7 days) sorted by attendance ----
     week_end = today + timedelta(days=7)
     weekend_serialized = [
-        await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set)
+        await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids)
         for d, ev in all_upcoming if d <= week_end
     ]
     top_weekend_list = sorted(
@@ -872,7 +899,7 @@ async def event_carousels(user: dict = Depends(get_current_user)):
     friends_going_list = []
     if friend_ids:
         for d, ev in all_upcoming:
-            se = await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set)
+            se = await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids)
             if (len(se["friends_going"]) + len(se["friends_interested"])) > 0:
                 friends_going_list.append(se)
         friends_going_list = sorted(
@@ -891,7 +918,7 @@ async def event_carousels(user: dict = Depends(get_current_user)):
         g = ev.get("genre")
         if not g or g in my_genres:
             continue
-        discover_new.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set))
+        discover_new.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids))
         if len(discover_new) >= 8:
             break
 
@@ -1636,55 +1663,17 @@ async def claim_referral(inp: ClaimReferralInput, user: dict = Depends(get_curre
     return {"ok": True, "points": ACTION_POINTS["referral_signup"]}
 
 
-@api_router.get("/events/discover")
-async def discover_events(user: dict = Depends(get_current_user)):
-    """Recommend upcoming events based on the genres the user engages with most."""
-    friend_ids = await accepted_friend_ids(user["user_id"])
-    genre_count = {}
-    interacted = set()
-    async for it in db.interests.find({"user_id": user["user_id"]}):
-        interacted.add(it["event_id"])
-        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
-        if ev and ev.get("genre"):
-            genre_count[ev["genre"]] = genre_count.get(ev["genre"], 0) + 1
-    ranked_genres = [g for g, _ in sorted(genre_count.items(), key=lambda x: -x[1])]
-    genre_rank = {g: i for i, g in enumerate(ranked_genres)}
-
-    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
-    upcoming = []
-    async for ev in db.events.find({"city": user.get("city", "Palma de Mallorca")}, {"_id": 0}):
-        if ev["id"] in interacted:
-            continue
-        try:
-            d = date.fromisoformat(ev["date"])
-        except Exception:
-            continue
-        if d < today:
-            continue
-        upcoming.append(ev)
-
-    if ranked_genres:
-        matched = [e for e in upcoming if e.get("genre") in genre_rank]
-        others = [e for e in upcoming if e.get("genre") not in genre_rank]
-        matched.sort(key=lambda e: (genre_rank.get(e.get("genre"), 999), e["date"]))
-        others.sort(key=lambda e: e["date"])
-        pool = matched + others
-    else:
-        pool = upcoming
-
-    result = []
-    for ev in pool[:12]:
-        result.append(await serialize_event(ev, user, friend_ids))
-    if not ranked_genres:
-        result.sort(key=lambda e: -(e["total_going"] + e["total_interested"]))
-    return result
-
-
 @api_router.get("/events/{event_id}")
 async def get_event(event_id: str, user: dict = Depends(get_current_user)):
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
+    # Track a view for the conversion funnel (fire-and-forget, deduped per open).
+    try:
+        await db.event_metrics.update_one(
+            {"event_id": event_id}, {"$inc": {"views": 1}}, upsert=True)
+    except Exception:
+        pass
     friend_ids = await accepted_friend_ids(user["user_id"])
     return await serialize_event(ev, user, friend_ids)
 
@@ -1727,6 +1716,101 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
             )
 
     return {"status": inp.status}
+
+
+
+class TicketInput(BaseModel):
+    have: bool = True
+
+
+@api_router.post("/events/{event_id}/ticket")
+async def set_ticket(event_id: str, inp: TicketInput, user: dict = Depends(get_current_user)):
+    """User marks (or unmarks) that they already have a ticket for this event.
+    Powers social proof ('3 amigos ya tienen entrada') and conversion tracking."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    if inp.have:
+        await db.tickets.update_one(
+            {"user_id": user["user_id"], "event_id": event_id},
+            {"$set": {"user_id": user["user_id"], "event_id": event_id,
+                      "created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+        await db.event_metrics.update_one(
+            {"event_id": event_id}, {"$inc": {"tickets": 1}}, upsert=True)
+    else:
+        res = await db.tickets.delete_one({"user_id": user["user_id"], "event_id": event_id})
+        if res.deleted_count:
+            await db.event_metrics.update_one(
+                {"event_id": event_id}, {"$inc": {"tickets": -1}}, upsert=True)
+    total = await db.tickets.count_documents({"event_id": event_id})
+    return {"have": inp.have, "total_tickets": total}
+
+
+@api_router.get("/me/activity")
+async def my_activity(user: dict = Depends(get_current_user)):
+    """Recent activity of the user's friends: who's going where, new tickets,
+    and fresh stories. The social heartbeat that keeps people opening the app."""
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    if not friend_ids:
+        return {"items": []}
+    fmap = {}
+    async for u in db.users.find({"user_id": {"$in": friend_ids}}, {"_id": 0}):
+        fmap[u["user_id"]] = u
+    items = []
+    # friends marking voy
+    async for it in db.interests.find(
+        {"user_id": {"$in": friend_ids}, "status": "voy"}, {"_id": 0}).sort("created_at", -1).limit(30):
+        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
+        fu = fmap.get(it["user_id"])
+        if ev and fu:
+            items.append({
+                "type": "going", "ts": it.get("created_at", ""),
+                "user": {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")},
+                "event_id": ev["id"], "event_name": ev["name"], "venue": ev.get("venue", ""), "date": ev.get("date", ""),
+            })
+    # friends who got tickets
+    async for tk in db.tickets.find({"user_id": {"$in": friend_ids}}, {"_id": 0}).sort("created_at", -1).limit(15):
+        ev = await db.events.find_one({"id": tk["event_id"]}, {"_id": 0})
+        fu = fmap.get(tk["user_id"])
+        if ev and fu:
+            items.append({
+                "type": "ticket", "ts": tk.get("created_at", ""),
+                "user": {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")},
+                "event_id": ev["id"], "event_name": ev["name"], "venue": ev.get("venue", ""), "date": ev.get("date", ""),
+            })
+    items.sort(key=lambda x: x.get("ts", ""), reverse=True)
+    return {"items": items[:25]}
+
+
+@api_router.get("/me/recap")
+async def my_recap(user: dict = Depends(get_current_user)):
+    """Weekly recap card: what the user did in the last 7 days. Dopamine + shareable."""
+    uid = user["user_id"]
+    now = datetime.now(timezone.utc)
+    week_ago = (now - timedelta(days=7)).isoformat()
+    went = await db.interests.count_documents(
+        {"user_id": uid, "status": {"$in": ["voy", "estuve"]}, "created_at": {"$gte": week_ago}})
+    photos = (
+        await db.album_uploads.count_documents({"user_id": uid, "created_at": {"$gte": week_ago}})
+        + await db.captures.count_documents({"user_id": uid, "created_at": {"$gte": week_ago}})
+        + await db.group_photos.count_documents({"user_id": uid, "created_at": {"$gte": week_ago}})
+    )
+    new_friends = await db.friendships.count_documents(
+        {"status": "accepted", "$or": [{"from_user_id": uid}, {"to_user_id": uid}],
+         "updated_at": {"$gte": week_ago}})
+    # friends' upcoming plans this coming week (FOMO)
+    friend_ids = await accepted_friend_ids(uid)
+    friends_plans = 0
+    if friend_ids:
+        friends_plans = await db.interests.count_documents(
+            {"user_id": {"$in": friend_ids}, "status": "voy"})
+    has_activity = (went + photos + new_friends) > 0
+    return {
+        "went": went, "photos": photos, "new_friends": new_friends,
+        "friends_plans": friends_plans, "has_activity": has_activity,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -2051,6 +2135,103 @@ async def admin_list_events(admin: dict = Depends(require_admin)):
     async for ev in db.events.find({}, {"_id": 0}).sort("date", 1):
         events.append(ev)
     return events
+
+
+DEFAULT_COMMISSION_PCT = 0.10  # your cut per ticket sold via the app
+
+
+def _est_commission(ev: dict, tickets: int) -> float:
+    price = _current_price(ev) or 0
+    pct = ev.get("commission_pct", DEFAULT_COMMISSION_PCT)
+    return round(price * tickets * pct, 2)
+
+
+@api_router.get("/admin/funnel")
+async def admin_funnel(admin: dict = Depends(require_admin), scope: str = Query("upcoming")):
+    """Money funnel per event: views → interested/going → ticket clicks → tickets → € commission.
+    scope=upcoming (default) or all."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    q = {} if scope == "all" else {"date": {"$gte": today}}
+    # bulk metrics
+    metrics = {}
+    async for m in db.event_metrics.find({}, {"_id": 0}):
+        metrics[m["event_id"]] = m
+    rows = []
+    totals = {"views": 0, "interested": 0, "going": 0, "clicks": 0, "tickets": 0, "commission": 0.0}
+    async for ev in db.events.find(q, {"_id": 0}).sort("date", 1):
+        eid = ev["id"]
+        m = metrics.get(eid, {})
+        going = await db.interests.count_documents({"event_id": eid, "status": "voy"})
+        interested = await db.interests.count_documents({"event_id": eid, "status": "me_interesa"})
+        tickets = await db.tickets.count_documents({"event_id": eid})
+        views = m.get("views", 0)
+        clicks = await db.ticket_purchases.count_documents({"event_id": eid})
+        commission = _est_commission(ev, tickets)
+        conv = round((tickets / clicks) * 100, 1) if clicks else 0.0
+        rows.append({
+            "id": eid, "name": ev["name"], "venue": ev.get("venue", ""), "date": ev.get("date", ""),
+            "price": _current_price(ev), "sale_state": ev.get("sale_state", "no_a_la_venta"),
+            "views": views, "interested": interested, "going": going,
+            "clicks": clicks, "tickets": tickets,
+            "conversion_pct": conv, "est_commission": commission,
+            "has_commission": ev.get("has_commission", False),
+        })
+        totals["views"] += views
+        totals["interested"] += interested
+        totals["going"] += going
+        totals["clicks"] += clicks
+        totals["tickets"] += tickets
+        totals["commission"] += commission
+    rows.sort(key=lambda r: -r["est_commission"])
+    totals["commission"] = round(totals["commission"], 2)
+    return {"rows": rows, "totals": totals}
+
+
+@api_router.get("/admin/venue-report")
+async def admin_venue_report(admin: dict = Depends(require_admin)):
+    """Aggregated reach/sales by venue — the one-pager you show a club to close a deal."""
+    metrics = {}
+    async for m in db.event_metrics.find({}, {"_id": 0}):
+        metrics[m["event_id"]] = m
+    venues = {}
+    async for ev in db.events.find({}, {"_id": 0}):
+        v = ev.get("venue", "Otros")
+        d = venues.setdefault(v, {"venue": v, "events": 0, "views": 0, "interested": 0, "going": 0, "clicks": 0, "tickets": 0, "commission": 0.0})
+        m = metrics.get(ev["id"], {})
+        going = await db.interests.count_documents({"event_id": ev["id"], "status": "voy"})
+        interested = await db.interests.count_documents({"event_id": ev["id"], "status": "me_interesa"})
+        tickets = await db.tickets.count_documents({"event_id": ev["id"]})
+        clicks = await db.ticket_purchases.count_documents({"event_id": ev["id"]})
+        d["events"] += 1
+        d["views"] += m.get("views", 0)
+        d["interested"] += interested
+        d["going"] += going
+        d["clicks"] += clicks
+        d["tickets"] += tickets
+        d["commission"] += _est_commission(ev, tickets)
+    out = list(venues.values())
+    for d in out:
+        d["commission"] = round(d["commission"], 2)
+    out.sort(key=lambda x: -(x["going"] + x["tickets"]))
+    return {"venues": out}
+
+
+class NotifyInterestedInput(BaseModel):
+    message: str = ""
+
+
+@api_router.post("/admin/events/{event_id}/notify-interested")
+async def admin_notify_interested(event_id: str, inp: NotifyInterestedInput, admin: dict = Depends(require_admin)):
+    """Send a custom push to everyone interested/going/following an event
+    (retargeting to recover ticket sales)."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    body = inp.message.strip() or f"🎟️ Últimas entradas para {ev['name']}. ¡No te quedes fuera!"
+    count = await _notify_event_audience(event_id, "tickets_reminder", ev["name"], body)
+    return {"notified": count}
+
+
 
 
 @api_router.post("/admin/upload")

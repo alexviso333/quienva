@@ -11,6 +11,7 @@ import Friends from "@/pages/Friends";
 import Notifications from "@/pages/Notifications";
 import Profile from "@/pages/Profile";
 import Admin from "@/pages/Admin";
+import AdminMoney from "@/pages/AdminMoney";
 import AdminDashboard from "@/pages/AdminDashboard";
 import EventDetail from "@/pages/EventDetail";
 import Onboarding from "@/pages/Onboarding";
@@ -69,6 +70,7 @@ function AppRouter() {
       <Route path="/ajustes/avisos" element={<ProtectedRoute><NotifPrefs /></ProtectedRoute>} />
       <Route path="/momento" element={<ProtectedRoute><Momento /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
+      <Route path="/admin/dinero" element={<ProtectedRoute adminOnly><AdminMoney /></ProtectedRoute>} />
       <Route path="/admin/dashboard" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/feed" replace />} />
       <Route path="*" element={<Navigate to="/feed" replace />} />

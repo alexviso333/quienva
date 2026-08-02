@@ -2420,3 +2420,261 @@ agent_communication:
       Test file: /app/group_photo_test.py
       Test credentials used: admin@quienva.app / admin123 + 4 fresh test users (A, B, C, D)
       Test scenario: 3 mutual friends (A, B, C) in a group, all mark 'voy' on same event, A uploads photo, C removes interest
+
+## Iteration — Monetización + retención (2026-08-02 e)
+### Backend nuevo a probar:
+1. POST /api/events/{id}/ticket {have:true|false} → marca/desmarca "tengo entrada". Devuelve {have,total_tickets}. 404 si evento no existe.
+2. serialize_event (GET /api/events, GET /api/events/{id}) ahora incluye my_has_ticket (bool), total_tickets (int en detalle, null en listados), friends_with_ticket (list en detalle).
+3. GET /api/events/{id} incrementa event_metrics.views (no romper respuesta).
+4. GET /api/me/activity → {items:[...]} actividad de amigos (voy + tickets). Sin amigos → items vacío.
+5. GET /api/me/recap → {went,photos,new_friends,friends_plans,has_activity}.
+6. GET /api/admin/funnel (admin) → {rows:[{id,name,venue,date,price,views,interested,going,clicks,tickets,conversion_pct,est_commission}], totals:{...,commission}}. clicks vienen de ticket_purchases, tickets de la colección tickets.
+7. GET /api/admin/venue-report (admin) → {venues:[{venue,events,views,going,clicks,tickets,commission}]}.
+8. POST /api/admin/events/{id}/notify-interested {message} (admin) → {notified}. 404 si no existe.
+9. GET /api/events/discover → debe devolver 404 (endpoint ELIMINADO).
+### Regresión: login, GET /api/events?date_filter=all, POST interest, /tickets/click (existente), /admin/stats, /admin/events.
+Credenciales admin: admin@quienva.app / admin123.
+
+## agent_communication:
+    - agent: "main"
+      message: "Añadido: estado 'tengo entrada' (/events/{id}/ticket) con prueba social en serialize_event, tracking de vistas en GET event, embudo con € (/admin/funnel), informe por local (/admin/venue-report), retargeting con mensaje (/admin/events/{id}/notify-interested), actividad de amigos (/me/activity) y recap (/me/recap). Eliminado /events/discover (debe dar 404). Probar todo + regresión."
+
+backend:
+  - task: "POST /api/events/{id}/ticket - Mark/unmark ticket ownership"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint POST /events/{id}/ticket with {have:bool}. Marks/unmarks user ticket ownership. Returns {have, total_tickets}. Upserts tickets collection, increments/decrements event_metrics.tickets. 404 if event not found."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (4 tests passed): ✅ (1) User A marks ticket → 200 with have=true, total_tickets=1. ✅ (2) User B marks ticket → total_tickets increments to 2. ✅ (3) User A unmarks ticket → have=false, total_tickets decrements to 1. ✅ (4) Non-existent event → 404. All functionality working correctly."
+
+  - task: "serialize_event extended with ticket fields (my_has_ticket, total_tickets, friends_with_ticket)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Extended serialize_event to include: my_has_ticket (bool), total_tickets (int in detail, null in list), friends_with_ticket (array in detail). Bulk-loads tickets via my_ticket_ids set for list view (cheap), full ticket data for detail view."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (5 tests passed): ✅ (1) GET /events/{id} as user with ticket → my_has_ticket=true, total_tickets=int, friends_with_ticket=array. ✅ (2) User B sees friend A in friends_with_ticket when A has ticket. ✅ (3) GET /events list includes my_has_ticket field (bool). ✅ (4) total_tickets may be null in list view (expected). ✅ (5) All field types correct. Social proof working correctly."
+
+  - task: "GET /api/events/{id} - View tracking"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /events/{id} now increments event_metrics.views (fire-and-forget, try-catch to not break response). Powers conversion funnel analytics."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (2 tests passed): ✅ (1) First view succeeds with correct response structure. ✅ (2) Second view succeeds (view tracking increments internally without breaking response). Response structure intact across multiple views."
+
+  - task: "GET /api/me/activity - Friend activity feed"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint GET /me/activity returns {items:[...]} with recent friend activity: type='going' (friends marking voy) and type='ticket' (friends getting tickets). Each item includes user info, event info, timestamp. Empty array if no friends. Limit 25 items."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (4 tests passed): ✅ (1) User with friends sees activity items (2 items: going + ticket). ✅ (2) Items have correct structure: type, ts, user, event_id, event_name, venue, date. ✅ (3) type in ['going', 'ticket']. ✅ (4) Fresh user with no friends → items=[]. Social heartbeat working correctly."
+
+  - task: "GET /api/me/recap - User weekly recap"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint GET /me/recap returns weekly recap: went (voy+estuve count last 7d), photos (album+captures+group_photos last 7d), new_friends (accepted last 7d), friends_plans (friends' upcoming voy count), has_activity (bool). Dopamine + shareable."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (6 tests passed): ✅ All required fields present: went, photos, new_friends, friends_plans, has_activity. ✅ All types correct (ints + bool). ✅ friends_plans >= 1 when friend marked voy (verified). ✅ Recap: went=1, photos=0, new_friends=0, friends_plans=1, has_activity=true. All functionality working correctly."
+
+  - task: "GET /api/admin/funnel - Admin conversion funnel report"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New admin endpoint GET /admin/funnel returns {rows:[...], totals:{...}}. Each row: id, name, venue, date, price, views, interested, going, clicks, tickets, conversion_pct, est_commission. Totals: views, interested, going, clicks, tickets, commission. scope=upcoming (default) or all. clicks from ticket_purchases, tickets from tickets collection. Commission calculated via _est_commission."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (5 tests passed): ✅ (1) Admin gets funnel → 200 with rows and totals. ✅ (2) Totals has all required fields: views, interested, going, clicks, tickets, commission (number). ✅ (3) Sample row has all required fields. ✅ (4) Funnel totals: views=7, interested=0, going=13, clicks=0, tickets=4, commission=0.0. ✅ (5) Non-admin → 403. Money funnel working correctly."
+
+  - task: "GET /api/admin/venue-report - Admin venue aggregation report"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New admin endpoint GET /admin/venue-report returns {venues:[...]}. Each venue: venue, events, views, interested, going, clicks, tickets, commission. Aggregates all events by venue. Sorted by (going + tickets) descending. The one-pager to show clubs."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (4 tests passed): ✅ (1) Admin gets venue report → 200 with venues array. ✅ (2) Sample venue has all required fields: venue, events, views, going, clicks, tickets, commission (number). ✅ (3) Sample venue: Sala Focus - events=1, views=7, going=13, tickets=4, commission=0.0. ✅ (4) Non-admin → 403. Venue aggregation working correctly."
+
+  - task: "POST /api/admin/events/{id}/notify-interested - Admin retargeting notification"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New admin endpoint POST /admin/events/{id}/notify-interested with {message:str}. Sends custom push to everyone interested/going/following the event. Returns {notified:int}. 404 if event not found. Default message if empty. Retargeting to recover ticket sales."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (3 tests passed): ✅ (1) Admin sends notification → 200 with notified=13 (count of users notified). ✅ (2) Non-existent event → 404. ✅ (3) Non-admin → 403. Retargeting notification working correctly."
+
+  - task: "GET /api/events/discover - Endpoint removed (should return 404)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Removed GET /events/discover endpoint. Should return 404."
+      - working: true
+        agent: "testing"
+        comment: "TESTED (1 test passed): ✅ GET /events/discover → 404 (endpoint correctly removed)."
+
+  - task: "Regression: Core endpoints after monetization changes"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "REGRESSION TESTS (5 tests passed): ✅ POST /auth/login working. ✅ GET /events?date_filter=all returns array. ✅ POST /events/{id}/interest working. ✅ POST /tickets/click working (existing endpoint). ✅ GET /admin/stats working. No regressions found."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.6"
+  test_sequence: 7
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - Monetization + Retention Endpoints
+      
+      🎉 ALL TESTS PASSED - 39/39 (100% success rate)
+      
+      ✅ NEW MONETIZATION + RETENTION ENDPOINTS TESTED (10/10 PASSED):
+      
+      1. POST /api/events/{id}/ticket (4 tests) ✅
+         - User A marks ticket → have=true, total_tickets=1
+         - User B marks ticket → total_tickets increments to 2
+         - User A unmarks ticket → have=false, total_tickets decrements to 1
+         - Non-existent event → 404
+         - All functionality working correctly
+      
+      2. serialize_event ticket fields (5 tests) ✅
+         - GET /events/{id} includes my_has_ticket (bool), total_tickets (int), friends_with_ticket (array)
+         - User B sees friend A in friends_with_ticket when A has ticket
+         - GET /events list includes my_has_ticket field
+         - total_tickets may be null in list view (expected behavior)
+         - All field types correct, social proof working
+      
+      3. GET /api/events/{id} view tracking (2 tests) ✅
+         - First view succeeds with correct response structure
+         - Second view succeeds (view tracking increments internally without breaking response)
+         - Response structure intact across multiple views
+      
+      4. GET /api/me/activity (4 tests) ✅
+         - User with friends sees activity items (going + ticket types)
+         - Items have correct structure: type, ts, user, event_id, event_name, venue, date
+         - type in ['going', 'ticket']
+         - Fresh user with no friends → items=[]
+         - Social heartbeat working correctly
+      
+      5. GET /api/me/recap (6 tests) ✅
+         - All required fields present: went, photos, new_friends, friends_plans, has_activity
+         - All types correct (ints + bool)
+         - friends_plans >= 1 when friend marked voy (verified)
+         - Recap: went=1, photos=0, new_friends=0, friends_plans=1, has_activity=true
+      
+      6. GET /api/admin/funnel (5 tests) ✅
+         - Admin gets funnel → 200 with rows and totals
+         - Totals has all required fields: views, interested, going, clicks, tickets, commission
+         - Sample row has all required fields
+         - Funnel totals: views=7, interested=0, going=13, clicks=0, tickets=4, commission=0.0
+         - Non-admin → 403
+         - Money funnel working correctly
+      
+      7. GET /api/admin/venue-report (4 tests) ✅
+         - Admin gets venue report → 200 with venues array
+         - Sample venue has all required fields: venue, events, views, going, clicks, tickets, commission
+         - Sample venue: Sala Focus - events=1, views=7, going=13, tickets=4, commission=0.0
+         - Non-admin → 403
+         - Venue aggregation working correctly
+      
+      8. POST /api/admin/events/{id}/notify-interested (3 tests) ✅
+         - Admin sends notification → 200 with notified=13
+         - Non-existent event → 404
+         - Non-admin → 403
+         - Retargeting notification working correctly
+      
+      9. GET /api/events/discover removed (1 test) ✅
+         - GET /events/discover → 404 (endpoint correctly removed)
+      
+      10. Regression tests (5 tests) ✅
+         - POST /auth/login working
+         - GET /events?date_filter=all returns array
+         - POST /events/{id}/interest working
+         - POST /tickets/click working (existing endpoint)
+         - GET /admin/stats working
+         - No regressions found
+      
+      🎯 CONCLUSION:
+      All new monetization and retention endpoints are working perfectly with correct authorization checks (admin-only endpoints return 403 for non-admin), validation (404 for non-existent events), and expected behaviors. The ticket tracking system provides social proof (friends_with_ticket), the activity feed shows friend engagement, the recap provides weekly stats, and the admin funnel/venue reports provide conversion analytics with commission calculations. All existing functionality remains intact with zero regressions.
+      
+      Test file: /app/backend_test.py
+      Test credentials used: admin@quienva.app / admin123 + 3 fresh test users (A, B, Fresh)
+      Test scenario: 2 mutual friends (A, B) both mark 'voy' on same event, both mark tickets, test all new endpoints + regression

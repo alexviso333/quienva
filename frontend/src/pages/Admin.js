@@ -391,6 +391,13 @@ export default function Admin() {
             <h1 className="font-display text-2xl font-black tracking-tighter">Panel admin</h1>
             <p className="text-white/40 text-xs">{events.length} eventos</p>
           </div>
+          <button
+            data-testid="admin-money-btn"
+            onClick={() => navigate("/admin/dinero")}
+            className="ml-auto h-10 px-4 rounded-full bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95"
+          >
+            💶 Dinero
+          </button>
         </header>
 
         <div className="px-5">

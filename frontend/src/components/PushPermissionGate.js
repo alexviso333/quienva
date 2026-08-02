@@ -29,6 +29,12 @@ export default function PushPermissionGate() {
       setShow(false);
       return;
     }
+    // Users still in the intro flow (/onboarding) haven't finished setup yet —
+    // don't stack this gate on top of it.
+    if (localStorage.getItem("qv_onboarded") !== "1") {
+      setShow(false);
+      return;
+    }
     if (!isPushSupported()) {
       // Browser doesn't support push — don't trap the user.
       localStorage.setItem(grantedKey, "1");

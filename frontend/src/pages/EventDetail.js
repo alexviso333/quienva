@@ -104,9 +104,32 @@ export default function EventDetail() {
   const hasInterest = !!event.my_status && event.my_status !== "none";
 
   const onTicketClick = () => {
-    // Fire-and-forget tracking for points
+    // Fire-and-forget tracking for the money funnel
     api.post("/tickets/click", { event_id: event.id }).catch(() => {});
   };
+
+  const setTicket = useMutation({
+    mutationFn: async (have) => (await api.post(`/events/${id}/ticket`, { have })).data,
+    onMutate: async (have) => {
+      await qc.cancelQueries({ queryKey: ["event", id] });
+      const prev = qc.getQueryData(["event", id]);
+      qc.setQueryData(["event", id], (e) => (e ? { ...e, my_has_ticket: have } : e));
+      return { prev };
+    },
+    onSuccess: (_d, have) => {
+      if (have) toast.success("¡Guardado! 🎟️ Tus amigos verán que vas con entrada");
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
+      toast.error("No se pudo guardar");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
+  });
+
+  const price = event.current_price;
+  const ticketFriends = event.friends_with_ticket || [];
+  const totalTickets = event.total_tickets || 0;
+  const saleBadge = { pocas_entradas: "⚡ Pocas entradas", agotado: "🔒 Agotadas", a_la_venta: "🎟️ A la venta" }[event.sale_state];
 
   return (
     <div className="min-h-screen qv-app-bg">
@@ -188,16 +211,29 @@ export default function EventDetail() {
           )}
 
           {!isPast && (event.has_commission && event.commission_url ? (
-            <a
-              data-testid="detail-ticket-btn"
-              href={event.commission_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={onTicketClick}
-              className="h-12 rounded-2xl bg-white text-black font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-            >
-              <Ticket className="w-5 h-5" /> Conseguir entrada
-            </a>
+            <div className="flex flex-col gap-2">
+              <a
+                data-testid="detail-ticket-btn"
+                href={event.commission_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onTicketClick}
+                className={`h-14 rounded-2xl font-display font-black text-base flex items-center justify-center gap-2 active:scale-95 transition-transform ${
+                  event.sale_state === "agotado"
+                    ? "bg-white/10 text-white/70 border border-white/20"
+                    : "bg-gradient-to-r from-qv-primary to-qv-secondary text-black shadow-[0_0_24px_rgba(255,0,85,0.35)]"
+                }`}
+              >
+                <Ticket className="w-5 h-5" />
+                {event.sale_state === "agotado" ? "Ver disponibilidad" : "Conseguir entrada"}
+                {price ? <span className="opacity-90">· desde {Math.round(price)}€</span> : null}
+              </a>
+              {saleBadge && (
+                <p className={`text-center text-xs font-bold ${event.sale_state === "pocas_entradas" ? "text-yellow-300 animate-pulse" : "text-white/50"}`}>
+                  {saleBadge}
+                </p>
+              )}
+            </div>
           ) : event.more_info_url ? (
             <a
               data-testid="detail-info-btn"
@@ -209,6 +245,41 @@ export default function EventDetail() {
               <ExternalLink className="w-5 h-5" /> Más información
             </a>
           ) : null)}
+
+          {/* "Ya tengo entrada" — social proof + conversion signal */}
+          {!isPast && (
+            <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/10 p-3">
+              <button
+                data-testid="detail-ticket-owned-btn"
+                onClick={() => setTicket.mutate(!event.my_has_ticket)}
+                className={`shrink-0 h-10 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-colors ${
+                  event.my_has_ticket ? "bg-qv-secondary text-black" : "bg-white/10 text-white/80 border border-white/20"
+                }`}
+              >
+                {event.my_has_ticket ? <><CheckCircle2 className="w-4 h-4" /> Tengo entrada</> : <>🎟️ Ya tengo entrada</>}
+              </button>
+              <div className="min-w-0 flex-1">
+                {totalTickets > 0 ? (
+                  <div className="flex items-center gap-2">
+                    {ticketFriends.length > 0 && (
+                      <div className="flex -space-x-2">
+                        {ticketFriends.slice(0, 3).map((f, i) => (
+                          <AvatarCircle key={i} name={f.name} picture={f.picture} size={22} />
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs text-white/70 leading-tight">
+                      {ticketFriends.length > 0
+                        ? `${ticketFriends.length} amigo${ticketFriends.length > 1 ? "s" : ""} ya ${ticketFriends.length > 1 ? "tienen" : "tiene"} entrada`
+                        : `${totalTickets} ${totalTickets > 1 ? "personas tienen" : "persona tiene"} entrada`}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/40 leading-tight">Sé el primero de tu grupo en pillar entrada 🎟️</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Friends */}
           <div className="flex flex-col gap-4">

@@ -1,32 +1,37 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { PartyPopper, Users, Bell, ChevronRight, Sparkles } from "lucide-react";
+import { PartyPopper, Users, Bell, ChevronRight, Sparkles, Loader2 } from "lucide-react";
+import { subscribeToPush } from "@/lib/push";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 
 const SLIDES = [
   {
     icon: PartyPopper,
     color: "text-qv-primary",
     title: "Descubre los planes",
-    body: "Las mejores fiestas de la semana en Palma, con foto, hora, local y links directos para comprar entrada.",
+    body: "Las mejores fiestas de Palma, con precio, hora, local y entrada directa. Marca 'Voy' o 'Me interesa' con un toque.",
   },
   {
     icon: Users,
     color: "text-qv-secondary",
-    title: "Mira quién va",
-    body: "Añade a tus amigos y ve al instante en qué fiesta va cada uno. Nunca más llegar solo a un sitio.",
+    title: "Con tus amigos",
+    body: "Ve quién va a cada fiesta, y si sois 3+ del grupo, haceos la foto de grupo. Cuando estéis dentro, salta El Momento: foto sorpresa delante y detrás.",
   },
   {
     icon: Bell,
     color: "text-yellow-300",
-    title: "No te pierdas el finde",
-    body: "Te avisamos cuando un amigo se apunta a un plan que no viste, o cuando queda 30 minutos para el tuyo.",
+    title: "No te pierdas nada",
+    body: "Te avisamos cuando un amigo se apunta, cuando salen últimas entradas o cuando salta El Momento. Actívalas para vivirlo al máximo.",
   },
 ];
 
 export default function Onboarding() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const [i, setI] = useState(0);
+  const [busy, setBusy] = useState(false);
   const Icon = SLIDES[i].icon;
 
   useEffect(() => {
@@ -36,15 +41,29 @@ export default function Onboarding() {
     }
   }, [nav]);
 
-  const finish = () => {
+  const finish = async (activate) => {
+    if (activate) {
+      setBusy(true);
+      try {
+        await subscribeToPush();
+        toast.success("¡Notificaciones activadas! ⚡");
+      } catch (e) {
+        // browser denied — continue anyway
+      } finally {
+        if (user) localStorage.setItem(`qv_push_granted_${user.user_id}`, "1");
+        setBusy(false);
+      }
+    }
     localStorage.setItem("qv_onboarded", "1");
     nav("/feed", { replace: true });
   };
 
   const next = () => {
-    if (i === SLIDES.length - 1) finish();
+    if (i === SLIDES.length - 1) finish(true);
     else setI(i + 1);
   };
+
+  const last = i === SLIDES.length - 1;
 
   return (
     <div className="min-h-screen qv-app-bg flex flex-col px-6 py-10" data-testid="onboarding">
@@ -52,7 +71,7 @@ export default function Onboarding() {
         <span className="text-qv-secondary text-xs font-bold uppercase tracking-widest">
           <Sparkles className="w-3.5 h-3.5 inline mr-1" /> Bienvenido
         </span>
-        <button onClick={finish} className="text-white/50 text-sm">Saltar</button>
+        <button onClick={() => finish(false)} className="text-white/50 text-sm">Saltar</button>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center text-center">
@@ -86,9 +105,12 @@ export default function Onboarding() {
       <button
         data-testid="onboarding-next"
         onClick={next}
-        className="h-14 rounded-2xl bg-qv-primary text-white font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform"
+        disabled={busy}
+        className="h-14 rounded-2xl bg-qv-primary text-white font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
       >
-        {i === SLIDES.length - 1 ? "Empezar" : "Siguiente"} <ChevronRight className="w-5 h-5" />
+        {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+        {last ? "Activar notificaciones y empezar" : "Siguiente"}
+        {!last && <ChevronRight className="w-5 h-5" />}
       </button>
     </div>
   );

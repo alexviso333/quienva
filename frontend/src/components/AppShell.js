@@ -1,11 +1,10 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { Home, Users, MessageCircle, Bell, User, Map } from "lucide-react";
+import { Home, Users, MessageCircle, Bell, User } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 
 const items = [
   { to: "/feed", icon: Home, label: "Planes", testid: "nav-feed" },
-  { to: "/mapa", icon: Map, label: "Mapa", testid: "nav-mapa" },
   { to: "/friends", icon: Users, label: "Amigos", testid: "nav-friends" },
   { to: "/chats", icon: MessageCircle, label: "Chats", testid: "nav-chats" },
   { to: "/notifications", icon: Bell, label: "Avisos", testid: "nav-notifications" },
