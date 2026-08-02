@@ -51,95 +51,45 @@ export function StreakBanner() {
     <button
       data-testid="streak-banner"
       onClick={() => navigate("/profile")}
-      className="w-full text-left rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-br from-[#1a0a12] via-[#0f0910] to-[#0a1a1f] active:scale-[0.99] transition-transform"
+      className="w-full text-left rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#1a0a12] via-[#0f0910] to-[#0a1a1f] active:scale-[0.99] transition-transform"
     >
-      <div className="relative p-4">
-        <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,0,85,0.35),transparent_60%)]" />
-        <div className="relative flex items-center gap-3">
-          {/* Day streak pill */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${dayStreak > 0 ? "bg-orange-500/20" : "bg-white/5"}`}>
-                <Flame className={`w-5 h-5 ${dayStreak > 0 ? "text-orange-400" : "text-white/40"}`} />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-white/50 font-bold">Días seguidos</p>
-                <p className="font-display text-2xl font-black text-white leading-none">
-                  {dayStreak}
-                  {bestDay > dayStreak && <span className="text-xs font-normal text-white/50 ml-1">/ máx {bestDay}</span>}
-                </p>
-              </div>
-            </div>
-            {nextDay && dayStreak > 0 && (
-              <p className="text-[11px] text-orange-300/80 mt-2 pl-1">🔥 {nextDay - dayStreak} más para insignia</p>
-            )}
-          </div>
-
-          <div className="h-14 w-px bg-white/10" />
-
-          {/* Week streak pill */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${weekStreak > 0 ? "bg-qv-secondary/20" : "bg-white/5"}`}>
-                <Calendar className={`w-5 h-5 ${weekStreak > 0 ? "text-qv-secondary" : "text-white/40"}`} />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-white/50 font-bold">Semanas</p>
-                <p className="font-display text-2xl font-black text-white leading-none">
-                  {weekStreak}
-                  {bestWeek > weekStreak && <span className="text-xs font-normal text-white/50 ml-1">/ máx {bestWeek}</span>}
-                </p>
-              </div>
-            </div>
-            {nextWeek && weekStreak > 0 && (
-              <p className="text-[11px] text-qv-secondary/80 mt-2 pl-1">✨ {nextWeek - weekStreak} más para insignia</p>
-            )}
-          </div>
-
-          <ChevronRight className="w-5 h-5 text-white/30 shrink-0" />
+      <div className="relative flex items-center gap-4 px-4 py-3">
+        <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,0,85,0.30),transparent_65%)]" />
+        {/* day streak */}
+        <div className="relative flex items-center gap-1.5">
+          <Flame className={`w-5 h-5 ${dayStreak > 0 ? "text-orange-400" : "text-white/40"}`} />
+          <span className="font-display text-xl font-black text-white leading-none">{dayStreak}</span>
+          <span className="text-[10px] uppercase tracking-wide text-white/50 font-bold">días</span>
         </div>
-
-        {/* Points row */}
-        <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/10">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-yellow-300" />
-            <span className="font-display font-black text-yellow-300 text-lg">{points.toLocaleString("es-ES")}</span>
-            <span className="text-white/60 text-xs uppercase tracking-widest font-bold">puntos</span>
-          </div>
-          <span
-            onClick={(e) => { e.stopPropagation(); navigate("/top"); }}
-            className="text-[11px] text-qv-secondary font-bold uppercase tracking-widest cursor-pointer active:opacity-70"
-          >
-            Ver ranking →
-          </span>
+        <span className="relative w-px h-6 bg-white/10" />
+        {/* week streak */}
+        <div className="relative flex items-center gap-1.5">
+          <Calendar className={`w-5 h-5 ${weekStreak > 0 ? "text-qv-secondary" : "text-white/40"}`} />
+          <span className="font-display text-xl font-black text-white leading-none">{weekStreak}</span>
+          <span className="text-[10px] uppercase tracking-wide text-white/50 font-bold">sem</span>
         </div>
-
-        {isCold && (
-          <p className="relative text-white/50 text-[11px] mt-2 italic">Marca &apos;Voy&apos; a un plan para empezar tu racha.</p>
-        )}
-
-        {nextBadge && (
-          <div className="relative flex items-center gap-2.5 mt-3 pt-3 border-t border-white/10" data-testid="next-badge-inline">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-300 flex items-center justify-center text-lg shrink-0">
-              {nextBadge.emoji}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[9px] uppercase tracking-widest text-qv-secondary font-bold flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> A punto de desbloquear
-              </p>
-              <p className="text-white text-xs font-bold truncate">
-                {nextBadge.name} <span className="text-yellow-300">+{nextBadge.points}</span>
-              </p>
-              <div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-qv-primary to-qv-secondary" style={{ width: `${Math.min(100, nextBadge.progress)}%` }} />
-              </div>
-            </div>
-            <span className="text-[10px] text-white/50 shrink-0">
-              {(_BADGE_HINT[nextBadge.stat_key] || ((r) => `${r} más`))(nextBadge.remaining)}
-            </span>
-          </div>
-        )}
+        {/* points */}
+        <div className="relative ml-auto flex items-center gap-1.5">
+          <Trophy className="w-4 h-4 text-yellow-300" />
+          <span className="font-display font-black text-yellow-300 text-lg leading-none">{points.toLocaleString("es-ES")}</span>
+          <ChevronRight className="w-4 h-4 text-white/30" />
+        </div>
       </div>
+
+      {nextBadge && (
+        <div className="relative flex items-center gap-2 px-4 pb-2.5 -mt-1" data-testid="next-badge-inline">
+          <Sparkles className="w-3 h-3 text-qv-secondary shrink-0" />
+          <span className="text-white/70 text-[11px] font-semibold shrink-0 truncate max-w-[45%]">{nextBadge.name}</span>
+          <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-qv-primary to-qv-secondary" style={{ width: `${Math.min(100, nextBadge.progress)}%` }} />
+          </div>
+          <span className="text-yellow-300 text-[11px] font-bold shrink-0">+{nextBadge.points}</span>
+        </div>
+      )}
+
+      {isCold && !nextBadge && (
+        <p className="relative text-white/50 text-[11px] px-4 pb-2.5 -mt-1 italic">Marca &apos;Voy&apos; a un plan para empezar tu racha.</p>
+      )}
     </button>
   );
 }
