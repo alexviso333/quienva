@@ -54,13 +54,29 @@ export default function EventDetail() {
 
   const setStatus = useMutation({
     mutationFn: async (status) => (await api.post(`/events/${id}/interest`, { status })).data,
+    onMutate: async (status) => {
+      await qc.cancelQueries({ queryKey: ["event", id] });
+      const prev = qc.getQueryData(["event", id]);
+      qc.setQueryData(["event", id], (e) => (e ? { ...e, my_status: status } : e));
+      const patchArr = (arr) =>
+        Array.isArray(arr) ? arr.map((e) => (e.id === id ? { ...e, my_status: status } : e)) : arr;
+      qc.getQueriesData({ queryKey: ["events"] }).forEach(([key, data]) => {
+        qc.setQueryData(key, patchArr(data));
+      });
+      return { prev };
+    },
     onSuccess: (_d, status) => {
-      qc.invalidateQueries({ queryKey: ["event", id] });
-      qc.invalidateQueries({ queryKey: ["events"] });
       if (status === "voy") toast.success("¡Apuntado! 🎉");
       if (status === "estuve") toast.success("Guardado en tus recuerdos ✨");
     },
-    onError: () => toast.error("No se pudo actualizar"),
+    onError: (_e, _s, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
+      toast.error("No se pudo actualizar");
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["event", id] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+    },
   });
 
   if (isLoading || !event) {

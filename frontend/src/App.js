@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import PushPermissionGate from "@/components/PushPermissionGate";
+import MomentGate from "@/components/MomentGate";
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import Feed from "@/pages/Feed";
@@ -21,6 +22,7 @@ import Memories from "@/pages/Memories";
 import Locales from "@/pages/Locales";
 import MapPage from "@/pages/MapPage";
 import NotifPrefs from "@/pages/NotifPrefs";
+import Momento from "@/pages/Momento";
 import { Loader2 } from "lucide-react";
 
 function LoadingScreen() {
@@ -65,6 +67,7 @@ function AppRouter() {
       <Route path="/locales" element={<ProtectedRoute><Locales /></ProtectedRoute>} />
       <Route path="/mapa" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
       <Route path="/ajustes/avisos" element={<ProtectedRoute><NotifPrefs /></ProtectedRoute>} />
+      <Route path="/momento" element={<ProtectedRoute><Momento /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
       <Route path="/admin/dashboard" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/feed" replace />} />
@@ -80,6 +83,7 @@ function App() {
         <BrowserRouter>
           <AppRouter />
           <PushPermissionGate />
+          <MomentGate />
         </BrowserRouter>
         <Toaster position="top-center" theme="dark" richColors />
       </AuthProvider>

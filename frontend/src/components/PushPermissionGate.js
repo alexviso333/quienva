@@ -16,37 +16,41 @@ export default function PushPermissionGate() {
   const { user, loading } = useAuth();
   const [show, setShow] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (loading || !user) {
       setShow(false);
       return;
     }
-    // Only ask once per browser per user
-    const askedKey = `qv_push_asked_${user.user_id}`;
-    if (localStorage.getItem(askedKey) === "1") {
+    // Only stop asking once notifications are actually granted for this user.
+    const grantedKey = `qv_push_granted_${user.user_id}`;
+    if (localStorage.getItem(grantedKey) === "1") {
       setShow(false);
       return;
     }
     if (!isPushSupported()) {
-      // Browser doesn't support push — silently mark as asked so we don't loop.
-      localStorage.setItem(askedKey, "1");
+      // Browser doesn't support push — don't trap the user.
+      localStorage.setItem(grantedKey, "1");
       setShow(false);
       return;
     }
-    // Only show if the browser hasn't granted or denied yet.
-    if (typeof Notification !== "undefined" && Notification.permission !== "default") {
-      localStorage.setItem(askedKey, "1");
+    // Already granted at the browser level -> record and skip.
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      localStorage.setItem(grantedKey, "1");
       setShow(false);
       return;
     }
-    // Delay a tiny moment so we don't flash before the UI renders
-    const t = setTimeout(() => setShow(true), 500);
+    // If the browser has hard-denied, we cannot force it — show the escape hatch.
+    if (typeof Notification !== "undefined" && Notification.permission === "denied") {
+      setFailed(true);
+    }
+    const t = setTimeout(() => setShow(true), 400);
     return () => clearTimeout(t);
   }, [user, loading]);
 
-  const markAsked = () => {
-    if (user) localStorage.setItem(`qv_push_asked_${user.user_id}`, "1");
+  const markDone = () => {
+    if (user) localStorage.setItem(`qv_push_granted_${user.user_id}`, "1");
     setShow(false);
   };
 
@@ -55,11 +59,11 @@ export default function PushPermissionGate() {
     try {
       await subscribeToPush();
       toast.success("Notificaciones activadas ⚡");
-      markAsked();
+      markDone();
     } catch (e) {
-      // User denied or something failed — record it and move on.
+      // Could not enable (denied at OS/browser level). Let them continue.
       toast.error(e.message || "No se pudieron activar");
-      markAsked();
+      setFailed(true);
     } finally {
       setSubmitting(false);
     }
@@ -69,7 +73,7 @@ export default function PushPermissionGate() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/85 backdrop-blur-sm"
       data-testid="push-permission-gate"
     >
       <div className="relative w-full max-w-sm rounded-3xl qv-glass border border-white/10 p-6 text-center">
@@ -80,7 +84,8 @@ export default function PushPermissionGate() {
           Activa las notificaciones
         </h2>
         <p className="text-white/70 text-sm mt-2 leading-relaxed">
-          Te avisamos cuando <span className="text-qv-secondary font-semibold">salte El Momento</span>,
+          Son <span className="text-qv-secondary font-semibold">obligatorias</span> para no perderte
+          nada: te avisamos cuando salte <span className="text-qv-secondary font-semibold">El Momento</span>,
           cuando un amigo diga que va a una fiesta o cuando salgan entradas nuevas.
         </p>
         <button
@@ -92,17 +97,22 @@ export default function PushPermissionGate() {
           {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
           Activar notificaciones
         </button>
-        <button
-          onClick={markAsked}
-          disabled={submitting}
-          className="mt-2 w-full py-2.5 rounded-2xl text-white/60 text-xs font-semibold hover:text-white/90"
-          data-testid="push-permission-later"
-        >
-          Ahora no
-        </button>
-        <p className="mt-3 text-white/30 text-[10px]">
-          Puedes cambiar esto luego en tu perfil.
-        </p>
+        {failed && (
+          <>
+            <p className="mt-4 text-amber-300/90 text-xs leading-relaxed">
+              Tu navegador tiene las notificaciones bloqueadas. Actívalas en los ajustes del navegador
+              para vivir la experiencia completa.
+            </p>
+            <button
+              onClick={markDone}
+              disabled={submitting}
+              className="mt-2 w-full py-2.5 rounded-2xl text-white/50 text-xs font-semibold hover:text-white/80"
+              data-testid="push-permission-later"
+            >
+              Continuar de todas formas
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

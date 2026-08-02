@@ -2304,6 +2304,8 @@ async def create_notification(user_id: str, ntype: str, message: str, data: dict
         url = "/notifications"
     elif ntype == "story_reaction":
         url = "/profile"
+    elif ntype in ("moment_prompt", "moment", "moment_friend"):
+        url = "/momento"
     elif data and data.get("event_id"):
         url = f"/event/{data['event_id']}"
     try:
@@ -3100,9 +3102,31 @@ async def send_group_message(group_id: str, inp: GroupMessageInput, user: dict =
 # =========================================================================
 
 async def _can_access_album(event_id: str, user_id: str) -> bool:
-    """User can upload/view album if they have any interest (voy, me_interesa, estuve)."""
+    """User can upload to the album if they have any interest (voy, me_interesa, estuve)."""
     it = await db.interests.find_one({"event_id": event_id, "user_id": user_id})
     return it is not None
+
+
+def _album_sharing_fields(a: dict) -> dict:
+    return {
+        "shared": bool(a.get("shared")),
+        "shared_all_friends": bool(a.get("shared_all_friends")),
+        "shared_with_users": a.get("shared_with_users", []) or [],
+        "shared_with_groups": a.get("shared_with_groups", []) or [],
+    }
+
+
+async def _album_visible_to(a: dict, viewer_id: str, friend_ids: List[str], my_group_ids: List[str]) -> bool:
+    """Whether a shared upload owned by someone else is visible to viewer."""
+    if not a.get("shared"):
+        return False
+    if viewer_id in (a.get("shared_with_users") or []):
+        return True
+    if set(a.get("shared_with_groups") or []) & set(my_group_ids):
+        return True
+    if a.get("shared_all_friends") and a["user_id"] in friend_ids:
+        return True
+    return False
 
 
 @api_router.post("/events/{event_id}/album/upload")
@@ -3136,6 +3160,11 @@ async def album_upload(event_id: str, file: UploadFile = File(...), user: dict =
         "media_url": f"/api/files/{path}",
         "media_type": "video" if is_video else "image",
         "created_at": datetime.now(timezone.utc).isoformat(),
+        # Private by default — the owner shares explicitly afterwards.
+        "shared": False,
+        "shared_all_friends": False,
+        "shared_with_users": [],
+        "shared_with_groups": [],
     }
     await db.album_uploads.insert_one(upload)
     upload.pop("_id", None)
@@ -3144,24 +3173,115 @@ async def album_upload(event_id: str, file: UploadFile = File(...), user: dict =
 
 @api_router.get("/events/{event_id}/album")
 async def album_list(event_id: str, user: dict = Depends(get_current_user)):
+    """Returns two buckets:
+    - mine: every upload of mine for this event (private album), with its sharing state.
+    - shared: the combined album = uploads shared *with me* by others + my own shared ones.
+    """
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
-    # Anyone who was interested/going/attended can view
-    if not await _can_access_album(event_id, user["user_id"]):
-        # But allow view if friend went
-        friend_ids = await accepted_friend_ids(user["user_id"])
-        has_friend = await db.interests.find_one({"event_id": event_id, "user_id": {"$in": friend_ids}})
-        if not has_friend:
-            raise HTTPException(status_code=403, detail="Sin acceso al álbum")
-    items = []
-    async for a in db.album_uploads.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1):
-        au = await db.users.find_one({"user_id": a["user_id"]}, {"_id": 0})
+    uid = user["user_id"]
+    friend_ids = await accepted_friend_ids(uid)
+    my_group_ids = [g["id"] async for g in db.groups.find({"member_ids": uid}, {"_id": 0, "id": 1})]
+
+    # cache authors to avoid N+1
+    author_cache: dict = {}
+
+    async def _decorate(a):
+        au = author_cache.get(a["user_id"])
+        if au is None:
+            au = await db.users.find_one({"user_id": a["user_id"]}, {"_id": 0})
+            author_cache[a["user_id"]] = au
         a["author"] = _msg_author(au)
-        a["is_mine"] = a["user_id"] == user["user_id"]
-        items.append(a)
-    return {"event": {"id": ev["id"], "name": ev["name"], "date": ev["date"], "venue": ev["venue"]},
-            "items": items, "total": len(items)}
+        a["is_mine"] = a["user_id"] == uid
+        a.update(_album_sharing_fields(a))
+        return a
+
+    mine, shared = [], []
+    async for a in db.album_uploads.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1):
+        if a["user_id"] == uid:
+            await _decorate(a)
+            mine.append(a)
+            if a.get("shared"):
+                shared.append(a)
+        elif await _album_visible_to(a, uid, friend_ids, my_group_ids):
+            await _decorate(a)
+            shared.append(a)
+    shared.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return {
+        "event": {"id": ev["id"], "name": ev["name"], "date": ev["date"], "venue": ev["venue"]},
+        "mine": mine,
+        "shared": shared,
+        "can_upload": await _can_access_album(event_id, uid),
+        "total_mine": len(mine),
+        "total_shared": len(shared),
+    }
+
+
+class AlbumShareInput(BaseModel):
+    user_ids: List[str] = []
+    group_ids: List[str] = []
+    all_friends: bool = False
+
+
+@api_router.post("/events/{event_id}/album/{upload_id}/share")
+async def album_share(event_id: str, upload_id: str, inp: AlbumShareInput, user: dict = Depends(get_current_user)):
+    a = await db.album_uploads.find_one({"id": upload_id, "event_id": event_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    if a["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Solo puedes compartir tus propias fotos")
+    friend_ids = await accepted_friend_ids(user["user_id"])
+    # sanitize: only share with actual friends
+    clean_users = [u for u in inp.user_ids if u in friend_ids]
+    # only groups I belong to
+    valid_groups = [g["id"] async for g in db.groups.find(
+        {"id": {"$in": inp.group_ids}, "member_ids": user["user_id"]}, {"_id": 0, "id": 1})]
+    is_shared = bool(clean_users or valid_groups or inp.all_friends)
+    prev_users = set(a.get("shared_with_users") or [])
+    await db.album_uploads.update_one({"id": upload_id}, {"$set": {
+        "shared": is_shared,
+        "shared_all_friends": bool(inp.all_friends),
+        "shared_with_users": clean_users,
+        "shared_with_groups": valid_groups,
+    }})
+    # notify newly-added recipients
+    try:
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        recipients = set()
+        if inp.all_friends:
+            recipients.update(friend_ids)
+        recipients.update(clean_users)
+        for gid in valid_groups:
+            g = await db.groups.find_one({"id": gid}, {"_id": 0, "member_ids": 1})
+            if g:
+                recipients.update(m for m in g.get("member_ids", []) if m != user["user_id"])
+        new_recipients = recipients - prev_users - {user["user_id"]}
+        for rid in list(new_recipients)[:60]:
+            await create_notification(
+                rid, "album_shared",
+                f"📸 {user['name']} compartió una foto de {ev['name'] if ev else 'una fiesta'}",
+                {"event_id": event_id, "type": "album_shared"},
+            )
+    except Exception as e:
+        logger.warning(f"album share notify failed: {e}")
+    a.update({"shared": is_shared, "shared_all_friends": bool(inp.all_friends),
+              "shared_with_users": clean_users, "shared_with_groups": valid_groups})
+    return {"ok": True, **_album_sharing_fields(a)}
+
+
+@api_router.post("/events/{event_id}/album/{upload_id}/unshare")
+async def album_unshare(event_id: str, upload_id: str, user: dict = Depends(get_current_user)):
+    a = await db.album_uploads.find_one({"id": upload_id, "event_id": event_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    if a["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Solo puedes gestionar tus propias fotos")
+    await db.album_uploads.update_one({"id": upload_id}, {"$set": {
+        "shared": False, "shared_all_friends": False,
+        "shared_with_users": [], "shared_with_groups": [],
+    }})
+    return {"ok": True, "shared": False}
 
 
 @api_router.delete("/events/{event_id}/album/{upload_id}")
@@ -3198,6 +3318,68 @@ async def moment_status(event_id: str, user: dict = Depends(get_current_user)):
         "my_capture": my_capture,
         "can_capture": bool(prompt),
     }
+
+
+@api_router.get("/me/active-moment")
+async def my_active_moment(user: dict = Depends(get_current_user)):
+    """Returns the most relevant *pending* moment for the current user:
+    an event they marked interest in, that has a non-expired prompt, and which
+    they have NOT captured yet. Powers the blocking modal + home pill + /momento.
+    """
+    uid = user["user_id"]
+    now = datetime.now(timezone.utc)
+    # events the user cares about
+    my_event_ids = [it["event_id"] async for it in db.interests.find(
+        {"user_id": uid, "status": {"$in": ["voy", "estuve", "me_interesa"]}},
+        {"_id": 0, "event_id": 1})]
+    if not my_event_ids:
+        return {"active": False}
+    # already captured -> exclude
+    captured_ids = {c["event_id"] async for c in db.captures.find(
+        {"user_id": uid, "event_id": {"$in": my_event_ids}}, {"_id": 0, "event_id": 1})}
+    best = None
+    async for p in db.moment_prompts.find(
+        {"event_id": {"$in": my_event_ids}}, {"_id": 0}).sort("sent_at", -1):
+        if p["event_id"] in captured_ids:
+            continue
+        try:
+            exp = datetime.fromisoformat(p["expires_at"].replace("Z", "+00:00"))
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if exp < now:
+            continue
+        best = p
+        break
+    if not best:
+        return {"active": False}
+    ev = await db.events.find_one({"id": best["event_id"]}, {"_id": 0})
+    if not ev:
+        return {"active": False}
+    try:
+        deadline = datetime.fromisoformat(best["on_time_deadline"].replace("Z", "+00:00"))
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        on_time = now <= deadline
+    except Exception:
+        on_time = False
+    # FOMO: how many friends already captured this moment
+    friend_ids = await accepted_friend_ids(uid)
+    friends_captured = 0
+    if friend_ids:
+        friends_captured = await db.captures.count_documents(
+            {"event_id": best["event_id"], "user_id": {"$in": friend_ids}})
+    return {
+        "active": True,
+        "event_id": ev["id"],
+        "event_name": ev["name"],
+        "venue": ev.get("venue", ""),
+        "prompt": best,
+        "on_time": on_time,
+        "friends_captured": friends_captured,
+    }
+
 
 
 @api_router.post("/admin/events/{event_id}/moment/trigger")

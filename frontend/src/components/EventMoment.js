@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { Zap, Camera, Loader2, Timer } from "lucide-react";
-import { toast } from "sonner";
+import { Zap, Camera, Timer } from "lucide-react";
 
 /**
  * "El Momento" — our own take on the BeReal-style capture during a party.
@@ -11,9 +11,7 @@ import { toast } from "sonner";
  * After uploading, users can see their friends' captures side-by-side.
  */
 export function EventMoment({ eventId, hasInterest }) {
-  const qc = useQueryClient();
-  const inputRef = useRef(null);
-  const [uploading, setUploading] = useState(false);
+  const navigate = useNavigate();
   const [secLeft, setSecLeft] = useState(null);
 
   const { data: status } = useQuery({
@@ -47,37 +45,6 @@ export function EventMoment({ eventId, hasInterest }) {
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, [status?.prompt?.on_time_deadline, status?.my_capture]);
-
-  const uploadMut = useMutation({
-    mutationFn: async (file) => {
-      const form = new FormData();
-      form.append("file", file);
-      return (await api.post(`/events/${eventId}/moment/upload`, form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      })).data;
-    },
-    onSuccess: (data) => {
-      if (data.on_time) toast.success("⭐ ¡A tiempo! +30 puntos");
-      else toast.success("Subido (fuera de tiempo)");
-      qc.invalidateQueries({ queryKey: ["moment-status", eventId] });
-      qc.invalidateQueries({ queryKey: ["moment-gallery", eventId] });
-      qc.invalidateQueries({ queryKey: ["badges", "me"] });
-      qc.invalidateQueries({ queryKey: ["streak-full"] });
-      setUploading(false);
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.detail || "No se pudo subir");
-      setUploading(false);
-    },
-  });
-
-  const onPick = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setUploading(true);
-    uploadMut.mutate(f);
-    e.target.value = "";
-  };
 
   if (!hasInterest) return null;
 
@@ -151,21 +118,11 @@ export function EventMoment({ eventId, hasInterest }) {
       )}
       <button
         data-testid="moment-capture-btn"
-        onClick={() => inputRef.current?.click()}
-        disabled={uploading}
-        className="w-full h-12 rounded-2xl bg-yellow-300 text-black font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
+        onClick={() => navigate("/momento")}
+        className="w-full h-12 rounded-2xl bg-yellow-300 text-black font-bold flex items-center justify-center gap-2 active:scale-95"
       >
-        {uploading ? <><Loader2 className="w-5 h-5 animate-spin" /> Subiendo…</> : <><Camera className="w-5 h-5" /> Hacer la foto</>}
+        <Camera className="w-5 h-5" /> Hacer la foto
       </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={onPick}
-        className="hidden"
-        data-testid="moment-file-input"
-      />
     </div>
   );
 }

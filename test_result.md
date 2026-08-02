@@ -2108,3 +2108,124 @@ Verify these two bug fixes (report PASS/FAIL with details):
       Test credentials used: admin@quienva.app / admin123
       Viewport: 1920x900 (as specified)
       Screenshots saved: .screenshots/map-locations-test.png, notifications-button-test.png
+
+## Iteration — Álbum privado + El Momento doble (BeReal) + fixes (2026-08-02)
+
+### Backend changes to test:
+1. **Album redesign (private + selective sharing)** — `backend/server.py`
+   - `POST /api/events/{event_id}/album/upload` → upload is now PRIVATE by default (fields: shared=false, shared_all_friends=false, shared_with_users=[], shared_with_groups=[]). Requires interest (voy/me_interesa/estuve) else 403. 404 if event missing.
+   - `GET /api/events/{event_id}/album` → returns {event, mine:[...my uploads with sharing fields], shared:[...combined: my shared + shared-with-me], can_upload, total_mine, total_shared}. A non-owner sees an upload in `shared` ONLY if it's shared with them (in shared_with_users OR member of a shared group OR shared_all_friends and they are a friend of the owner).
+   - `POST /api/events/{event_id}/album/{upload_id}/share` body {user_ids:[], group_ids:[], all_friends:bool} → owner only (403 otherwise, 404 if missing). Sanitizes: only actual friends kept in user_ids; only groups the owner belongs to kept. Sets shared accordingly. Notifies new recipients (type album_shared).
+   - `POST /api/events/{event_id}/album/{upload_id}/unshare` → owner only, sets shared=false.
+   - `DELETE /api/events/{event_id}/album/{upload_id}` → owner (or admin) only. Non-owner MUST get 403 (previously buggy).
+2. **New `GET /api/me/active-moment`** — returns {active:false} if no pending moment. Else {active:true, event_id, event_name, venue, prompt, on_time, friends_captured}. "Pending" = user has interest (voy/estuve/me_interesa) in an event whose moment_prompt is not expired AND user has NOT captured yet.
+3. **Notification routing** — moment_prompt/moment/moment_friend now route push url to /momento (verify no crash; low priority).
+
+### Testing required (backend only):
+- Full album flow with TWO users A (owner) and B: A uploads (private) → B's GET album shows it in neither mine nor shared. A shares with B (user_ids=[B]) → B's GET album shows it in `shared`, A's shows it in mine (shared=true) and shared. A unshares → B no longer sees it. B tries DELETE A's upload → 403. B tries share A's upload → 403.
+- all_friends sharing: A shares all_friends=true → any friend of A sees it; a non-friend does NOT.
+- group sharing: create a group with A+B, A shares group_ids=[g] → B sees it.
+- share sanitization: A shares with a non-friend user_id → that id is dropped (B non-friend won't see).
+- GET /api/me/active-moment: with no moment → {active:false}. After admin triggers a moment on an event where the user is 'voy' and hasn't captured → {active:true,...}. After the user captures → {active:false}.
+- Regression: existing endpoints (auth, events, interests, moment status/upload/gallery, groups, friends) still work.
+
+Test credentials: admin@quienva.app / admin123. Register 2 fresh users, make them friends, mark interest on an event to test album/moment.
+
+## agent_communication:
+    - agent: "main"
+      message: "Reworked album to be private-by-default with per-photo selective sharing to friends/groups/all-friends (POST .../share, .../unshare; GET returns mine + shared buckets). Added GET /api/me/active-moment powering a blocking capture gate + /momento dual-camera page. Fixed album delete auth (owner only). Please backend-test the album two-user sharing matrix and active-moment lifecycle, plus regression on core endpoints. NOTE: .env files were wiped again and I restored them (dev): DB quienva re-seeded, admin@quienva.app/admin123, VAPID regenerated, Google+FourVenues token empty."
+
+
+backend:
+  - task: "Album private + selective sharing (POST/GET album, share/unshare, delete)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Reworked album to be private-by-default. POST /events/{id}/album/upload creates private upload (shared=false, empty lists). GET /events/{id}/album returns {mine, shared, can_upload, total_mine, total_shared}. POST .../share with user_ids/group_ids/all_friends. POST .../unshare. DELETE requires ownership (403 for non-owner). Sanitizes non-friend IDs."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL ALBUM SCENARIOS (46 tests passed): ✅ (1) Upload is private by default (shared=false, empty sharing lists). ✅ (2) Upload without interest returns 403. ✅ (3) User B cannot see A's private photo (mine=[], shared=[]). ✅ (4) A shares with B (user_ids=[B]) → B sees in 'shared' with is_mine=false and author info. ✅ (5) A sees photo in both 'mine' (shared=true) and 'shared'. ✅ (6) B cannot share A's upload (403). ✅ (7) B cannot delete A's upload (403) - REGRESSION FIX VERIFIED. ✅ (8) A unshares → B no longer sees it. ✅ (9) all_friends=true: friend B sees it, non-friend C doesn't. ✅ (10) group sharing: A creates group with B, shares group_ids=[g] → B sees it. ✅ (11) sanitization: A shares with non-friend C → C doesn't see it (ID dropped). ✅ (12) 404 on non-existent upload_id for share/unshare/delete. All album functionality working perfectly with correct privacy controls."
+
+  - task: "GET /api/me/active-moment endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint returns {active:false} if no pending moment. Else {active:true, event_id, event_name, venue, prompt, on_time, friends_captured}. Pending = user has interest (voy/estuve/me_interesa) in event with non-expired prompt and hasn't captured yet."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL 3 SCENARIOS (11 tests passed): ✅ (1) Fresh user with no interest → {active:false}. ✅ (2) User marks voy, admin triggers moment → {active:true, event_id, event_name, prompt, on_time:bool, friends_captured:int}. All required fields present and correct types. ✅ (3) After user uploads capture → {active:false}. Endpoint working perfectly for blocking capture gate."
+
+  - task: "Regression: existing endpoints after album redesign"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "REGRESSION TESTS (8 tests passed): ✅ POST /auth/login, GET /auth/me. ✅ GET /events. ✅ POST /events/{id}/interest. ✅ GET /events/{id}/moment/status, GET /events/{id}/moment/gallery. ✅ GET /groups. ✅ GET /friends. ✅ GET /me/badges. ✅ GET /rankings/world. ✅ GET /health. All existing endpoints working correctly, no regressions."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.4"
+  test_sequence: 5
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - Album Private + Selective Sharing + Active Moment
+      
+      🎉 ALL TESTS PASSED - 65/65 (100% success rate)
+      
+      ✅ NEW FEATURES TESTED (3/3 PASSED):
+      
+      1. Album Private + Selective Sharing (46 tests) ✅
+         - Upload is private by default (shared=false, empty lists)
+         - Upload without interest returns 403
+         - Privacy controls: B cannot see A's private photo
+         - Selective sharing: A shares with B → B sees in 'shared'
+         - Owner sees photo in both 'mine' and 'shared'
+         - Authorization: B cannot share/delete A's upload (403)
+         - Unshare: A unshares → B no longer sees it
+         - all_friends sharing: friend sees, non-friend doesn't
+         - group sharing: group member sees photo
+         - Sanitization: non-friend IDs dropped
+         - 404 on non-existent upload_id
+         - REGRESSION FIX VERIFIED: DELETE returns 403 for non-owner (was 200)
+      
+      2. GET /api/me/active-moment (11 tests) ✅
+         - Fresh user with no interest → {active:false}
+         - User marks voy + admin triggers → {active:true} with all fields
+         - After capture upload → {active:false}
+         - All required fields present: event_id, event_name, venue, prompt, on_time, friends_captured
+      
+      3. Regression Tests (8 tests) ✅
+         - All existing endpoints working: auth, events, interests, moment, groups, friends, badges, rankings, health
+         - No regressions found
+      
+      🎯 CONCLUSION:
+      All new album features working perfectly with correct privacy controls and authorization checks. The album delete regression fix is verified (non-owner gets 403). Active-moment endpoint working correctly for all scenarios. All existing functionality remains intact.
+      
+      Test file: /app/backend_test.py
+      Test credentials used: admin@quienva.app / admin123 + 5 fresh test users

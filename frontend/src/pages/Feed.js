@@ -16,10 +16,8 @@ import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2 }
 import { toast } from "sonner";
 
 const DATE_FILTERS = [
-  { key: "all", label: "Todos" },
-  { key: "descubrir", label: "Descubrir" },
-  { key: "hoy", label: "Hoy" },
   { key: "finde", label: "Este finde" },
+  { key: "hoy", label: "Hoy" },
   { key: "semana", label: "Próx. semana" },
   { key: "pasados", label: "Recuerdos" },
 ];
@@ -29,7 +27,7 @@ export default function Feed() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [dateFilter, setDateFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("finde");
   const [genre, setGenre] = useState("all");
   const [view, setView] = useState("dia");
   const [sale, setSale] = useState("all");
@@ -38,8 +36,7 @@ export default function Feed() {
   const cardRefs = useRef({});
 
   const isPastView = dateFilter === "pasados";
-  const isDiscover = dateFilter === "descubrir";
-  const isDefaultView = dateFilter === "all" && genre === "all";
+  const isDefaultView = dateFilter === "finde" && genre === "all";
 
   const { data: topEvent } = useQuery({
     queryKey: ["top-weekend"],
@@ -50,7 +47,7 @@ export default function Feed() {
   const { data: carousels } = useQuery({
     queryKey: ["carousels"],
     queryFn: async () => (await api.get("/events/carousels")).data,
-    enabled: isDefaultView && !isPastView && !isDiscover,
+    enabled: isDefaultView && !isPastView,
     staleTime: 60_000,
   });
 
@@ -63,7 +60,6 @@ export default function Feed() {
   const { data: events, isLoading } = useQuery({
     queryKey: ["events", dateFilter, genre],
     queryFn: async () => {
-      if (dateFilter === "descubrir") return (await api.get("/events/discover")).data;
       return (await api.get("/events", { params: { date_filter: dateFilter, genre } })).data;
     },
     staleTime: 30_000,
@@ -71,14 +67,41 @@ export default function Feed() {
 
   const setStatus = useMutation({
     mutationFn: async ({ eventId, status }) => (await api.post(`/events/${eventId}/interest`, { status })).data,
+    // Optimistic: flip my_status instantly across every cached list so the UI
+    // never freezes waiting for the network (fixes the Voy/Me interesa lag).
+    onMutate: async ({ eventId, status }) => {
+      await qc.cancelQueries({ queryKey: ["events"] });
+      const patchArr = (arr) =>
+        Array.isArray(arr) ? arr.map((e) => (e.id === eventId ? { ...e, my_status: status } : e)) : arr;
+      qc.getQueriesData({ queryKey: ["events"] }).forEach(([key, data]) => {
+        qc.setQueryData(key, patchArr(data));
+      });
+      qc.setQueryData(["carousels"], (c) =>
+        c
+          ? {
+              ...c,
+              top_weekend: patchArr(c.top_weekend),
+              friends_going: patchArr(c.friends_going),
+              discover_new: patchArr(c.discover_new),
+            }
+          : c
+      );
+    },
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["events"] });
-      qc.invalidateQueries({ queryKey: ["top-weekend"] });
-      qc.invalidateQueries({ queryKey: ["carousels"] });
       if (vars.status === "voy") toast.success("¡Apuntado! Tus amigos ya lo verán 🎉");
       if (vars.status === "estuve") toast.success("Guardado en tus recuerdos ✨");
     },
-    onError: () => toast.error("No se pudo actualizar"),
+    onError: () => {
+      toast.error("No se pudo actualizar");
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["carousels"] });
+    },
+    // Re-sync counts / friend avatars in the background without blocking the UI.
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["top-weekend"] });
+      qc.invalidateQueries({ queryKey: ["carousels"] });
+    },
   });
 
   // Deep-link: scroll to & highlight a shared event
@@ -108,9 +131,8 @@ export default function Feed() {
               {user?.city || "Palma de Mallorca"}
             </p>
             <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
-              {isPastView ? "Recuerdos" : isDiscover ? "Para ti" : "Los planes"}<span className="text-qv-primary">.</span>
+              {isPastView ? "Recuerdos" : "Los planes"}<span className="text-qv-primary">.</span>
             </h1>
-            {isDiscover && <p className="text-white/50 text-sm mt-1">Según los géneros a los que más vas.</p>}
           </div>
           <button
             onClick={() => navigate("/locales")}
@@ -128,7 +150,7 @@ export default function Feed() {
         <StreakBanner />
       </div>
 
-      {!isPastView && !isDiscover && (
+      {!isPastView && (
         <div className="px-4 pb-3">
           <FeedPlansControls view={view} setView={setView} sale={sale} setSale={setSale} />
         </div>
@@ -149,7 +171,7 @@ export default function Feed() {
         ))}
       </div>
 
-      {genres.length > 0 && !isPastView && !isDiscover && (
+      {genres.length > 0 && !isPastView && (
         <div className="flex overflow-x-auto hide-scrollbar gap-2 px-5 pb-4" data-testid="genre-filters">
           <button
             data-testid="filter-genre-all"
@@ -176,7 +198,7 @@ export default function Feed() {
       )}
 
       <div className="flex flex-col gap-4 px-4 pt-1">
-        {!isPastView && !isDiscover && !isDefaultView && topEvent && (topEvent.friends_going || []).length > 0 && (
+        {!isPastView && !isDefaultView && topEvent && (topEvent.friends_going || []).length > 0 && (
           <button
             data-testid="top-weekend-banner"
             onClick={() => navigate(`/event/${topEvent.id}`)}
@@ -212,7 +234,7 @@ export default function Feed() {
           <div className="flex justify-center py-20">
             <Loader2 className="w-7 h-7 text-qv-primary animate-spin" />
           </div>
-        ) : isPastView || isDiscover ? (
+        ) : isPastView ? (
           events && events.length > 0 ? (
             compact ? (
               <div className="grid grid-cols-2 gap-3" data-testid="feed-compact-grid">
@@ -228,7 +250,7 @@ export default function Feed() {
                   index={i}
                   highlight={highlightId === ev.id}
                   cardRef={(el) => (cardRefs.current[ev.id] = el)}
-                  pending={setStatus.isPending}
+                  pending={false}
                   onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
                 />
               ))
@@ -236,12 +258,8 @@ export default function Feed() {
           ) : (
             <div className="text-center py-20 px-6" data-testid="feed-empty">
               <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
-              <p className="text-white/60">
-                {isPastView ? "Aún no hay recuerdos guardados." : "No hay planes con estos filtros."}
-              </p>
-              <p className="text-white/40 text-sm mt-1">
-                {isPastView ? "Marca 'Estuve aquí' en eventos pasados." : "Prueba a cambiar la fecha o el género."}
-              </p>
+              <p className="text-white/60">Aún no hay recuerdos guardados.</p>
+              <p className="text-white/40 text-sm mt-1">Marca 'Estuve aquí' en eventos pasados.</p>
             </div>
           )
         ) : events && events.length > 0 ? (
@@ -250,7 +268,7 @@ export default function Feed() {
             compact={compact}
             highlightId={highlightId}
             cardRefs={cardRefs}
-            pending={setStatus.isPending}
+            pending={false}
             onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
             view={view}
             sale={sale}
@@ -264,7 +282,7 @@ export default function Feed() {
         )}
 
         {/* Curated carousels — below the main list so the parties come first */}
-        {!isPastView && !isDiscover && isDefaultView && carousels && (
+        {!isPastView && isDefaultView && carousels && (
           <div className="-mx-4 pt-2">
             <EventCarousel
               testId="carousel-top-weekend"
