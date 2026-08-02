@@ -9,7 +9,7 @@ import sys
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://8c7ddfbe-7582-4efe-beca-08a944bba005.preview.emergentagent.com/api"
+BASE_URL = "https://bereal-clone-1.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
