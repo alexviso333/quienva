@@ -54,6 +54,17 @@ VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:hola@quienva.app")
 
+# Cities the app operates in. `id` is the canonical value stored on users +
+# events (feed filters by exact match), `label` is what the UI shows.
+SUPPORTED_CITIES = [
+    {"id": "Palma de Mallorca", "label": "Palma de Mallorca", "emoji": "\U0001F3DD\uFE0F"},
+    {"id": "Ibiza", "label": "Ibiza", "emoji": "\U0001F305"},
+    {"id": "Madrid", "label": "Madrid", "emoji": "\U0001F306"},
+    {"id": "Barcelona", "label": "Barcelona", "emoji": "\U0001F3D9\uFE0F"},
+    {"id": "Marbella", "label": "Marbella / Puerto Ban\u00fas", "emoji": "\U0001F6E5\uFE0F"},
+]
+CITY_IDS = {c["id"] for c in SUPPORTED_CITIES}
+
 # In-memory TTL cache for expensive user-stats computation
 _STATS_CACHE = {}
 
@@ -391,6 +402,93 @@ async def create_session(user_id: str, token: Optional[str] = None) -> str:
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     return token
+
+
+# ---------------------------------------------------------------------------
+# Cities + social share (WhatsApp Open Graph preview)
+# ---------------------------------------------------------------------------
+@api_router.get("/cities")
+async def list_cities():
+    """Public list of supported cities for the registration / settings selector."""
+    return {"cities": SUPPORTED_CITIES}
+
+
+def _es_share_date(date_str: str) -> str:
+    _dias = ["lunes", "martes", "mi\u00e9rcoles", "jueves", "viernes", "s\u00e1bado", "domingo"]
+    _meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+    try:
+        d = date.fromisoformat(date_str)
+        return f"{_dias[d.weekday()]} {d.day} {_meses[d.month - 1]}"
+    except Exception:
+        return date_str or ""
+
+
+@api_router.get("/share/event/{event_id}")
+async def share_event(event_id: str, request: Request):
+    """HTML page with Open Graph tags so WhatsApp/Telegram/social show a rich,
+    compact card (the specific party poster + title + venue/date). Humans are
+    redirected to the SPA event page; crawlers read the meta tags."""
+    import html as _html
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    base = f"{proto}://{host}"
+    app_url = f"{base}/event/{event_id}"
+
+    if not ev:
+        return StarletteResponse(
+            content=f"<!doctype html><meta http-equiv=refresh content='0;url={base}/feed'>",
+            media_type="text/html",
+        )
+
+    name = ev.get("name") or "Fiesta"
+    venue = ev.get("venue") or ""
+    parts = [p for p in [venue, _es_share_date(ev.get("date", ""))] if p]
+    # price / sale-state line
+    tiers = ev.get("price_tiers") or []
+    prices = [t.get("price") for t in tiers if isinstance(t, dict) and t.get("price")]
+    state = ev.get("sale_state")
+    if state == "agotado":
+        parts.append("Agotado")
+    elif prices:
+        parts.append(f"desde {int(min(prices))}\u20ac")
+    desc = " \u00b7 ".join(parts)
+
+    img = ev.get("image_url") or ""
+    if img and not img.startswith("http"):
+        img = base + img
+
+    e = _html.escape
+    title = e(f"{name} \u2013 \u00bfQui\u00e9n va?")
+    og_title = e(name)
+    og_desc = e(desc)
+    og_img = e(img)
+    html_out = f"""<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="\u00bfQui\u00e9n va?">
+<meta property="og:title" content="{og_title}">
+<meta property="og:description" content="{og_desc}">
+<meta property="og:url" content="{e(app_url)}">
+{f'<meta property="og:image" content="{og_img}"><meta property="og:image:width" content="1080"><meta property="og:image:height" content="1080">' if og_img else ''}
+<meta name="twitter:card" content="{'summary_large_image' if og_img else 'summary'}">
+<meta name="twitter:title" content="{og_title}">
+<meta name="twitter:description" content="{og_desc}">
+{f'<meta name="twitter:image" content="{og_img}">' if og_img else ''}
+<meta http-equiv="refresh" content="0; url={e(app_url)}">
+<script>window.location.replace({json.dumps(app_url)});</script>
+</head>
+<body style="background:#0a0a0b;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:40px">
+<p>Abriendo {og_title} en \u00bfQui\u00e9n va?\u2026</p>
+<p><a style="color:#00f0ff" href="{e(app_url)}">Toca aqu\u00ed si no se abre</a></p>
+</body>
+</html>"""
+    return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
+                             headers={"Cache-Control": "public, max-age=600"})
 
 
 # ---------------------------------------------------------------------------

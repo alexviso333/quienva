@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl } from "@/lib/api";
+import api, { mediaUrl, API } from "@/lib/api";
 import { timeSuffix } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { EventAlbum } from "@/components/EventAlbum";
@@ -113,8 +113,8 @@ export default function EventDetail() {
 
   const mapQuery = encodeURIComponent(`${event.address || event.venue}, ${event.city || "Palma de Mallorca"}`);
   const shareWhatsApp = () => {
-    const link = `${window.location.origin}/event/${event.id}`;
-    const text = `${event.name} · ${event.venue} · ${formatDate(event.date)} — ¿vienes? ${link}`;
+    const link = `${API}/share/event/${event.id}`;
+    const text = `${event.name} — ¿vienes? 👀\n${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   };
 

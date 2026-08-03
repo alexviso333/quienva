@@ -28,6 +28,12 @@ export default function Settings() {
   const pushSupported = isPushSupported();
   const [privacy, setPrivacy] = useState(user?.attendance_privacy || "amigos");
   const [privacyBusy, setPrivacyBusy] = useState(false);
+  const { data: citiesData } = useQuery({
+    queryKey: ["cities"],
+    queryFn: async () => (await api.get("/cities")).data,
+    staleTime: 1000 * 60 * 60,
+  });
+  const cities = citiesData?.cities || [{ id: "Palma de Mallorca", label: "Palma de Mallorca", emoji: "" }];
   const [momentPriv, setMomentPriv] = useState(user?.moment_privacy || "amigos");
   const [momentBusy, setMomentBusy] = useState(false);
   const [blockedOpen, setBlockedOpen] = useState(false);
@@ -176,7 +182,21 @@ export default function Settings() {
         </div>
         <div>
           <label className="text-xs text-white/40 font-bold">Ciudad</label>
-          <Input data-testid="profile-city" value={city} onChange={(e) => setCity(e.target.value)} className="h-12 mt-1.5 bg-white/5 border-white/15 rounded-2xl text-white" />
+          <select
+            data-testid="profile-city"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            className="w-full h-12 mt-1.5 px-3 bg-white/5 border border-white/15 rounded-2xl text-white appearance-none"
+          >
+            {cities.map((c) => (
+              <option key={c.id} value={c.id} className="bg-[#121215] text-white">
+                {c.emoji ? `${c.emoji} ` : ""}{c.label}
+              </option>
+            ))}
+            {!cities.some((c) => c.id === city) && (
+              <option value={city} className="bg-[#121215] text-white">{city}</option>
+            )}
+          </select>
         </div>
         <button data-testid="profile-save" onClick={save} disabled={saving} className="h-12 rounded-2xl bg-qv-primary text-white font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60">
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-4 h-4" /> Guardar cambios</>}

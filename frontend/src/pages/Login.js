@@ -15,6 +15,13 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [invitedBy, setInvitedBy] = useState(null);
   const [form, setForm] = useState({ email: "", password: "", name: "", username: "", city: "Palma de Mallorca", birthdate: "", phone: "" });
+  const [cities, setCities] = useState([{ id: "Palma de Mallorca", label: "Palma de Mallorca", emoji: "" }]);
+
+  useEffect(() => {
+    api.get("/cities").then(({ data }) => {
+      if (data?.cities?.length) setCities(data.cities);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     // WARMUP PING: fire-and-forget health check to wake up the backend
@@ -205,6 +212,21 @@ export default function Login() {
                 onChange={update("phone")}
                 className="h-12 bg-white/5 border-white/15 rounded-2xl text-white placeholder:text-white/40"
               />
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-white/40 font-bold ml-1">Tu ciudad</label>
+                <select
+                  data-testid="auth-city"
+                  value={form.city}
+                  onChange={update("city")}
+                  className="w-full h-12 mt-1 px-3 bg-white/5 border border-white/15 rounded-2xl text-white appearance-none"
+                >
+                  {cities.map((c) => (
+                    <option key={c.id} value={c.id} className="bg-[#121215] text-white">
+                      {c.emoji ? `${c.emoji} ` : ""}{c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </>
           )}
           <Input

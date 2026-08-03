@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import api, { mediaUrl } from "@/lib/api";
+import api, { mediaUrl, API } from "@/lib/api";
 import { timeSuffix } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -110,8 +110,10 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
 
   const shareWhatsApp = (e) => {
     if (e) e.stopPropagation();
-    const link = `${window.location.origin}/event/${event.id}`;
-    const text = `${event.name} · ${event.venue} · ${formatDate(event.date)}${timeSuffix(event.time)} — míralo en ¿Quién va? y dime si vienes 👀 ${link}`;
+    // Share the backend OG page so WhatsApp renders a compact card with the
+    // party poster instead of a long, spammy text line.
+    const link = `${API}/share/event/${event.id}`;
+    const text = `${event.name} — ¿vienes? 👀\n${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   };
 
