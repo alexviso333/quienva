@@ -9,7 +9,7 @@ import time
 from datetime import datetime, date, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://cdc89f20-639c-44d3-b016-c6f36b367666.preview.emergentagent.com/api"
+BASE_URL = "https://night-hub-7.preview.emergentagent.com/api"
 
 # Test credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
