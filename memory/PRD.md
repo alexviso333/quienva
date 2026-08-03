@@ -176,3 +176,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Auto-update**: los 5 venues-fuente + Ushuaïa + Hï entran en el scheduler de 30 min como el resto (precios, agotado, fiestas nuevas + push).
 - **Notas/limitaciones**: (a) algunos eventos Xceed son diurnos/gratuitos (p.ej. "Good Mornings" 11:00, "GRATIS* VIERNES") — se pueden filtrar más si molesta; (b) los venues de Xceed aún NO tienen ficha de Locale/pin en el mapa (aparecen en el feed; el mapa usa el directorio). Mejora futura: crear locales dinámicos para venues Xceed usando su geo.
 
+## Update 2026-08-03 j — Pins de Xceed en el Mapa (locales dinámicos por geo)
+- Nueva `sync_xceed_venues_to_directory()` (server.py): agrupa los eventos Xceed por venue+ciudad y crea/actualiza una ficha de Locale (colección `venues`, marcador `xceed_venue: True`) con la geo embebida en los eventos, imagen y ciudad. Evita duplicar venues ya cubiertos (curados/FourVenues) comparando por nombre normalizado (`_norm_name`, sin acentos/puntuación). Se ejecuta al arranque y tras cada `run_all_scrapers` (idempotente).
+- `/api/venues`: los venues `xceed_venue` reciben `upcoming_events` vía `_xceed_venue_counts()` (conteo por nombre normalizado + ciudad). `/api/venues/{id}`: para venues Xceed lista los eventos por `venue`==nombre + ciudad + fecha futura (los eventos Xceed no tienen un scraped_venue por local).
+- Añadido `import unicodedata`.
+- **Verificado (API)**: 31 locales Xceed creados con geo real; Barcelona 11 (City Hall, Jamboree Dance/Jazz…), Ibiza 4 (TANTRA, 528, Ibiza Rocks, Playa San Antonio), Palma 4 (Es Gremi, Sotano Club…), todos con lat/lng y `upcoming_events` correctos. Ficha TANTRA IBIZA: xceed_venue=True, geo y 10 eventos con precio. `MapPage.js` pinta un Marker por cada venue con lat/lng → los pins salen en el mapa con su badge de nº de eventos.
+
+

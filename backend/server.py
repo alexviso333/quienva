@@ -20,6 +20,7 @@ import bcrypt
 import secrets
 import requests
 import re
+import unicodedata
 import json
 import asyncio
 from datetime import datetime, timezone, timedelta, date, time as dtime
@@ -5370,6 +5371,10 @@ async def on_startup():
     except Exception as _:
         pass
     try:
+        await sync_xceed_venues_to_directory()
+    except Exception as _:
+        pass
+    try:
         await migrate_midnight_events()
     except Exception as _:
         pass
@@ -6098,6 +6103,10 @@ async def run_all_scrapers():
         await enrich_venue_directory()
     except Exception:
         pass
+    try:
+        await sync_xceed_venues_to_directory()
+    except Exception:
+        pass
     return results
 
 
@@ -6728,6 +6737,80 @@ async def sync_scraper_venues_to_directory():
         logger.warning(f"sync_scraper_venues_to_directory failed: {e}")
 
 
+def _norm_name(s: str) -> str:
+    """Accent/punctuation-insensitive key for venue-name matching."""
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+async def sync_xceed_venues_to_directory():
+    """Create/refresh a Locale (directory) entry for each real venue behind Xceed
+    events, using the geo embedded in the events, so they appear on the Map.
+    Venues already covered by a curated / FourVenues locale are skipped."""
+    try:
+        existing = {}
+        async for v in db.venues.find({"xceed_venue": {"$ne": True}},
+                                      {"_id": 0, "name": 1, "city": 1}):
+            existing.setdefault(v.get("city") or "", set()).add(_norm_name(v.get("name")))
+        pipeline = [
+            {"$match": {"external_id": {"$regex": "^xc:"}, "lat": {"$ne": None}}},
+            {"$group": {"_id": {"venue": "$venue", "city": "$city"},
+                        "lat": {"$first": "$lat"}, "lng": {"$first": "$lng"},
+                        "img": {"$max": "$venue_image"}, "n": {"$sum": 1}}},
+        ]
+        created = updated = 0
+        async for r in db.events.aggregate(pipeline):
+            name = (r["_id"].get("venue") or "").strip()
+            city = r["_id"].get("city") or ""
+            if not name or not city:
+                continue
+            if _norm_name(name) in existing.get(city, set()):
+                continue  # already a curated / FourVenues locale
+            doc_set = {
+                "name": name, "city": city, "zone": city, "type": "discoteca",
+                "xceed_venue": True, "scraper_slug": "",
+                "lat": r["lat"], "lng": r["lng"], "active": True,
+            }
+            if r.get("img"):
+                doc_set["image_url"] = r["img"]
+            found = await db.venues.find_one(
+                {"xceed_venue": True, "name": name, "city": city}, {"_id": 0, "id": 1})
+            if found:
+                await db.venues.update_one({"id": found["id"]}, {"$set": doc_set})
+                updated += 1
+            else:
+                await db.venues.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "free_entry": False, "open_days": [], "open_days_manual": False,
+                    "instagram": "", "buy_url": "", "open_time": "", "close_time": "",
+                    "address": "", "description": "", "order": 100,
+                    "auto_generated": True,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    **doc_set,
+                })
+                created += 1
+        if created or updated:
+            logger.info(f"sync_xceed_venues_to_directory: +{created} new, {updated} updated")
+    except Exception as e:
+        logger.warning(f"sync_xceed_venues_to_directory failed: {e}")
+
+
+async def _xceed_venue_counts() -> dict:
+    """Map (normalized venue name, city) -> count of upcoming Xceed events."""
+    today = date.today().isoformat()
+    counts = {}
+    try:
+        pipeline = [
+            {"$match": {"external_id": {"$regex": "^xc:"}, "date": {"$gte": today}}},
+            {"$group": {"_id": {"v": "$venue", "c": "$city"}, "n": {"$sum": 1}}},
+        ]
+        async for r in db.events.aggregate(pipeline):
+            counts[(_norm_name(r["_id"].get("v")), r["_id"].get("c"))] = r["n"]
+    except Exception:
+        pass
+    return counts
+
+
 async def enrich_venue_directory():
     """Derive coords, cover image and opening days for directory venues from
     their scraped events. open_days is only auto-set when not manually edited."""
@@ -6827,9 +6910,13 @@ async def list_venues(zone: str = None, type: str = None, user: dict = Depends(g
         if s.get("slug"):
             slug_to_id[s["slug"]] = s["id"]
     counts = await _venue_event_counts()
+    xc_counts = await _xceed_venue_counts()
     for v in venues:
-        vid = slug_to_id.get(v.get("scraper_slug") or "")
-        v["upcoming_events"] = counts.get(vid, 0) if vid else 0
+        if v.get("xceed_venue"):
+            v["upcoming_events"] = xc_counts.get((_norm_name(v.get("name")), v.get("city")), 0)
+        else:
+            vid = slug_to_id.get(v.get("scraper_slug") or "")
+            v["upcoming_events"] = counts.get(vid, 0) if vid else 0
     return venues
 
 
@@ -6840,7 +6927,18 @@ async def get_venue(venue_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Local no encontrado")
     events = []
     slug = v.get("scraper_slug") or ""
-    if slug:
+    if v.get("xceed_venue"):
+        today = date.today().isoformat()
+        async for e in db.events.find(
+            {"external_id": {"$regex": "^xc:"}, "venue": v.get("name"),
+             "city": v.get("city"), "date": {"$gte": today}}, {"_id": 0}
+        ).sort("date", 1).limit(30):
+            events.append({
+                "id": e["id"], "name": e["name"], "date": e["date"], "time": e.get("time", ""),
+                "image_url": e.get("image_url", ""), "sale_state": e.get("sale_state"),
+                "current_price": next((t.get("price") for t in (e.get("price_tiers") or []) if not t.get("sold_out")), None),
+            })
+    elif slug:
         sv = await db.scraped_venues.find_one({"slug": slug}, {"_id": 0, "id": 1})
         if sv:
             today = date.today().isoformat()
