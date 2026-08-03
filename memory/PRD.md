@@ -182,4 +182,13 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Añadido `import unicodedata`.
 - **Verificado (API)**: 31 locales Xceed creados con geo real; Barcelona 11 (City Hall, Jamboree Dance/Jazz…), Ibiza 4 (TANTRA, 528, Ibiza Rocks, Playa San Antonio), Palma 4 (Es Gremi, Sotano Club…), todos con lat/lng y `upcoming_events` correctos. Ficha TANTRA IBIZA: xceed_venue=True, geo y 10 eventos con precio. `MapPage.js` pinta un Marker por cada venue con lat/lng → los pins salen en el mapa con su badge de nº de eventos.
 
+## Update 2026-08-03 k — Admin por ciudad + fiestas pasadas + rendimiento del feed
+- **Panel admin por ciudad** (`pages/Admin.js`): selector de ciudad arriba (Mallorca/Ibiza/Madrid/Barcelona/Marbella; testids `admin-city-<valor>`) = un panel de fiestas por ciudad. Dentro, 3 subsecciones (testids `admin-tab-upcoming|momentos|past`): **Próximas** (con botón "Nueva fiesta" + form con selector de ciudad), **Momentos** (fiestas agrupadas por día, botón rayo por fila para lanzar "El Momento"), **Pasadas** (fiestas ya celebradas). Cada fila tiene botón de **stats** (`admin-stats-<id>`) que abre `AdminEventStats`.
+- **Backend** `GET /api/admin/events`: nuevos params `city` (region-aware vía `city_query_value`) y `scope` (upcoming/past/all) + proyección ligera (antes devolvía los ~1700 eventos completos → mucho más rápido).
+- **Auto-borrado 3 días**: `cleanup_old_events()` borra eventos (y sus interests/tickets/follows/metrics/history/album/moment_captures) con fecha < hoy-3. Se ejecuta al arranque y tras cada `run_all_scrapers` (cada 30 min). → las stats de fiestas pasadas viven 3 días y luego desaparecen; también mantiene la BD ligera.
+- **Rendimiento del feed**: el backend ya iba rápido (0,25s / 700KB para 765 eventos, sin N+1). El cuello era el frontend montando cientos de tarjetas de golpe. `FeedPlans.js` ahora hace **renderizado progresivo por nº de tarjetas** (CARD_PAGE=20 iniciales + IntersectionObserver `feed-load-more` que revela más al hacer scroll) en vistas Día y Discoteca. Imágenes con `loading="lazy"`.
+- **00:00→23:59**: confirmado que a nivel de datos NO hay eventos a las 00:00 (todos desplazados a 23:59 del día anterior en ingesta + migración). El usuario veía una versión vieja (no había hecho push a GitHub). Sin cambios adicionales necesarios.
+- **Verificado**: testing agent (frontend) PASÓ panel admin (ciudades + subsecciones + stats) y paginación del feed. Endpoints admin por curl: Madrid 199, Ibiza 765, Barcelona 450, past filtra bien. Ajustes finales (paginación por tarjetas, DialogTitle a11y en stats, useMemo) compilan limpio.
+
+
 

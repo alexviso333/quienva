@@ -36,11 +36,11 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
   const [selDay, setSelDay] = useState(null);
 
   // Progressive rendering: mounting hundreds of cards at once is what makes the
-  // feed feel slow, so we reveal day/venue groups in pages as the user scrolls.
-  const PAGE = 6;
-  const [limit, setLimit] = useState(PAGE);
+  // feed feel slow, so we reveal cards in pages (by card count) as the user scrolls.
+  const CARD_PAGE = 20;
+  const [limit, setLimit] = useState(CARD_PAGE);
   const sentinelRef = useRef(null);
-  useEffect(() => { setLimit(PAGE); }, [view, sale, events]);
+  useEffect(() => { setLimit(CARD_PAGE); }, [view, sale, events]);
 
   const shown = useMemo(() => {
     let list = events || [];
@@ -101,13 +101,21 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
 
   const selDayEvents = selDay ? shown.filter((e) => e.date === selDay) : [];
 
-  const groupCount = view === "dia" ? byDay.length : view === "disco" ? byVenue.length : 0;
-  const hasMore = groupCount > limit;
+  const activeGroups = useMemo(
+    () => (view === "dia" ? byDay : view === "disco" ? byVenue : []),
+    [view, byDay, byVenue]
+  );
+  const shownGroups = useMemo(() => {
+    const out = []; let n = 0;
+    for (const g of activeGroups) { if (n >= limit) break; out.push(g); n += g.items.length; }
+    return out;
+  }, [activeGroups, limit]);
+  const hasMore = shownGroups.length < activeGroups.length;
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el || !hasMore) return;
     const io = new IntersectionObserver(
-      (entries) => { if (entries[0].isIntersecting) setLimit((l) => l + PAGE); },
+      (entries) => { if (entries[0].isIntersecting) setLimit((l) => l + CARD_PAGE); },
       { rootMargin: "800px" }
     );
     io.observe(el);
@@ -124,7 +132,7 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
       )}
 
       {/* DÍA */}
-      {view === "dia" && byDay.slice(0, limit).map((g) => (
+      {view === "dia" && shownGroups.map((g) => (
         <div key={g.date} className="flex flex-col gap-3">
           <div className="flex items-center gap-2 pt-1">
             <span className="text-qv-primary font-display font-black text-lg">{dayLabel(g.date)}</span>
@@ -136,7 +144,7 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
       ))}
 
       {/* DISCOTECA */}
-      {view === "disco" && byVenue.slice(0, limit).map((g) => (
+      {view === "disco" && shownGroups.map((g) => (
         <div key={g.venue} className="flex flex-col gap-3">
           <div className="flex items-center gap-2 pt-1">
             <Building2 className="w-4 h-4 text-qv-secondary" />

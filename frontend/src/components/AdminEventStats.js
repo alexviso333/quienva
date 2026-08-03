@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api, { mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   X, Eye, Star, Ticket, Users, Zap, Images, Bell, Flame, Euro, TrendingUp,
   TrendingDown, Sparkles, Lock, Loader2, ExternalLink, MousePointerClick, Heart,
@@ -89,6 +89,7 @@ export default function AdminEventStats({ eventId, onClose }) {
   return (
     <Dialog open={!!eventId} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-[#0b0b0d] border-white/10 text-white max-w-md rounded-2xl p-0 overflow-hidden max-h-[88vh] flex flex-col">
+        <DialogTitle className="sr-only">Estadísticas del evento</DialogTitle>
         {isLoading || !ev ? (
           <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 text-qv-primary animate-spin" /></div>
         ) : (
