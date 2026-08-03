@@ -105,3 +105,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Descubrir** (`GET /api/discover` + página `/descubrir`, acceso desde Amigos): perfiles recomendados de tu ciudad (excluye amigos/pendientes/bloqueados/uno mismo) + feed de "El Momento" público (solo de quien activó moment_privacy=publico). Pensado para recién llegados/guiris. Cargado bajo demanda (no afecta al feed).
 - NOTA: .env (backend+frontend) borrados otra vez en dev y restaurados (DB quienva, admin re-seed, VAPID regenerado). Multi-ciudad (Fase 2) aplazada a petición del usuario.
 - Backend probado: 7/7 OK. Frontend compila; login verificado en pantalla.
+
+## Update 2026-08-03 b — Descubrir v2 (filtros + likes + onboarding guiri)
+- **Descubrir con filtros**: `/discover` calcula `shared_events` por persona (fiestas de ESTA semana a las que vais los dos). Toggle "Van a tus fiestas (N)" + badge "Coincidís en N". Estas personas suben arriba en el orden.
+- **Likes en El Momento público**: nueva colección `capture_reactions` + `POST /api/captures/{id}/like` (toggle, notifica al autor). `/discover` incluye `likes` e `i_liked` por momento. UI: corazón con contador en rejilla y en el visor (optimista). Índices añadidos.
+- **Onboarding guiri**: en el Feed, si el usuario no tiene amigos, banner "¿Nuevo por aquí?" a Descubrir + auto-abre Descubrir una vez (flag localStorage `qv_discover_seen`).
+- Backend probado: 21/21 OK.
+- PENDIENTE debatir con usuario: cómo surfacear fiestas GRATIS/pubs (hoy el feed solo muestra eventos scrapeados de FourVenues = de pago con comisión; los pubs están escondidos en /locales).
