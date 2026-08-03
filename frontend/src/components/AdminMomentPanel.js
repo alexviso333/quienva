@@ -13,7 +13,7 @@ import { toast } from "sonner";
  *  - fire manually right now
  *  - pause/unpause per event
  */
-export default function AdminMomentPanel() {
+export default function AdminMomentPanel({ embedded = false }) {
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState(null);
   const [hour, setHour] = useState(3);
@@ -126,25 +126,40 @@ export default function AdminMomentPanel() {
   };
 
   return (
-    <div className="px-4 mt-6" data-testid="admin-moment-panel">
-      <div className="flex items-center gap-2 mb-2">
-        <Moon className="w-4 h-4 text-fuchsia-300" />
-        <h2 className="font-display text-base font-bold text-white flex-1">
-          El Momento · esta noche
-        </h2>
-        <button
-          onClick={() => randomizeAll.mutate()}
-          disabled={randomizeAll.isPending || events.length === 0}
-          className="text-xs font-bold text-black bg-fuchsia-300 rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
-          data-testid="moment-randomize-all"
-        >
-          <Shuffle className="w-3.5 h-3.5" /> Randomizar todos
-        </button>
-      </div>
-      <p className="text-white/40 text-[11px] mb-3 leading-snug">
-        Cada noche, entre las 01:00 y las 05:59, saltará una foto tipo BeReal a los que van.
-        Aquí controlas a qué hora exacta en cada fiesta.
-      </p>
+    <div className={embedded ? "mt-3" : "px-4 mt-6"} data-testid="admin-moment-panel">
+      {embedded ? (
+        <div className="flex items-center justify-end mb-2">
+          <button
+            onClick={() => randomizeAll.mutate()}
+            disabled={randomizeAll.isPending || events.length === 0}
+            className="text-xs font-bold text-black bg-fuchsia-300 rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
+            data-testid="moment-randomize-all"
+          >
+            <Shuffle className="w-3.5 h-3.5" /> Randomizar todos
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 mb-2">
+            <Moon className="w-4 h-4 text-fuchsia-300" />
+            <h2 className="font-display text-base font-bold text-white flex-1">
+              El Momento · esta noche
+            </h2>
+            <button
+              onClick={() => randomizeAll.mutate()}
+              disabled={randomizeAll.isPending || events.length === 0}
+              className="text-xs font-bold text-black bg-fuchsia-300 rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
+              data-testid="moment-randomize-all"
+            >
+              <Shuffle className="w-3.5 h-3.5" /> Randomizar todos
+            </button>
+          </div>
+          <p className="text-white/40 text-[11px] mb-3 leading-snug">
+            Cada noche, entre las 01:00 y las 05:59, saltará una foto tipo BeReal a los que van.
+            Aquí controlas a qué hora exacta en cada fiesta.
+          </p>
+        </>
+      )}
 
       {isLoading && (
         <div className="py-10 flex justify-center">

@@ -54,6 +54,7 @@ export default function AdminDashboard() {
   const { data: dashboard } = useQuery({ queryKey: ["admin-dashboard"], queryFn: async () => (await api.get("/admin/dashboard")).data, staleTime: 30_000 });
   const { data: pendingTickets = [] } = useQuery({ queryKey: ["admin-tickets", "pending"], queryFn: async () => (await api.get("/admin/tickets?status=pending")).data, staleTime: 20_000 });
   const { data: funnel } = useQuery({ queryKey: ["admin-funnel", "all"], queryFn: async () => (await api.get("/admin/funnel?scope=all")).data, staleTime: 30_000, enabled: tab === "fiestas" || tab === "dinero" });
+  const { data: momentEvents = [] } = useQuery({ queryKey: ["admin-moments"], queryFn: async () => (await api.get("/admin/moments")).data, staleTime: 15_000, enabled: tab === "fiestas" });
 
   const confirmTicket = useMutation({
     mutationFn: async ({ purchase_id, confirmed }) => (await api.post("/admin/tickets/confirm", { purchase_id, confirmed })).data,
@@ -215,8 +216,16 @@ export default function AdminDashboard() {
       {/* ---------------- FIESTAS ---------------- */}
       {tab === "fiestas" && (
         <div className="px-4 pt-4">
-          <AdminMomentPanel />
-          <h2 className="font-display text-base font-bold text-white mb-2 mt-2 flex items-center gap-2"><PartyPopper className="w-4 h-4 text-qv-primary" /> Todas las fiestas</h2>
+          {/* El Momento · esta noche (colapsable, compacto) */}
+          <button onClick={() => setMomentOpen((o) => !o)} data-testid="admin-moment-toggle" className="w-full flex items-center gap-2 rounded-2xl bg-white/[0.04] border border-white/10 p-3 active:scale-[0.99] text-left">
+            <Moon className="w-4 h-4 text-fuchsia-300 shrink-0" />
+            <span className="font-display text-base font-bold text-white">El Momento · esta noche</span>
+            <span className="text-[11px] text-white/60 bg-fuchsia-400/20 rounded-full px-2 py-0.5" data-testid="admin-moment-count">{momentEvents.length}</span>
+            {momentOpen ? <ChevronDown className="w-5 h-5 text-white/40 ml-auto" /> : <ChevronRight className="w-5 h-5 text-white/40 ml-auto" />}
+          </button>
+          {momentOpen && <AdminMomentPanel embedded />}
+
+          <h2 className="font-display text-base font-bold text-white mb-2 mt-6 flex items-center gap-2"><PartyPopper className="w-4 h-4 text-qv-primary" /> Todas las fiestas</h2>
           <p className="text-white/40 text-xs mb-3">Toca una fiesta para ver estadísticas completas e historial de precio/estado.</p>
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -225,27 +234,27 @@ export default function AdminDashboard() {
           {!funnel ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-qv-primary animate-spin" /></div>
           ) : (
-            <div className="flex flex-col gap-1.5">
-              {funnelRows.map((r) => {
-                const sl = SALE_LABEL[r.sale_state] || SALE_LABEL.no_a_la_venta;
-                return (
-                  <button key={r.id} data-testid={`admin-event-row-${r.id}`} onClick={() => setStatsEventId(r.id)} className="text-left rounded-xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center gap-3 active:scale-[0.99]">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-white truncate">{r.name}</p>
-                      <p className="text-white/45 text-[11px] truncate">{r.venue} · {r.date}</p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-white/50">
-                        <span className="flex items-center gap-0.5"><Users className="w-3 h-3 text-qv-primary" />{r.going}</span>
-                        <span className="flex items-center gap-0.5"><Star className="w-3 h-3 text-yellow-300" />{r.interested}</span>
-                        <span className="flex items-center gap-0.5"><Ticket className="w-3 h-3 text-emerald-300" />{r.tickets}</span>
-                        <span className={`px-1.5 py-0.5 rounded-full ${sl.c}`}>{r.price ? `${Math.round(r.price)}€ · ` : ""}{sl.t}</span>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-white/30 shrink-0" />
-                  </button>
-                );
-              })}
-              {funnelRows.length === 0 && <p className="text-center text-white/40 text-sm py-8">Ninguna fiesta coincide</p>}
-            </div>
+            <>
+              {/* Próximas (visibles siempre) */}
+              <div className="flex flex-col gap-1.5" data-testid="admin-upcoming-list">
+                {upcomingRows.map(EventRow)}
+                {upcomingRows.length === 0 && <p className="text-center text-white/40 text-sm py-6">No hay fiestas próximas{eventSearch ? " que coincidan" : ""}.</p>}
+              </div>
+
+              {/* Fiestas pasadas (colapsable, colapsado por defecto) */}
+              <button onClick={() => setPastOpen((o) => !o)} data-testid="admin-past-toggle" className="w-full flex items-center gap-2 rounded-2xl bg-white/[0.04] border border-white/10 p-3 mt-4 active:scale-[0.99] text-left">
+                <History className="w-4 h-4 text-white/50 shrink-0" />
+                <span className="font-display text-sm font-bold text-white">Fiestas pasadas</span>
+                <span className="text-[11px] text-white/60 bg-white/10 rounded-full px-2 py-0.5" data-testid="admin-past-count">{pastRows.length}</span>
+                {pastOpen ? <ChevronDown className="w-5 h-5 text-white/40 ml-auto" /> : <ChevronRight className="w-5 h-5 text-white/40 ml-auto" />}
+              </button>
+              {pastOpen && (
+                <div className="flex flex-col gap-1.5 mt-2" data-testid="admin-past-list">
+                  {pastRows.map(EventRow)}
+                  {pastRows.length === 0 && <p className="text-center text-white/40 text-sm py-6">No hay fiestas pasadas (se borran a los 3 días).</p>}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
