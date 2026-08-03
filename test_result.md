@@ -116,6 +116,34 @@ user_problem_statement: |
   código único y puntos para ambas partes.
 
 backend:
+  - task: "Multi-city expansion: /api/cities + 4 new cities auto via FourVenues"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added SUPPORTED_CITIES + public GET /api/cities. Seeded ~36 new FourVenues venues (verified live) across Ibiza/Madrid/Barcelona/Marbella, each with correct city so scraper assigns city and feed filters by user.city. Mallorca untouched. run_all_scrapers bounded to 4 concurrent venues; new-event push suppressed on a venue's first run to avoid onboarding flood. Non-FourVenues superclubs added to venue directory with buy_url."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL MULTI-CITY FEATURES (33 tests, 100% pass): ✅ (1) GET /api/cities PUBLIC endpoint → 200 with exactly 5 cities: 'Palma de Mallorca', 'Ibiza', 'Madrid', 'Barcelona', 'Marbella'. Each city has id, label, emoji fields. ✅ (2) CITY FEED FILTERING: Registered users with each city and verified GET /api/events returns ONLY events matching that city. Results: Ibiza (628 events, all Ibiza), Madrid (149 events, all Madrid), Barcelona (401 events, all Barcelona), Marbella (217 events, all Marbella), Palma de Mallorca (150 events, all Palma de Mallorca). NO LEAKAGE between cities - perfect filtering. ✅ (3) REGRESSION: POST /auth/register works with all 5 city values. POST /auth/login works. GET /events returns 401 without token. All functionality working perfectly. Dev DB contains ~1545 scraped events across all cities."
+  - task: "WhatsApp/social share OG page (GET /api/share/event/{id})"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New GET /api/share/event/{id} returns HTML with Open Graph + Twitter meta (og:title=name, og:description=venue · date · price, og:image=specific party poster absolute URL) + redirect to /event/{id}; missing event redirects to /feed. Frontend share now uses this backend URL for a compact WhatsApp card."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SHARE OG FEATURES (10 tests, 100% pass): ✅ (1) GET /api/share/event/{valid_id} WITHOUT auth → 200 with Content-Type text/html. ✅ (2) HTML contains all required Open Graph meta tags: og:title (event name), og:description (venue · date · price), og:image (absolute HTTPS URL to event poster). Example: og:image='https://www.fourvenues.com/cdn-cgi/imagedelivery/...' ✅ (3) HTML contains redirect mechanisms: meta http-equiv='refresh' AND window.location.replace() JS redirect, both pointing to /event/{id}. ✅ (4) GET /api/share/event/doesnotexist-123 → 200 HTML redirecting to /feed (no crash, graceful fallback). WhatsApp share functionality working perfectly with rich preview cards."
   - task: "Chat photos (DM + group image_url) + /chat/upload multi"
     implemented: true
     working: true
@@ -948,7 +976,9 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Multi-city expansion: /api/cities + 4 new cities auto via FourVenues"
+    - "WhatsApp/social share OG page (GET /api/share/event/{id})"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -956,6 +986,22 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
+      ITERATION multi-city + WhatsApp share. Test ONLY these new backend features
+      (admin@quienva.app/admin123; register normal users as needed):
+      1) GET /api/cities (PUBLIC, no auth) -> 200 {cities:[{id,label,emoji}, ...]} with 5 cities
+         including exactly these ids: "Palma de Mallorca", "Ibiza", "Madrid", "Barcelona", "Marbella".
+      2) CITY FEED FILTER: Register a NEW user with city:"Ibiza" -> GET /api/events (auth) returns
+         events and EVERY event has city=="Ibiza" (no Mallorca leakage). Repeat with city:"Madrid",
+         "Barcelona", "Marbella": each returns >0 events all matching that city. Register a user with
+         city:"Palma de Mallorca": all returned events city=="Palma de Mallorca" (regression, Mallorca
+         must be unaffected). Note: events already seeded in dev DB.
+      3) SHARE OG PAGE: pick an event id from GET /api/events. GET /api/share/event/{id} (NO auth)
+         -> 200, Content-Type text/html, body contains <meta property="og:title" ...>, og:description,
+         og:image (absolute http URL = the event poster), and a redirect to /event/{id}. GET
+         /api/share/event/doesnotexist -> 200 HTML redirecting to /feed (no crash).
+      4) Regression: POST /auth/register still works with new city values; POST /auth/login; GET /events
+         still requires auth (401 without token).
+
       ITERATION 2 (Descubrir enhancements). Test ONLY these (admin@quienva.app/admin123; register normal users as needed):
       1) CAPTURE LIKE: POST /api/captures/{capture_id}/like toggles a like.
          - Need a capture: register user U, create an event as admin (POST /api/admin/events), U marks voy (POST /api/events/{id}/interest {status:"voy"}), admin triggers moment (POST /api/admin/events/{id}/moment/trigger), U uploads a capture (POST /api/events/{id}/moment/upload, multipart file field 'file', image). Get capture id from GET /api/events/{id}/moment/gallery.
@@ -3386,3 +3432,68 @@ agent_communication:
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
         Base URL: https://nightlife-multi-city.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
+
+  - agent: "main"
+    message: |
+      ITERATION multi-city + WhatsApp share. Test ONLY these new backend features
+      (admin@quienva.app/admin123; register normal users as needed):
+      1) GET /api/cities (PUBLIC, no auth) -> 200 {cities:[{id,label,emoji}, ...]} with 5 cities
+         including exactly these ids: "Palma de Mallorca", "Ibiza", "Madrid", "Barcelona", "Marbella".
+      2) CITY FEED FILTER: Register a NEW user with city:"Ibiza" -> GET /api/events (auth) returns
+         events and EVERY event has city=="Ibiza" (no Mallorca leakage). Repeat with city:"Madrid",
+         "Barcelona", "Marbella": each returns >0 events all matching that city. Register a user with
+         city:"Palma de Mallorca": all returned events city=="Palma de Mallorca" (regression, Mallorca
+         must be unaffected). Note: events already seeded in dev DB.
+      3) SHARE OG PAGE: pick an event id from GET /api/events. GET /api/share/event/{id} (NO auth)
+         -> 200, Content-Type text/html, body contains <meta property="og:title" ...>, og:description,
+         og:image (absolute http URL = the event poster), and a redirect to /event/{id}. GET
+         /api/share/event/doesnotexist -> 200 HTML redirecting to /feed (no crash).
+      4) Regression: POST /auth/register still works with new city values; POST /auth/login; GET /events
+         still requires auth (401 without token).
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - Multi-City Expansion + WhatsApp Share (2026-08-03)
+      
+      🎉 ALL TESTS PASSED: 51/51 (100% pass rate)
+      
+      ✅ TEST 1: GET /api/cities (13 tests, 100% pass)
+      - PUBLIC endpoint (no auth required) → 200 OK
+      - Returns exactly 5 cities with correct structure
+      - All required city IDs present: "Palma de Mallorca", "Ibiza", "Madrid", "Barcelona", "Marbella"
+      - Each city has id, label, and emoji fields
+      - Response structure: {"cities": [{id, label, emoji}, ...]}
+      
+      ✅ TEST 2: CITY FEED FILTERING (20 tests, 100% pass)
+      - Registered NEW users with each city and verified GET /api/events returns ONLY events matching that city
+      - Ibiza: 628 events, ALL match city "Ibiza" (no leakage)
+      - Madrid: 149 events, ALL match city "Madrid" (no leakage)
+      - Barcelona: 401 events, ALL match city "Barcelona" (no leakage)
+      - Marbella: 217 events, ALL match city "Marbella" (no leakage)
+      - Palma de Mallorca: 150 events, ALL match city "Palma de Mallorca" (regression verified - no leakage)
+      - TOTAL: ~1545 scraped events across all cities in dev DB
+      - CRITICAL: Perfect city filtering - zero cross-city contamination
+      
+      ✅ TEST 3: SHARE OG PAGE (10 tests, 100% pass)
+      - GET /api/share/event/{valid_id} WITHOUT auth → 200 with Content-Type text/html
+      - HTML contains all required Open Graph meta tags:
+        * og:title (event name)
+        * og:description (venue · date · price format)
+        * og:image (absolute HTTPS URL to event poster)
+      - Example og:image: https://www.fourvenues.com/cdn-cgi/imagedelivery/...
+      - HTML contains redirect mechanisms:
+        * meta http-equiv="refresh" pointing to /event/{id}
+        * window.location.replace() JS redirect to /event/{id}
+      - GET /api/share/event/doesnotexist-123 → 200 HTML redirecting to /feed (no crash, graceful fallback)
+      - WhatsApp share functionality working perfectly with rich preview cards
+      
+      ✅ TEST 4: REGRESSION TESTS (8 tests, 100% pass)
+      - POST /auth/register works with all 5 city values (Ibiza, Madrid, Barcelona, Marbella, Palma de Mallorca)
+      - POST /auth/login works (admin login successful)
+      - GET /events returns 401 without token (auth protection working)
+      
+      🎯 CONCLUSION:
+      All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
+      
+      Test file: /app/backend_test.py
+      Base URL: https://nightlife-multi-city.preview.emergentagent.com/api
+      Admin credentials: admin@quienva.app / admin123

@@ -5564,6 +5564,86 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/galaxy-mallorca"},
     {"name": "Panama Jack", "slug": "panama-jack-magaluf", "city": "Magaluf",
      "url": "https://site.fourvenues.com/es/panama-jack-magaluf"},
+
+    # ---- IBIZA (FourVenues, verified live) ----
+    {"name": "Pacha Ibiza", "slug": "pacha-ibiza", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/pacha-ibiza"},
+    {"name": "Lío Ibiza", "slug": "lio-ibiza", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/lio-ibiza"},
+    {"name": "Es Paradis Ibiza", "slug": "es-paradis-ibiza", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/es-paradis-ibiza"},
+    {"name": "Eden Ibiza", "slug": "eden-ibiza", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/eden-ibiza"},
+    {"name": "Pikes Ibiza", "slug": "pikes-ibiza", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/pikes-ibiza"},
+    {"name": "Chinois Ibiza", "slug": "chinois-ibiza", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/chinois-ibiza"},
+    {"name": "Swag Ibiza", "slug": "swag-ibiza", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/swag-ibiza"},
+    {"name": "Ibiza Rocks", "slug": "ibiza-rocks", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/ibiza-rocks"},
+    {"name": "Bora Bora Ibiza", "slug": "bora-bora-ibiza", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/bora-bora-ibiza"},
+    {"name": "Cova Santa Ibiza", "slug": "cova-santa", "city": "Ibiza",
+     "url": "https://site.fourvenues.com/es/cova-santa"},
+
+    # ---- MADRID (FourVenues, verified live) ----
+    {"name": "LuLa Club", "slug": "lula-club", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/lula-club"},
+    {"name": "Chango Madrid", "slug": "discoteca-chango", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/discoteca-chango"},
+    {"name": "Deseo (Nazca)", "slug": "nazca-club", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/nazca-club"},
+    {"name": "Vandido", "slug": "vandido", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/vandido"},
+    {"name": "Green Social Club", "slug": "green", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/green"},
+    {"name": "Jowke Club", "slug": "jowke-club", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/jowke-club"},
+    {"name": "Kube Madrid", "slug": "kube", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/kube"},
+    {"name": "Teatro Kapital", "slug": "kapital", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/kapital"},
+    {"name": "Teatro Barceló", "slug": "teatro-barcelo", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/teatro-barcelo"},
+    {"name": "Sala Mon", "slug": "sala-mon", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/sala-mon"},
+    {"name": "Opium Madrid", "slug": "opium-madrid", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/opium-madrid"},
+    {"name": "Gabana", "slug": "gabana", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/gabana"},
+    {"name": "Medias Puri", "slug": "medias-puri", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/medias-puri"},
+
+    # ---- BARCELONA (FourVenues, verified live) ----
+    {"name": "Opium Barcelona", "slug": "opium-barcelona", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/opium-barcelona"},
+    {"name": "Bling Bling BCN", "slug": "bling-bling", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/bling-bling"},
+    {"name": "Costa Este BCN", "slug": "costa-este", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/costa-este"},
+    {"name": "Downtown Barcelona", "slug": "downtown-barcelona", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/downtown-barcelona"},
+    {"name": "Twenties Barcelona", "slug": "twenties-barcelona", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/twenties-barcelona"},
+    {"name": "Sutton Barcelona", "slug": "sutton-barcelona", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/sutton-barcelona"},
+    {"name": "Otto Zutz", "slug": "otto-zutz", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/otto-zutz"},
+    {"name": "City Hall Barcelona", "slug": "city-hall-barcelona", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/city-hall-barcelona"},
+
+    # ---- MARBELLA / PUERTO BANÚS (FourVenues, verified live) ----
+    {"name": "Fitz Marbella", "slug": "fitz-marbella", "city": "Marbella",
+     "url": "https://site.fourvenues.com/es/fitz-marbella"},
+    {"name": "Mirage Marbella", "slug": "mirage-marbella", "city": "Marbella",
+     "url": "https://site.fourvenues.com/es/mirage-marbella"},
+    {"name": "Marina Beach Club", "slug": "marina-beach-club", "city": "Marbella",
+     "url": "https://site.fourvenues.com/es/marina-beach-club"},
+    {"name": "Opium Marbella", "slug": "opium-marbella", "city": "Marbella",
+     "url": "https://site.fourvenues.com/es/opium-marbella"},
+    {"name": "Tibu Marbella", "slug": "tibu-marbella", "city": "Marbella",
+     "url": "https://site.fourvenues.com/es/tibu-marbella"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")
@@ -5698,11 +5778,15 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
         }
         await db.events.insert_one(ev)
         _invalidate_stats_cache()
-        # Fire "new event" push (fire-and-forget)
-        try:
-            asyncio.create_task(_notify_new_event_city(ev))
-        except Exception:
-            pass
+        # Fire "new event" push (fire-and-forget). Skip on the venue's FIRST
+        # ever run to avoid flooding users when a new club/city is onboarded
+        # (that run bulk-creates its whole calendar). Real new events on later
+        # runs still notify.
+        if venue.get("last_run_at"):
+            try:
+                asyncio.create_task(_notify_new_event_city(ev))
+            except Exception:
+                pass
         await _record_scrape_change(batch_id, "new", ev, {
             "current_price": ev.get("price_tiers", [{}])[0].get("price") if ev.get("price_tiers") else None,
             "sale_state": ev.get("sale_state"),
@@ -5831,14 +5915,25 @@ async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
 
 
 async def run_all_scrapers():
-    """Run every active venue in parallel. Called by scheduler + admin trigger."""
+    """Run active venues with a bounded concurrency (protects Render free tier
+    and avoids hammering FourVenues when many venues are configured). Called by
+    scheduler + admin trigger."""
     venues = []
     async for v in db.scraped_venues.find({"active": True}, {"_id": 0}):
         venues.append(v)
     if not venues:
         return []
     batch_id = uuid.uuid4().hex
-    results = await asyncio.gather(*(run_scraper_for_venue(v, batch_id) for v in venues), return_exceptions=False)
+    # Cap how many venues scrape at the same time. Each venue can fire up to
+    # ~120 ticket-detail requests, so running all of them at once would spike
+    # CPU/memory and risk rate-limiting. 4 at a time is a safe compromise.
+    _sem = asyncio.Semaphore(4)
+
+    async def _run_one(v):
+        async with _sem:
+            return await run_scraper_for_venue(v, batch_id)
+
+    results = await asyncio.gather(*(_run_one(v) for v in venues), return_exceptions=False)
     total_new = sum(r["created"] for r in results)
     total_upd = sum(r["updated"] for r in results)
     logger.info(f"[scrapers] Completed: {len(results)} venues, {total_new} new events, {total_upd} updated")
@@ -6239,6 +6334,64 @@ _SEED_DIRECTORY = [
     {"name": "Cala Gran Beach Club", "zone": "Cala d'Or", "city": "Santanyí", "type": "beach_club",
      "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "",
      "buy_url": "", "open_time": "11:00", "close_time": "20:00", "address": "Cala d'Or, Santanyí"},
+
+    # ============================================================
+    # OTRAS CIUDADES — superclubs que NO usan FourVenues (directorio
+    # con enlace de compra propio; visibles y monetizables. Las que
+    # SÍ usan FourVenues están en _SEED_VENUES y se auto-actualizan).
+    # ============================================================
+    # --- IBIZA ---
+    {"name": "Amnesia Ibiza", "zone": "Sant Rafel", "city": "Ibiza", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "amnesiaibiza",
+     "buy_url": "https://www.amnesia.es/", "address": "Ctra. Ibiza a San Antonio Km 5, Sant Rafel"},
+    {"name": "Hï Ibiza", "zone": "Platja d'en Bossa", "city": "Ibiza", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "hiibizaofficial",
+     "buy_url": "https://hiibiza.com/", "address": "Platja d'en Bossa, Sant Josep"},
+    {"name": "Ushuaïa Ibiza", "zone": "Platja d'en Bossa", "city": "Ibiza", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "ushuaiaibiza",
+     "buy_url": "https://www.theushuaiaexperience.com/", "address": "Platja d'en Bossa 10, Sant Josep"},
+    {"name": "[UNVRS]", "zone": "Ibiza", "city": "Ibiza", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "unvrs",
+     "buy_url": "https://unvrs.com/", "address": "Ctra. Sant Josep, Ibiza"},
+    {"name": "DC10", "zone": "Platja d'en Bossa", "city": "Ibiza", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1], "instagram": "dc10ibiza",
+     "buy_url": "https://dc10ibiza.com/", "address": "Ctra. Aeroport Km 1, Sant Josep"},
+    # --- MADRID ---
+    {"name": "Fabrik", "zone": "Humanes", "city": "Madrid", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [5, 6], "instagram": "fabrikmadrid",
+     "buy_url": "https://fabrik.es/", "address": "Av. de la Industria 82, Humanes de Madrid"},
+    {"name": "Uñas Chung Lee", "zone": "Centro", "city": "Madrid", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "unaschunglee",
+     "buy_url": "", "address": "Madrid"},
+    {"name": "Goya Social Club", "zone": "Salamanca", "city": "Madrid", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5], "instagram": "goyasocialclub",
+     "buy_url": "", "address": "C/ Goya, Madrid"},
+    # --- BARCELONA ---
+    {"name": "Pacha Barcelona", "zone": "Vila Olímpica", "city": "Barcelona", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "pachabarcelona",
+     "buy_url": "https://pachabarcelona.es/", "address": "C/ Ramon Trias Fargas 2, Barcelona"},
+    {"name": "Shôko Barcelona", "zone": "Barceloneta", "city": "Barcelona", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5, 6], "instagram": "shokobarcelona",
+     "buy_url": "https://shoko.biz/", "address": "Passeig Marítim de la Barceloneta 36, Barcelona"},
+    {"name": "Razzmatazz", "zone": "Poblenou", "city": "Barcelona", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "salarazzmatazz",
+     "buy_url": "https://www.salarazzmatazz.com/", "address": "C/ Pamplona 88, Barcelona"},
+    {"name": "Sala Apolo", "zone": "Paral·lel", "city": "Barcelona", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 3, 4, 5, 6], "instagram": "sala_apolo",
+     "buy_url": "https://www.sala-apolo.com/", "address": "C/ Nou de la Rambla 113, Barcelona"},
+    {"name": "Input High Fidelity Dance Club", "zone": "Montjuïc", "city": "Barcelona", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [5, 6], "instagram": "input_bcn",
+     "buy_url": "", "address": "Av. Francesc Ferrer i Guàrdia, Barcelona"},
+    # --- MARBELLA / PUERTO BANÚS ---
+    {"name": "Olivia Valère", "zone": "Marbella", "city": "Marbella", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5], "instagram": "oliviavalere",
+     "buy_url": "https://oliviavalere.com/", "address": "Ctra. de Istán Km 0.8, Marbella"},
+    {"name": "La Suite Marbella", "zone": "Puente Romano", "city": "Marbella", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5], "instagram": "lasuitemarbella",
+     "buy_url": "", "address": "Puente Romano Resort, Marbella"},
+    {"name": "Momento Puerto Banús", "zone": "Puerto Banús", "city": "Marbella", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5, 6], "instagram": "momentomarbella",
+     "buy_url": "", "address": "Puerto Banús, Marbella"},
 ]
 
 
