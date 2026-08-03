@@ -5261,6 +5261,7 @@ async def on_startup():
         await db.users.create_index("username", unique=True)
         await db.users.create_index("user_id", unique=True)
         await db.users.create_index("city")
+        await db.users.create_index([("city", 1), ("city_change_alerts", 1)])
         await db.users.create_index("referral_code")
         await db.users.create_index("referred_by")
         await db.users.create_index("created_at")
