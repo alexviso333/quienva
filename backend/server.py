@@ -5597,7 +5597,7 @@ app.include_router(api_router)
 from scrapers import build_scraper as _build_scraper, ScrapedEvent as _ScrapedEvent
 from scrapers.base import normalize_venue_key as _norm_venue
 
-_ALLOWED_ADAPTERS = ("fourvenues_api", "fourvenues_public_api", "nextjs_html")
+_ALLOWED_ADAPTERS = ("fourvenues_api", "fourvenues_public_api", "nextjs_html", "nightleague")
 
 # FourVenues guest-token: long-lived JWT shared by every microsite. Read from an
 # app_settings override (editable in admin) first, then the env var. Cached briefly.
@@ -5744,6 +5744,14 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/opium-marbella"},
     {"name": "Tibu Marbella", "slug": "tibu-marbella", "city": "Marbella",
      "url": "https://site.fourvenues.com/es/tibu-marbella"},
+    # The Night League official-site scrapers (Ibiza superclubs, real prices via
+    # embedded ClubTickets/JSON-LD availability — no FourVenues, no auth).
+    {"name": "Ushuaïa Ibiza", "slug": "ushuaia-ibiza", "city": "Ibiza",
+     "adapter_type": "nightleague",
+     "url": "https://www.theushuaiaexperience.com/club/en"},
+    {"name": "Hï Ibiza", "slug": "hi-ibiza", "city": "Ibiza",
+     "adapter_type": "nightleague",
+     "url": "https://www.hiibiza.com/es"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")
@@ -5783,6 +5791,15 @@ async def seed_scraped_venues():
                    "last_run_new": 0, "last_run_updated": 0, "last_run_error": None}
             await db.scraped_venues.insert_one(doc)
         logger.info(f"Seeded scraped_venues: {len(_SEED_VENUES)} venues (fourvenues_api)")
+        # Link curated Ibiza directory entries to their new Night League scrapers
+        # so sync_scraper_venues_to_directory dedups them (no duplicate locales).
+        for nm, slug in (("Ushuaïa Ibiza", "ushuaia-ibiza"), ("Hï Ibiza", "hi-ibiza")):
+            await db.venues.update_many(
+                {"name": nm, "scraper_slug": {"$in": ["", None]}},
+                {"$set": {"scraper_slug": slug}})
+            # Drop any auto-generated duplicate created before the link existed.
+            await db.venues.delete_many(
+                {"scraper_slug": slug, "auto_generated": True})
     except Exception as e:
         logger.warning(f"seed_scraped_venues failed: {e}")
 
@@ -6458,10 +6475,10 @@ _SEED_DIRECTORY = [
      "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "amnesiaibiza",
      "buy_url": "https://www.amnesia.es/", "address": "Ctra. Ibiza a San Antonio Km 5, Sant Rafel"},
     {"name": "Hï Ibiza", "zone": "Platja d'en Bossa", "city": "Ibiza", "type": "discoteca",
-     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "hiibizaofficial",
+     "scraper_slug": "hi-ibiza", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "hiibizaofficial",
      "buy_url": "https://hiibiza.com/", "address": "Platja d'en Bossa, Sant Josep"},
     {"name": "Ushuaïa Ibiza", "zone": "Platja d'en Bossa", "city": "Ibiza", "type": "discoteca",
-     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "ushuaiaibiza",
+     "scraper_slug": "ushuaia-ibiza", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "ushuaiaibiza",
      "buy_url": "https://www.theushuaiaexperience.com/", "address": "Platja d'en Bossa 10, Sant Josep"},
     {"name": "[UNVRS]", "zone": "Ibiza", "city": "Ibiza", "type": "discoteca",
      "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "unvrs",
