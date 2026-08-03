@@ -4934,26 +4934,17 @@ DEMO_EVENTS = [
 ]
 
 
-async def seed_events():
-    # Remove leftover automated-test artifacts so the pilot feed stays clean
+async def cleanup_demo_events():
+    # Remove leftover automated-test artifacts so the feed stays clean
     await db.events.delete_many({"name": {"$regex": "^(TEST|UI5|Iteration)", "$options": "i"}})
-    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
-    for d in DEMO_EVENTS:
-        date_str = (today + timedelta(days=d["offset"])).isoformat()
-        await db.events.update_one(
-            {"name": d["name"]},
-            {
-                "$set": {
-                    "venue": d["venue"], "address": d["address"], "date": date_str, "time": d["time"],
-                    "genre": d["genre"], "image_url": d["image_url"], "has_commission": d["has_commission"],
-                    "commission_url": d["commission_url"], "more_info_url": d["more_info_url"],
-                    "city": "Palma de Mallorca",
-                },
-                "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat()},
-            },
-            upsert=True,
-        )
-    logger.info("Eventos demo actualizados (fechas próximas)")
+    # Remove the previously-seeded DEMO parties (matched by their exact
+    # name + venue pair) so demo data never mixes with real events — in the
+    # sandbox AND in production once this deploys. Real events are untouched.
+    demo_or = [{"name": d["name"], "venue": d["venue"]} for d in DEMO_EVENTS]
+    if demo_or:
+        res = await db.events.delete_many({"$or": demo_or})
+        if res.deleted_count:
+            logger.info(f"Eliminadas {res.deleted_count} fiestas demo")
 
 
 @app.on_event("startup")
@@ -5025,7 +5016,7 @@ async def on_startup():
         await enrich_venue_directory()
     except Exception as _:
         pass
-    await seed_events()
+    await cleanup_demo_events()
     global scheduler
     try:
         scheduler = AsyncIOScheduler(timezone="Europe/Madrid")
