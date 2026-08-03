@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import api, { mediaUrl } from "@/lib/api";
+import api, { mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { ReportFlag } from "@/components/ReportBlock";
 import { Zap, Camera, Timer } from "lucide-react";
@@ -79,7 +79,7 @@ export function EventMoment({ eventId, hasInterest }) {
         <div className="grid grid-cols-3 gap-1.5" data-testid="moment-gallery">
           {gallery.map((c) => (
             <div key={c.id} className="aspect-square rounded-xl overflow-hidden bg-black relative">
-              <img src={mediaUrl(c.image_url)} alt="" className="w-full h-full object-cover" loading="lazy" />
+              <img src={mediaThumb(c.image_url, 500)} alt="" className="w-full h-full object-cover" loading="lazy" />
               <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/50 rounded-full px-1.5 py-0.5">
                 <AvatarCircle name={c.author?.name || ""} picture={c.author?.picture || ""} size={16} ring={false} />
                 <span className="text-white text-[10px] font-bold">{c.author?.name?.split(" ")[0]}</span>

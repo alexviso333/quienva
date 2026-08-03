@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import api, { mediaUrl, API } from "@/lib/api";
+import api, { mediaThumb, API } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -127,7 +127,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
         data-testid={`event-open-${event.id}`}
       >
         {event.image_url ? (
-          <img src={mediaUrl(event.image_url)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
+          <img src={mediaThumb(event.image_url, 900)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#2a0a1a] via-[#121215] to-[#0a1a1f]" />
         )}

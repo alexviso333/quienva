@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl, API } from "@/lib/api";
+import api, { mediaThumb, API } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { EventAlbum } from "@/components/EventAlbum";
@@ -148,7 +148,7 @@ export default function EventDetail() {
         {/* Hero */}
         <div className="relative h-72">
           {event.image_url ? (
-            <img src={mediaUrl(event.image_url)} alt={event.name} className="w-full h-full object-cover" />
+            <img src={mediaThumb(event.image_url, 1200)} alt={event.name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-[#2a0a1a] via-[#121215] to-[#0a1a1f]" />
           )}

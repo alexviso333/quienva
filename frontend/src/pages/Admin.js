@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl, formatApiErrorDetail } from "@/lib/api";
+import api, { mediaUrl, mediaThumb, formatApiErrorDetail } from "@/lib/api";
 import AdminEventStats from "@/components/AdminEventStats";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -419,7 +419,7 @@ export default function Admin() {
   const Row = ({ ev, showMoment }) => (
     <div className="flex gap-3 bg-white/5 border border-white/10 rounded-2xl p-3" data-testid={`admin-event-${ev.id}`}>
       {ev.image_url && (
-        <img src={mediaUrl(ev.image_url)} alt={ev.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+        <img src={mediaThumb(ev.image_url, 200)} alt={ev.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover shrink-0" />
       )}
       <div className="flex-1 min-w-0">
         <p className="font-semibold truncate">{ev.name}</p>

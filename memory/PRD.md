@@ -192,3 +192,9 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 
 
 
+
+## Update 2026-08-04 — Rendimiento (imágenes) + panel de control (fiestas)
+- **Imágenes optimizadas (rendimiento)**: se cambió `mediaUrl` → `mediaThumb` (Cloudinary `f_auto,q_auto,w_,c_limit`; calidad automática ALTA, sin verse pixeladas) en tarjetas del feed (EventCard w_900, CompactEventCard w_800), avatares (AvatarCircle size*3), detalle de evento (w_1200), stories (w_1080), Feed top (w_200), Admin thumb (w_200), Memories (w_200/400), EventMoment (w_500). `mediaThumb` solo transforma URLs de res.cloudinary.com; URLs externas (scrapers) se devuelven intactas → cero riesgo. Añadido `preconnect`/`dns-prefetch` a res.cloudinary.com en index.html. Backend ya estaba optimizado (índices, GZip, sin N+1) y React Query con staleTime 5m — no se tocó.
+- **Panel de control → Fiestas → "Todas las fiestas"**: el desplegable "Fiestas pasadas" (colapsable) se movió a JUSTO debajo de la barra de búsqueda (antes de la lista de próximas), para no tener que bajar hasta el final. (AdminDashboard.js)
+- **Panel de control → "El Momento"**: AdminMomentPanel agrupa ahora las fiestas — "esta noche" se muestran expandidas y "Próximos días" (siguientes días) en un desplegable colapsado por defecto. "Esta noche" = noche en curso (antes de las 6:00 cuenta como la del día anterior).
+- **Infra preview**: backend/.env y frontend/.env volvían a estar vacíos (borrados) → backend caía por KeyError MONGO_URL y el frontend llamaba a /undefined/api. Restaurados para el preview (MONGO_URL local, DB_NAME=quienva, REACT_APP_BACKEND_URL del preview). NO afecta a producción (Render/Vercel tienen su propio env). Admin re-sembrado: admin@quienva.app / admin123.

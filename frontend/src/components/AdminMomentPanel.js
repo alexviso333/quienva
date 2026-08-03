@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { formatApiErrorDetail } from "@/lib/api";
-import { Moon, Shuffle, Zap, Pause, Play, Clock, CheckCircle2, Loader2, X } from "lucide-react";
+import { Moon, Shuffle, Zap, Pause, Play, Clock, CheckCircle2, Loader2, X, ChevronDown, ChevronRight, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 
 /**
@@ -18,6 +18,7 @@ export default function AdminMomentPanel({ embedded = false }) {
   const [editingId, setEditingId] = useState(null);
   const [hour, setHour] = useState(3);
   const [minute, setMinute] = useState(0);
+  const [laterOpen, setLaterOpen] = useState(false);
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["admin-moments"],
@@ -173,8 +174,16 @@ export default function AdminMomentPanel({ embedded = false }) {
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        {events.map((ev) => {
+      {(() => {
+        // "Esta noche" = la noche en curso. Antes de las 6:00 sigue contando
+        // como la noche del día anterior (fiestas de after / madrugada).
+        const _now = new Date();
+        const _base = new Date(_now);
+        if (_now.getHours() < 6) _base.setDate(_base.getDate() - 1);
+        const tonightStr = `${_base.getFullYear()}-${String(_base.getMonth() + 1).padStart(2, "0")}-${String(_base.getDate()).padStart(2, "0")}`;
+        const tonightEvents = events.filter((e) => e.date === tonightStr);
+        const laterEvents = events.filter((e) => e.date !== tonightStr);
+        const renderEvent = (ev) => {
           const isEditing = editingId === ev.id;
           const cancelled = ev.moment_cancelled;
           const fired = ev.has_fired;
@@ -319,8 +328,36 @@ export default function AdminMomentPanel({ embedded = false }) {
               )}
             </div>
           );
-        })}
-      </div>
+        };
+        return (
+          <>
+            {tonightEvents.length > 0 && (
+              <div className="flex flex-col gap-2" data-testid="moment-tonight-list">
+                {tonightEvents.map(renderEvent)}
+              </div>
+            )}
+            {laterEvents.length > 0 && (
+              <div className="mt-3" data-testid="moment-later-section">
+                <button
+                  onClick={() => setLaterOpen((o) => !o)}
+                  data-testid="moment-later-toggle"
+                  className="w-full flex items-center gap-2 rounded-2xl bg-white/[0.04] border border-white/10 p-3 active:scale-[0.99] text-left"
+                >
+                  <CalendarDays className="w-4 h-4 text-white/50 shrink-0" />
+                  <span className="font-display text-sm font-bold text-white">Próximos días</span>
+                  <span className="text-[11px] text-white/60 bg-white/10 rounded-full px-2 py-0.5">{laterEvents.length}</span>
+                  {laterOpen ? <ChevronDown className="w-5 h-5 text-white/40 ml-auto" /> : <ChevronRight className="w-5 h-5 text-white/40 ml-auto" />}
+                </button>
+                {laterOpen && (
+                  <div className="flex flex-col gap-2 mt-2" data-testid="moment-later-list">
+                    {laterEvents.map(renderEvent)}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }

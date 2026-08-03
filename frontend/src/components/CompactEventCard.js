@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import api, { mediaUrl } from "@/lib/api";
+import api, { mediaThumb } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -100,7 +100,7 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
     >
       <div className="relative aspect-[4/5]">
         {event.image_url ? (
-          <img src={mediaUrl(event.image_url)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
+          <img src={mediaThumb(event.image_url, 800)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#2a0a1a] via-[#121215] to-[#0a1a1f]" />
         )}

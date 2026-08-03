@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl } from "@/lib/api";
+import api, { mediaThumb } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { EventCarousel } from "@/components/EventCarousel";
 import { StoriesBar } from "@/components/Stories";
@@ -202,7 +202,7 @@ export default function Feed() {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,_rgba(255,0,85,0.25),transparent_60%)]" />
             <div className="relative flex items-center gap-3 p-3">
               {topEvent.image_url && (
-                <img src={mediaUrl(topEvent.image_url)} alt={topEvent.name} className="w-16 h-16 rounded-xl object-cover shrink-0" />
+                <img src={mediaThumb(topEvent.image_url, 200)} alt={topEvent.name} className="w-16 h-16 rounded-xl object-cover shrink-0" />
               )}
               <div className="flex-1 min-w-0">
                 <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-qv-primary">

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { mediaUrl } from "@/lib/api";
+import { mediaThumb } from "@/lib/api";
 
 const COLORS = ["#FF0055", "#00F0FF", "#7C3AED", "#F59E0B", "#10B981", "#EC4899"];
 
@@ -23,7 +23,7 @@ export function AvatarCircle({ name, picture, size = 40, className = "", ring = 
     return (
       <img
         data-testid={testid}
-        src={mediaUrl(picture)}
+        src={mediaThumb(picture, Math.round(size * 3))}
         alt={name || ""}
         style={dim}
         onError={() => setBroken(true)}

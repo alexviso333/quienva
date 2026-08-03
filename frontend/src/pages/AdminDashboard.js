@@ -235,25 +235,25 @@ export default function AdminDashboard() {
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-qv-primary animate-spin" /></div>
           ) : (
             <>
-              {/* Próximas (visibles siempre) */}
-              <div className="flex flex-col gap-1.5" data-testid="admin-upcoming-list">
-                {upcomingRows.map(EventRow)}
-                {upcomingRows.length === 0 && <p className="text-center text-white/40 text-sm py-6">No hay fiestas próximas{eventSearch ? " que coincidan" : ""}.</p>}
-              </div>
-
-              {/* Fiestas pasadas (colapsable, colapsado por defecto) */}
-              <button onClick={() => setPastOpen((o) => !o)} data-testid="admin-past-toggle" className="w-full flex items-center gap-2 rounded-2xl bg-white/[0.04] border border-white/10 p-3 mt-4 active:scale-[0.99] text-left">
+              {/* Fiestas pasadas (colapsable, colapsado por defecto) — justo debajo de la búsqueda */}
+              <button onClick={() => setPastOpen((o) => !o)} data-testid="admin-past-toggle" className="w-full flex items-center gap-2 rounded-2xl bg-white/[0.04] border border-white/10 p-3 mb-3 active:scale-[0.99] text-left">
                 <History className="w-4 h-4 text-white/50 shrink-0" />
                 <span className="font-display text-sm font-bold text-white">Fiestas pasadas</span>
                 <span className="text-[11px] text-white/60 bg-white/10 rounded-full px-2 py-0.5" data-testid="admin-past-count">{pastRows.length}</span>
                 {pastOpen ? <ChevronDown className="w-5 h-5 text-white/40 ml-auto" /> : <ChevronRight className="w-5 h-5 text-white/40 ml-auto" />}
               </button>
               {pastOpen && (
-                <div className="flex flex-col gap-1.5 mt-2" data-testid="admin-past-list">
+                <div className="flex flex-col gap-1.5 mb-4" data-testid="admin-past-list">
                   {pastRows.map(EventRow)}
                   {pastRows.length === 0 && <p className="text-center text-white/40 text-sm py-6">No hay fiestas pasadas (se borran a los 3 días).</p>}
                 </div>
               )}
+
+              {/* Próximas (visibles siempre) */}
+              <div className="flex flex-col gap-1.5" data-testid="admin-upcoming-list">
+                {upcomingRows.map(EventRow)}
+                {upcomingRows.length === 0 && <p className="text-center text-white/40 text-sm py-6">No hay fiestas próximas{eventSearch ? " que coincidan" : ""}.</p>}
+              </div>
             </>
           )}
         </div>

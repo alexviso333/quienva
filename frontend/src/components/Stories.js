@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl, mediaThumb } from "@/lib/api";
+import api, { mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -212,7 +212,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
       </div>
 
       <div className="flex-1 flex items-center justify-center" onClick={nav} data-testid="story-nav-area">
-        <SafeImg src={mediaUrl(story.image_url)} className="max-w-full max-h-full object-contain" />
+        <SafeImg src={mediaThumb(story.image_url, 1080)} className="max-w-full max-h-full object-contain" />
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 z-20 p-4 pb-6 bg-gradient-to-t from-black/80 to-transparent">

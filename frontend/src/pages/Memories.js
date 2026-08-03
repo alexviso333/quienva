@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import api, { mediaUrl } from "@/lib/api";
+import api, { mediaUrl, mediaThumb } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { CalendarDays, ArrowLeft, Play, Images, MapPin, ChevronLeft, ChevronRight, Loader2, Zap } from "lucide-react";
@@ -154,7 +154,7 @@ export default function Memories() {
                       className="w-full flex items-center gap-3 mb-3 text-left active:scale-[0.99]"
                     >
                       {ev.image_url ? (
-                        <img src={mediaUrl(ev.image_url)} alt="" className="w-14 h-14 rounded-xl object-cover" />
+                        <img src={mediaThumb(ev.image_url, 200)} alt="" className="w-14 h-14 rounded-xl object-cover" />
                       ) : (
                         <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-qv-primary to-qv-secondary" />
                       )}
@@ -177,7 +177,7 @@ export default function Memories() {
                       <div className="grid grid-cols-4 gap-1" data-testid={`memories-media-${ev.id}`}>
                         {(ev.moments || []).map((m) => (
                           <div key={m.id} className="aspect-square rounded-lg overflow-hidden bg-black relative">
-                            <img src={mediaUrl(m.image_url)} alt="" className="w-full h-full object-cover" loading="lazy" />
+                            <img src={mediaThumb(m.image_url, 400)} alt="" className="w-full h-full object-cover" loading="lazy" />
                             <Zap className="absolute top-1 right-1 w-3 h-3 text-yellow-300" />
                           </div>
                         ))}
@@ -189,7 +189,7 @@ export default function Memories() {
                                 <Play className="absolute inset-0 m-auto w-5 h-5 text-white drop-shadow" fill="white" />
                               </>
                             ) : (
-                              <img src={mediaUrl(m.media_url)} alt="" className="w-full h-full object-cover" loading="lazy" />
+                              <img src={mediaThumb(m.media_url, 400)} alt="" className="w-full h-full object-cover" loading="lazy" />
                             )}
                           </div>
                         ))}
