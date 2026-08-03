@@ -1,11 +1,28 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl } from "@/lib/api";
+import api, { mediaUrl, mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon, Send } from "lucide-react";
+import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon, Send, ImageOff } from "lucide-react";
 import { toast } from "sonner";
+
+/**
+ * Renders an image but degrades gracefully to a branded placeholder when the
+ * source is missing or fails to load (e.g. old stories whose file was lost on
+ * an ephemeral disk). Avoids the ugly browser "?" broken-image glyph.
+ */
+function SafeImg({ src, className = "", alt = "" }) {
+  const [broken, setBroken] = useState(false);
+  if (!src || broken) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-[#2a0a1a] via-[#121215] to-[#0a1a1f] text-white/30 ${className}`}>
+        <ImageOff className="w-6 h-6" />
+      </div>
+    );
+  }
+  return <img src={src} alt={alt} className={className} loading="lazy" onError={() => setBroken(true)} />;
+}
 
 function timeAgo(iso) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -195,7 +212,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
       </div>
 
       <div className="flex-1 flex items-center justify-center" onClick={nav} data-testid="story-nav-area">
-        <img src={mediaUrl(story.image_url)} alt="" className="max-w-full max-h-full object-contain" />
+        <SafeImg src={mediaUrl(story.image_url)} className="max-w-full max-h-full object-contain" />
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 z-20 p-4 pb-6 bg-gradient-to-t from-black/80 to-transparent">
@@ -342,7 +359,7 @@ export function StoriesArchive({ open, onOpenChange }) {
                   onClick={() => { setViewerIdx(i); onOpenChange(false); }}
                   className="relative aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-white/5"
                 >
-                  <img src={mediaUrl(s.image_url)} alt="" className="w-full h-full object-cover" />
+                  <SafeImg src={mediaThumb(s.image_url, 400)} className="w-full h-full object-cover" />
                   {s.reactions && s.reactions.length > 0 && (
                     <span className="absolute bottom-1 right-1 text-xs bg-black/60 rounded-full px-1.5 py-0.5">
                       {s.reactions.length} 💌

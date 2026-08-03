@@ -26,6 +26,7 @@ import Locales from "@/pages/Locales";
 import MapPage from "@/pages/MapPage";
 import NotifPrefs from "@/pages/NotifPrefs";
 import Momento from "@/pages/Momento";
+import Descubrir from "@/pages/Descubrir";
 import { Loader2 } from "lucide-react";
 
 function LoadingScreen() {
@@ -74,6 +75,7 @@ function AppRouter() {
       <Route path="/mapa" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
       <Route path="/ajustes/avisos" element={<ProtectedRoute><NotifPrefs /></ProtectedRoute>} />
       <Route path="/momento" element={<ProtectedRoute><Momento /></ProtectedRoute>} />
+      <Route path="/descubrir" element={<ProtectedRoute><Descubrir /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
       <Route path="/admin/dinero" element={<ProtectedRoute adminOnly><AdminMoney /></ProtectedRoute>} />
       <Route path="/admin/dashboard" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />

@@ -161,6 +161,18 @@ export default function ChatThread({ kind }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages.length]);
 
+  // Opening a DM marks its messages read on the backend; refresh the unread
+  // badges (bell + chats tab) so the conversation stops showing as pending.
+  useEffect(() => {
+    if (kind === "dm" && !isLoading) {
+      qc.invalidateQueries({ queryKey: ["dm-unread-count"] });
+      qc.invalidateQueries({ queryKey: ["unread-count"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["dm-threads"] });
+    }
+     
+  }, [kind, isLoading, messages.length]);
+
   const title = kind === "dm" ? (friend?.name || "Chat") : (groupInfo?.name || "Grupo");
   const subtitle = kind === "dm"
     ? (friend?.username ? `@${friend.username}` : "")

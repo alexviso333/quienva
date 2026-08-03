@@ -5,16 +5,17 @@ const EVENT = "qv-compact-changed";
 
 export function getCompactMode() {
   try {
-    return localStorage.getItem(KEY) === "1";
+    // Compact is the DEFAULT now. Only "0" (explicit "vista completa") disables it.
+    return localStorage.getItem(KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 
 export function setCompactMode(v) {
   try {
-    if (v) localStorage.setItem(KEY, "1");
-    else localStorage.removeItem(KEY);
+    if (v) localStorage.removeItem(KEY); // default state = compact
+    else localStorage.setItem(KEY, "0"); // user explicitly chose full view
     window.dispatchEvent(new Event(EVENT));
   } catch {
     /* ignore */

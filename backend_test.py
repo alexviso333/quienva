@@ -1,518 +1,458 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for ¿Quién va? - Iteration 2026-08-02j
-Tests: Featured Events, Notify Segmentation, Scheduling
+Backend API tests for ¿Quién va? app
+Testing iteration: Default privacy + moment_privacy field + DM read fix + weekly recap + discover
 """
+
 import requests
-import json
 import time
-from datetime import datetime
+import random
+import string
+from datetime import datetime, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://night-hub-7.preview.emergentagent.com/api"
+BASE_URL = "https://d74373cf-d064-48e4-9df1-2467107df57c.preview.emergentagent.com/api"
 
-# Test credentials
+# Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 
-# Test results tracking
+# Test results
 tests_passed = 0
 tests_failed = 0
-test_results = []
+failed_tests = []
 
-def log_test(name, passed, details=""):
-    global tests_passed, tests_failed
-    if passed:
-        tests_passed += 1
-        status = "✅ PASS"
-    else:
-        tests_failed += 1
-        status = "❌ FAIL"
-    result = f"{status}: {name}"
-    if details:
-        result += f" - {details}"
-    test_results.append(result)
-    print(result)
+def log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def register_user(email, password, name, username, city="Palma de Mallorca"):
-    """Register a new user"""
-    response = requests.post(f"{BASE_URL}/auth/register", json={
+def random_string(length=8):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+def register_user(name=None, email=None, password="testpass123", city="Palma de Mallorca", birthdate="1998-05-05", username=None):
+    """Register a new user and return token"""
+    if not name:
+        name = f"Test User {random_string(4)}"
+    if not email:
+        email = f"test_{random_string(8)}@test.com"
+    if not username:
+        username = f"user_{random_string(6)}"
+    
+    resp = requests.post(f"{BASE_URL}/auth/register", json={
+        "name": name,
         "email": email,
         "password": password,
-        "name": name,
-        "username": username,
-        "city": city
+        "city": city,
+        "birthdate": birthdate,
+        "username": username
     })
-    return response
+    if resp.status_code != 200:
+        log(f"❌ Failed to register user: {resp.status_code} - {resp.text}")
+        return None, None, None
+    data = resp.json()
+    return data["token"], data["user"]["user_id"], email
 
 def login(email, password):
     """Login and return token"""
-    response = requests.post(f"{BASE_URL}/auth/login", json={
+    resp = requests.post(f"{BASE_URL}/auth/login", json={
         "email": email,
         "password": password
     })
-    if response.status_code == 200:
-        data = response.json()
-        return data.get("token")
-    return None
+    if resp.status_code != 200:
+        return None
+    return resp.json()["token"]
 
-def get_headers(token):
-    """Get authorization headers"""
-    return {"Authorization": f"Bearer {token}"}
-
-print("=" * 80)
-print("BACKEND API TESTING - Iteration 2026-08-02j")
-print("Testing: Featured Events, Notify Segmentation, Scheduling")
-print("=" * 80)
-
-# ============================================================================
-# SETUP: Login as admin and register normal user
-# ============================================================================
-print("\n[SETUP] Logging in as admin...")
-admin_token = login(ADMIN_EMAIL, ADMIN_PASSWORD)
-if not admin_token:
-    print("❌ CRITICAL: Cannot login as admin. Aborting tests.")
-    exit(1)
-print(f"✅ Admin logged in successfully")
-
-print("\n[SETUP] Registering normal user...")
-normal_email = f"testuser_{int(time.time())}@test.com"
-normal_password = "testpass123"
-normal_name = "Test User"
-normal_username = f"testuser{int(time.time())}"
-reg_response = register_user(normal_email, normal_password, normal_name, normal_username, "Palma de Mallorca")
-if reg_response.status_code == 200:
-    normal_token = reg_response.json().get("token")
-    print(f"✅ Normal user registered: {normal_email}")
-else:
-    print(f"❌ Failed to register normal user: {reg_response.status_code}")
-    normal_token = None
-
-# ============================================================================
-# TEST 1: FEATURED EVENTS
-# ============================================================================
-print("\n" + "=" * 80)
-print("TEST 1: FEATURED EVENTS")
-print("=" * 80)
-
-# Get an upcoming event in Palma de Mallorca
-print("\n[1.1] Getting an upcoming event in Palma de Mallorca...")
-events_response = requests.get(f"{BASE_URL}/events", headers=get_headers(normal_token))
-log_test("GET /events as normal user", events_response.status_code == 200, 
-         f"Status: {events_response.status_code}")
-
-event_id = None
-if events_response.status_code == 200:
-    events = events_response.json()
-    if events:
-        # Find an event in Palma de Mallorca
-        for ev in events:
-            if ev.get("city") == "Palma de Mallorca":
-                event_id = ev["id"]
-                print(f"✅ Found event: {ev['name']} (ID: {event_id})")
-                break
-
-if not event_id:
-    print("❌ No events found in Palma de Mallorca. Cannot continue featured tests.")
-else:
-    # Test 1.2: Set event as featured (admin)
-    print(f"\n[1.2] Setting event {event_id} as featured (admin)...")
-    featured_response = requests.put(
-        f"{BASE_URL}/admin/events/{event_id}/featured",
-        headers=get_headers(admin_token),
-        json={"featured": True}
+def make_friends(token_a, user_id_a, token_b, user_id_b):
+    """Make two users friends"""
+    # A sends friend request to B
+    resp = requests.post(
+        f"{BASE_URL}/friends/request",
+        json={"user_id": user_id_b},
+        headers={"Authorization": f"Bearer {token_a}"}
     )
-    log_test("PUT /admin/events/{id}/featured with featured:true (admin)", 
-             featured_response.status_code == 200 and 
-             featured_response.json().get("ok") == True and 
-             featured_response.json().get("featured") == True,
-             f"Status: {featured_response.status_code}, Response: {featured_response.json()}")
-
-    # Test 1.3: Verify event appears as featured in GET /events
-    print(f"\n[1.3] Verifying event appears as featured in GET /events...")
-    events_response = requests.get(f"{BASE_URL}/events", headers=get_headers(normal_token))
-    if events_response.status_code == 200:
-        events = events_response.json()
-        featured_event = next((e for e in events if e["id"] == event_id), None)
-        if featured_event:
-            is_featured = featured_event.get("featured") == True
-            # Check if it's among the first items (featured events should float to top)
-            event_index = next((i for i, e in enumerate(events) if e["id"] == event_id), -1)
-            is_first = event_index >= 0 and event_index < 5  # Should be in top 5
-            log_test("Featured event has featured:true flag", is_featured,
-                    f"featured={featured_event.get('featured')}")
-            log_test("Featured event appears among first items", is_first,
-                    f"Position: {event_index + 1} of {len(events)}")
-        else:
-            log_test("Featured event found in list", False, "Event not found")
-    else:
-        log_test("GET /events after featuring", False, f"Status: {events_response.status_code}")
-
-    # Test 1.4: Unset featured flag
-    print(f"\n[1.4] Unsetting featured flag...")
-    unfeatured_response = requests.put(
-        f"{BASE_URL}/admin/events/{event_id}/featured",
-        headers=get_headers(admin_token),
-        json={"featured": False}
+    if resp.status_code != 200:
+        log(f"❌ Failed to send friend request: {resp.status_code} - {resp.text}")
+        return False
+    
+    # B gets friend requests
+    resp = requests.get(
+        f"{BASE_URL}/friends/requests",
+        headers={"Authorization": f"Bearer {token_b}"}
     )
-    log_test("PUT /admin/events/{id}/featured with featured:false", 
-             unfeatured_response.status_code == 200 and 
-             unfeatured_response.json().get("featured") == False,
-             f"Status: {unfeatured_response.status_code}, Response: {unfeatured_response.json()}")
-
-    # Test 1.5: Verify featured flag is false
-    print(f"\n[1.5] Verifying featured flag is false...")
-    events_response = requests.get(f"{BASE_URL}/events", headers=get_headers(normal_token))
-    if events_response.status_code == 200:
-        events = events_response.json()
-        event = next((e for e in events if e["id"] == event_id), None)
-        if event:
-            log_test("Event featured flag is false after unsetting", 
-                    event.get("featured") == False,
-                    f"featured={event.get('featured')}")
-        else:
-            log_test("Event found after unfeaturing", False, "Event not found")
-
-    # Test 1.6: Non-admin tries to set featured (should be 403)
-    print(f"\n[1.6] Non-admin trying to set featured (should be 403)...")
-    non_admin_response = requests.put(
-        f"{BASE_URL}/admin/events/{event_id}/featured",
-        headers=get_headers(normal_token),
-        json={"featured": True}
+    if resp.status_code != 200:
+        log(f"❌ Failed to get friend requests: {resp.status_code}")
+        return False
+    
+    requests_list = resp.json()
+    if not requests_list:
+        log(f"❌ No friend requests found")
+        return False
+    
+    request_id = requests_list[0]["request_id"]
+    
+    # B accepts friend request
+    resp = requests.post(
+        f"{BASE_URL}/friends/respond",
+        json={"request_id": request_id, "accept": True},
+        headers={"Authorization": f"Bearer {token_b}"}
     )
-    log_test("Non-admin PUT /admin/events/{id}/featured returns 403", 
-             non_admin_response.status_code == 403,
-             f"Status: {non_admin_response.status_code}")
+    if resp.status_code != 200:
+        log(f"❌ Failed to accept friend request: {resp.status_code}")
+        return False
+    
+    return True
 
-    # Test 1.7: Invalid event ID (should be 404)
-    print(f"\n[1.7] Setting featured on invalid event ID (should be 404)...")
-    invalid_response = requests.put(
-        f"{BASE_URL}/admin/events/invalid-event-id-12345/featured",
-        headers=get_headers(admin_token),
-        json={"featured": True}
-    )
-    log_test("PUT /admin/events/{invalid_id}/featured returns 404", 
-             invalid_response.status_code == 404,
-             f"Status: {invalid_response.status_code}")
-
-    # Test 1.8: GET /admin/events/{id}/stats includes featured field
-    print(f"\n[1.8] Verifying GET /admin/events/{id}/stats includes featured field...")
-    # First set it to true
-    requests.put(
-        f"{BASE_URL}/admin/events/{event_id}/featured",
-        headers=get_headers(admin_token),
-        json={"featured": True}
-    )
-    stats_response = requests.get(
-        f"{BASE_URL}/admin/events/{event_id}/stats",
-        headers=get_headers(admin_token)
-    )
-    if stats_response.status_code == 200:
-        stats = stats_response.json()
-        event_data = stats.get("event", {})
-        log_test("GET /admin/events/{id}/stats includes featured field", 
-                "featured" in event_data and event_data["featured"] == True,
-                f"featured={event_data.get('featured')}")
-    else:
-        log_test("GET /admin/events/{id}/stats", False, 
-                f"Status: {stats_response.status_code}")
+def test(name, func):
+    """Run a test and track results"""
+    global tests_passed, tests_failed, failed_tests
+    try:
+        log(f"🧪 Testing: {name}")
+        func()
+        tests_passed += 1
+        log(f"✅ PASSED: {name}")
+    except AssertionError as e:
+        tests_failed += 1
+        failed_tests.append(name)
+        log(f"❌ FAILED: {name} - {str(e)}")
+    except Exception as e:
+        tests_failed += 1
+        failed_tests.append(name)
+        log(f"❌ ERROR: {name} - {str(e)}")
 
 # ============================================================================
-# TEST 2: NOTIFY SEGMENTATION
+# TEST 1: DEFAULT PRIVACY = amigos
 # ============================================================================
-print("\n" + "=" * 80)
-print("TEST 2: NOTIFY SEGMENTATION")
-print("=" * 80)
 
-# Test 2.1: Get a real genre from the system
-print("\n[2.1] Getting available genres...")
-genres_response = requests.get(f"{BASE_URL}/events/genres", headers=get_headers(normal_token))
-real_genre = None
-if genres_response.status_code == 200:
-    genres = genres_response.json()
-    if genres:
-        real_genre = genres[0]
-        print(f"✅ Found genre: {real_genre}")
-        log_test("GET /events/genres", True, f"Found {len(genres)} genres")
-    else:
-        print("⚠️ No genres found in system")
-        log_test("GET /events/genres", True, "No genres available")
-else:
-    log_test("GET /events/genres", False, f"Status: {genres_response.status_code}")
-
-# Test 2.2: Send notification to city audience
-print("\n[2.2] Sending notification to city audience (Palma de Mallorca)...")
-city_notify_response = requests.post(
-    f"{BASE_URL}/admin/notify/send",
-    headers=get_headers(admin_token),
-    json={
-        "preset_id": "generic_new",
-        "audience": "city",
-        "city": "Palma de Mallorca"
-    }
-)
-if city_notify_response.status_code == 200:
-    data = city_notify_response.json()
-    log_test("POST /admin/notify/send with city audience", 
-             data.get("ok") == True and 
-             data.get("audience") == "city" and 
-             "notified" in data and 
-             data.get("queued") == True,
-             f"Response: {data}")
-else:
-    log_test("POST /admin/notify/send with city audience", False,
-             f"Status: {city_notify_response.status_code}, Response: {city_notify_response.text}")
-
-# Test 2.3: Send notification to genre audience (if genre available)
-if real_genre:
-    print(f"\n[2.3] Sending notification to genre audience ({real_genre})...")
-    genre_notify_response = requests.post(
-        f"{BASE_URL}/admin/notify/send",
-        headers=get_headers(admin_token),
-        json={
-            "body": "hola melomanos",
-            "audience": "genre",
-            "genre": real_genre
-        }
+def test_default_privacy_amigos():
+    """Register a NEW user and verify attendance_privacy and moment_privacy both default to 'amigos'"""
+    log("Registering new user to test default privacy...")
+    token, user_id, email = register_user()
+    assert token, "Failed to register user"
+    
+    # GET /api/auth/me
+    resp = requests.get(
+        f"{BASE_URL}/auth/me",
+        headers={"Authorization": f"Bearer {token}"}
     )
-    if genre_notify_response.status_code == 200:
-        data = genre_notify_response.json()
-        log_test("POST /admin/notify/send with genre audience", 
-                data.get("ok") == True and 
-                data.get("audience") == "genre",
-                f"Response: {data}")
-    else:
-        log_test("POST /admin/notify/send with genre audience", False,
-                f"Status: {genre_notify_response.status_code}, Response: {genre_notify_response.text}")
-else:
-    print("\n[2.3] Skipping genre notification test (no genres available)")
-
-# Test 2.4: Send notification with genre audience but empty genre (should be 400)
-print("\n[2.4] Sending notification with genre audience but empty genre (should be 400)...")
-empty_genre_response = requests.post(
-    f"{BASE_URL}/admin/notify/send",
-    headers=get_headers(admin_token),
-    json={
-        "body": "test message",
-        "audience": "genre",
-        "genre": ""
-    }
-)
-log_test("POST /admin/notify/send with empty genre returns 400", 
-         empty_genre_response.status_code == 400,
-         f"Status: {empty_genre_response.status_code}")
-
-# Test 2.5: Send notification with city audience but empty city (should be 400)
-print("\n[2.5] Sending notification with city audience but empty city (should be 400)...")
-empty_city_response = requests.post(
-    f"{BASE_URL}/admin/notify/send",
-    headers=get_headers(admin_token),
-    json={
-        "body": "test message",
-        "audience": "city",
-        "city": ""
-    }
-)
-log_test("POST /admin/notify/send with empty city returns 400", 
-         empty_city_response.status_code == 400,
-         f"Status: {empty_city_response.status_code}")
-
-# Test 2.6: Non-admin tries to send notification (should be 403)
-print("\n[2.6] Non-admin trying to send notification (should be 403)...")
-non_admin_notify_response = requests.post(
-    f"{BASE_URL}/admin/notify/send",
-    headers=get_headers(normal_token),
-    json={
-        "preset_id": "generic_new",
-        "audience": "all"
-    }
-)
-log_test("Non-admin POST /admin/notify/send returns 403", 
-         non_admin_notify_response.status_code == 403,
-         f"Status: {non_admin_notify_response.status_code}")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    
+    user = resp.json()
+    log(f"User data: attendance_privacy={user.get('attendance_privacy')}, moment_privacy={user.get('moment_privacy')}")
+    
+    assert user.get("attendance_privacy") == "amigos", f"Expected attendance_privacy='amigos', got '{user.get('attendance_privacy')}'"
+    assert user.get("moment_privacy") == "amigos", f"Expected moment_privacy='amigos', got '{user.get('moment_privacy')}'"
+    
+    log("✓ Default privacy values are correct (both 'amigos')")
 
 # ============================================================================
-# TEST 3: SCHEDULING
+# TEST 2: MOMENT PRIVACY field validation
 # ============================================================================
-print("\n" + "=" * 80)
-print("TEST 3: SCHEDULING")
-print("=" * 80)
 
-# Test 3.1: Schedule notification for future
-print("\n[3.1] Scheduling notification for future (2030-01-01T12:00:00)...")
-schedule_response = requests.post(
-    f"{BASE_URL}/admin/notify/send",
-    headers=get_headers(admin_token),
-    json={
-        "preset_id": "generic_new",
-        "audience": "all",
-        "send_at": "2030-01-01T12:00:00"
-    }
-)
-scheduled_id = None
-if schedule_response.status_code == 200:
-    data = schedule_response.json()
-    scheduled_id = data.get("id")
-    log_test("POST /admin/notify/send with future send_at", 
-             data.get("ok") == True and 
-             data.get("scheduled") == True and 
-             "id" in data and 
-             "send_at" in data,
-             f"Response: {data}")
-else:
-    log_test("POST /admin/notify/send with future send_at", False,
-             f"Status: {schedule_response.status_code}, Response: {schedule_response.text}")
-
-# Test 3.2: GET scheduled notifications
-print("\n[3.2] Getting scheduled notifications...")
-get_scheduled_response = requests.get(
-    f"{BASE_URL}/admin/notify/scheduled",
-    headers=get_headers(admin_token)
-)
-if get_scheduled_response.status_code == 200:
-    data = get_scheduled_response.json()
-    scheduled_list = data.get("scheduled", [])
-    found_scheduled = any(s.get("id") == scheduled_id for s in scheduled_list) if scheduled_id else False
-    log_test("GET /admin/notify/scheduled returns list", 
-             "scheduled" in data and isinstance(scheduled_list, list),
-             f"Found {len(scheduled_list)} scheduled notifications")
-    if scheduled_id:
-        log_test("Scheduled notification appears in list", found_scheduled,
-                f"Looking for ID: {scheduled_id}")
-else:
-    log_test("GET /admin/notify/scheduled", False,
-             f"Status: {get_scheduled_response.status_code}")
-
-# Test 3.3: DELETE scheduled notification
-if scheduled_id:
-    print(f"\n[3.3] Deleting scheduled notification {scheduled_id}...")
-    delete_response = requests.delete(
-        f"{BASE_URL}/admin/notify/scheduled/{scheduled_id}",
-        headers=get_headers(admin_token)
+def test_moment_privacy_field():
+    """Test PUT /api/auth/profile with moment_privacy field"""
+    log("Registering user for moment_privacy tests...")
+    token, user_id, email = register_user()
+    assert token, "Failed to register user"
+    
+    # Test 1: Set moment_privacy to "publico" -> 200
+    log("Test 1: Setting moment_privacy to 'publico'...")
+    resp = requests.put(
+        f"{BASE_URL}/auth/profile",
+        json={"moment_privacy": "publico"},
+        headers={"Authorization": f"Bearer {token}"}
     )
-    if delete_response.status_code == 200:
-        data = delete_response.json()
-        log_test("DELETE /admin/notify/scheduled/{id}", 
-                data.get("ok") == True and data.get("cancelled") == True,
-                f"Response: {data}")
-    else:
-        log_test("DELETE /admin/notify/scheduled/{id}", False,
-                f"Status: {delete_response.status_code}")
-
-    # Test 3.4: Verify it's no longer in the list
-    print(f"\n[3.4] Verifying scheduled notification is no longer in list...")
-    get_scheduled_response = requests.get(
-        f"{BASE_URL}/admin/notify/scheduled",
-        headers=get_headers(admin_token)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    
+    # Verify it's reflected in GET /auth/me
+    resp = requests.get(
+        f"{BASE_URL}/auth/me",
+        headers={"Authorization": f"Bearer {token}"}
     )
-    if get_scheduled_response.status_code == 200:
-        data = get_scheduled_response.json()
-        scheduled_list = data.get("scheduled", [])
-        still_found = any(s.get("id") == scheduled_id for s in scheduled_list)
-        log_test("Cancelled notification no longer in pending list", not still_found,
-                f"Still found: {still_found}")
-    else:
-        log_test("GET /admin/notify/scheduled after delete", False,
-                f"Status: {get_scheduled_response.status_code}")
-else:
-    print("\n[3.3-3.4] Skipping delete tests (no scheduled ID)")
-
-# Test 3.5: DELETE unknown scheduled notification (should be 404)
-print("\n[3.5] Deleting unknown scheduled notification (should be 404)...")
-delete_unknown_response = requests.delete(
-    f"{BASE_URL}/admin/notify/scheduled/unknown-id-12345",
-    headers=get_headers(admin_token)
-)
-log_test("DELETE /admin/notify/scheduled/{unknown_id} returns 404", 
-         delete_unknown_response.status_code == 404,
-         f"Status: {delete_unknown_response.status_code}")
-
-# Test 3.6: Schedule notification with past date (should send now)
-print("\n[3.6] Scheduling notification with past date (should send now)...")
-past_schedule_response = requests.post(
-    f"{BASE_URL}/admin/notify/send",
-    headers=get_headers(admin_token),
-    json={
-        "preset_id": "generic_new",
-        "audience": "all",
-        "send_at": "2020-01-01T12:00:00"
-    }
-)
-if past_schedule_response.status_code == 200:
-    data = past_schedule_response.json()
-    # Should NOT have scheduled:true, should have notified/queued
-    has_scheduled = data.get("scheduled") == True
-    has_notified = "notified" in data or "queued" in data
-    log_test("POST /admin/notify/send with past send_at sends now", 
-             not has_scheduled and has_notified,
-             f"Response: {data}")
-else:
-    log_test("POST /admin/notify/send with past send_at", False,
-             f"Status: {past_schedule_response.status_code}, Response: {past_schedule_response.text}")
-
-# Test 3.7: Non-admin tries to get scheduled (should be 403)
-print("\n[3.7] Non-admin trying to get scheduled notifications (should be 403)...")
-non_admin_scheduled_response = requests.get(
-    f"{BASE_URL}/admin/notify/scheduled",
-    headers=get_headers(normal_token)
-)
-log_test("Non-admin GET /admin/notify/scheduled returns 403", 
-         non_admin_scheduled_response.status_code == 403,
-         f"Status: {non_admin_scheduled_response.status_code}")
-
-# Test 3.8: Non-admin tries to delete scheduled (should be 403)
-print("\n[3.8] Non-admin trying to delete scheduled notification (should be 403)...")
-non_admin_delete_response = requests.delete(
-    f"{BASE_URL}/admin/notify/scheduled/some-id",
-    headers=get_headers(normal_token)
-)
-log_test("Non-admin DELETE /admin/notify/scheduled/{id} returns 403", 
-         non_admin_delete_response.status_code == 403,
-         f"Status: {non_admin_delete_response.status_code}")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    user = resp.json()
+    assert user.get("moment_privacy") == "publico", f"Expected 'publico', got '{user.get('moment_privacy')}'"
+    log("✓ moment_privacy='publico' works")
+    
+    # Test 2: Invalid value "foo" -> 400
+    log("Test 2: Setting moment_privacy to invalid value 'foo'...")
+    resp = requests.put(
+        f"{BASE_URL}/auth/profile",
+        json={"moment_privacy": "foo"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 400, f"Expected 400 for invalid value, got {resp.status_code}"
+    log("✓ Invalid moment_privacy value returns 400")
+    
+    # Test 3: Set back to "amigos" -> 200
+    log("Test 3: Setting moment_privacy back to 'amigos'...")
+    resp = requests.put(
+        f"{BASE_URL}/auth/profile",
+        json={"moment_privacy": "amigos"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    log("✓ moment_privacy='amigos' works")
+    
+    # REGRESSION: Test attendance_privacy still works
+    log("Regression test: Setting attendance_privacy to 'amigos'...")
+    resp = requests.put(
+        f"{BASE_URL}/auth/profile",
+        json={"attendance_privacy": "amigos"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    log("✓ attendance_privacy='amigos' works")
+    
+    log("Regression test: Setting attendance_privacy to invalid value 'foo'...")
+    resp = requests.put(
+        f"{BASE_URL}/auth/profile",
+        json={"attendance_privacy": "foo"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 400, f"Expected 400 for invalid value, got {resp.status_code}"
+    log("✓ Invalid attendance_privacy value returns 400")
 
 # ============================================================================
-# TEST 4: REGRESSION - Admin Funnel
+# TEST 3: DM READ FIX - opening thread clears dm notifications
 # ============================================================================
-print("\n" + "=" * 80)
-print("TEST 4: REGRESSION - Admin Funnel")
-print("=" * 80)
 
-print("\n[4.1] Testing GET /admin/funnel?scope=all...")
-funnel_response = requests.get(
-    f"{BASE_URL}/admin/funnel?scope=all",
-    headers=get_headers(admin_token)
-)
-if funnel_response.status_code == 200:
-    data = funnel_response.json()
-    has_rows = "rows" in data
-    has_totals = "totals" in data
-    log_test("GET /admin/funnel?scope=all returns 200", True,
-             f"Status: {funnel_response.status_code}")
-    log_test("Response has 'rows' field", has_rows,
-             f"rows present: {has_rows}")
-    log_test("Response has 'totals' field", has_totals,
-             f"totals present: {has_totals}")
-else:
-    log_test("GET /admin/funnel?scope=all", False,
-             f"Status: {funnel_response.status_code}")
+def test_dm_read_fix():
+    """Test that opening a DM thread marks the dm notification as read"""
+    log("Registering user A...")
+    token_a, user_id_a, email_a = register_user(name="Alice")
+    assert token_a, "Failed to register user A"
+    
+    log("Registering user B...")
+    token_b, user_id_b, email_b = register_user(name="Bob")
+    assert token_b, "Failed to register user B"
+    
+    # Make them friends
+    log("Making users friends...")
+    assert make_friends(token_a, user_id_a, token_b, user_id_b), "Failed to make users friends"
+    log("✓ Users are now friends")
+    
+    # B sends DM to A
+    log("B sends DM to A...")
+    resp = requests.post(
+        f"{BASE_URL}/dm/send",
+        json={"to_user_id": user_id_a, "text": "hola"},
+        headers={"Authorization": f"Bearer {token_b}"}
+    )
+    assert resp.status_code == 200, f"Failed to send DM: {resp.status_code} - {resp.text}"
+    log("✓ DM sent successfully")
+    
+    # Wait a moment for notification to be created
+    time.sleep(0.5)
+    
+    # As A: GET /api/notifications should contain an unread notification with type=="dm"
+    log("As A: Checking notifications...")
+    resp = requests.get(
+        f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    assert resp.status_code == 200, f"Failed to get notifications: {resp.status_code}"
+    notifications = resp.json()
+    
+    dm_notif = None
+    for n in notifications:
+        if n.get("type") == "dm" and n.get("data", {}).get("user_id") == user_id_b:
+            dm_notif = n
+            break
+    
+    assert dm_notif is not None, "No dm notification found from user B"
+    assert dm_notif.get("read") == False, f"Expected dm notification to be unread, got read={dm_notif.get('read')}"
+    log(f"✓ Found unread dm notification from B: {dm_notif.get('message')}")
+    
+    # As A: GET /api/notifications/unread-count should be > 0
+    resp = requests.get(
+        f"{BASE_URL}/notifications/unread-count",
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    assert resp.status_code == 200, f"Failed to get unread count: {resp.status_code}"
+    unread_count = resp.json().get("count", 0)
+    assert unread_count > 0, f"Expected unread count > 0, got {unread_count}"
+    log(f"✓ Unread notification count: {unread_count}")
+    
+    # Now as A: GET /api/dm/{B_userId}/messages (opens thread)
+    log("As A: Opening DM thread with B...")
+    resp = requests.get(
+        f"{BASE_URL}/dm/{user_id_b}/messages",
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    assert resp.status_code == 200, f"Failed to get DM messages: {resp.status_code}"
+    messages = resp.json()
+    assert len(messages) > 0, "Expected at least one message"
+    log(f"✓ Retrieved {len(messages)} message(s)")
+    
+    # Wait a moment for notification to be marked as read
+    time.sleep(0.5)
+    
+    # THEN re-check as A: GET /api/notifications -> the dm notification from B must now have read==true
+    log("As A: Re-checking notifications after opening thread...")
+    resp = requests.get(
+        f"{BASE_URL}/notifications",
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    assert resp.status_code == 200, f"Failed to get notifications: {resp.status_code}"
+    notifications = resp.json()
+    
+    dm_notif_after = None
+    for n in notifications:
+        if n.get("type") == "dm" and n.get("data", {}).get("user_id") == user_id_b:
+            dm_notif_after = n
+            break
+    
+    assert dm_notif_after is not None, "DM notification disappeared after opening thread"
+    assert dm_notif_after.get("read") == True, f"Expected dm notification to be read after opening thread, got read={dm_notif_after.get('read')}"
+    log("✓ DM notification is now marked as read")
+    
+    # As A: GET /api/dm/unread-count should be 0 for that thread
+    resp = requests.get(
+        f"{BASE_URL}/dm/unread-count",
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    assert resp.status_code == 200, f"Failed to get dm unread count: {resp.status_code}"
+    dm_unread = resp.json().get("count", 0)
+    assert dm_unread == 0, f"Expected dm unread count to be 0, got {dm_unread}"
+    log("✓ DM unread count is now 0")
+    
+    log("✓ DM READ FIX VERIFIED: Opening a chat clears its pending notification")
 
 # ============================================================================
-# SUMMARY
+# TEST 4: WEEKLY RECAP
 # ============================================================================
-print("\n" + "=" * 80)
-print("TEST SUMMARY")
-print("=" * 80)
-print(f"\nTotal Tests: {tests_passed + tests_failed}")
-print(f"✅ Passed: {tests_passed}")
-print(f"❌ Failed: {tests_failed}")
-print(f"Pass Rate: {(tests_passed / (tests_passed + tests_failed) * 100):.1f}%")
 
-print("\n" + "=" * 80)
-print("DETAILED RESULTS")
-print("=" * 80)
-for result in test_results:
-    print(result)
+def test_weekly_recap():
+    """Test POST /api/admin/trigger-weekend-recap"""
+    log("Logging in as admin...")
+    admin_token = login(ADMIN_EMAIL, ADMIN_PASSWORD)
+    assert admin_token, "Failed to login as admin"
+    
+    log("Triggering weekend recap...")
+    resp = requests.post(
+        f"{BASE_URL}/admin/trigger-weekend-recap",
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    
+    data = resp.json()
+    assert "sent" in data, "Response missing 'sent' field"
+    sent_count = data["sent"]
+    log(f"✓ Weekend recap triggered successfully, sent to {sent_count} users")
+    
+    # Verify it's an integer
+    assert isinstance(sent_count, int), f"Expected 'sent' to be an integer, got {type(sent_count)}"
+    log("✓ Response format is correct")
 
-print("\n" + "=" * 80)
-print("TEST COMPLETE")
-print("=" * 80)
+# ============================================================================
+# TEST 5: DISCOVER endpoint
+# ============================================================================
+
+def test_discover():
+    """Test GET /api/discover returns correct structure and never includes requesting user"""
+    log("Registering user for discover test...")
+    token, user_id, email = register_user()
+    assert token, "Failed to register user"
+    
+    log("Calling GET /api/discover...")
+    resp = requests.get(
+        f"{BASE_URL}/discover",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    
+    data = resp.json()
+    log(f"Discover response keys: {data.keys()}")
+    
+    # Verify structure
+    assert "people" in data, "Response missing 'people' field"
+    assert "moments" in data, "Response missing 'moments' field"
+    assert "city" in data, "Response missing 'city' field"
+    
+    assert isinstance(data["people"], list), f"Expected 'people' to be a list, got {type(data['people'])}"
+    assert isinstance(data["moments"], list), f"Expected 'moments' to be a list, got {type(data['moments'])}"
+    assert isinstance(data["city"], str), f"Expected 'city' to be a string, got {type(data['city'])}"
+    
+    log(f"✓ Response structure correct: people={len(data['people'])}, moments={len(data['moments'])}, city='{data['city']}'")
+    
+    # CRITICAL: Verify people NEVER contains the requesting user's own user_id
+    people_ids = [p.get("user_id") for p in data["people"]]
+    assert user_id not in people_ids, f"CRITICAL BUG: Discover people list contains requesting user's own user_id ({user_id})"
+    log(f"✓ VERIFIED: Requesting user ({user_id}) is NOT in people list")
+    
+    # Log some sample data if available
+    if data["people"]:
+        sample = data["people"][0]
+        log(f"Sample person: {sample.get('name')} ({sample.get('user_id')})")
+    
+    if data["moments"]:
+        sample = data["moments"][0]
+        log(f"Sample moment: author={sample.get('author', {}).get('name')}, event={sample.get('event_name')}")
+
+# ============================================================================
+# REGRESSION TESTS
+# ============================================================================
+
+def test_regression_login():
+    """Test POST /api/auth/login works"""
+    log("Testing login with admin credentials...")
+    resp = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": ADMIN_EMAIL,
+        "password": ADMIN_PASSWORD
+    })
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    data = resp.json()
+    assert "token" in data, "Response missing 'token' field"
+    assert "user" in data, "Response missing 'user' field"
+    log("✓ Login works correctly")
+
+def test_regression_events():
+    """Test GET /api/events returns 200"""
+    log("Testing GET /api/events...")
+    # Events endpoint requires authentication
+    admin_token = login(ADMIN_EMAIL, ADMIN_PASSWORD)
+    assert admin_token, "Failed to login as admin"
+    
+    resp = requests.get(
+        f"{BASE_URL}/events",
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    data = resp.json()
+    assert isinstance(data, list), f"Expected list, got {type(data)}"
+    log(f"✓ GET /api/events works, returned {len(data)} events")
+
+# ============================================================================
+# RUN ALL TESTS
+# ============================================================================
+
+def main():
+    log("=" * 80)
+    log("BACKEND TESTING - ¿Quién va? App")
+    log("Testing: Default privacy + moment_privacy + DM read fix + weekly recap + discover")
+    log("=" * 80)
+    
+    # Main tests
+    test("1. Default privacy = amigos", test_default_privacy_amigos)
+    test("2. Moment privacy field validation", test_moment_privacy_field)
+    test("3. DM read fix (opening thread clears notification)", test_dm_read_fix)
+    test("4. Weekly recap endpoint", test_weekly_recap)
+    test("5. Discover endpoint", test_discover)
+    
+    # Regression tests
+    test("Regression: Login", test_regression_login)
+    test("Regression: Events list", test_regression_events)
+    
+    # Summary
+    log("=" * 80)
+    log(f"TESTING COMPLETE")
+    log(f"✅ Passed: {tests_passed}")
+    log(f"❌ Failed: {tests_failed}")
+    if failed_tests:
+        log(f"Failed tests: {', '.join(failed_tests)}")
+    log("=" * 80)
+    
+    return tests_failed == 0
+
+if __name__ == "__main__":
+    success = main()
+    exit(0 if success else 1)

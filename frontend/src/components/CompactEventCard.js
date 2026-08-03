@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Flame, Users, Ticket, Lock, Clock, Star } from "lucide-react";
+import { Flame, Users, Ticket, Lock, Clock, Star, Check } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { mediaUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -45,7 +45,7 @@ function formatDate(dateStr) {
  * Compact tile used in horizontal carousels AND in "modo compacto" 2-column grid.
  * Not the full card — just a teaser. Tapping opens the event detail.
  */
-export function CompactEventCard({ event, index = 0, width }) {
+export function CompactEventCard({ event, index = 0, width, onVoy }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const going = event.friends_going || [];
@@ -60,14 +60,22 @@ export function CompactEventCard({ event, index = 0, width }) {
   const interestedCount = interested.length + (isInteresa ? 1 : 0);
   const friendCount = goingCount + interestedCount;
 
+  const handleVoy = (e) => {
+    e.stopPropagation();
+    if (onVoy) onVoy(isVoy ? "none" : "voy");
+  };
+
   return (
-    <motion.button
+    <motion.div
       data-testid={`compact-card-${event.id}`}
+      role="button"
+      tabIndex={0}
       onClick={() => navigate(`/event/${event.id}`)}
+      onKeyDown={(e) => { if (e.key === "Enter") navigate(`/event/${event.id}`); }}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.24), ease: "easeOut" }}
-      className="relative rounded-2xl overflow-hidden bg-[#121215] border border-white/10 text-left flex-shrink-0 active:scale-[0.98] transition-transform"
+      className="relative rounded-2xl overflow-hidden bg-[#121215] border border-white/10 text-left flex-shrink-0 active:scale-[0.98] transition-transform cursor-pointer"
       style={width ? { width } : undefined}
     >
       <div className="relative aspect-[4/5]">
@@ -95,6 +103,21 @@ export function CompactEventCard({ event, index = 0, width }) {
             <Flame className="w-2.5 h-2.5" />
             {friendCount}
           </span>
+        )}
+
+        {onVoy && (
+          <button
+            data-testid={`compact-voy-${event.id}`}
+            onClick={handleVoy}
+            className={`absolute bottom-2 right-2 z-20 inline-flex items-center gap-0.5 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide backdrop-blur-sm active:scale-90 transition-colors border ${
+              isVoy
+                ? "bg-qv-primary text-white border-qv-primary"
+                : "bg-black/50 text-white/90 border-white/25"
+            }`}
+            aria-label={isVoy ? "Quitar voy" : "Marcar voy"}
+          >
+            {isVoy ? <><Check className="w-2.5 h-2.5" /> Voy</> : "Voy"}
+          </button>
         )}
 
         <div className="absolute bottom-0 w-full p-2.5 z-10">
@@ -125,6 +148,6 @@ export function CompactEventCard({ event, index = 0, width }) {
           )}
         </div>
       </div>
-    </motion.button>
+    </motion.div>
   );
 }

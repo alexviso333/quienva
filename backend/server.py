@@ -199,6 +199,9 @@ def phone_hash(raw: str) -> Optional[str]:
 
 
 ATTENDANCE_PRIVACY_VALUES = ("todos", "amigos", "nadie")
+# Who can see YOUR "El Momento" captures. "amigos" (default) = only friends;
+# "publico" = anyone (feeds the Descubrir section so newcomers/tourists see them).
+MOMENT_PRIVACY_VALUES = ("amigos", "publico")
 
 
 def new_session_token() -> str:
@@ -242,6 +245,7 @@ class ProfileUpdate(BaseModel):
     birthdate: Optional[str] = None
     phone: Optional[str] = None
     attendance_privacy: Optional[str] = None   # "todos" | "amigos" | "nadie"
+    moment_privacy: Optional[str] = None       # "amigos" | "publico"
 
 
 class BlockInput(BaseModel):
@@ -335,7 +339,8 @@ def public_user(u: dict) -> dict:
         "city": u.get("city"),
         "role": u.get("role", "user"),
         "auth_provider": u.get("auth_provider"),
-        "attendance_privacy": u.get("attendance_privacy", "todos"),
+        "attendance_privacy": u.get("attendance_privacy", "amigos"),
+        "moment_privacy": u.get("moment_privacy", "amigos"),
         "has_phone": bool(u.get("phone_hash")),
         "needs_birthdate": not bool(u.get("birthdate")),
     }
@@ -413,7 +418,8 @@ async def register(inp: RegisterInput, response: Response):
         "auth_provider": "email",
         "password_hash": hash_password(inp.password),
         "birthdate": inp.birthdate.strip()[:10],
-        "attendance_privacy": "todos",
+        "attendance_privacy": "amigos",
+        "moment_privacy": "amigos",
         "blocked_users": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -493,7 +499,8 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
             "city": "Palma de Mallorca",
             "role": "user",
             "auth_provider": "google",
-            "attendance_privacy": "todos",
+            "attendance_privacy": "amigos",
+            "moment_privacy": "amigos",
             "blocked_users": [],
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -550,6 +557,10 @@ async def update_profile(inp: ProfileUpdate, user: dict = Depends(get_current_us
             {"user_id": user["user_id"]},
             {"$set": {"privacy": inp.attendance_privacy}},
         )
+    if inp.moment_privacy is not None:
+        if inp.moment_privacy not in MOMENT_PRIVACY_VALUES:
+            raise HTTPException(status_code=400, detail="Valor de privacidad inválido")
+        updates["moment_privacy"] = inp.moment_privacy
     if updates:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
         user.update(updates)
@@ -1933,7 +1944,7 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
 
     existing = await db.interests.find_one({"user_id": user["user_id"], "event_id": event_id})
     prev_status = existing["status"] if existing else None
-    my_privacy = user.get("attendance_privacy", "todos")
+    my_privacy = user.get("attendance_privacy", "amigos")
 
     if inp.status == "none":
         await db.interests.delete_one({"user_id": user["user_id"], "event_id": event_id})
@@ -2108,6 +2119,72 @@ async def my_recap(user: dict = Depends(get_current_user)):
         "went": went, "photos": photos, "new_friends": new_friends,
         "friends_plans": friends_plans, "has_activity": has_activity,
     }
+
+
+@api_router.get("/discover")
+async def discover(user: dict = Depends(get_current_user)):
+    """Discover section — built for newcomers (e.g. tourists with no friends yet):
+    recommended people in their city + recent PUBLIC 'El Momento' captures from
+    users who opted in via moment_privacy='publico'. Loaded on demand, not on the
+    main feed, so it never slows down the hot path."""
+    uid = user["user_id"]
+    my_city = user.get("city") or "Palma de Mallorca"
+    friend_ids = set(await accepted_friend_ids(uid))
+    blocked = await blocked_relation_ids(uid)
+    rel = await friendship_status_map(uid)  # exclude anyone with a pending/accepted relation
+    exclude = set(friend_ids) | set(blocked) | set(rel.keys()) | {uid}
+
+    # ---- Recommended people (same city) ----
+    candidates = []
+    async for u in db.users.find(
+        {"city": my_city, "user_id": {"$nin": list(exclude)}},
+        {"_id": 0, "user_id": 1, "name": 1, "username": 1, "picture": 1, "city": 1},
+    ).limit(40):
+        candidates.append(u)
+    cand_ids = [c["user_id"] for c in candidates]
+    going_counts = {}
+    if cand_ids:
+        pipeline = [
+            {"$match": {"user_id": {"$in": cand_ids}, "status": {"$in": ["voy", "me_interesa"]}}},
+            {"$group": {"_id": "$user_id", "n": {"$sum": 1}}},
+        ]
+        async for row in db.interests.aggregate(pipeline):
+            going_counts[row["_id"]] = row["n"]
+    my_fids = list(friend_ids)
+    people = []
+    for c in candidates:
+        # Only compute mutual friends when the viewer actually has friends
+        # (a brand-new tourist has none -> skip the extra queries entirely).
+        mutual = await mutual_friends_count(my_fids, c["user_id"]) if my_fids else 0
+        people.append({
+            **c,
+            "going_count": going_counts.get(c["user_id"], 0),
+            "mutual_friends": mutual,
+        })
+    people.sort(key=lambda p: (p["mutual_friends"], p["going_count"], bool(p.get("picture"))), reverse=True)
+    people = people[:24]
+
+    # ---- Public moments feed ----
+    public_ids = await db.users.distinct("user_id", {"moment_privacy": "publico"})
+    public_ids = [i for i in public_ids if i not in blocked and i != uid]
+    moments = []
+    if public_ids:
+        async for c in db.captures.find(
+            {"user_id": {"$in": public_ids}}, {"_id": 0}
+        ).sort("created_at", -1).limit(30):
+            au = await db.users.find_one({"user_id": c["user_id"]}, {"_id": 0})
+            ev = None
+            if c.get("event_id"):
+                ev = await db.events.find_one({"id": c["event_id"]}, {"_id": 0})
+            moments.append({
+                "id": c["id"],
+                "image_url": c.get("image_url", ""),
+                "created_at": c.get("created_at"),
+                "author": _msg_author(au),
+                "author_id": c["user_id"],
+                "event_name": ev["name"] if ev else None,
+            })
+    return {"people": people, "moments": moments, "city": my_city}
 
 
 # ---------------------------------------------------------------------------
@@ -3561,15 +3638,15 @@ async def generate_weekend_recap() -> int:
     today = datetime.now(PALMA_TZ).date()
     days_back = (today.weekday() + 1) % 7 or 7  # most recent past Sunday
     last_sunday = today - timedelta(days=days_back)
-    last_friday = last_sunday - timedelta(days=2)
+    last_monday = last_sunday - timedelta(days=6)  # whole past week (Mon→Sun)
     sent = 0
 
-    def in_weekend(dstr):
+    def in_week(dstr):
         try:
             d = date.fromisoformat(dstr)
         except Exception:
             return False
-        return last_friday <= d <= last_sunday
+        return last_monday <= d <= last_sunday
 
     async for u in db.users.find({}, {"_id": 0}):
         friend_ids = await accepted_friend_ids(u["user_id"])
@@ -3578,29 +3655,29 @@ async def generate_weekend_recap() -> int:
         my_plans = 0
         async for it in db.interests.find({"user_id": u["user_id"], "status": {"$in": ["voy", "estuve"]}}):
             ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
-            if ev and in_weekend(ev["date"]):
+            if ev and in_week(ev["date"]):
                 my_plans += 1
 
         group_events = set()
         async for it in db.interests.find({"user_id": {"$in": friend_ids}, "status": {"$in": ["voy", "estuve"]}}):
             ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0})
-            if ev and in_weekend(ev["date"]):
+            if ev and in_week(ev["date"]):
                 group_events.add(ev["id"])
 
-        fri_iso = datetime.combine(last_friday, datetime.min.time()).replace(tzinfo=PALMA_TZ).isoformat()
+        mon_iso = datetime.combine(last_monday, datetime.min.time()).replace(tzinfo=PALMA_TZ).isoformat()
         sun_iso = datetime.combine(last_sunday + timedelta(days=1), datetime.min.time()).replace(tzinfo=PALMA_TZ).isoformat()
-        photos = await db.stories.count_documents({"user_id": {"$in": allowed}, "created_at": {"$gte": fri_iso, "$lte": sun_iso}})
+        photos = await db.stories.count_documents({"user_id": {"$in": allowed}, "created_at": {"$gte": mon_iso, "$lte": sun_iso}})
 
         if my_plans + len(group_events) + photos == 0:
             continue
-        week_key = last_friday.isoformat()
+        week_key = last_monday.isoformat()
         if await db.notifications.find_one({"user_id": u["user_id"], "type": "weekend_recap", "data.week": week_key}):
             continue
-        msg = (f"Recuerdo del finde 🎉 Fuiste a {my_plans} plan{'es' if my_plans != 1 else ''}, "
+        msg = (f"Recuerdo de la semana 🎉 Fuiste a {my_plans} plan{'es' if my_plans != 1 else ''}, "
                f"tu grupo se apuntó a {len(group_events)} y subisteis {photos} foto{'s' if photos != 1 else ''}.")
         await create_notification(u["user_id"], "weekend_recap", msg, {"week": week_key})
         sent += 1
-    logger.info(f"Recuerdo del finde enviado a {sent} usuarios")
+    logger.info(f"Recuerdo de la semana enviado a {sent} usuarios")
     return sent
 
 
@@ -3697,6 +3774,13 @@ async def get_dm_messages(other_user_id: str, user: dict = Depends(get_current_u
     # Mark received as read
     await db.dm_messages.update_many(
         {"thread_key": key, "to_user_id": user["user_id"], "read": False},
+        {"$set": {"read": True}},
+    )
+    # Also clear the bell notifications for this conversation so it no longer
+    # shows as pending (fixes: "entro al mensaje y sigue pendiente").
+    await db.notifications.update_many(
+        {"user_id": user["user_id"], "type": "dm",
+         "data.user_id": other_user_id, "read": False},
         {"$set": {"read": True}},
     )
     return msgs

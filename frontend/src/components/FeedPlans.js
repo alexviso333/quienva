@@ -59,7 +59,12 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
 
   const renderCard = (ev, i) =>
     compact ? (
-      <CompactEventCard key={ev.id} event={ev} index={i} />
+      <CompactEventCard
+        key={ev.id}
+        event={ev}
+        index={i}
+        onVoy={onSetStatus ? (status) => onSetStatus(ev.id, status) : undefined}
+      />
     ) : (
       <EventCard
         key={ev.id}

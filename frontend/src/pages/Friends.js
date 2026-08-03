@@ -5,11 +5,13 @@ import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import FindFriends from "@/components/FindFriends";
 import { Input } from "@/components/ui/input";
-import { UserPlus, Check, Clock, Search, X, Loader2 } from "lucide-react";
+import { UserPlus, Check, Clock, Search, X, Loader2, Compass } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 export default function Friends() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
 
@@ -80,6 +82,16 @@ export default function Friends() {
         </h1>
         <p className="text-white/50 text-sm mt-1">Cuantos más amigos, más planes verás.</p>
       </header>
+
+      <div className="px-5 pb-1">
+        <button
+          data-testid="descubrir-btn"
+          onClick={() => navigate("/descubrir")}
+          className="w-full h-12 rounded-2xl bg-gradient-to-r from-qv-primary/20 to-qv-secondary/20 border border-qv-secondary/40 text-white font-bold flex items-center justify-center gap-2 active:scale-95"
+        >
+          <Compass className="w-4 h-4 text-qv-secondary" /> Descubrir gente y momentos
+        </button>
+      </div>
 
       <FindFriends />
 

@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, LogOut, Camera, Share2, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, Copy, Eye, Users2, EyeOff, Ban } from "lucide-react";
+import { ArrowLeft, LogOut, Camera, Share2, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, Copy, Eye, Users2, EyeOff, Ban, Zap, Globe2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
@@ -26,8 +26,10 @@ export default function Settings() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [compact, setCompact] = useCompactMode();
   const pushSupported = isPushSupported();
-  const [privacy, setPrivacy] = useState(user?.attendance_privacy || "todos");
+  const [privacy, setPrivacy] = useState(user?.attendance_privacy || "amigos");
   const [privacyBusy, setPrivacyBusy] = useState(false);
+  const [momentPriv, setMomentPriv] = useState(user?.moment_privacy || "amigos");
+  const [momentBusy, setMomentBusy] = useState(false);
   const [blockedOpen, setBlockedOpen] = useState(false);
 
   const savePrivacy = async (val) => {
@@ -39,9 +41,24 @@ export default function Settings() {
       toast.success("Privacidad actualizada");
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail));
-      setPrivacy(user?.attendance_privacy || "todos");
+      setPrivacy(user?.attendance_privacy || "amigos");
     } finally {
       setPrivacyBusy(false);
+    }
+  };
+
+  const saveMomentPrivacy = async (val) => {
+    setMomentPriv(val);
+    setMomentBusy(true);
+    try {
+      const { data } = await api.put("/auth/profile", { moment_privacy: val });
+      setUser(data);
+      toast.success("Privacidad del Momento actualizada");
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail));
+      setMomentPriv(user?.moment_privacy || "amigos");
+    } finally {
+      setMomentBusy(false);
     }
   };
 
@@ -78,6 +95,10 @@ export default function Settings() {
   });
 
   const togglePush = async () => {
+    if (!pushSupported) {
+      toast.error("Tu navegador no permite avisos push aquí. Instala la app en tu pantalla de inicio y actívalos desde ahí.");
+      return;
+    }
     setPushBusy(true);
     try {
       if (pushOn) { await unsubscribeFromPush(); setPushOn(false); toast.success("Avisos en el móvil desactivados"); }
@@ -173,11 +194,9 @@ export default function Settings() {
         )}
 
         <p className="text-xs uppercase tracking-widest text-white/40 font-bold mt-3">Preferencias</p>
-        {pushSupported && (
-          <button data-testid="push-toggle-btn" onClick={togglePush} disabled={pushBusy} className={`h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60 ${pushOn ? "bg-qv-primary/15 border border-qv-primary/40 text-qv-primary" : "bg-white/5 border border-white/15 text-white"}`}>
-            {pushBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : pushOn ? <><BellRing className="w-4 h-4" /> Avisos en el móvil activados</> : <><Bell className="w-4 h-4" /> Activar avisos en el móvil</>}
-          </button>
-        )}
+        <button data-testid="push-toggle-btn" onClick={togglePush} disabled={pushBusy} className={`h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60 ${pushOn ? "bg-qv-primary/15 border border-qv-primary/40 text-qv-primary" : "bg-white/5 border border-white/15 text-white"}`}>
+          {pushBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : pushOn ? <><BellRing className="w-4 h-4" /> Notificaciones activadas</> : <><Bell className="w-4 h-4" /> Activar notificaciones</>}
+        </button>
         <button data-testid="compact-toggle-btn" onClick={() => { setCompact(!compact); toast.success(compact ? "Vista completa activada" : "Vista compacta activada"); }} className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-between px-4 active:scale-95">
           <span className="flex items-center gap-2">{compact ? <Grid3x3 className="w-4 h-4" /> : <Rows3 className="w-4 h-4" />} Vista del feed</span>
           <span className={`text-xs px-2.5 py-1 rounded-full ${compact ? "bg-qv-secondary/20 text-qv-secondary" : "bg-white/10 text-white/70"}`}>{compact ? "Compacta" : "Completa"}</span>
@@ -211,6 +230,35 @@ export default function Settings() {
             })}
           </div>
           <p className="text-white/40 text-[11px] mt-2 leading-tight">{PRIVACY_OPTS.find((o) => o.key === privacy)?.hint}</p>
+        </div>
+
+        <div className="rounded-2xl bg-white/5 border border-white/10 p-3" data-testid="moment-privacy-section">
+          <p className="text-sm font-semibold text-white flex items-center gap-2"><Zap className="w-4 h-4 text-qv-primary" /> ¿Quién ve tu Momento?</p>
+          <div className="grid grid-cols-2 gap-1.5 mt-2.5">
+            {[
+              { key: "amigos", label: "Solo amigos", icon: Users2 },
+              { key: "publico", label: "Público", icon: Globe2 },
+            ].map((o) => {
+              const Icon = o.icon;
+              const on = momentPriv === o.key;
+              return (
+                <button
+                  key={o.key}
+                  data-testid={`moment-privacy-${o.key}`}
+                  onClick={() => saveMomentPrivacy(o.key)}
+                  disabled={momentBusy}
+                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-1 border transition-colors ${on ? "bg-qv-primary/15 border-qv-primary/50 text-white" : "bg-white/5 border-white/10 text-white/60"}`}
+                >
+                  <Icon className="w-4 h-4" /> {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-white/40 text-[11px] mt-2 leading-tight">
+            {momentPriv === "publico"
+              ? "Tus capturas de El Momento pueden aparecer en Descubrir para gente nueva."
+              : "Modo normal: solo tus amigos ven tus capturas de El Momento."}
+          </p>
         </div>
         <button data-testid="blocked-accounts-btn" onClick={() => setBlockedOpen(true)} className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95">
           <Ban className="w-4 h-4 text-red-300" /> Cuentas bloqueadas
