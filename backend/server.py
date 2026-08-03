@@ -5752,6 +5752,19 @@ _SEED_VENUES = [
     {"name": "Hï Ibiza", "slug": "hi-ibiza", "city": "Ibiza",
      "adapter_type": "nightleague",
      "url": "https://www.hiibiza.com/es"},
+    # Xceed city listings — real club events with prices via schema.org JSON-LD.
+    # No slug (they aggregate many real venues) so they don't create a directory
+    # locale; per-event venue name is set from each event's JSON-LD location.
+    {"name": "Xceed · Ibiza", "slug": "", "city": "Ibiza", "adapter_type": "xceed",
+     "url": "https://xceed.me/es/ibiza/events"},
+    {"name": "Xceed · Madrid", "slug": "", "city": "Madrid", "adapter_type": "xceed",
+     "url": "https://xceed.me/es/madrid/events"},
+    {"name": "Xceed · Barcelona", "slug": "", "city": "Barcelona", "adapter_type": "xceed",
+     "url": "https://xceed.me/es/barcelona/events"},
+    {"name": "Xceed · Marbella", "slug": "", "city": "Marbella", "adapter_type": "xceed",
+     "url": "https://xceed.me/es/marbella/events"},
+    {"name": "Xceed · Palma", "slug": "", "city": "Palma de Mallorca", "adapter_type": "xceed",
+     "url": "https://xceed.me/es/palma-de-mallorca/events"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")
