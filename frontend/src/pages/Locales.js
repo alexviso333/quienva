@@ -94,6 +94,17 @@ function VenueCard({ v }) {
         >
           <MapPin className="w-3.5 h-3.5" /> Cómo llegar
         </a>
+        {v.buy_url && (
+          <a
+            href={v.buy_url}
+            target="_blank"
+            rel="noreferrer"
+            data-testid={`venue-buy-${v.id}`}
+            className="text-[11px] font-bold text-black bg-qv-secondary rounded-lg px-2.5 py-1.5 flex items-center gap-1 active:scale-95"
+          >
+            <Ticket className="w-3.5 h-3.5" /> Entradas
+          </a>
+        )}
         {v.instagram && (
           <a
             href={`https://instagram.com/${v.instagram}`}

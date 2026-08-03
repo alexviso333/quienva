@@ -112,3 +112,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Onboarding guiri**: en el Feed, si el usuario no tiene amigos, banner "¿Nuevo por aquí?" a Descubrir + auto-abre Descubrir una vez (flag localStorage `qv_discover_seen`).
 - Backend probado: 21/21 OK.
 - PENDIENTE debatir con usuario: cómo surfacear fiestas GRATIS/pubs (hoy el feed solo muestra eventos scrapeados de FourVenues = de pago con comisión; los pubs están escondidos en /locales).
+
+## Update 2026-08-03 c — Fiestas gratis/pubs + locales nuevos (aparte pero visible)
+- **Sección de feed "También esta noche"** (`FeedVenuesTonight`): muestra locales del directorio abiertos HOY que NO son ticketing FourVenues (o son gratis). Va DEBAJO de las fiestas de pago (FourVenues siguen primeras = comisión intacta) pero visible, con enlace a Locales. Tarjetas con badge Gratis/Entradas → abren buy_url o Instagram o /locales.
+- **Campo `buy_url`** añadido al modelo VenueInput + directorio + ficha de Locales (botón "Entradas") para locales que venden por su propia web/otra plataforma.
+- **24 locales nuevos** añadidos al directorio (deduplicados, SIN bares puros; beach clubs NO incluidos a la espera de confirmación del usuario). Discotecas + pubs de Mallorca/Magaluf/Alcúdia/Playa de Palma/Cala Rajada.
+- **3 scrapers FourVenues nuevos** en _SEED_VENUES: Zar Society (`zar-mallorca`), Galaxy (`galaxy-mallorca`), Panama Jack (`panama-jack-magaluf`) — slugs sacados de URLs reales de fourvenues.com; en producción scrapearán eventos como el resto. Otros (Selva, Kaelum, Stereo, Mansion) con buy_url a su web/eventbrite/ticketib. Mega-Park/Oberbayern/Night Flight/pubs = free_entry.
+- Verificado: 53 locales, 17 scrapers, /venues devuelve buy_url; feed muestra la sección (8 tarjetas "hoy"), Descubrir OK, banner guiri OK.

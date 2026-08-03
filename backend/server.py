@@ -5460,6 +5460,12 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/savage-mallorca"},
     {"name": "Laos", "slug": "laos-club",
      "url": "https://site.fourvenues.com/es/laos-club"},
+    {"name": "Zar Society", "slug": "zar-mallorca",
+     "url": "https://site.fourvenues.com/es/zar-mallorca"},
+    {"name": "Galaxy", "slug": "galaxy-mallorca", "city": "Magaluf",
+     "url": "https://site.fourvenues.com/es/galaxy-mallorca"},
+    {"name": "Panama Jack", "slug": "panama-jack-magaluf", "city": "Magaluf",
+     "url": "https://site.fourvenues.com/es/panama-jack-magaluf"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")
@@ -6023,6 +6029,83 @@ _SEED_DIRECTORY = [
     {"name": "Club Milano", "zone": "Mallorca", "city": "Mallorca", "type": "discoteca",
      "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "clubmilano",
      "address": "Mallorca"},
+    # --- Nuevas discotecas (2026): FourVenues donde existe, si no link propio ---
+    {"name": "Zar Society", "zone": "Palma · Marítimo", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "zar-mallorca", "free_entry": False, "open_days": [3, 4, 5], "instagram": "zarsociety",
+     "buy_url": "https://zarsociety.es/", "address": "Av. Gabriel Roca 27, Palma"},
+    {"name": "Selva Club", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "selva.011",
+     "buy_url": "https://www.selvaclub.com/", "address": "Palma de Mallorca"},
+    {"name": "Kaelum Club", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "kaelumclub",
+     "buy_url": "https://ticketib.com/organizers/kaelum-club", "address": "Av. de l'Argentina 3, Palma"},
+    {"name": "R33 (Wave Club)", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "r33mallorca",
+     "buy_url": "", "address": "Carrer Poima 24, Palma"},
+    {"name": "Sala Luna", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "Living Music Club", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "livingmusicclub",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "VIP GLAM 69", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "Times Square Music Club", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "Hello The Club", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "Club NL", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "La Nit", "zone": "Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    # --- Magaluf ---
+    {"name": "Galaxy", "zone": "Magaluf", "city": "Magaluf", "type": "discoteca",
+     "scraper_slug": "galaxy-mallorca", "free_entry": False, "open_days": [3, 4, 5, 6], "instagram": "galaxymagaluf",
+     "buy_url": "", "address": "Carrer Punta Ballena 7, Magaluf"},
+    {"name": "Panama Jack", "zone": "Magaluf", "city": "Magaluf", "type": "discoteca",
+     "scraper_slug": "panama-jack-magaluf", "free_entry": False, "open_days": [3, 4, 5, 6], "instagram": "panamajackmagaluf",
+     "buy_url": "", "address": "Magaluf"},
+    {"name": "Stereo", "zone": "Magaluf", "city": "Magaluf", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5, 6], "instagram": "stereomallorca",
+     "buy_url": "https://stereomallorca.com/", "address": "Carrer Punta Ballena 2, Magaluf"},
+    {"name": "Mansion", "zone": "Magaluf", "city": "Magaluf", "type": "discoteca",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5, 6], "instagram": "mansionmallorca",
+     "buy_url": "https://www.eventbrite.com/o/mansion-mallorca-58079932393", "address": "Magaluf"},
+    {"name": "Night Flight", "zone": "Magaluf", "city": "Magaluf", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [3, 4, 5, 6], "instagram": "",
+     "buy_url": "", "address": "Magaluf"},
+    # --- Playa de Palma / El Arenal (entrada gratis) ---
+    {"name": "Mega-Park", "zone": "Playa de Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "megapark_official",
+     "buy_url": "https://www.megapark.tv/", "address": "Carrer de l'Illa de Formentera, S'Arenal"},
+    {"name": "Oberbayern", "zone": "Playa de Palma", "city": "Palma de Mallorca", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "oberbayern_official",
+     "buy_url": "", "address": "Carrer Miquel Pellisa, S'Arenal"},
+    # --- Cala Rajada ---
+    {"name": "Bell's Disco & Club", "zone": "Cala Rajada", "city": "Cala Rajada", "type": "discoteca",
+     "scraper_slug": "", "free_entry": True, "open_days": [4, 5, 6], "instagram": "",
+     "buy_url": "", "address": "Cala Rajada"},
+    # --- Pubs (entrada libre, mismo horario cada semana) ---
+    {"name": "Why Not?", "zone": "Palma", "city": "Palma de Mallorca", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [3, 4, 5], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "After Landing", "zone": "Palma", "city": "Palma de Mallorca", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [4, 5, 6], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "The Prince of Wales", "zone": "Palma", "city": "Palma de Mallorca", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "",
+     "buy_url": "", "address": "Palma de Mallorca"},
+    {"name": "Goodfellas", "zone": "Magaluf", "city": "Magaluf", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "",
+     "buy_url": "", "address": "Magaluf"},
+    {"name": "Legends", "zone": "Port d'Alcúdia", "city": "Alcúdia", "type": "pub",
+     "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "",
+     "buy_url": "", "address": "Port d'Alcúdia"},
 ]
 
 
@@ -6151,6 +6234,7 @@ class VenueInput(BaseModel):
     open_days: List[int] = []
     open_days_manual: bool = False
     instagram: str = ""
+    buy_url: str = ""                # external ticket page (non-FourVenues venues)
     address: str = ""
     image_url: str = ""
     description: str = ""

@@ -9,6 +9,7 @@ import { StreakBanner } from "@/components/StreakBanner";
 import { FriendsActivity, RecapCard } from "@/components/FeedExtras";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import FeedPlans, { FeedPlansControls } from "@/components/FeedPlans";
+import FeedVenuesTonight from "@/components/FeedVenuesTonight";
 import { useAuth } from "@/context/AuthContext";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass } from "lucide-react";
@@ -257,6 +258,11 @@ export default function Feed() {
             <p className="text-white/40 text-sm mt-1">Vuelve pronto o revisa otros géneros.</p>
           </div>
         )}
+
+        {/* Recurring free / non-ticketed plans open tonight — separate but visible */}
+        <div className="-mx-4">
+          <FeedVenuesTonight />
+        </div>
 
         {/* Curated carousels — below the main list so the parties come first */}
         {isDefaultView && carousels && (
