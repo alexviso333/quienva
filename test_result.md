@@ -1036,7 +1036,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://d74373cf-d064-48e4-9df1-2467107df57c.preview.emergentagent.com/api
+      Base URL: https://nightlife-multi-city.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -3384,5 +3384,5 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://d74373cf-d064-48e4-9df1-2467107df57c.preview.emergentagent.com/api
+        Base URL: https://nightlife-multi-city.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)

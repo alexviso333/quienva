@@ -11,7 +11,7 @@ import string
 from datetime import datetime, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://d74373cf-d064-48e4-9df1-2467107df57c.preview.emergentagent.com/api"
+BASE_URL = "https://nightlife-multi-city.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"
