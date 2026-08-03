@@ -90,9 +90,9 @@ export default function PushPermissionGate() {
           Activa las notificaciones
         </h2>
         <p className="text-white/70 text-sm mt-2 leading-relaxed">
-          Son <span className="text-qv-secondary font-semibold">obligatorias</span> para no perderte
-          nada: te avisamos cuando salte <span className="text-qv-secondary font-semibold">El Momento</span>,
-          cuando un amigo diga que va a una fiesta o cuando salgan entradas nuevas.
+          Actívalas para no perderte nada: te avisamos cuando salte{" "}
+          <span className="text-qv-secondary font-semibold">El Momento</span>, cuando un amigo diga que
+          va a una fiesta o cuando salgan entradas nuevas. Puedes cambiarlo cuando quieras en Ajustes.
         </p>
         <button
           onClick={activate}
@@ -101,8 +101,18 @@ export default function PushPermissionGate() {
           data-testid="push-permission-activate"
         >
           {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-          Activar notificaciones
+          Sí, activar
         </button>
+        {!failed && (
+          <button
+            onClick={markDone}
+            disabled={submitting}
+            className="mt-3 w-full py-3 rounded-2xl bg-white/5 border border-white/15 text-white/80 font-display font-bold text-sm active:scale-[0.98] disabled:opacity-60"
+            data-testid="push-permission-decline"
+          >
+            No, gracias
+          </button>
+        )}
         {failed && (
           <>
             <p className="mt-4 text-amber-300/90 text-xs leading-relaxed">

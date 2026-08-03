@@ -5369,6 +5369,10 @@ async def on_startup():
         await enrich_venue_directory()
     except Exception as _:
         pass
+    try:
+        await migrate_midnight_events()
+    except Exception as _:
+        pass
     await cleanup_demo_events()
     global scheduler
     try:
@@ -5831,6 +5835,15 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
     """
     venue_name = venue.get("name") or ""
     city = venue.get("city") or "Palma de Mallorca"
+    # Normalize midnight: a party at 00:00 really belongs to the previous night,
+    # so we store it as 23:59 of the day before. This removes the "day 4 00:00 vs
+    # night of 3→4" ambiguity and makes it show under the correct "hoy" day.
+    if (se.time or "").strip() in ("00:00", "0:00", "00:00:00"):
+        try:
+            se.date = (date.fromisoformat(se.date) - timedelta(days=1)).isoformat()
+            se.time = "23:59"
+        except Exception:
+            pass
     # 1) Lookup by external_id (most reliable)
     existing = await db.events.find_one({"external_id": se.external_id}, {"_id": 0})
     # 2) Fallback: venue + date (user might have created it manually). Only match
@@ -6624,6 +6637,29 @@ _VENUE_COORDS = {
     "La Suite Marbella": (36.503904, -4.925198),
     "Momento Puerto Banús": (36.48746, -4.9536),
 }
+
+
+async def migrate_midnight_events():
+    """One-off (idempotent): shift already-stored scraped events at 00:00 to
+    23:59 of the previous day, matching the new normalization. Only touches
+    scraped events (external_id set) so manual placeholders aren't moved."""
+    try:
+        moved = 0
+        cur = db.events.find(
+            {"time": {"$in": ["00:00", "0:00", "00:00:00"]}, "external_id": {"$nin": [None, ""]}},
+            {"_id": 0, "id": 1, "date": 1},
+        )
+        async for e in cur:
+            try:
+                new_date = (date.fromisoformat(e["date"]) - timedelta(days=1)).isoformat()
+            except Exception:
+                continue
+            await db.events.update_one({"id": e["id"]}, {"$set": {"date": new_date, "time": "23:59"}})
+            moved += 1
+        if moved:
+            logger.info(f"migrate_midnight_events: shifted {moved} events 00:00 -> prev day 23:59")
+    except Exception as e:
+        logger.warning(f"migrate_midnight_events failed: {e}")
 
 
 async def sync_scraper_venues_to_directory():

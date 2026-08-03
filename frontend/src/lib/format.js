@@ -18,15 +18,11 @@ const _WD = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 const _MO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const _pad = (n) => String(n).padStart(2, "0");
 
-// The DATE (YYYY-MM-DD) of the night a party belongs to. A start time between
-// 00:00 and 05:59 belongs to the PREVIOUS night (e.g. a party dated the 4th at
-// 00:00 is really the night of the 3rd → 4th). Display-only; stored date is
-// untouched. 23:59 is treated as the app's placeholder (not a real hour).
+// The DATE (YYYY-MM-DD) a party belongs to. Backend already shifts 00:00 →
+// 23:59 of the previous day, but keep a safeguard for any residual 00:00.
 export function partyNightDate(dateStr, time) {
   const t = String(time || "").trim();
-  const m = t.match(/^(\d{1,2}):(\d{2})/);
-  const hour = m ? parseInt(m[1], 10) : null;
-  if (t !== "23:59" && hour !== null && hour >= 0 && hour < 6) {
+  if (t === "00:00" || t === "0:00" || t === "00:00:00") {
     try {
       const d = new Date(dateStr + "T00:00:00");
       d.setDate(d.getDate() - 1);
@@ -38,10 +34,12 @@ export function partyNightDate(dateStr, time) {
   return dateStr;
 }
 
-// Human label like "vie 3 ago · 00:30 · madrugada" using the night the party
-// belongs to. Placeholder times (23:59) and missing times show just the date.
+// Human label like "vie 3 ago · 23:59". Shows the real start time, INCLUDING
+// 23:59 (which now means "late night, from midnight" after the 00:00 shift).
+// Only a missing/empty time is hidden.
 export function formatPartyDate(dateStr, time) {
-  const nd = partyNightDate(dateStr, time);
+  const t = String(time || "").trim();
+  const nd = partyNightDate(dateStr, t);
   let dateLabel = nd;
   try {
     const d = new Date(nd + "T00:00:00");
@@ -49,11 +47,9 @@ export function formatPartyDate(dateStr, time) {
   } catch {
     /* keep raw */
   }
-  const t = String(time || "").trim();
   const m = t.match(/^(\d{1,2}):(\d{2})/);
-  if (t === "23:59" || !m) return dateLabel; // placeholder / no time
+  if (!m) return dateLabel; // no/empty time
+  if (t === "00:00" || t === "0:00") return `${dateLabel} · 23:59`; // safeguard
   const hour = parseInt(m[1], 10);
-  const hhmm = `${hour}:${m[2]}`;
-  if (hour >= 0 && hour < 6) return `${dateLabel} · ${hhmm} · madrugada`;
-  return `${dateLabel} · ${t.slice(0, 5)}`;
+  return `${dateLabel} · ${hour}:${m[2]}`;
 }
