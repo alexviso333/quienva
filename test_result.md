@@ -911,10 +911,40 @@ frontend:
         agent: "testing"
         comment: "TESTED ALL SCENARIOS (5 tests, 100% pass): ✅ (1) GET /discover as normal user → 200 with correct structure {people:[], moments:[], city:str}. ✅ (2) people is array, moments is array, city is string. ✅ (3) Response: people=10, moments=0, city='Palma de Mallorca'. ✅ (4) CRITICAL VERIFICATION: Requesting user's own user_id is NOT in people list (verified user_id not in people_ids). ✅ (5) Sample person data correct. Discover endpoint working perfectly, never includes requesting user in people list."
 
+  - task: "POST /api/captures/{capture_id}/like (toggle like on moment)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint POST /api/captures/{capture_id}/like toggles a like on an 'El Momento' capture. Returns {liked: bool, likes: int}. Used by Descubrir feed and moment gallery. Creates notification for capture owner when liked by another user. Requires authentication (401 if not logged in). Returns 404 for non-existent capture."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (12 tests, 100% pass): ✅ (1) Admin login successful. ✅ (2) Created test event with today's date. ✅ (3) Registered user U with adult birthdate. ✅ (4) User U marked 'voy' on event. ✅ (5) Admin triggered moment. ✅ (6) User U uploaded moment capture (JPEG image). ✅ (7) Retrieved capture ID from gallery. ✅ (8) Registered user V. ✅ (9) User V likes capture → 200 {liked:true, likes:1}. ✅ (10) User V likes again (toggle) → 200 {liked:false, likes:0}. ✅ (11) Non-existent capture → 404. ✅ (12) Unauthenticated request → 401. All functionality working perfectly including toggle behavior."
+
+  - task: "Discover enhancements (shared_events, likes, i_liked fields)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Enhanced GET /api/discover endpoint. Each person object now includes 'shared_events' (int) field showing number of events this week where both users are going/interested. Each moment object now includes 'likes' (int) count and 'i_liked' (bool) indicating if the requesting user has liked it. People list never includes the requesting user."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (6 tests, 100% pass): ✅ (1) GET /discover returns 200 with correct structure. ✅ (2) Response has people (list) and moments (list). ✅ (3) Each person has 'shared_events' field (integer). ✅ (4) CRITICAL: Requesting user's own user_id is NOT in people list (verified). ✅ (5) Created public moment with user having moment_privacy='publico'. ✅ (6) Moments have 'likes' (int) and 'i_liked' (bool) fields. Verified after liking: i_liked=true, likes=1. All enhancements working correctly."
+
 metadata:
   created_by: "main_agent"
-  version: "2.8"
-  test_sequence: 9
+  version: "2.9"
+  test_sequence: 10
   run_ui: false
 
 test_plan:
@@ -926,7 +956,12 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      NEW ITERATION (Fase 1 + Descubrir). Test ONLY these backend changes (admin@quienva.app/admin123; register 2 normal users A and B and make them friends where needed):
+      ITERATION 2 (Descubrir enhancements). Test ONLY these (admin@quienva.app/admin123; register normal users as needed):
+      1) CAPTURE LIKE: POST /api/captures/{capture_id}/like toggles a like.
+         - Need a capture: register user U, create an event as admin (POST /api/admin/events), U marks voy (POST /api/events/{id}/interest {status:"voy"}), admin triggers moment (POST /api/admin/events/{id}/moment/trigger), U uploads a capture (POST /api/events/{id}/moment/upload, multipart file field 'file', image). Get capture id from GET /api/events/{id}/moment/gallery.
+         - As ANOTHER user V: POST /api/captures/{capture_id}/like -> 200 {liked:true, likes:1}. Call again -> {liked:false, likes:0} (toggle). Non-existent capture -> 404. Unauthenticated -> 401.
+      2) DISCOVER shape additions: GET /api/discover -> each person object includes integer field 'shared_events'; response people/moments are lists; each moment (if any) includes 'likes' (int) and 'i_liked' (bool). people never includes the caller.
+      Regression: GET /api/discover still 200; PUT /api/auth/profile {moment_privacy:"publico"} still 200.
       1) DEFAULT PRIVACY = amigos:
          - Register a NEW user -> GET /api/auth/me returns attendance_privacy:"amigos" and moment_privacy:"amigos" (defaults changed from "todos").
       2) MOMENT PRIVACY field:
@@ -3294,3 +3329,60 @@ agent_communication:
       message: "NOTE: sandbox .env was lost on workspace refresh; recreated backend/.env (local mongo, DB_NAME=quienva) and frontend/.env (preview URL). Local DB seeded: admin@quienva.app/Admin1234! (admin), ana@quienva.app/Ana12345! (phone 600333444). Please TEST BACKEND ONLY for the 5 new areas above. Key checks: (1) /auth/register rejects birthdate<18 (400) and accepts adult; phone optional; (2) PUT /auth/profile attendance_privacy=nadie hides the user from friends_going and total_going for that event; (3) /me/block removes friendship + hides from /users/search; /me/unblock restores; (4) /reports create + /admin/reports list (admin only, 403 for non-admin); (5) /me/match-contacts returns Ana when given 600333444 in +34/0034/plain formats. Do NOT test frontend."
     - agent: "testing"
       message: "BACKEND TESTING COMPLETE - LAUNCH READINESS (Trust & Safety + Cold Start + Privacy). ALL 5 FEATURES TESTED: 40 tests run, 38 passed, 2 minor failures (95% pass rate). ✅ (1) Registration +18 gate: Minor birthdate rejected (400), adult accepted (200), phone optional, all user fields correct. ✅ (2) Attendance privacy: Ghost mode working perfectly - users with privacy='nadie' are excluded from total_going/interested/attended counts. ✅ (3) Block/Unblock: Blocking removes friendship, hides from search, appears in blocked list; unblocking restores visibility. ✅ (4) Reports: User reports created, admin can list/resolve, non-admin gets 403, all authorization working. ✅ (5) Contact matching: ES phone normalization working (+34/0034/plain), self excluded, already-friends excluded. Minor: friends_going list population issue (empty in test scenarios) but core privacy logic working (total counts correct). Test file: /app/backend_test_launch.py"
+    - agent: "testing"
+      message: |
+        BACKEND TESTING COMPLETE - Iteration 2026-08-03 (Capture Likes + Discover Enhancements)
+        
+        🎉 ALL TESTS PASSED: 21/21 (100% pass rate)
+        
+        ✅ CAPTURE LIKE ENDPOINT TESTED (12 tests, 100% pass):
+        POST /api/captures/{capture_id}/like - Toggle like on 'El Momento' captures
+        
+        Test Setup (7 steps):
+        ✅ (1) Admin login successful
+        ✅ (2) Created test event with today's date (Test Fiesta at Test Club)
+        ✅ (3) Registered user U with adult birthdate (1995-03-15)
+        ✅ (4) User U marked 'voy' on event
+        ✅ (5) Admin triggered moment for event
+        ✅ (6) User U uploaded moment capture (JPEG image via multipart form)
+        ✅ (7) Retrieved capture ID from gallery
+        
+        Like Functionality Tests (5 tests):
+        ✅ (8) Registered user V
+        ✅ (9) User V likes capture → 200 {liked:true, likes:1}
+        ✅ (10) User V likes again (toggle/unlike) → 200 {liked:false, likes:0}
+        ✅ (11) Non-existent capture → 404
+        ✅ (12) Unauthenticated request → 401
+        
+        RESULT: Toggle behavior working perfectly. Like count increments/decrements correctly.
+        
+        ✅ DISCOVER ENHANCEMENTS TESTED (6 tests, 100% pass):
+        GET /api/discover - New fields: shared_events, likes, i_liked
+        
+        ✅ (1) Registered test user
+        ✅ (2) GET /discover → 200 with correct structure
+        ✅ (3) Response has people (list) and moments (list)
+        ✅ (4) Each person has 'shared_events' field (integer) - shows events this week where both users are going/interested
+        ✅ (5) CRITICAL: Requesting user's own user_id is NOT in people list (verified)
+        ✅ (6) Created public moment (user with moment_privacy='publico') and verified moments have 'likes' (int) and 'i_liked' (bool) fields
+        
+        Additional Moment Tests:
+        - Created user with moment_privacy='publico'
+        - User uploaded capture
+        - Verified moment appears in discover with likes=0, i_liked=false
+        - After liking: i_liked=true, likes=1 (correct)
+        
+        RESULT: All new fields present and working correctly. Moments show accurate like counts and user's like status.
+        
+        ✅ REGRESSION TESTS (3 tests, 100% pass):
+        ✅ (1) GET /api/discover returns 200
+        ✅ (2) PUT /api/auth/profile {moment_privacy:'publico'} returns 200
+        ✅ (3) All existing functionality intact
+        
+        🎯 CONCLUSION:
+        All new features working perfectly with ZERO issues found. Capture like endpoint provides toggle functionality with accurate like counts and proper authorization (401 for unauthenticated, 404 for non-existent captures). Discover enhancements add social context (shared_events shows event overlap this week) and engagement metrics (likes/i_liked on moments). All regression tests pass, confirming no breaking changes.
+        
+        Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
+        Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
+        Base URL: https://d74373cf-d064-48e4-9df1-2467107df57c.preview.emergentagent.com/api
+        Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)

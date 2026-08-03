@@ -5,7 +5,7 @@ import api, { mediaThumb } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ArrowLeft, UserPlus, Check, Loader2, Compass, Zap, Users, ImageOff, X } from "lucide-react";
+import { ArrowLeft, UserPlus, Check, Loader2, Compass, Zap, Users, ImageOff, X, Heart } from "lucide-react";
 import { toast } from "sonner";
 
 function timeAgo(iso) {
@@ -36,6 +36,7 @@ export default function Descubrir() {
   const qc = useQueryClient();
   const [lightbox, setLightbox] = useState(null);
   const [sentIds, setSentIds] = useState(() => new Set());
+  const [onlyMatches, setOnlyMatches] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["discover"],
@@ -43,7 +44,9 @@ export default function Descubrir() {
     staleTime: 60_000,
   });
 
-  const people = data?.people || [];
+  const allPeople = data?.people || [];
+  const people = onlyMatches ? allPeople.filter((p) => p.shared_events > 0) : allPeople;
+  const matchesCount = allPeople.filter((p) => p.shared_events > 0).length;
   const moments = data?.moments || [];
   const city = data?.city || "";
 
@@ -55,6 +58,20 @@ export default function Descubrir() {
       qc.invalidateQueries({ queryKey: ["friends"] });
     },
     onError: (e) => toast.error(e.response?.data?.detail || "No se pudo enviar"),
+  });
+
+  const likeMoment = useMutation({
+    mutationFn: async (m) => (await api.post(`/captures/${m.id}/like`)).data,
+    onMutate: async (m) => {
+      await qc.cancelQueries({ queryKey: ["discover"] });
+      const prev = qc.getQueryData(["discover"]);
+      const flip = (x) => ({ ...x, i_liked: !x.i_liked, likes: Math.max(0, (x.likes || 0) + (x.i_liked ? -1 : 1)) });
+      qc.setQueryData(["discover"], (d) =>
+        d ? { ...d, moments: d.moments.map((x) => (x.id === m.id ? flip(x) : x)) } : d);
+      setLightbox((lb) => (lb && lb.id === m.id ? flip(lb) : lb));
+      return { prev };
+    },
+    onError: (_e, _m, ctx) => { if (ctx?.prev) qc.setQueryData(["discover"], ctx.prev); },
   });
 
   return (
@@ -80,9 +97,26 @@ export default function Descubrir() {
             <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2 flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5" /> Gente para conocer
             </p>
+            {matchesCount > 0 && (
+              <div className="flex gap-1.5 mb-3" data-testid="discover-people-filter">
+                <button
+                  onClick={() => setOnlyMatches(false)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold ${!onlyMatches ? "bg-qv-primary text-white" : "bg-white/5 border border-white/10 text-white/60"}`}
+                >
+                  Todos
+                </button>
+                <button
+                  data-testid="filter-matches"
+                  onClick={() => setOnlyMatches(true)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold flex items-center gap-1 ${onlyMatches ? "bg-qv-secondary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
+                >
+                  <Zap className="w-3 h-3" /> Van a tus fiestas ({matchesCount})
+                </button>
+              </div>
+            )}
             {people.length === 0 ? (
               <p className="text-white/40 text-sm py-3">
-                No hay recomendaciones ahora mismo. Vuelve cuando haya más gente por aquí.
+                {onlyMatches ? "Nadie coincide con tus planes de esta semana todavía." : "No hay recomendaciones ahora mismo. Vuelve cuando haya más gente por aquí."}
               </p>
             ) : (
               <div className="flex flex-col gap-2">
@@ -100,6 +134,11 @@ export default function Descubrir() {
                           {p.mutual_friends > 0 && <span className="text-qv-secondary"> · {p.mutual_friends} en común</span>}
                           {p.mutual_friends === 0 && p.going_count > 0 && <span className="text-white/50"> · {p.going_count} planes</span>}
                         </p>
+                        {p.shared_events > 0 && (
+                          <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-black uppercase tracking-wide text-black bg-qv-secondary rounded-full px-2 py-0.5">
+                            <Zap className="w-2.5 h-2.5" /> Coincidís en {p.shared_events}
+                          </span>
+                        )}
                       </button>
                       <button
                         data-testid={`discover-add-${p.user_id}`}
@@ -135,6 +174,11 @@ export default function Descubrir() {
                     className="relative aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-white/5 active:scale-95"
                   >
                     <MomentImg src={mediaThumb(m.image_url, 400)} className="w-full h-full object-cover" />
+                    {m.likes > 0 && (
+                      <span className="absolute top-1.5 right-1.5 flex items-center gap-0.5 text-[10px] font-bold text-white bg-black/55 rounded-full px-1.5 py-0.5">
+                        <Heart className="w-2.5 h-2.5" fill={m.i_liked ? "#ff0055" : "none"} stroke={m.i_liked ? "#ff0055" : "currentColor"} /> {m.likes}
+                      </span>
+                    )}
                     <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent flex items-center gap-1">
                       <AvatarCircle name={m.author?.name} picture={m.author?.picture} size={16} ring={false} />
                       <span className="text-[10px] text-white/90 font-semibold truncate">{m.author?.name?.split(" ")[0]}</span>
@@ -164,6 +208,13 @@ export default function Descubrir() {
                       {lightbox.event_name ? `🎉 ${lightbox.event_name} · ` : ""}{timeAgo(lightbox.created_at)}
                     </p>
                   </div>
+                </button>
+                <button
+                  data-testid={`moment-like-${lightbox.id}`}
+                  onClick={() => likeMoment.mutate(lightbox)}
+                  className={`shrink-0 flex items-center gap-1.5 h-10 px-4 rounded-full font-bold active:scale-95 ${lightbox.i_liked ? "bg-qv-primary/20 text-qv-primary" : "bg-white/10 text-white"}`}
+                >
+                  <Heart className="w-4 h-4" fill={lightbox.i_liked ? "currentColor" : "none"} /> {lightbox.likes || 0}
                 </button>
               </div>
             </div>

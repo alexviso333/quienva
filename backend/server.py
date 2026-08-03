@@ -2151,6 +2151,34 @@ async def discover(user: dict = Depends(get_current_user)):
         async for row in db.interests.aggregate(pipeline):
             going_counts[row["_id"]] = row["n"]
     my_fids = list(friend_ids)
+
+    # Events THIS WEEK the viewer is going to / interested in (for "coincidís" filter)
+    today = datetime.now(PALMA_TZ).date()
+    week_end = today + timedelta(days=7)
+    my_week_ids = set()
+    async for it in db.interests.find(
+        {"user_id": uid, "status": {"$in": ["voy", "me_interesa"]}},
+        {"_id": 0, "event_id": 1},
+    ):
+        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0, "date": 1})
+        if not ev:
+            continue
+        try:
+            d = date.fromisoformat(ev["date"])
+        except Exception:
+            continue
+        if today <= d <= week_end:
+            my_week_ids.add(it["event_id"])
+    shared_counts = {}
+    if cand_ids and my_week_ids:
+        async for row in db.interests.aggregate([
+            {"$match": {"user_id": {"$in": cand_ids},
+                        "event_id": {"$in": list(my_week_ids)},
+                        "status": {"$in": ["voy", "me_interesa"]}}},
+            {"$group": {"_id": "$user_id", "n": {"$sum": 1}}},
+        ]):
+            shared_counts[row["_id"]] = row["n"]
+
     people = []
     for c in candidates:
         # Only compute mutual friends when the viewer actually has friends
@@ -2160,8 +2188,10 @@ async def discover(user: dict = Depends(get_current_user)):
             **c,
             "going_count": going_counts.get(c["user_id"], 0),
             "mutual_friends": mutual,
+            "shared_events": shared_counts.get(c["user_id"], 0),
         })
-    people.sort(key=lambda p: (p["mutual_friends"], p["going_count"], bool(p.get("picture"))), reverse=True)
+    # People you coincide with this week float to the top.
+    people.sort(key=lambda p: (p["shared_events"], p["mutual_friends"], p["going_count"], bool(p.get("picture"))), reverse=True)
     people = people[:24]
 
     # ---- Public moments feed ----
@@ -2184,6 +2214,23 @@ async def discover(user: dict = Depends(get_current_user)):
                 "author_id": c["user_id"],
                 "event_name": ev["name"] if ev else None,
             })
+    # Attach like counts + whether the viewer already liked each moment.
+    if moments:
+        cap_ids = [m["id"] for m in moments]
+        like_counts = {}
+        async for row in db.capture_reactions.aggregate([
+            {"$match": {"capture_id": {"$in": cap_ids}}},
+            {"$group": {"_id": "$capture_id", "n": {"$sum": 1}}},
+        ]):
+            like_counts[row["_id"]] = row["n"]
+        my_liked = set()
+        async for r in db.capture_reactions.find(
+            {"capture_id": {"$in": cap_ids}, "user_id": uid}, {"_id": 0, "capture_id": 1}
+        ):
+            my_liked.add(r["capture_id"])
+        for m in moments:
+            m["likes"] = like_counts.get(m["id"], 0)
+            m["i_liked"] = m["id"] in my_liked
     return {"people": people, "moments": moments, "city": my_city}
 
 
@@ -4756,6 +4803,36 @@ async def moment_gallery(event_id: str, user: dict = Depends(get_current_user)):
     return items
 
 
+@api_router.post("/captures/{capture_id}/like")
+async def like_capture(capture_id: str, user: dict = Depends(get_current_user)):
+    """Toggle a like on an 'El Momento' capture. Used by the Descubrir feed and
+    the moment gallery. Returns the new like count and whether I like it now."""
+    uid = user["user_id"]
+    c = await db.captures.find_one({"id": capture_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Momento no encontrado")
+    existing = await db.capture_reactions.find_one({"capture_id": capture_id, "user_id": uid})
+    if existing:
+        await db.capture_reactions.delete_one({"capture_id": capture_id, "user_id": uid})
+        liked = False
+    else:
+        await db.capture_reactions.insert_one({
+            "id": str(uuid.uuid4()),
+            "capture_id": capture_id,
+            "user_id": uid,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        liked = True
+        if c["user_id"] != uid:
+            await create_notification(
+                c["user_id"], "capture_like",
+                f"A {user['name']} le gusta tu Momento ❤️",
+                {"user_id": uid, "type": "capture_like"},
+            )
+    count = await db.capture_reactions.count_documents({"capture_id": capture_id})
+    return {"liked": liked, "likes": count}
+
+
 # =========================================================================
 # CALENDAR — past events with multimedia grouped by day
 # =========================================================================
@@ -5064,6 +5141,8 @@ async def on_startup():
         await db.groups.create_index("member_ids")
         await db.captures.create_index([("event_id", 1), ("user_id", 1)])
         await db.captures.create_index("user_id")
+        await db.capture_reactions.create_index([("capture_id", 1), ("user_id", 1)], unique=True)
+        await db.capture_reactions.create_index("capture_id")
         await db.album_uploads.create_index([("event_id", 1), ("created_at", -1)])
         await db.album_uploads.create_index("user_id")
         # Compound index for the feed's main query (city + date)

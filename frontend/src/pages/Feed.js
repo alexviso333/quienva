@@ -11,7 +11,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import FeedPlans, { FeedPlansControls } from "@/components/FeedPlans";
 import { useAuth } from "@/context/AuthContext";
 import { useCompactMode } from "@/hooks/useCompactMode";
-import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2 } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Feed() {
@@ -53,6 +53,25 @@ export default function Feed() {
     queryFn: async () => (await api.get("/events", { params: { date_filter: "all", genre } })).data,
     staleTime: 30_000,
   });
+
+  // Newcomers with no friends yet: gently push them to Descubrir once, and keep
+  // a persistent banner so "guiris" can find people/plans without any friends.
+  const { data: friendsList } = useQuery({
+    queryKey: ["friends"],
+    queryFn: async () => (await api.get("/friends")).data,
+    staleTime: 60_000,
+  });
+  const noFriends = Array.isArray(friendsList) && friendsList.length === 0;
+
+  useEffect(() => {
+    if (!noFriends) return;
+    try {
+      if (!localStorage.getItem("qv_discover_seen")) {
+        localStorage.setItem("qv_discover_seen", "1");
+        navigate("/descubrir");
+      }
+    } catch { /* ignore */ }
+  }, [noFriends, navigate]);
 
   const setStatus = useMutation({
     mutationFn: async ({ eventId, status }) => (await api.post(`/events/${eventId}/interest`, { status })).data,
@@ -132,6 +151,25 @@ export default function Feed() {
       </header>
 
       <StoriesBar />
+
+      {noFriends && (
+        <div className="px-4 pt-1 pb-1">
+          <button
+            data-testid="feed-descubrir-banner"
+            onClick={() => navigate("/descubrir")}
+            className="w-full rounded-2xl border border-qv-secondary/40 bg-gradient-to-r from-qv-primary/15 to-qv-secondary/15 p-3 flex items-center gap-3 text-left active:scale-[0.99]"
+          >
+            <div className="w-10 h-10 rounded-full bg-qv-secondary/20 flex items-center justify-center shrink-0">
+              <Compass className="w-5 h-5 text-qv-secondary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-black text-white text-sm leading-tight">¿Nuevo por aquí? 👋</p>
+              <p className="text-white/60 text-xs">Descubre gente y momentos para no salir solo.</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-white/40 shrink-0" />
+          </button>
+        </div>
+      )}
 
       <FriendsActivity />
 
