@@ -147,6 +147,60 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Age (+18) helpers
+# ---------------------------------------------------------------------------
+def compute_age(birthdate: str) -> Optional[int]:
+    """Return age in years from an ISO 'YYYY-MM-DD' string, or None if invalid."""
+    if not birthdate:
+        return None
+    try:
+        b = date.fromisoformat(birthdate.strip()[:10])
+    except Exception:
+        return None
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    return today.year - b.year - ((today.month, today.day) < (b.month, b.day))
+
+
+def is_adult(birthdate: str) -> bool:
+    age = compute_age(birthdate)
+    return age is not None and age >= 18
+
+
+# ---------------------------------------------------------------------------
+# Phone normalisation (for contact matching) — privacy-first: we only ever
+# store a one-way hash, never the raw number.
+# ---------------------------------------------------------------------------
+def normalize_phone(raw: str) -> Optional[str]:
+    """Normalise to the Spanish 9-digit national number for matching.
+    Strips spaces/symbols and a leading +34/0034/34 country code."""
+    if not raw:
+        return None
+    digits = re.sub(r"\D", "", str(raw))
+    if not digits:
+        return None
+    if digits.startswith("0034"):
+        digits = digits[4:]
+    elif digits.startswith("34") and len(digits) > 9:
+        digits = digits[2:]
+    # Keep the last 9 digits (Spanish mobile/landline length)
+    if len(digits) >= 9:
+        digits = digits[-9:]
+    else:
+        return None
+    return digits
+
+
+def phone_hash(raw: str) -> Optional[str]:
+    norm = normalize_phone(raw)
+    if not norm:
+        return None
+    return hashlib.sha256(("qv_phone_" + norm).encode("utf-8")).hexdigest()
+
+
+ATTENDANCE_PRIVACY_VALUES = ("todos", "amigos", "nadie")
+
+
 def new_session_token() -> str:
     return secrets.token_urlsafe(48)
 
@@ -167,6 +221,8 @@ class RegisterInput(BaseModel):
     name: str
     username: str
     city: str = "Palma de Mallorca"
+    birthdate: Optional[str] = None   # YYYY-MM-DD — required, must be 18+
+    phone: Optional[str] = None       # optional, stored only as a one-way hash
 
 
 class LoginInput(BaseModel):
@@ -183,6 +239,24 @@ class ProfileUpdate(BaseModel):
     city: Optional[str] = None
     picture: Optional[str] = None
     username: Optional[str] = None
+    birthdate: Optional[str] = None
+    phone: Optional[str] = None
+    attendance_privacy: Optional[str] = None   # "todos" | "amigos" | "nadie"
+
+
+class BlockInput(BaseModel):
+    user_id: str
+
+
+class ReportInput(BaseModel):
+    target_type: str          # "user" | "moment" | "album_photo" | "message" | "event"
+    target_id: str
+    reason: str = ""
+    note: str = ""
+
+
+class MatchContactsInput(BaseModel):
+    phones: List[str] = Field(default_factory=list)
 
 
 class FriendActionInput(BaseModel):
@@ -261,6 +335,9 @@ def public_user(u: dict) -> dict:
         "city": u.get("city"),
         "role": u.get("role", "user"),
         "auth_provider": u.get("auth_provider"),
+        "attendance_privacy": u.get("attendance_privacy", "todos"),
+        "has_phone": bool(u.get("phone_hash")),
+        "needs_birthdate": not bool(u.get("birthdate")),
     }
 
 
@@ -318,6 +395,9 @@ async def create_session(user_id: str, token: Optional[str] = None) -> str:
 async def register(inp: RegisterInput, response: Response):
     email = inp.email.lower().strip()
     username = inp.username.lower().strip().replace(" ", "")
+    # +18 gate — birthdate is required and must be an adult
+    if not inp.birthdate or not is_adult(inp.birthdate):
+        raise HTTPException(status_code=400, detail="Debes ser mayor de 18 años para usar ¿Quién va?")
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Ese email ya está registrado")
     if await db.users.find_one({"username": username}):
@@ -332,8 +412,14 @@ async def register(inp: RegisterInput, response: Response):
         "role": "user",
         "auth_provider": "email",
         "password_hash": hash_password(inp.password),
+        "birthdate": inp.birthdate.strip()[:10],
+        "attendance_privacy": "todos",
+        "blocked_users": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    ph = phone_hash(inp.phone) if inp.phone else None
+    if ph:
+        user["phone_hash"] = ph
     await db.users.insert_one(user)
     token = await create_session(user["user_id"])
     set_session_cookie(response, token)
@@ -407,6 +493,8 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
             "city": "Palma de Mallorca",
             "role": "user",
             "auth_provider": "google",
+            "attendance_privacy": "todos",
+            "blocked_users": [],
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user)
@@ -445,6 +533,23 @@ async def update_profile(inp: ProfileUpdate, user: dict = Depends(get_current_us
         if clash:
             raise HTTPException(status_code=400, detail="Ese nombre de usuario ya existe")
         updates["username"] = uname
+    if inp.birthdate is not None:
+        if not is_adult(inp.birthdate):
+            raise HTTPException(status_code=400, detail="Debes ser mayor de 18 años para usar ¿Quién va?")
+        updates["birthdate"] = inp.birthdate.strip()[:10]
+    if inp.phone is not None:
+        ph = phone_hash(inp.phone)
+        if ph:
+            updates["phone_hash"] = ph
+    if inp.attendance_privacy is not None:
+        if inp.attendance_privacy not in ATTENDANCE_PRIVACY_VALUES:
+            raise HTTPException(status_code=400, detail="Valor de privacidad inválido")
+        updates["attendance_privacy"] = inp.attendance_privacy
+        # Denormalise onto the user's interests so event reads stay fast.
+        await db.interests.update_many(
+            {"user_id": user["user_id"]},
+            {"$set": {"privacy": inp.attendance_privacy}},
+        )
     if updates:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
         user.update(updates)
@@ -493,16 +598,21 @@ async def search_users(q: str, user: dict = Depends(get_current_user)):
             {"username": {"$regex": q, "$options": "i"}},
             {"name": {"$regex": q, "$options": "i"}},
         ],
-    }, {"_id": 0}).limit(20)
+    }, {"_id": 0}).limit(30)
     fmap = await friendship_status_map(user["user_id"])
     my_friends = await accepted_friend_ids(user["user_id"])
+    blocked = await blocked_relation_ids(user["user_id"])
     out = []
     async for u in cursor:
+        if u["user_id"] in blocked:
+            continue
         pu = public_user(u)
         rel = fmap.get(u["user_id"])
         pu["relationship"] = rel or {"status": "none"}
         pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
         out.append(pu)
+        if len(out) >= 20:
+            break
     return out
 
 
@@ -621,6 +731,131 @@ async def list_requests(user: dict = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
+# Block & Report (trust & safety)
+# ---------------------------------------------------------------------------
+async def blocked_by_me(user_id: str) -> set:
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "blocked_users": 1})
+    return set((u or {}).get("blocked_users", []))
+
+
+async def blocked_relation_ids(user_id: str) -> set:
+    """Everyone the user can't interact with: people they blocked + people who
+    blocked them (visibility is mutual)."""
+    ids = await blocked_by_me(user_id)
+    async for u in db.users.find({"blocked_users": user_id}, {"_id": 0, "user_id": 1}):
+        ids.add(u["user_id"])
+    return ids
+
+
+@api_router.post("/me/block")
+async def block_user(inp: BlockInput, user: dict = Depends(get_current_user)):
+    target = inp.user_id
+    if target == user["user_id"]:
+        raise HTTPException(status_code=400, detail="No puedes bloquearte a ti mismo")
+    if not await db.users.find_one({"user_id": target}):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    # Add to block list, drop any friendship / pending requests both ways.
+    await db.users.update_one({"user_id": user["user_id"]},
+                              {"$addToSet": {"blocked_users": target}})
+    await db.friendships.delete_many({
+        "$or": [
+            {"requester_id": user["user_id"], "addressee_id": target},
+            {"requester_id": target, "addressee_id": user["user_id"]},
+        ]
+    })
+    _invalidate_stats_cache(user["user_id"])
+    _invalidate_stats_cache(target)
+    return {"ok": True, "blocked": target}
+
+
+@api_router.post("/me/unblock")
+async def unblock_user(inp: BlockInput, user: dict = Depends(get_current_user)):
+    await db.users.update_one({"user_id": user["user_id"]},
+                              {"$pull": {"blocked_users": inp.user_id}})
+    return {"ok": True, "unblocked": inp.user_id}
+
+
+@api_router.get("/me/blocked")
+async def list_blocked(user: dict = Depends(get_current_user)):
+    ids = list(await blocked_by_me(user["user_id"]))
+    out = []
+    async for u in db.users.find({"user_id": {"$in": ids}}, {"_id": 0}):
+        out.append(public_user(u))
+    return out
+
+
+@api_router.post("/reports")
+async def create_report(inp: ReportInput, user: dict = Depends(get_current_user)):
+    valid_types = {"user", "moment", "album_photo", "message", "event"}
+    if inp.target_type not in valid_types:
+        raise HTTPException(status_code=400, detail="Tipo de reporte inválido")
+    report = {
+        "id": str(uuid.uuid4()),
+        "reporter_id": user["user_id"],
+        "target_type": inp.target_type,
+        "target_id": inp.target_id,
+        "reason": (inp.reason or "").strip()[:200],
+        "note": (inp.note or "").strip()[:1000],
+        "status": "open",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.reports.insert_one(report)
+    return {"ok": True, "id": report["id"]}
+
+
+@api_router.get("/admin/reports")
+async def admin_list_reports(admin: dict = Depends(require_admin), status: str = Query("open")):
+    q = {} if status == "all" else {"status": status}
+    out = []
+    async for r in db.reports.find(q, {"_id": 0}).sort("created_at", -1).limit(200):
+        reporter = await db.users.find_one({"user_id": r["reporter_id"]}, {"_id": 0})
+        r["reporter"] = public_user(reporter) if reporter else None
+        if r["target_type"] == "user":
+            tu = await db.users.find_one({"user_id": r["target_id"]}, {"_id": 0})
+            r["target_user"] = public_user(tu) if tu else None
+        out.append(r)
+    return out
+
+
+@api_router.post("/admin/reports/{report_id}/resolve")
+async def admin_resolve_report(report_id: str, admin: dict = Depends(require_admin)):
+    await db.reports.update_one({"id": report_id}, {"$set": {"status": "resolved"}})
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Contact matching (cold-start: find friends already on the app by phone)
+# ---------------------------------------------------------------------------
+@api_router.post("/me/match-contacts")
+async def match_contacts(inp: MatchContactsInput, user: dict = Depends(get_current_user)):
+    """Given a list of raw phone numbers from the device, return the users who
+    are already on ¿Quién va?. We hash numbers and never store the raw list."""
+    hashes = set()
+    for raw in inp.phones[:2000]:
+        h = phone_hash(raw)
+        if h:
+            hashes.add(h)
+    if not hashes:
+        return []
+    fmap = await friendship_status_map(user["user_id"])
+    my_friends = await accepted_friend_ids(user["user_id"])
+    blocked = await blocked_relation_ids(user["user_id"])
+    out = []
+    async for u in db.users.find({"phone_hash": {"$in": list(hashes)}}, {"_id": 0}).limit(100):
+        if u["user_id"] == user["user_id"] or u["user_id"] in blocked:
+            continue
+        rel = fmap.get(u["user_id"])
+        if rel and rel.get("status") == "accepted":
+            continue  # already friends
+        pu = public_user(u)
+        pu["relationship"] = rel or {"status": "none"}
+        pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
+        out.append(pu)
+    return out
+
+
+
+# ---------------------------------------------------------------------------
 # Events
 # ---------------------------------------------------------------------------
 def date_in_filter(event_date_str: str, flt: str) -> bool:
@@ -672,6 +907,10 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         if it["user_id"] == user["user_id"]:
             my_status = it["status"]
         elif it["user_id"] in friend_ids:
+            # Respect attendance privacy: "nadie" (ghost) hides the person from
+            # everyone's lists. "todos"/"amigos" are both visible to friends.
+            if it.get("privacy", "todos") == "nadie":
+                continue
             fu = users_map.get(it["user_id"])
             if fu:
                 entry = {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")}
@@ -726,9 +965,9 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "friends_going": friends_going,
         "friends_interested": friends_interested,
         "friends_attended": friends_attended,
-        "total_going": sum(1 for it in interests if it["status"] == "voy"),
-        "total_interested": sum(1 for it in interests if it["status"] == "me_interesa"),
-        "total_attended": sum(1 for it in interests if it["status"] == "estuve"),
+        "total_going": sum(1 for it in interests if it["status"] == "voy" and it.get("privacy", "todos") != "nadie"),
+        "total_interested": sum(1 for it in interests if it["status"] == "me_interesa" and it.get("privacy", "todos") != "nadie"),
+        "total_attended": sum(1 for it in interests if it["status"] == "estuve" and it.get("privacy", "todos") != "nadie"),
         # Tickets
         "my_has_ticket": my_has_ticket,
         "total_tickets": total_tickets,
@@ -1694,12 +1933,14 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
 
     existing = await db.interests.find_one({"user_id": user["user_id"], "event_id": event_id})
     prev_status = existing["status"] if existing else None
+    my_privacy = user.get("attendance_privacy", "todos")
 
     if inp.status == "none":
         await db.interests.delete_one({"user_id": user["user_id"], "event_id": event_id})
     elif existing:
         await db.interests.update_one({"_id": existing["_id"]},
                                       {"$set": {"status": inp.status,
+                                                "privacy": my_privacy,
                                                 "updated_at": datetime.now(timezone.utc).isoformat()}})
     else:
         await db.interests.insert_one({
@@ -1707,12 +1948,14 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
             "user_id": user["user_id"],
             "event_id": event_id,
             "status": inp.status,
+            "privacy": my_privacy,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     _invalidate_stats_cache(user["user_id"])
 
-    # Notify friends when marking "voy" (only on transition to voy)
-    if inp.status == "voy" and prev_status != "voy":
+    # Notify friends when marking "voy" (only on transition to voy). Users who
+    # chose a non-public privacy ("amigos"/"nadie") are not broadcast.
+    if inp.status == "voy" and prev_status != "voy" and my_privacy == "todos":
         friend_ids = await accepted_friend_ids(user["user_id"])
         for fid in friend_ids:
             await create_notification(
@@ -4416,9 +4659,10 @@ async def moment_gallery(event_id: str, user: dict = Depends(get_current_user)):
     my_capture = await db.captures.find_one({"event_id": event_id, "user_id": user["user_id"]}, {"_id": 0})
     if not my_capture:
         raise HTTPException(status_code=403, detail="Debes subir tu momento para ver los de los demás")
-    # Only show friends' captures + own
+    # Only show friends' captures + own (excluding anyone blocked either way)
     friend_ids = await accepted_friend_ids(user["user_id"])
-    allowed = friend_ids + [user["user_id"]]
+    blocked = await blocked_relation_ids(user["user_id"])
+    allowed = [fid for fid in friend_ids if fid not in blocked] + [user["user_id"]]
     items = []
     async for c in db.captures.find({"event_id": event_id, "user_id": {"$in": allowed}}, {"_id": 0}).sort("created_at", 1):
         au = await db.users.find_one({"user_id": c["user_id"]}, {"_id": 0})

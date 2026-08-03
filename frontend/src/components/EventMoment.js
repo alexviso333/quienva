@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
+import { ReportFlag } from "@/components/ReportBlock";
 import { Zap, Camera, Timer } from "lucide-react";
 
 /**
@@ -85,6 +86,11 @@ export function EventMoment({ eventId, hasInterest }) {
               </div>
               {c.on_time && (
                 <div className="absolute top-1 right-1 bg-yellow-300 text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">A TIEMPO</div>
+              )}
+              {!c.is_mine && (
+                <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center">
+                  <ReportFlag targetType="moment" targetId={c.id} />
+                </div>
               )}
             </div>
           ))}

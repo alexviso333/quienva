@@ -1,0 +1,150 @@
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import api from "@/lib/api";
+import { AvatarCircle } from "@/components/AvatarCircle";
+import { contactsSupported, pickContactPhones, inviteWhatsApp, shareInvite } from "@/lib/contacts";
+import { Contact, Share2, UserPlus, Check, Loader2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+
+/**
+ * Cold-start friend finder: connect phone contacts (where supported) to find
+ * people already on ¿Quién va?, plus invite links via WhatsApp / share sheet.
+ */
+export default function FindFriends() {
+  const qc = useQueryClient();
+  const [matches, setMatches] = useState(null); // null = not run yet
+  const [scanning, setScanning] = useState(false);
+
+  const { data: referral } = useQuery({
+    queryKey: ["referral"],
+    queryFn: async () => (await api.get("/me/referral")).data,
+    staleTime: 5 * 60_000,
+  });
+  const code = referral?.code || "";
+
+  const matchMut = useMutation({
+    mutationFn: async (phones) => (await api.post("/me/match-contacts", { phones })).data,
+    onSuccess: (data) => setMatches(data),
+    onError: () => toast.error("No se pudieron cruzar los contactos"),
+  });
+
+  const sendReq = useMutation({
+    mutationFn: async (userId) => (await api.post("/friends/request", { user_id: userId })).data,
+    onSuccess: (d, userId) => {
+      toast.success(d.status === "accepted" ? "¡Ya sois amigos!" : "Solicitud enviada");
+      setMatches((prev) => (prev || []).map((u) => (u.user_id === userId ? { ...u, relationship: { status: d.status === "accepted" ? "accepted" : "pending", direction: "out" } } : u)));
+      qc.invalidateQueries({ queryKey: ["friends"] });
+    },
+    onError: (e) => toast.error(e.response?.data?.detail || "Error"),
+  });
+
+  const connectContacts = async () => {
+    setScanning(true);
+    try {
+      const phones = await pickContactPhones();
+      if (!phones.length) { toast("No seleccionaste ningún contacto"); return; }
+      matchMut.mutate(phones);
+    } catch (err) {
+      if (err.code === "unsupported") {
+        toast("Tu móvil no permite leer contactos desde la web. Invita por WhatsApp 👇", { icon: "📵" });
+      } else {
+        toast("No se pudo acceder a los contactos");
+      }
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const doShare = async () => {
+    const res = await shareInvite(code);
+    if (res === "copied") toast.success("Enlace de invitación copiado");
+  };
+
+  return (
+    <section className="px-5 mt-4" data-testid="find-friends">
+      <div className="rounded-2xl border border-qv-secondary/30 bg-gradient-to-br from-qv-secondary/10 via-white/[0.03] to-transparent p-4">
+        <p className="flex items-center gap-2 font-display font-black text-white text-base">
+          <Sparkles className="w-4 h-4 text-qv-secondary" /> Encuentra a tu gente
+        </p>
+        <p className="text-white/55 text-xs mt-0.5 leading-relaxed">
+          Conecta tus contactos para ver quién ya está en ¿Quién va?, o invita a tus amigos. Cuantos más, más planes verás.
+        </p>
+
+        <div className="grid grid-cols-1 gap-2 mt-3">
+          <button
+            data-testid="connect-contacts-btn"
+            onClick={connectContacts}
+            disabled={scanning || matchMut.isPending}
+            className="h-12 rounded-2xl bg-qv-secondary text-black font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
+          >
+            {scanning || matchMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Contact className="w-4 h-4" />} Conectar contactos
+          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              data-testid="invite-whatsapp-btn"
+              onClick={() => inviteWhatsApp(code)}
+              className="h-11 rounded-2xl bg-[#25D366]/15 border border-[#25D366]/40 text-[#4ee38a] font-bold text-sm flex items-center justify-center gap-2 active:scale-95"
+            >
+              WhatsApp
+            </button>
+            <button
+              data-testid="invite-share-btn"
+              onClick={doShare}
+              className="h-11 rounded-2xl bg-white/5 border border-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95"
+            >
+              <Share2 className="w-4 h-4" /> Enlace
+            </button>
+          </div>
+        </div>
+        {!contactsSupported() && (
+          <p className="text-white/35 text-[11px] mt-2 leading-tight">
+            Si estás en iPhone, tu navegador no deja leer la agenda: usa “Invitar por WhatsApp”.
+          </p>
+        )}
+      </div>
+
+      {matches !== null && (
+        <div className="mt-3" data-testid="contact-matches">
+          {matches.length === 0 ? (
+            <p className="text-white/45 text-sm py-2">
+              Ninguno de tus contactos está aún en ¿Quién va?. ¡Invítalos y sé el primero de tu grupo!
+            </p>
+          ) : (
+            <>
+              <p className="text-xs uppercase tracking-widest text-qv-secondary font-bold mb-2">
+                Ya están aquí ({matches.length})
+              </p>
+              <div className="flex flex-col gap-2">
+                {matches.map((u) => {
+                  const status = u.relationship?.status;
+                  return (
+                    <div key={u.user_id} className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-3" data-testid={`match-${u.username}`}>
+                      <AvatarCircle name={u.name} picture={u.picture} size={44} ring={false} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold truncate">{u.name}</p>
+                        <p className="text-white/40 text-sm truncate">@{u.username}</p>
+                      </div>
+                      {status === "accepted" ? (
+                        <span className="h-9 px-3 rounded-full bg-white/10 text-white/60 text-sm font-semibold flex items-center gap-1"><Check className="w-4 h-4" /> Amigos</span>
+                      ) : status === "pending" ? (
+                        <span className="h-9 px-3 rounded-full bg-white/10 text-white/60 text-sm font-semibold flex items-center">Pendiente</span>
+                      ) : (
+                        <button
+                          data-testid={`match-add-${u.username}`}
+                          onClick={() => sendReq.mutate(u.user_id)}
+                          className="h-9 px-4 rounded-full bg-qv-primary text-white text-sm font-semibold flex items-center gap-1.5 active:scale-95"
+                        >
+                          <UserPlus className="w-4 h-4" /> Añadir
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}

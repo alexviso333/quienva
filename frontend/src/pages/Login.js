@@ -14,7 +14,7 @@ export default function Login() {
   const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
   const [invitedBy, setInvitedBy] = useState(null);
-  const [form, setForm] = useState({ email: "", password: "", name: "", username: "", city: "Palma de Mallorca" });
+  const [form, setForm] = useState({ email: "", password: "", name: "", username: "", city: "Palma de Mallorca", birthdate: "", phone: "" });
 
   useEffect(() => {
     // WARMUP PING: fire-and-forget health check to wake up the backend
@@ -49,6 +49,22 @@ export default function Login() {
       } else {
         if (!form.name || !form.username) {
           toast.error("Completa nombre y usuario");
+          setLoading(false);
+          return;
+        }
+        if (!form.birthdate) {
+          toast.error("Añade tu fecha de nacimiento");
+          setLoading(false);
+          return;
+        }
+        // +18 gate (client-side; backend re-checks)
+        const b = new Date(form.birthdate);
+        const now = new Date();
+        let age = now.getFullYear() - b.getFullYear();
+        const m = now.getMonth() - b.getMonth();
+        if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+        if (isNaN(age) || age < 18) {
+          toast.error("Debes ser mayor de 18 años para usar ¿Quién va?");
           setLoading(false);
           return;
         }
@@ -169,6 +185,24 @@ export default function Login() {
                 placeholder="Nombre de usuario (ej. martag)"
                 value={form.username}
                 onChange={update("username")}
+                className="h-12 bg-white/5 border-white/15 rounded-2xl text-white placeholder:text-white/40"
+              />
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-white/40 font-bold ml-1">Fecha de nacimiento · +18</label>
+                <Input
+                  data-testid="auth-birthdate"
+                  type="date"
+                  value={form.birthdate}
+                  onChange={update("birthdate")}
+                  className="h-12 mt-1 bg-white/5 border-white/15 rounded-2xl text-white placeholder:text-white/40"
+                />
+              </div>
+              <Input
+                data-testid="auth-phone"
+                type="tel"
+                placeholder="Teléfono (opcional, para encontrar amigos)"
+                value={form.phone}
+                onChange={update("phone")}
                 className="h-12 bg-white/5 border-white/15 rounded-2xl text-white placeholder:text-white/40"
               />
             </>

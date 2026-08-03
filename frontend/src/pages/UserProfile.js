@@ -4,6 +4,7 @@ import api, { formatApiErrorDetail } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { BadgesPanel } from "@/components/BadgesPanel";
+import { UserActionsMenu } from "@/components/ReportBlock";
 import { ArrowLeft, Loader2, MessageSquare, UserPlus, Clock, Check, Trophy, Flame, Calendar, Star } from "lucide-react";
 import { toast } from "sonner";
 
@@ -97,7 +98,8 @@ export default function UserProfile() {
         <button onClick={() => navigate(-1)} data-testid="userprofile-back">
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
-        <span className="font-display text-lg font-bold">Perfil</span>
+        <span className="font-display text-lg font-bold flex-1">Perfil</span>
+        {!is_self && <UserActionsMenu userId={userId} userName={user.name} />}
       </div>
 
       <div className="px-5 pt-4 flex flex-col items-center gap-3">

@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl } from "@/lib/api";
 import { timeSuffix } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { AddStoryButton } from "@/components/Stories";
 import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
 import {
@@ -299,6 +298,13 @@ export default function EventDetail() {
             )}
           </div>
 
+          {/* Shared album — elevated so friends' photos don't get stuck in
+              everyone's phone. Comes right after the friends block. */}
+          <EventAlbum eventId={event.id} hasInterest={hasInterest} prominent />
+
+          {/* El Momento — only during event window; component handles empty states */}
+          {!isPast && <EventMoment eventId={event.id} hasInterest={hasInterest} />}
+
           {/* Map + directions */}
           <div>
             <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2">Cómo llegar</p>
@@ -324,18 +330,6 @@ export default function EventDetail() {
               <Navigation className="w-4 h-4 text-qv-secondary" /> Cómo llegar
             </a>
           </div>
-
-          <AddStoryButton
-            eventId={event.id}
-            label="Subir historia de esta noche"
-            className="h-12 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-          />
-
-          {/* El Momento — only during event window; component handles empty states */}
-          {!isPast && <EventMoment eventId={event.id} hasInterest={hasInterest} />}
-
-          {/* Shared album — photos + videos (past or current) */}
-          <EventAlbum eventId={event.id} hasInterest={hasInterest} />
         </div>
       </div>
     </div>

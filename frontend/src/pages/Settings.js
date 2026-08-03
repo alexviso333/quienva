@@ -5,8 +5,9 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, LogOut, Camera, Share2, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, Copy } from "lucide-react";
+import { ArrowLeft, LogOut, Camera, Share2, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, Copy, Eye, Users2, EyeOff, Ban } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 import { StoriesArchive } from "@/components/Stories";
 import { useCompactMode } from "@/hooks/useCompactMode";
@@ -25,6 +26,46 @@ export default function Settings() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [compact, setCompact] = useCompactMode();
   const pushSupported = isPushSupported();
+  const [privacy, setPrivacy] = useState(user?.attendance_privacy || "todos");
+  const [privacyBusy, setPrivacyBusy] = useState(false);
+  const [blockedOpen, setBlockedOpen] = useState(false);
+
+  const savePrivacy = async (val) => {
+    setPrivacy(val);
+    setPrivacyBusy(true);
+    try {
+      const { data } = await api.put("/auth/profile", { attendance_privacy: val });
+      setUser(data);
+      toast.success("Privacidad actualizada");
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail));
+      setPrivacy(user?.attendance_privacy || "todos");
+    } finally {
+      setPrivacyBusy(false);
+    }
+  };
+
+  const { data: blocked = [], refetch: refetchBlocked } = useQuery({
+    queryKey: ["blocked-users"],
+    queryFn: async () => (await api.get("/me/blocked")).data,
+    enabled: blockedOpen,
+  });
+
+  const unblock = async (userId) => {
+    try {
+      await api.post("/me/unblock", { user_id: userId });
+      toast.success("Desbloqueado");
+      refetchBlocked();
+    } catch {
+      toast.error("No se pudo desbloquear");
+    }
+  };
+
+  const PRIVACY_OPTS = [
+    { key: "todos", label: "Todos", icon: Eye, hint: "Sales en el recuento público y tus amigos te ven." },
+    { key: "amigos", label: "Solo amigos", icon: Users2, hint: "Solo tus amigos ven a qué vas; sin anuncios." },
+    { key: "nadie", label: "Nadie", icon: EyeOff, hint: "Modo fantasma: nadie ve a qué fiestas vas." },
+  ];
 
   useEffect(() => {
     if (pushSupported) getPushStatus().then(setPushOn);
@@ -148,6 +189,56 @@ export default function Settings() {
           <Archive className="w-4 h-4" /> Archivo de historias
         </button>
         <StoriesArchive open={archiveOpen} onOpenChange={setArchiveOpen} />
+
+        <p className="text-xs uppercase tracking-widest text-white/40 font-bold mt-3">Privacidad y seguridad</p>
+        <div className="rounded-2xl bg-white/5 border border-white/10 p-3" data-testid="privacy-section">
+          <p className="text-sm font-semibold text-white flex items-center gap-2"><Eye className="w-4 h-4 text-qv-secondary" /> ¿Quién ve que voy?</p>
+          <div className="grid grid-cols-3 gap-1.5 mt-2.5">
+            {PRIVACY_OPTS.map((o) => {
+              const Icon = o.icon;
+              const on = privacy === o.key;
+              return (
+                <button
+                  key={o.key}
+                  data-testid={`privacy-${o.key}`}
+                  onClick={() => savePrivacy(o.key)}
+                  disabled={privacyBusy}
+                  className={`py-2.5 rounded-xl text-xs font-bold flex flex-col items-center gap-1 border transition-colors ${on ? "bg-qv-primary/15 border-qv-primary/50 text-white" : "bg-white/5 border-white/10 text-white/60"}`}
+                >
+                  <Icon className="w-4 h-4" /> {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-white/40 text-[11px] mt-2 leading-tight">{PRIVACY_OPTS.find((o) => o.key === privacy)?.hint}</p>
+        </div>
+        <button data-testid="blocked-accounts-btn" onClick={() => setBlockedOpen(true)} className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95">
+          <Ban className="w-4 h-4 text-red-300" /> Cuentas bloqueadas
+        </button>
+
+        <Dialog open={blockedOpen} onOpenChange={setBlockedOpen}>
+          <DialogContent className="bg-[#0d0d0d] border-white/10 text-white max-w-sm rounded-2xl">
+            <h3 className="font-display font-black text-lg">Cuentas bloqueadas</h3>
+            {blocked.length === 0 ? (
+              <p className="text-white/50 text-sm py-3">No tienes cuentas bloqueadas.</p>
+            ) : (
+              <div className="flex flex-col gap-2 mt-1 max-h-[50vh] overflow-y-auto">
+                {blocked.map((b) => (
+                  <div key={b.user_id} className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-2.5" data-testid={`blocked-${b.username}`}>
+                    <AvatarCircle name={b.name} picture={b.picture} size={40} ring={false} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate text-sm">{b.name}</p>
+                      <p className="text-white/40 text-xs truncate">@{b.username}</p>
+                    </div>
+                    <button data-testid={`unblock-${b.username}`} onClick={() => unblock(b.user_id)} className="h-9 px-4 rounded-full bg-white/10 text-white/80 text-sm font-semibold active:scale-95">
+                      Desbloquear
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         <button data-testid="logout-btn" onClick={async () => { await logout(); navigate("/login"); }} className="h-12 rounded-2xl bg-transparent border border-white/10 text-white/60 font-semibold flex items-center justify-center gap-2 active:scale-95 mt-3">
           <LogOut className="w-4 h-4" /> Cerrar sesión

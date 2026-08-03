@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import PushPermissionGate from "@/components/PushPermissionGate";
 import MomentGate from "@/components/MomentGate";
+import AgeGate from "@/components/AgeGate";
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import Feed from "@/pages/Feed";
@@ -90,6 +91,7 @@ function App() {
           <AppRouter />
           <PushPermissionGate />
           <MomentGate />
+          <AgeGate />
         </BrowserRouter>
         <Toaster position="top-center" theme="dark" richColors />
       </AuthProvider>

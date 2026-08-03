@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
+import FindFriends from "@/components/FindFriends";
 import { Input } from "@/components/ui/input";
 import { UserPlus, Check, Clock, Search, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -80,7 +81,9 @@ export default function Friends() {
         <p className="text-white/50 text-sm mt-1">Cuantos más amigos, más planes verás.</p>
       </header>
 
-      <div className="px-5">
+      <FindFriends />
+
+      <div className="px-5 mt-2">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
           <Input

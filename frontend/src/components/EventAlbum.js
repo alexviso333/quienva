@@ -7,6 +7,7 @@ import {
   Download, CheckCircle2, Circle,
 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ReportFlag } from "@/components/ReportBlock";
 import { toast } from "sonner";
 
 /**
@@ -15,7 +16,7 @@ import { toast } from "sonner";
  * "Compartido": the combined album = photos you shared + photos friends/groups shared with you.
  * Supports MULTI upload (several files at once) and MULTI share (select many, share once).
  */
-export function EventAlbum({ eventId, hasInterest }) {
+export function EventAlbum({ eventId, hasInterest, prominent = false }) {
   const qc = useQueryClient();
   const inputRef = useRef(null);
   const [tab, setTab] = useState("mias");
@@ -103,7 +104,30 @@ export function EventAlbum({ eventId, hasInterest }) {
   const items = tab === "mias" ? mine : shared;
 
   return (
-    <div>
+    <div className={prominent ? "rounded-3xl border border-qv-secondary/30 bg-gradient-to-br from-qv-secondary/10 via-white/[0.03] to-transparent p-4" : ""}>
+      {prominent && (
+        <div className="flex items-start gap-3 mb-3">
+          <div className="w-11 h-11 rounded-2xl bg-qv-secondary/20 flex items-center justify-center shrink-0">
+            <Images className="w-5 h-5 text-qv-secondary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-display font-black text-white text-lg leading-tight">El álbum de la fiesta</p>
+            <p className="text-white/55 text-xs leading-snug mt-0.5">
+              Sube tus fotos y compártelas con el grupo — que no se queden en el móvil de uno solo. 📸
+            </p>
+          </div>
+          {canUpload && (
+            <button
+              data-testid="album-prominent-upload"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+              className="shrink-0 h-9 px-3 rounded-full bg-qv-secondary text-black text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-60"
+            >
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> Subir</>}
+            </button>
+          )}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-2">
         <p className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 font-bold">
           <Images className="w-4 h-4 text-qv-secondary" /> Álbum
@@ -233,6 +257,11 @@ export function EventAlbum({ eventId, hasInterest }) {
                 {tab === "compartido" && !it.is_mine && (
                   <div className="absolute bottom-1 left-1 flex items-center gap-1">
                     <AvatarCircle name={it.author?.name || ""} picture={it.author?.picture || ""} size={18} ring={false} />
+                  </div>
+                )}
+                {tab === "compartido" && !it.is_mine && (
+                  <div className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center">
+                    <ReportFlag targetType="album_photo" targetId={it.id} />
                   </div>
                 )}
               </button>
