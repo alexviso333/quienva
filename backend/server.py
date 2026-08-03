@@ -2043,6 +2043,20 @@ async def admin_set_pricing(event_id: str, inp: EventPricingInput, admin: dict =
     # Invalidate caches so the feed reflects the change
     _invalidate_stats_cache()
 
+    # Persistent history (admin manual change) — always recorded, even if silent
+    def _eff_price(tiers):
+        avail = [t.get("price") for t in (tiers or []) if not t.get("sold_out") and t.get("price") is not None]
+        return min(avail) if avail else None
+    old_price = _eff_price(old_tiers)
+    new_price_hist = _eff_price(new_tiers)
+    if old_state != inp.sale_state:
+        await _record_event_history(event_id, "state", "admin",
+                                    {"old_state": old_state, "new_state": inp.sale_state})
+    if old_price != new_price_hist:
+        kind_h = "price_up" if (old_price is not None and new_price_hist is not None and new_price_hist > old_price) else ("price_down" if (old_price is not None and new_price_hist is not None and new_price_hist < old_price) else "pricing_edited")
+        await _record_event_history(event_id, kind_h, "admin",
+                                    {"old_price": old_price, "new_price": new_price_hist})
+
     notifications_sent = 0
     if not inp.silent:
         # 1) State transition notification
@@ -2262,6 +2276,74 @@ async def admin_venue_report(admin: dict = Depends(require_admin)):
         d["commission"] = round(d["commission"], 2)
     out.sort(key=lambda x: -(x["going"] + x["tickets"]))
     return {"venues": out}
+
+
+@api_router.get("/admin/events/{event_id}/history")
+async def admin_event_history(event_id: str, admin: dict = Depends(require_admin)):
+    """Persistent timeline of every price/state change for one event (scraper + admin)."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    entries = []
+    async for h in db.event_history.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1).limit(200):
+        entries.append(h)
+    return {"event_id": event_id, "name": ev.get("name"), "entries": entries, "total": len(entries)}
+
+
+@api_router.get("/admin/events/{event_id}/stats")
+async def admin_event_stats(event_id: str, admin: dict = Depends(require_admin)):
+    """FULL per-event dashboard (admin 'Gran Hermano'): funnel + who's going/interested/
+    attended, tickets, clicks, views, album, captures, followers, current pricing + history."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    eid = event_id
+    metric = await db.event_metrics.find_one({"event_id": eid}, {"_id": 0}) or {}
+    going = await db.interests.count_documents({"event_id": eid, "status": "voy"})
+    interested = await db.interests.count_documents({"event_id": eid, "status": "me_interesa"})
+    attended = await db.interests.count_documents({"event_id": eid, "status": "estuve"})
+    tickets = await db.tickets.count_documents({"event_id": eid})
+    clicks = await db.ticket_purchases.count_documents({"event_id": eid})
+    views = metric.get("views", 0)
+    followers = await db.event_follows.count_documents({"event_id": eid})
+    album_items = await db.album_uploads.count_documents({"event_id": eid})
+    captures = await db.captures.count_documents({"event_id": eid})
+
+    async def _people(status, limit=60):
+        ids = await db.interests.distinct("user_id", {"event_id": eid, "status": status})
+        people = []
+        async for u in db.users.find({"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "city": 1}).limit(limit):
+            people.append({"user_id": u["user_id"], "name": u.get("name", ""), "picture": u.get("picture", ""), "city": u.get("city", "")})
+        return people
+
+    commission = _est_commission(ev, tickets)
+    conv = round((tickets / clicks) * 100, 1) if clicks else 0.0
+    history = []
+    async for h in db.event_history.find({"event_id": eid}, {"_id": 0}).sort("created_at", -1).limit(100):
+        history.append(h)
+    return {
+        "event": {
+            "id": ev["id"], "name": ev.get("name"), "venue": ev.get("venue", ""),
+            "date": ev.get("date", ""), "time": ev.get("time", ""), "genre": ev.get("genre", ""),
+            "image_url": ev.get("image_url", ""), "city": ev.get("city", ""),
+            "source": ev.get("source", "manual"),
+            "price_tiers": ev.get("price_tiers", []), "sale_state": ev.get("sale_state", "no_a_la_venta"),
+            "current_price": _current_price(ev), "currency": ev.get("currency", "EUR"),
+            "commission_url": ev.get("commission_url", ""), "has_commission": ev.get("has_commission", False),
+        },
+        "funnel": {
+            "views": views, "interested": interested, "going": going, "attended": attended,
+            "clicks": clicks, "tickets": tickets, "followers": followers,
+            "album_items": album_items, "captures": captures,
+            "conversion_pct": conv, "est_commission": commission,
+        },
+        "people": {
+            "going": await _people("voy"),
+            "interested": await _people("me_interesa"),
+            "attended": await _people("estuve"),
+        },
+        "history": history,
+    }
 
 
 class NotifyInterestedInput(BaseModel):
@@ -4433,6 +4515,7 @@ async def on_startup():
         await db.scraped_venues.create_index("name")
         await db.scraped_venues.create_index("active")
         await db.scrape_changelog.create_index([("batch_id", 1), ("created_at", -1)])
+        await db.event_history.create_index([("event_id", 1), ("created_at", -1)])
         try:
             # auto-expire changelog after 30 days so it never bloats (also serves created_at sorts)
             await db.scrape_changelog.create_index("created_at", expireAfterSeconds=30 * 24 * 3600, name="cl_ttl")
@@ -4797,6 +4880,24 @@ async def _record_scrape_change(batch_id: str, kind: str, ev: dict, extra: dict 
         logger.warning(f"scrape changelog insert failed: {e}")
 
 
+async def _record_event_history(event_id: str, kind: str, source: str = "scraper", extra: dict = None):
+    """PERSISTENT per-event timeline (no TTL) — every price/state change, manual or
+    automatic. Powers the admin 'Fiestas' tab history. 'Gran Hermano' mode."""
+    try:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "event_id": event_id,
+            "kind": kind,          # created | price_up | price_down | on_sale | low_stock | sold_out | state | edited | pricing_edited
+            "source": source,      # scraper | admin
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if extra:
+            doc.update(extra)
+        await db.event_history.insert_one(doc)
+    except Exception as e:
+        logger.warning(f"event history insert failed: {e}")
+
+
 async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "") -> str:
     """Diff a single scraped event against the DB and apply changes:
     - CREATE if not found → fires "new event" push to city.
@@ -4858,6 +4959,10 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
             "current_price": ev.get("price_tiers", [{}])[0].get("price") if ev.get("price_tiers") else None,
             "sale_state": ev.get("sale_state"),
         })
+        await _record_event_history(ev["id"], "created", "scraper", {
+            "sale_state": ev.get("sale_state"),
+            "new_price": ev.get("price_tiers", [{}])[0].get("price") if ev.get("price_tiers") else None,
+        })
         return "created"
 
     # UPDATE — merge scraped fields but respect admin's manual overrides where
@@ -4911,16 +5016,19 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
         _cl_kind = {"tickets_on_sale": "on_sale", "tickets_low_stock": "state",
                     "tickets_sold_out": "sold_out"}.get(kind, "state")
         await _record_scrape_change(batch_id, _cl_kind, existing, {"old_state": old_state, "new_state": new_state})
+        await _record_event_history(existing["id"], _cl_kind, "scraper", {"old_state": old_state, "new_state": new_state})
     new_price = _detect_price_increase(old_tiers, new_tiers)
     if new_price is not None and new_state == "a_la_venta":
         body = f"📈 Nueva fase de precios en {existing['name']}: ahora {int(new_price)}€."
         await _notify_event_audience(existing["id"], "tickets_price_up", existing["name"], body)
         await _record_scrape_change(batch_id, "price_up", existing, {"new_price": new_price})
+        await _record_event_history(existing["id"], "price_up", "scraper", {"new_price": new_price})
     drop_price = _detect_price_decrease(old_tiers, new_tiers)
     if drop_price is not None and new_state in ("a_la_venta", "pocas_entradas"):
         body = f"📉 ¡Bajada de precio en {existing['name']}! Ahora desde {int(drop_price)}€."
         await _notify_event_audience(existing["id"], "tickets_price_down", existing["name"], body)
         await _record_scrape_change(batch_id, "price_down", existing, {"new_price": drop_price})
+        await _record_event_history(existing["id"], "price_down", "scraper", {"new_price": drop_price})
     return "updated"
 
 

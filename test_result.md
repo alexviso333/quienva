@@ -172,6 +172,37 @@ backend:
       - working: true
         agent: "testing"
         comment: "TESTED ALL SCENARIOS (3 tests, 100% pass): ✅ (1) GET /admin/scrape-changelog?limit=60 as admin → 200 with correct structure: {last_run:{...}, counts:{new,price_up,price_down,state,sold_out,on_sale}, total:<int>, entries:[...]}. All required keys present. ✅ (2) As non-admin user → 403. ✅ (3) Unauthenticated → 401. Authorization and response structure working correctly."
+
+  - task: "Admin per-event stats + history (Gran Hermano)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New GET /api/admin/events/{event_id}/stats returns full per-event dashboard with keys: event (full event object with pricing), funnel (views/interested/going/attended/clicks/tickets/followers/album_items/captures/conversion_pct/est_commission), people (going/interested/attended arrays with user details), history (last 100 entries). New GET /api/admin/events/{event_id}/history returns {event_id, name, entries, total}. Both endpoints require admin role (403 for non-admin, 401 for unauth, 404 for non-existent event)."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (15 tests, 100% pass): ✅ (1) GET /admin/events/{event_id}/stats as admin → 200 with all required top-level keys: event, funnel, people, history. ✅ (2) Funnel contains all 11 required keys: views, interested, going, attended, clicks, tickets, followers, album_items, captures, conversion_pct, est_commission. ✅ (3) People contains 3 arrays: going, interested, attended (all are lists). ✅ (4) As non-admin → 403. ✅ (5) Unauthenticated → 401. ✅ (6) Non-existent event → 404. ✅ (7) GET /admin/events/{event_id}/history as admin → 200 with keys: event_id, name, entries, total. ✅ (8) entries is a list. ✅ (9) As non-admin → 403. ✅ (10) Unauthenticated → 401. All authorization and response structures working correctly."
+
+  - task: "Manual pricing change records event_history"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "PUT /api/admin/events/{event_id}/pricing now records persistent history entries via _record_event_history. When sale_state changes, records entry with kind='state' and {old_state, new_state}. When price changes, records entry with kind='price_up'/'price_down'/'pricing_edited' and {old_price, new_price}. All entries have source='admin'. History is persistent (no TTL) and powers the Gran Hermano admin view."
+      - working: true
+        agent: "testing"
+        comment: "TESTED PRICING HISTORY (6 tests, 100% pass): ✅ (1) Initial history total retrieved. ✅ (2) PUT /admin/events/{event_id}/pricing with new price_tiers and sale_state → 200. ✅ (3) History total increased after pricing change (from 2 to 4 entries). ✅ (4) Latest history entry has source='admin'. ✅ (5) Latest entry has valid kind (one of: state, price_up, price_down, pricing_edited). ✅ (6) Verified actual entry structure: contains id, event_id, kind, source, created_at, and pricing details (old_price, new_price, old_state, new_state) at top level. Example entry: kind='price_down', source='admin', old_price=25.0, new_price=15.0. All functionality working correctly."
+
   - task: "Profile permission fix: /users/:id/badges public for non-friends"
     implemented: true
     working: true
@@ -777,8 +808,8 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.5"
-  test_sequence: 6
+  version: "2.6"
+  test_sequence: 7
   run_ui: false
 
 test_plan:
@@ -788,6 +819,54 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NEW ITERATION (2026-08-02 h) — test ONLY these new/changed backend endpoints (admin@quienva.app/admin123):
+      1) GET /api/admin/events/{event_id}/stats as admin -> 200 with keys {event, funnel, people, history}. funnel has views/interested/going/attended/clicks/tickets/followers/album_items/captures/conversion_pct/est_commission. people has going/interested/attended arrays. Non-admin -> 403. Unauth -> 401. Invalid event id -> 404.
+      2) GET /api/admin/events/{event_id}/history as admin -> 200 {event_id, name, entries, total}. Non-admin -> 403.
+      3) MANUAL PRICING records history: pick an event id, PUT /api/admin/events/{event_id}/pricing (use the existing pricing schema — price_tiers + sale_state) to change sale_state and/or price. Then GET /api/admin/events/{event_id}/history should now include a new entry with source="admin" (kind state/price_up/price_down/pricing_edited). Verify the entry appears.
+      Also quick regression: GET /api/admin/stats, GET /api/admin/dashboard, GET /api/admin/funnel?scope=all (rows + totals), GET /api/admin/scrape-changelog. Test credentials in /app/memory/test_credentials.md.
+
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - Iteration 2026-08-02h (Admin Event Stats & History - Gran Hermano)
+      
+      🎉 ALL TESTS PASSED: 31/31 (100% pass rate)
+      
+      ✅ FEATURE 1: GET /api/admin/events/{event_id}/stats (10 tests, 100% pass)
+      - As admin → 200 with all required top-level keys: event, funnel, people, history
+      - Funnel contains all 11 required keys: views, interested, going, attended, clicks, tickets, followers, album_items, captures, conversion_pct, est_commission
+      - People contains 3 arrays (going, interested, attended) - all are lists
+      - As non-admin user → 403
+      - Unauthenticated → 401
+      - Non-existent event ID → 404
+      
+      ✅ FEATURE 2: GET /api/admin/events/{event_id}/history (5 tests, 100% pass)
+      - As admin → 200 with keys: event_id, name, entries, total
+      - entries is a list
+      - As non-admin user → 403
+      - Unauthenticated → 401
+      
+      ✅ FEATURE 3: MANUAL PRICING RECORDS HISTORY (6 tests, 100% pass)
+      - Initial history total retrieved successfully
+      - PUT /admin/events/{event_id}/pricing with new price_tiers and sale_state → 200
+      - History total increased after pricing change (verified: 2 → 4 entries)
+      - Latest history entry has source='admin' ✓
+      - Latest entry has valid kind (verified: 'price_down', 'state', 'pricing_edited')
+      - Verified actual entry structure contains: id, event_id, kind, source, created_at, old_price, new_price, old_state, new_state
+      - Example entries created:
+        * kind='state', source='admin', old_state='pocas_entradas', new_state='a_la_venta'
+        * kind='price_down', source='admin', old_price=25.0, new_price=15.0
+      
+      ✅ REGRESSION TESTS (10 tests, 100% pass)
+      - GET /admin/stats → 200 with basic structure
+      - GET /admin/dashboard → 200 with basic structure
+      - GET /admin/funnel?scope=all → 200 with rows[] and totals{}
+      - GET /admin/scrape-changelog → 200 with basic structure
+      
+      All endpoints working correctly with proper authorization (admin-only), validation, and data structures. No issues found.
+      Test file: /app/admin_event_stats_test.py
+
   - agent: "main"
     message: |
       NEW ITERATION (2026-08-02 g) — test ONLY these new/changed backend endpoints (admin@quienva.app/admin123):
