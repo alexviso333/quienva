@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock } from "lucide-react";
+import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import api, { mediaUrl, API } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
@@ -38,6 +38,7 @@ const SALE_STATE_META = {
   a_la_venta:    { label: "A la venta",   cls: "bg-emerald-400/20 text-emerald-300", icon: Ticket },
   pocas_entradas:{ label: "Pocas entradas", cls: "bg-orange-400/25 text-orange-200", icon: Flame },
   agotado:       { label: "Agotado",      cls: "bg-white/10 text-white/50", icon: Lock },
+  solo_lista:    { label: "Solo lista",   cls: "bg-violet-400/20 text-violet-200", icon: ClipboardList },
 };
 
 function PriceBadge({ event }) {

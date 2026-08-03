@@ -133,6 +133,16 @@ class FourVenuesApiScraper(Scraper):
                         )
                         if tr.status_code == 401:
                             raise FourVenuesTokenError("401 en tickets-types")
+                        # 409 rate_not_exist_for_event => venue only runs
+                        # guest lists, no paid tickets (e.g. Zar Society).
+                        if tr.status_code == 409:
+                            try:
+                                body = tr.json()
+                            except Exception:
+                                body = {}
+                            if "rate_not_exist" in str(body):
+                                return "__guestlist__"
+                            return None
                         if tr.status_code != 200:
                             return None
                         tp = tr.json()
@@ -241,6 +251,9 @@ class FourVenuesApiScraper(Scraper):
           - any available type flagged few-left  -> pocas_entradas
           - otherwise                            -> a_la_venta
         """
+        if tickets == "__guestlist__":
+            # Guest-list only venue: no paid tickets, hide price, flag state.
+            return [], "solo_lista"
         if tickets is None:
             # Unknown (detail fetch failed / not fetched) -> don't invent a state.
             return [], "no_a_la_venta"

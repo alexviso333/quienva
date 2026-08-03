@@ -244,7 +244,11 @@ export default function EventDetail() {
                 }`}
               >
                 <Ticket className="w-5 h-5" />
-                {event.sale_state === "agotado" ? "Ver disponibilidad" : "Conseguir entrada"}
+                {event.sale_state === "agotado"
+                  ? "Ver disponibilidad"
+                  : event.sale_state === "solo_lista"
+                  ? "Apuntarme a la lista"
+                  : "Conseguir entrada"}
                 {price ? <span className="opacity-90">· desde {Math.round(price)}€</span> : null}
               </a>
               {saleBadge && (

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell } from "lucide-react";
+import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import api, { mediaUrl } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
@@ -14,6 +14,7 @@ const SALE_STATE_META = {
   a_la_venta: { label: "A la venta", cls: "bg-emerald-400/25 text-emerald-200", icon: Ticket },
   pocas_entradas: { label: "Pocas", cls: "bg-orange-400/30 text-orange-100", icon: Flame },
   agotado: { label: "Agotado", cls: "bg-white/10 text-white/50", icon: Lock },
+  solo_lista: { label: "Solo lista", cls: "bg-violet-400/25 text-violet-100", icon: ClipboardList },
 };
 
 function CompactPriceBadge({ event }) {
