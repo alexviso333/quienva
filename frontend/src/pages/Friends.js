@@ -125,12 +125,11 @@ export default function Friends() {
                     <AvatarCircle name={u.name} picture={u.picture} size={44} ring={false} />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold truncate">{u.name}</p>
-                      <p className="text-white/40 text-sm truncate">
-                        @{u.username}
-                        {u.mutual_count > 0 && (
-                          <span className="text-qv-secondary"> · {u.mutual_count} en común</span>
-                        )}
-                      </p>
+                      {u.mutual_count > 0 && (
+                        <p className="text-white/40 text-sm truncate">
+                          <span className="text-qv-secondary">{u.mutual_count} en común</span>
+                        </p>
+                      )}
                     </div>
                     <button
                       data-testid={`friend-action-${u.username}`}
@@ -162,12 +161,11 @@ export default function Friends() {
                 <AvatarCircle name={r.user.name} picture={r.user.picture} size={44} ring={false} />
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{r.user.name}</p>
-                  <p className="text-white/40 text-sm truncate">
-                    @{r.user.username}
-                    {r.user.mutual_count > 0 && (
-                      <span className="text-qv-secondary"> · {r.user.mutual_count} en común</span>
-                    )}
-                  </p>
+                  {r.user.mutual_count > 0 && (
+                    <p className="text-white/40 text-sm truncate">
+                      <span className="text-qv-secondary">{r.user.mutual_count} en común</span>
+                    </p>
+                  )}
                 </div>
                 <button
                   data-testid={`accept-${r.user.username}`}
@@ -204,7 +202,6 @@ export default function Friends() {
                 <AvatarCircle name={f.name} picture={f.picture} size={44} ring={false} />
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{f.name}</p>
-                  <p className="text-white/40 text-sm truncate">@{f.username}</p>
                 </div>
                 <Check className="w-5 h-5 text-qv-secondary" />
               </div>

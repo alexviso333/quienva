@@ -352,9 +352,19 @@ def public_user(u: dict) -> dict:
         "auth_provider": u.get("auth_provider"),
         "attendance_privacy": u.get("attendance_privacy", "amigos"),
         "moment_privacy": u.get("moment_privacy", "amigos"),
+        "city_change_alerts": bool(u.get("city_change_alerts", False)),
         "has_phone": bool(u.get("phone_hash")),
         "needs_birthdate": not bool(u.get("birthdate")),
     }
+
+
+def display_name(u) -> str:
+    """Public display name shown to OTHER users: only the @username, never the
+    real personal name. Self still sees their real name via public_user()."""
+    if not u:
+        return "Usuario"
+    un = u.get("username")
+    return f"@{un}" if un else (u.get("name") or "Usuario")
 
 
 async def get_token_from_request(request: Request) -> Optional[str]:
@@ -710,7 +720,6 @@ async def search_users(q: str, user: dict = Depends(get_current_user)):
         "user_id": {"$ne": user["user_id"]},
         "$or": [
             {"username": {"$regex": q, "$options": "i"}},
-            {"name": {"$regex": q, "$options": "i"}},
         ],
     }, {"_id": 0}).limit(30)
     fmap = await friendship_status_map(user["user_id"])
@@ -721,6 +730,8 @@ async def search_users(q: str, user: dict = Depends(get_current_user)):
         if u["user_id"] in blocked:
             continue
         pu = public_user(u)
+        pu["name"] = display_name(u)
+        pu.pop("email", None)
         rel = fmap.get(u["user_id"])
         pu["relationship"] = rel or {"status": "none"}
         pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
@@ -740,6 +751,8 @@ async def get_by_username(username: str, user: dict = Depends(get_current_user))
     pu["relationship"] = fmap.get(u["user_id"]) or {"status": "none"}
     my_friends = await accepted_friend_ids(user["user_id"])
     pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
+    pu["name"] = display_name(u)
+    pu.pop("email", None)
     return pu
 
 
@@ -761,7 +774,7 @@ async def do_friend_request(user: dict, target: str) -> dict:
         if existing["requester_id"] == target and existing["status"] == "pending":
             await db.friendships.update_one({"id": existing["id"]}, {"$set": {"status": "accepted"}})
             await create_notification(target, "friend_accept",
-                                      f"{user['name']} aceptó tu solicitud de amistad",
+                                      f"{display_name(user)} aceptó tu solicitud de amistad",
                                       {"user_id": user["user_id"]})
             return {"status": "accepted"}
         return {"status": "pending", "request_id": existing["id"]}
@@ -774,7 +787,7 @@ async def do_friend_request(user: dict, target: str) -> dict:
     }
     await db.friendships.insert_one(fr)
     await create_notification(target, "friend_request",
-                              f"{user['name']} te ha enviado una solicitud de amistad",
+                              f"{display_name(user)} te ha enviado una solicitud de amistad",
                               {"user_id": user["user_id"], "request_id": fr["id"]})
     return {"status": "pending", "request_id": fr["id"]}
 
@@ -791,6 +804,8 @@ async def send_friend_request_by_username(inp: UsernameInput, user: dict = Depen
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     result = await do_friend_request(user, target["user_id"])
     result["user"] = public_user(target)
+    result["user"]["name"] = display_name(target)
+    result["user"].pop("email", None)
     return result
 
 
@@ -804,7 +819,7 @@ async def respond_friend(inp: FriendRespondInput, user: dict = Depends(get_curre
         _invalidate_stats_cache(fr["requester_id"])
         _invalidate_stats_cache(user["user_id"])
         await create_notification(fr["requester_id"], "friend_accept",
-                                  f"{user['name']} aceptó tu solicitud de amistad",
+                                  f"{display_name(user)} aceptó tu solicitud de amistad",
                                   {"user_id": user["user_id"]})
         return {"status": "accepted"}
     await db.friendships.delete_one({"id": fr["id"]})
@@ -827,7 +842,10 @@ async def list_friends(user: dict = Depends(get_current_user)):
     ids = await accepted_friend_ids(user["user_id"])
     out = []
     async for u in db.users.find({"user_id": {"$in": ids}}, {"_id": 0}):
-        out.append(public_user(u))
+        pu = public_user(u)
+        pu["name"] = display_name(u)
+        pu.pop("email", None)
+        out.append(pu)
     return out
 
 
@@ -839,6 +857,8 @@ async def list_requests(user: dict = Depends(get_current_user)):
         requester = await db.users.find_one({"user_id": f["requester_id"]}, {"_id": 0})
         if requester:
             pu = public_user(requester)
+            pu["name"] = display_name(requester)
+            pu.pop("email", None)
             pu["mutual_count"] = await mutual_friends_count(my_friends, requester["user_id"])
             incoming.append({"request_id": f["id"], "user": pu})
     return incoming
@@ -1027,7 +1047,7 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
                 continue
             fu = users_map.get(it["user_id"])
             if fu:
-                entry = {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")}
+                entry = {"user_id": fu["user_id"], "name": display_name(fu), "picture": fu.get("picture", "")}
                 if it["status"] == "voy":
                     friends_going.append(entry)
                 elif it["status"] == "me_interesa":
@@ -1052,7 +1072,7 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
                 if not fu:
                     fu = await db.users.find_one({"user_id": t["user_id"]}, {"_id": 0})
                 if fu:
-                    friends_with_ticket.append({"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")})
+                    friends_with_ticket.append({"user_id": fu["user_id"], "name": display_name(fu), "picture": fu.get("picture", "")})
 
     return {
         "id": ev["id"],
@@ -1845,7 +1865,7 @@ async def user_badges(user_id: str, viewer: dict = Depends(get_current_user)):
 
     if is_self or is_friend:
         return {
-            "user": {"user_id": target["user_id"], "name": target["name"],
+            "user": {"user_id": target["user_id"], "name": target["name"] if is_self else display_name(target),
                      "picture": target.get("picture", ""), "username": target.get("username", ""),
                      "city": target.get("city", ""), "bio": target.get("bio", "")},
             "stats": stats,
@@ -1865,7 +1885,7 @@ async def user_badges(user_id: str, viewer: dict = Depends(get_current_user)):
         "day_streak": stats.get("day_streak", 0),
     }
     return {
-        "user": {"user_id": target["user_id"], "name": target["name"],
+        "user": {"user_id": target["user_id"], "name": display_name(target),
                  "picture": target.get("picture", ""), "username": target.get("username", ""),
                  "city": target.get("city", ""), "bio": target.get("bio", "")},
         "stats": public_stats,
@@ -1900,7 +1920,7 @@ async def _build_ranking(candidate_user_ids: list, limit: int = 100) -> list:
     entries = [
         {
             "user_id": u["user_id"],
-            "name": u["name"],
+            "name": display_name(u),
             "username": u.get("username", ""),
             "picture": u.get("picture", ""),
             "city": u.get("city", ""),
@@ -2016,7 +2036,7 @@ async def claim_referral(inp: ClaimReferralInput, user: dict = Depends(get_curre
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"referred_by": referrer["user_id"]}})
     await create_notification(
         referrer["user_id"], "referral",
-        f"¡{u['name']} se registró con tu código! +{ACTION_POINTS['referral_signup']} puntos 🎁",
+        f"¡{display_name(u)} se registró con tu código! +{ACTION_POINTS['referral_signup']} puntos 🎁",
         {"user_id": user["user_id"]},
     )
     return {"ok": True, "points": ACTION_POINTS["referral_signup"]}
@@ -2074,7 +2094,7 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
         for fid in friend_ids:
             await create_notification(
                 fid, "friend_going",
-                f"{user['name']} va a {ev['name']}",
+                f"{display_name(user)} va a {ev['name']}",
                 {"event_id": event_id, "user_id": user["user_id"]},
             )
 
@@ -2131,7 +2151,7 @@ async def my_activity(user: dict = Depends(get_current_user)):
         if ev and fu and ev.get("date", "") >= today_iso:
             items.append({
                 "type": "going", "ts": it.get("created_at", ""),
-                "user": {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")},
+                "user": {"user_id": fu["user_id"], "name": display_name(fu), "picture": fu.get("picture", "")},
                 "event_id": ev["id"], "event_name": ev["name"], "venue": ev.get("venue", ""), "date": ev.get("date", ""),
             })
     # friends who got tickets (only for FUTURE events)
@@ -2141,7 +2161,7 @@ async def my_activity(user: dict = Depends(get_current_user)):
         if ev and fu and ev.get("date", "") >= today_iso:
             items.append({
                 "type": "ticket", "ts": tk.get("created_at", ""),
-                "user": {"user_id": fu["user_id"], "name": fu["name"], "picture": fu.get("picture", "")},
+                "user": {"user_id": fu["user_id"], "name": display_name(fu), "picture": fu.get("picture", "")},
                 "event_id": ev["id"], "event_name": ev["name"], "venue": ev.get("venue", ""), "date": ev.get("date", ""),
             })
     items.sort(key=lambda x: x.get("ts", ""), reverse=True)
@@ -2427,6 +2447,14 @@ async def _notify_event_audience(event_id: str, kind: str, title: str, body: str
         {"_id": 0, "user_id": 1},
     ):
         target_ids.add(it["user_id"])
+    # City-wide change opt-in: users who enabled "avisarme de cualquier cambio en
+    # mi ciudad" (off by default) get price/sale-state change notifications for
+    # every event in their city, even ones they don't follow.
+    async for u in db.users.find(
+        {"city": ev.get("city"), "city_change_alerts": True},
+        {"_id": 0, "user_id": 1},
+    ):
+        target_ids.add(u["user_id"])
     for uid in target_ids:
         await create_notification(uid, kind, body, {"event_id": event_id, "type": kind})
     logger.info(f"[notify] event={event_id} kind={kind} → {len(target_ids)} users")
@@ -2813,7 +2841,7 @@ async def admin_event_stats(event_id: str, admin: dict = Depends(require_admin))
         ids = await db.interests.distinct("user_id", {"event_id": eid, "status": status})
         people = []
         async for u in db.users.find({"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "city": 1}).limit(limit):
-            people.append({"user_id": u["user_id"], "name": u.get("name", ""), "picture": u.get("picture", ""), "city": u.get("city", "")})
+            people.append({"user_id": u["user_id"], "name": display_name(u), "picture": u.get("picture", ""), "city": u.get("city", "")})
         return people
 
     async def _history():
@@ -3451,6 +3479,21 @@ async def set_notif_prefs(inp: NotifPrefsInput, user: dict = Depends(get_current
     return {"prefs": merged}
 
 
+class CityAlertsInput(BaseModel):
+    enabled: bool
+
+
+@api_router.put("/me/city-alerts")
+async def set_city_alerts(inp: CityAlertsInput, user: dict = Depends(get_current_user)):
+    """Opt in/out of notifications for ANY change (price/sale-state) on ANY event
+    in your city. Off by default."""
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"city_change_alerts": bool(inp.enabled)}},
+    )
+    return {"city_change_alerts": bool(inp.enabled)}
+
+
 # ---------------------------------------------------------------------------
 # Web Push
 # ---------------------------------------------------------------------------
@@ -3512,7 +3555,7 @@ async def generate_weekly_digest() -> int:
             fu = await db.users.find_one({"user_id": it["user_id"]}, {"_id": 0})
             plans.setdefault(ev["name"], set())
             if fu:
-                plans[ev["name"]].add(fu["name"].split(" ")[0])
+                plans[ev["name"]].add(display_name(fu))
         if not plans:
             continue
         n = len(plans)
@@ -3653,7 +3696,7 @@ async def serialize_story(s: dict, viewer: dict) -> dict:
         **{k: v for k, v in s.items() if k != "_id"},
         "is_mine": is_mine,
         "author": {
-            "name": author["name"] if author else "Usuario",
+            "name": display_name(author) if author else "Usuario",
             "picture": author.get("picture", "") if author else "",
             "username": author["username"] if author else "",
         },
@@ -3665,7 +3708,7 @@ async def serialize_story(s: dict, viewer: dict) -> dict:
             ru = await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0})
             reactions.append({
                 "content": r["content"],
-                "user": {"name": ru["name"] if ru else "Usuario", "picture": ru.get("picture", "") if ru else ""},
+                "user": {"name": display_name(ru) if ru else "Usuario", "picture": ru.get("picture", "") if ru else ""},
             })
         out["reactions"] = reactions
     return out
@@ -3715,7 +3758,7 @@ async def react_to_story(story_id: str, inp: ReactionInput, user: dict = Depends
     if s["user_id"] != user["user_id"]:
         await create_notification(
             s["user_id"], "story_reaction",
-            f"{user['name']} reaccionó a tu historia: {content}",
+            f"{display_name(user)} reaccionó a tu historia: {content}",
             {"story_id": story_id},
         )
     return {"ok": True}
@@ -3733,7 +3776,7 @@ async def delete_story(story_id: str, user: dict = Depends(get_current_user)):
 # Event chat
 # ---------------------------------------------------------------------------
 def _msg_author(u):
-    return {"name": u["name"] if u else "Usuario", "picture": u.get("picture", "") if u else "",
+    return {"name": display_name(u) if u else "Usuario", "picture": u.get("picture", "") if u else "",
             "username": u["username"] if u else ""}
 
 
@@ -3775,7 +3818,7 @@ async def post_event_message(event_id: str, inp: MessageInput, user: dict = Depe
         if pid != user["user_id"]:
             await create_notification(
                 pid, "event_message",
-                f"{user['name']} en el chat de {ev['name']}: {text[:60]}",
+                f"{display_name(user)} en el chat de {ev['name']}: {text[:60]}",
                 {"event_id": event_id},
             )
     return {**msg, "author": _msg_author(user), "is_mine": True}
@@ -3888,7 +3931,7 @@ async def _dm_thread_summary(other_id: str, my_id: str) -> dict:
         "thread_key": key, "to_user_id": my_id, "read": False,
     })
     return {
-        "user": {"user_id": other["user_id"], "name": other["name"],
+        "user": {"user_id": other["user_id"], "name": display_name(other),
                  "username": other.get("username", ""), "picture": other.get("picture", "")},
         "last_message": (last["text"] if (last and last.get("text")) else ("📷 Foto" if last else "")),
         "last_at": last["created_at"] if last else "",
@@ -3962,7 +4005,7 @@ async def send_dm(inp: DMSendInput, user: dict = Depends(get_current_user)):
     _preview = text[:60] if text else "📷 Foto"
     await create_notification(
         inp.to_user_id, "dm",
-        f"{user['name']}: {_preview}",
+        f"{display_name(user)}: {_preview}",
         {"user_id": user["user_id"], "type": "dm"},
     )
     return {**msg, "is_mine": True}
@@ -3991,7 +4034,7 @@ def _serialize_group(g: dict, members_map: dict, viewer_id: str, last_msg: dict 
         "picture": g.get("picture", ""),
         "member_ids": g.get("member_ids", []),
         "members": [
-            {"user_id": mid, "name": members_map.get(mid, {}).get("name", ""),
+            {"user_id": mid, "name": display_name(members_map.get(mid)),
              "picture": members_map.get(mid, {}).get("picture", ""),
              "username": members_map.get(mid, {}).get("username", "")}
             for mid in g.get("member_ids", [])
@@ -4030,7 +4073,7 @@ async def create_group(inp: GroupCreateInput, user: dict = Depends(get_current_u
         if mid != user["user_id"]:
             await create_notification(
                 mid, "group_invite",
-                f"{user['name']} te añadió al grupo '{name}'",
+                f"{display_name(user)} te añadió al grupo '{name}'",
                 {"group_id": g["id"]},
             )
     return g
@@ -4101,7 +4144,7 @@ async def add_group_member(group_id: str, inp: GroupMemberInput, user: dict = De
     await db.groups.update_one({"id": group_id}, {"$addToSet": {"member_ids": inp.user_id}})
     await create_notification(
         inp.user_id, "group_invite",
-        f"{user['name']} te añadió al grupo '{g['name']}'",
+        f"{display_name(user)} te añadió al grupo '{g['name']}'",
         {"group_id": group_id},
     )
     return {"ok": True}
@@ -4170,7 +4213,7 @@ async def send_group_message(group_id: str, inp: GroupMessageInput, user: dict =
         if mid != user["user_id"]:
             await create_notification(
                 mid, "group_message",
-                f"{g['name']} · {user['name']}: {_preview}",
+                f"{g['name']} · {display_name(user)}: {_preview}",
                 {"group_id": group_id, "type": "group_message"},
             )
     return {**msg, "author": _msg_author(user), "is_mine": True}
@@ -4267,7 +4310,7 @@ async def group_photo_upload(
         if mid != user["user_id"]:
             await create_notification(
                 mid, "group_message",
-                f"📸 {user['name']} subió la foto de grupo de {ev['name']}",
+                f"📸 {display_name(user)} subió la foto de grupo de {ev['name']}",
                 {"group_id": group_id, "type": "group_photo"},
             )
     return {**photo, "author": _msg_author(user)}
@@ -4463,7 +4506,7 @@ async def album_share(event_id: str, upload_id: str, inp: AlbumShareInput, user:
         for rid in list(new_recipients)[:60]:
             await create_notification(
                 rid, "album_shared",
-                f"📸 {user['name']} compartió una foto de {ev['name'] if ev else 'una fiesta'}",
+                f"📸 {display_name(user)} compartió una foto de {ev['name'] if ev else 'una fiesta'}",
                 {"event_id": event_id, "type": "album_shared"},
             )
     except Exception as e:
@@ -4538,7 +4581,7 @@ async def album_share_batch(event_id: str, inp: AlbumShareBatchInput, user: dict
         for rid in list(new_recipients)[:60]:
             await create_notification(
                 rid, "album_shared",
-                f"📸 {user['name']} compartió {n} foto{'s' if n != 1 else ''} de {ev['name'] if ev else 'una fiesta'}",
+                f"📸 {display_name(user)} compartió {n} foto{'s' if n != 1 else ''} de {ev['name'] if ev else 'una fiesta'}",
                 {"event_id": event_id, "type": "album_shared"},
             )
     except Exception as e:
@@ -4876,7 +4919,7 @@ async def moment_upload(event_id: str, file: UploadFile = File(...), user: dict 
             for fid in targets:
                 await create_notification(
                     fid, "moment_friend",
-                    f"⚡ {user['name']} subió su momento en {ev['name']}. ¡No te lo pierdas!",
+                    f"⚡ {display_name(user)} subió su momento en {ev['name']}. ¡No te lo pierdas!",
                     {"event_id": event_id, "type": "moment_friend"},
                 )
     except Exception as e:
@@ -4929,7 +4972,7 @@ async def like_capture(capture_id: str, user: dict = Depends(get_current_user)):
         if c["user_id"] != uid:
             await create_notification(
                 c["user_id"], "capture_like",
-                f"A {user['name']} le gusta tu Momento ❤️",
+                f"A {display_name(user)} le gusta tu Momento ❤️",
                 {"user_id": uid, "type": "capture_like"},
             )
     count = await db.capture_reactions.count_documents({"capture_id": capture_id})
@@ -4985,7 +5028,7 @@ async def my_calendar(user: dict = Depends(get_current_user),
                 continue
             fu = await db.users.find_one({"user_id": i["user_id"]}, {"_id": 0, "name": 1, "picture": 1})
             if fu:
-                friend_names.append({"name": fu["name"], "picture": fu.get("picture", "")})
+                friend_names.append({"name": display_name(fu), "picture": fu.get("picture", "")})
         key = d.isoformat()
         days.setdefault(key, {"date": key, "events": []})
         days[key]["events"].append({

@@ -1,23 +1,15 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl, API } from "@/lib/api";
-import { timeSuffix } from "@/lib/format";
+import { formatPartyDate } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
 import {
-  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2,
+  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 
-function formatDate(dateStr) {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
-  } catch {
-    return dateStr;
-  }
-}
 const todayStr = () => {
   const n = new Date();
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
@@ -97,6 +89,26 @@ export default function EventDetail() {
     onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
   });
 
+  const setFollow = useMutation({
+    mutationFn: async (follow) =>
+      follow
+        ? (await api.post(`/events/${id}/follow`)).data
+        : (await api.delete(`/events/${id}/follow`)).data,
+    onMutate: async (follow) => {
+      await qc.cancelQueries({ queryKey: ["event", id] });
+      const prev = qc.getQueryData(["event", id]);
+      qc.setQueryData(["event", id], (e) => (e ? { ...e, is_following: follow } : e));
+      return { prev };
+    },
+    onSuccess: (_d, follow) =>
+      toast.success(follow ? "Te avisaremos de cambios 🔔" : "Avisos desactivados"),
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
+      toast.error("No se pudo actualizar el aviso");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
+  });
+
   if (isLoading || !event) {
     return (
       <div className="min-h-screen qv-app-bg flex items-center justify-center">
@@ -150,6 +162,14 @@ export default function EventDetail() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <button
+            data-testid="detail-follow"
+            onClick={() => setFollow.mutate(!event.is_following)}
+            className="absolute top-6 right-16 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
+            aria-label="Avisarme de cambios"
+          >
+            <Bell className={`w-5 h-5 ${event.is_following ? "text-qv-secondary" : "text-white"}`} fill={event.is_following ? "currentColor" : "none"} />
+          </button>
+          <button
             data-testid="detail-share"
             onClick={shareWhatsApp}
             className="absolute top-6 right-4 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
@@ -172,7 +192,7 @@ export default function EventDetail() {
         <div className="px-5 pt-4 flex flex-col gap-5">
           <div className="flex flex-col gap-2 text-white/80">
             <span className="flex items-center gap-2"><MapPin className="w-4 h-4 text-qv-secondary" /> {event.venue}{event.address ? ` · ${event.address}` : ""}</span>
-            <span className="flex items-center gap-2 capitalize"><Clock className="w-4 h-4 text-qv-secondary" /> {formatDate(event.date)}{timeSuffix(event.time)}</span>
+            <span className="flex items-center gap-2 capitalize"><Clock className="w-4 h-4 text-qv-secondary" /> {formatPartyDate(event.date, event.time)}</span>
           </div>
 
           {/* Status */}

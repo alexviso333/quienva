@@ -88,7 +88,6 @@ export default function Rankings() {
                 <AvatarCircle name={e.name} picture={e.picture} size={42} ring={i < 3} />
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-white truncate">{e.name} {isMe && <span className="text-qv-primary text-xs ml-1">· TÚ</span>}</p>
-                  <p className="text-white/50 text-xs">@{e.username || ""}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-display font-black text-yellow-300 text-lg leading-none">{e.points.toLocaleString("es-ES")}</p>

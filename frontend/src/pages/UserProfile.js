@@ -106,7 +106,6 @@ export default function UserProfile() {
         <AvatarCircle name={user.name} picture={user.picture} size={92} />
         <div className="text-center">
           <h1 className="font-display text-2xl font-bold">{user.name}</h1>
-          {user.username && <p className="text-white/50 text-sm">@{user.username}</p>}
           {user.city && <p className="text-white/40 text-xs mt-1">{user.city}</p>}
         </div>
         {user.bio && <p className="text-white/70 text-sm text-center max-w-xs">{user.bio}</p>}

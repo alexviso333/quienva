@@ -6,6 +6,7 @@ const COLORS = ["#FF0055", "#00F0FF", "#7C3AED", "#F59E0B", "#10B981", "#EC4899"
 function initials(name = "") {
   return name
     .trim()
+    .replace(/^@/, "")
     .split(" ")
     .slice(0, 2)
     .map((w) => w[0])

@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Flame, Users, Ticket, Lock, Clock, Star, Check } from "lucide-react";
+import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { mediaUrl } from "@/lib/api";
+import api, { mediaUrl } from "@/lib/api";
+import { formatPartyDate } from "@/lib/format";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
 const SALE_STATE_META = {
@@ -32,15 +36,6 @@ function CompactPriceBadge({ event }) {
   );
 }
 
-function formatDate(dateStr) {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
-  } catch {
-    return dateStr;
-  }
-}
-
 /**
  * Compact tile used in horizontal carousels AND in "modo compacto" 2-column grid.
  * Not the full card — just a teaser. Tapping opens the event detail.
@@ -59,6 +54,30 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
   const goingCount = going.length + (isVoy ? 1 : 0);
   const interestedCount = interested.length + (isInteresa ? 1 : 0);
   const friendCount = goingCount + interestedCount;
+
+  const qc = useQueryClient();
+  const [following, setFollowing] = useState(!!event.is_following);
+  const followMut = useMutation({
+    mutationFn: async () =>
+      following
+        ? (await api.delete(`/events/${event.id}/follow`)).data
+        : (await api.post(`/events/${event.id}/follow`)).data,
+    onMutate: () => {
+      const prev = following;
+      setFollowing(!prev);
+      return { prev };
+    },
+    onError: (e, v, ctx) => {
+      if (ctx) setFollowing(ctx.prev);
+      toast.error("No se pudo actualizar el aviso");
+    },
+    onSuccess: (d) => toast.success(d.following ? "Te avisaremos de cambios 🔔" : "Avisos desactivados"),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["events"] }),
+  });
+  const onBell = (e) => {
+    e.stopPropagation();
+    followMut.mutate();
+  };
 
   const handleVoy = (e) => {
     e.stopPropagation();
@@ -99,11 +118,20 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
         )}
 
         {friendCount > 0 && (
-          <span className="absolute top-2 right-2 bg-qv-primary/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+          <span className="absolute top-2 right-10 bg-qv-primary/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
             <Flame className="w-2.5 h-2.5" />
             {friendCount}
           </span>
         )}
+
+        <button
+          data-testid={`compact-follow-${event.id}`}
+          onClick={onBell}
+          className="absolute top-2 right-2 z-20 h-7 w-7 rounded-full bg-black/50 backdrop-blur-sm border border-white/25 flex items-center justify-center active:scale-90 transition-transform"
+          aria-label="Avisarme de cambios"
+        >
+          <Bell className={`w-3.5 h-3.5 ${following ? "text-qv-secondary" : "text-white/80"}`} fill={following ? "currentColor" : "none"} />
+        </button>
 
         {onVoy && (
           <button
@@ -123,7 +151,7 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
         <div className="absolute bottom-0 w-full p-2.5 z-10">
           <h3 className="font-display font-bold text-white text-sm leading-tight line-clamp-2">{event.name}</h3>
           <p className="text-white/60 text-[11px] mt-0.5 truncate">
-            {event.venue} · {formatDate(event.date)}
+            {event.venue} · {formatPartyDate(event.date, event.time)}
           </p>
           <div className="mt-1">
             <CompactPriceBadge event={event} />

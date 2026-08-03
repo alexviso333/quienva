@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import api, { mediaUrl, API } from "@/lib/api";
-import { timeSuffix } from "@/lib/format";
+import { formatPartyDate } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
@@ -26,15 +26,6 @@ function friendsTextWithSelf(friends, isMe, verbSingle, verbPlural) {
   const first = friends[0].name.split(" ")[0];
   if (friends.length === 1) return `${first} ${verb}`;
   return `${first} y ${friends.length - 1} más ${verb}`;
-}
-
-function formatDate(dateStr) {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
-  } catch {
-    return dateStr;
-  }
 }
 
 const todayStr = () => {
@@ -197,7 +188,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
               <span className="truncate">{event.venue}</span>
             </span>
             <span className="flex items-center gap-1 shrink-0">
-              <Clock className="w-3.5 h-3.5" /> {formatDate(event.date)}{timeSuffix(event.time)}
+              <Clock className="w-3.5 h-3.5" /> {formatPartyDate(event.date, event.time)}
             </span>
           </div>
         </div>

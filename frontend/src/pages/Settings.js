@@ -35,6 +35,24 @@ export default function Settings() {
   });
   const cities = citiesData?.cities || [{ id: "Palma de Mallorca", label: "Palma de Mallorca", emoji: "" }];
   const [momentPriv, setMomentPriv] = useState(user?.moment_privacy || "amigos");
+  const [cityAlerts, setCityAlerts] = useState(!!user?.city_change_alerts);
+  const [cityAlertsBusy, setCityAlertsBusy] = useState(false);
+
+  const toggleCityAlerts = async () => {
+    const next = !cityAlerts;
+    setCityAlerts(next);
+    setCityAlertsBusy(true);
+    try {
+      await api.put("/me/city-alerts", { enabled: next });
+      if (user) setUser({ ...user, city_change_alerts: next });
+      toast.success(next ? `Te avisaremos de cambios en ${user?.city || "tu ciudad"} 🔔` : "Aviso de ciudad desactivado");
+    } catch {
+      setCityAlerts(!next);
+      toast.error("No se pudo actualizar");
+    } finally {
+      setCityAlertsBusy(false);
+    }
+  };
   const [momentBusy, setMomentBusy] = useState(false);
   const [blockedOpen, setBlockedOpen] = useState(false);
 
@@ -223,6 +241,16 @@ export default function Settings() {
         </button>
         <button data-testid="notif-prefs-btn" onClick={() => navigate("/ajustes/avisos")} className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95">
           <Bell className="w-4 h-4" /> Ajustes de avisos
+        </button>
+        <button data-testid="city-alerts-toggle" onClick={toggleCityAlerts} disabled={cityAlertsBusy} className="min-h-12 py-2 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-between px-4 active:scale-95 disabled:opacity-60 gap-3 text-left">
+          <span className="flex items-center gap-2 min-w-0">
+            <Globe2 className="w-4 h-4 shrink-0" />
+            <span className="min-w-0">
+              <span className="block truncate">Avisos de mi ciudad</span>
+              <span className="block text-white/40 text-[11px] font-normal leading-tight">Cualquier cambio de precio o estado en {user?.city || "tu ciudad"}</span>
+            </span>
+          </span>
+          <span className={`text-xs px-2.5 py-1 rounded-full shrink-0 ${cityAlerts ? "bg-qv-secondary/20 text-qv-secondary" : "bg-white/10 text-white/70"}`}>{cityAlerts ? "ON" : "OFF"}</span>
         </button>
         <button data-testid="archive-btn" onClick={() => setArchiveOpen(true)} className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95">
           <Archive className="w-4 h-4" /> Archivo de historias
