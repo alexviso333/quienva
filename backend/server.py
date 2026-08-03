@@ -65,6 +65,44 @@ SUPPORTED_CITIES = [
 ]
 CITY_IDS = {c["id"] for c in SUPPORTED_CITIES}
 
+# Each app-city behaves like its own isolated app. A region groups the canonical
+# city with all of its sub-zones (the `city` value stored on venues/events), so
+# a user in "Palma de Mallorca" sees the WHOLE island, an Ibiza user only Ibiza,
+# etc. Feed, Locales, Map and notifications all use this so cities never mix.
+CITY_REGIONS = {
+    "Palma de Mallorca": [
+        "Palma de Mallorca", "Mallorca", "Magaluf", "Can Picafort", "Alcúdia",
+        "Cala Rajada", "Calvià", "Llucmajor", "Santa Ponsa", "Santanyí",
+        "Cala d'Or", "Peguera", "Portals", "Sa Coma", "El Arenal", "s'Arenal",
+    ],
+    "Ibiza": [
+        "Ibiza", "Eivissa", "Sant Antoni", "San Antonio", "Sant Josep",
+        "Sant Rafel", "Platja d'en Bossa", "Santa Eulària", "Santa Eulalia",
+    ],
+    "Madrid": ["Madrid"],
+    "Barcelona": ["Barcelona"],
+    "Marbella": ["Marbella", "Puerto Banús", "Puerto Banus", "San Pedro", "San Pedro de Alcántara"],
+}
+
+
+def region_cities(user_city: str) -> list:
+    """The list of stored `city` values that belong to a user's app-city."""
+    return CITY_REGIONS.get(user_city, [user_city])
+
+
+def region_for_city(city: str) -> str:
+    """Reverse map: which app-city does a stored `city` value belong to."""
+    for region, members in CITY_REGIONS.items():
+        if city in members:
+            return region
+    return city
+
+
+def city_query_value(user_city: str):
+    """Mongo filter value for `city` given a user's app-city (region-aware)."""
+    members = region_cities(user_city)
+    return {"$in": members} if len(members) > 1 else members[0]
+
 # In-memory TTL cache for expensive user-stats computation
 _STATS_CACHE = {}
 
@@ -1128,7 +1166,7 @@ async def list_events(user: dict = Depends(get_current_user),
                       date_filter: str = Query("all"),
                       genre: str = Query("all")):
     friend_ids = await accepted_friend_ids(user["user_id"])
-    query = {"city": user.get("city", "Palma de Mallorca")}
+    query = {"city": city_query_value(user.get("city", "Palma de Mallorca"))}
     sort_dir = -1 if date_filter == "pasados" else 1
 
     # Preload friend users once (avoid N+1 lookups inside serialize_event)
@@ -1176,7 +1214,7 @@ async def list_events(user: dict = Depends(get_current_user),
 
 @api_router.get("/events/genres")
 async def list_genres(user: dict = Depends(get_current_user)):
-    genres = await db.events.distinct("genre", {"city": user.get("city", "Palma de Mallorca")})
+    genres = await db.events.distinct("genre", {"city": city_query_value(user.get("city", "Palma de Mallorca"))})
     return [g for g in genres if g]
 
 
@@ -2451,7 +2489,7 @@ async def _notify_event_audience(event_id: str, kind: str, title: str, body: str
     # mi ciudad" (off by default) get price/sale-state change notifications for
     # every event in their city, even ones they don't follow.
     async for u in db.users.find(
-        {"city": ev.get("city"), "city_change_alerts": True},
+        {"city": region_for_city(ev.get("city")), "city_change_alerts": True},
         {"_id": 0, "user_id": 1},
     ):
         target_ids.add(u["user_id"])
@@ -2462,17 +2500,18 @@ async def _notify_event_audience(event_id: str, kind: str, title: str, body: str
 
 
 async def _notify_new_event_city(event: dict):
-    """When a new event is created, notify all users in the same city."""
-    city = event.get("city") or "Palma de Mallorca"
+    """When a new event is created, notify all users in the same app-city
+    (region-aware: e.g. a Magaluf event notifies Palma de Mallorca users)."""
+    region = region_for_city(event.get("city") or "Palma de Mallorca")
     body = f"🆕 Nueva fiesta: {event['name']} · {event.get('venue', '')} ({event['date']})"
     count = 0
-    async for u in db.users.find({"city": city}, {"_id": 0, "user_id": 1}):
+    async for u in db.users.find({"city": region}, {"_id": 0, "user_id": 1}):
         await create_notification(
             u["user_id"], "new_event", body,
             {"event_id": event["id"], "type": "new_event"},
         )
         count += 1
-    logger.info(f"[notify] new_event {event['id']} → {count} users in {city}")
+    logger.info(f"[notify] new_event {event['id']} → {count} users in {region}")
     return count
 
 
@@ -5323,6 +5362,10 @@ async def on_startup():
     except Exception as _:
         pass
     try:
+        await sync_scraper_venues_to_directory()
+    except Exception as _:
+        pass
+    try:
         await enrich_venue_directory()
     except Exception as _:
         pass
@@ -5663,6 +5706,8 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/gabana"},
     {"name": "Medias Puri", "slug": "medias-puri", "city": "Madrid",
      "url": "https://site.fourvenues.com/es/medias-puri"},
+    {"name": "Florida Park", "slug": "florida-park", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/florida-park"},
 
     # ---- BARCELONA (FourVenues, verified live) ----
     {"name": "Opium Barcelona", "slug": "opium-barcelona", "city": "Barcelona",
@@ -5681,6 +5726,8 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/otto-zutz"},
     {"name": "City Hall Barcelona", "slug": "city-hall-barcelona", "city": "Barcelona",
      "url": "https://site.fourvenues.com/es/city-hall-barcelona"},
+    {"name": "Luz de Gas", "slug": "luz-de-gas", "city": "Barcelona",
+     "url": "https://site.fourvenues.com/es/luz-de-gas"},
 
     # ---- MARBELLA / PUERTO BANÚS (FourVenues, verified live) ----
     {"name": "Fitz Marbella", "slug": "fitz-marbella", "city": "Marbella",
@@ -5998,6 +6045,10 @@ async def run_all_scrapers():
             }},
             upsert=True,
         )
+    except Exception:
+        pass
+    try:
+        await sync_scraper_venues_to_directory()
     except Exception:
         pass
     try:
@@ -6478,6 +6529,11 @@ _ZONE_COORDS = {
     "Cala Rajada": (39.7095, 3.4630),
     "Santa Ponsa": (39.5111, 2.4790),
     "Mallorca": (39.6953, 3.0176),
+    # City centres — fallback for other-city venues without a curated coord.
+    "Ibiza": (38.9089, 1.4328),
+    "Madrid": (40.4239, -3.6997),
+    "Barcelona": (41.3888, 2.1590),
+    "Marbella": (36.4930, -4.9540),
 }
 
 # Curated real-world coordinates per venue (authoritative — overrides guesses).
@@ -6511,7 +6567,99 @@ _VENUE_COORDS = {
     "Angel's": (39.7102, 3.4620),
     "Disco Inferno": (39.5115, 2.4795),
     "Club Milano": (39.6953, 3.0176),
+    # --- Other cities (FourVenues clubs, geocoded) ---
+    "Pacha Ibiza": (38.918441, 1.443315),
+    "Lío Ibiza": (38.913783, 1.443104),
+    "Es Paradis Ibiza": (38.978647, 1.307947),
+    "Eden Ibiza": (38.97904, 1.307781),
+    "Pikes Ibiza": (38.991108, 1.320141),
+    "Chinois Ibiza": (38.916492, 1.441461),
+    "Swag Ibiza": (38.891337, 1.408253),
+    "Ibiza Rocks": (38.982881, 1.299883),
+    "Bora Bora Ibiza": (38.889474, 1.405702),
+    "Cova Santa Ibiza": (38.897831, 1.331792),
+    "LuLa Club": (40.421235, -3.707137),
+    "Chango Madrid": (40.431683, -3.698185),
+    "Deseo (Nazca)": (40.434, -3.679),
+    "Vandido": (40.4266, -3.7),
+    "Green Social Club": (40.4245, -3.684),
+    "Jowke Club": (40.42, -3.699),
+    "Kube Madrid": (40.459781, -3.6918),
+    "Teatro Kapital": (40.409774, -3.693224),
+    "Teatro Barceló": (40.42702, -3.699712),
+    "Sala Mon": (40.435766, -3.716496),
+    "Opium Madrid": (40.437935, -3.692172),
+    "Gabana": (40.421771, -3.684182),
+    "Medias Puri": (40.412323, -3.703456),
+    "Opium Barcelona": (41.385278, 2.19671),
+    "Bling Bling BCN": (41.3934, 2.1497),
+    "Costa Este BCN": (41.381918, 2.157767),
+    "Downtown Barcelona": (41.381261, 2.114327),
+    "Twenties Barcelona": (41.393612, 2.15801),
+    "Sutton Barcelona": (41.395949, 2.151744),
+    "Otto Zutz": (41.400109, 2.150382),
+    "City Hall Barcelona": (41.387748, 2.168255),
+    "Fitz Marbella": (36.4879, -4.9527),
+    "Mirage Marbella": (36.5085, -4.8858),
+    "Marina Beach Club": (36.4869, -4.956),
+    "Opium Marbella": (36.4874, -4.9538),
+    "Tibu Marbella": (36.488057, -4.953503),
+    "Florida Park": (40.4148, -3.6795),
+    "Luz de Gas": (41.3936, 2.149),
+    # --- Other cities (non-FourVenues superclubs, geocoded) ---
+    "Amnesia Ibiza": (38.94766, 1.408229),
+    "Hï Ibiza": (38.885987, 1.403855),
+    "Ushuaïa Ibiza": (38.885142, 1.405109),
+    "[UNVRS]": (38.957901, 1.408304),
+    "DC10": (38.88024, 1.392638),
+    "Fabrik": (40.265301, -3.840565),
+    "Uñas Chung Lee": (40.419996, -3.699015),
+    "Goya Social Club": (40.425395, -3.688824),
+    "Pacha Barcelona": (41.385749, 2.197042),
+    "Shôko Barcelona": (41.385499, 2.196975),
+    "Razzmatazz": (41.397278, 2.191076),
+    "Sala Apolo": (41.374391, 2.169561),
+    "Input High Fidelity Dance Club": (41.369441, 2.146997),
+    "Olivia Valère": (36.505062, -4.940957),
+    "La Suite Marbella": (36.503904, -4.925198),
+    "Momento Puerto Banús": (36.48746, -4.9536),
 }
+
+
+async def sync_scraper_venues_to_directory():
+    """Ensure every FourVenues scraped venue has a matching directory entry so it
+    appears in Locales + Map for its city. Slugs already covered by a hand-curated
+    entry (e.g. all of Mallorca) are skipped and never modified."""
+    try:
+        manual_slugs, auto_slugs = set(), set()
+        async for v in db.venues.find({"scraper_slug": {"$nin": ["", None]}},
+                                      {"_id": 0, "scraper_slug": 1, "auto_generated": 1}):
+            s = v.get("scraper_slug")
+            if not s:
+                continue
+            (auto_slugs if v.get("auto_generated") else manual_slugs).add(s)
+        created = 0
+        async for sv in db.scraped_venues.find({}, {"_id": 0}):
+            slug = sv.get("slug")
+            if not slug or slug in manual_slugs or slug in auto_slugs:
+                continue
+            city = sv.get("city") or "Palma de Mallorca"
+            await db.venues.insert_one({
+                "id": str(uuid.uuid4()),
+                "name": sv["name"], "zone": city, "city": city, "type": "discoteca",
+                "scraper_slug": slug, "free_entry": False, "open_days": [],
+                "open_days_manual": False, "instagram": "", "buy_url": sv.get("url", ""),
+                "open_time": "", "close_time": "", "address": "", "image_url": "",
+                "description": "", "lat": None, "lng": None,
+                "active": True, "order": 100, "auto_generated": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            auto_slugs.add(slug)
+            created += 1
+        if created:
+            logger.info(f"sync_scraper_venues_to_directory: +{created} auto directory venues")
+    except Exception as e:
+        logger.warning(f"sync_scraper_venues_to_directory failed: {e}")
 
 
 async def enrich_venue_directory():
@@ -6599,7 +6747,7 @@ async def _venue_event_counts() -> dict:
 
 @app.get("/api/venues")
 async def list_venues(zone: str = None, type: str = None, user: dict = Depends(get_current_user)):
-    q = {"active": True}
+    q = {"active": True, "city": city_query_value(user.get("city", "Palma de Mallorca"))}
     if zone:
         q["zone"] = zone
     if type:
@@ -6645,7 +6793,7 @@ async def get_venue(venue_id: str, user: dict = Depends(get_current_user)):
 
 @app.get("/api/venues/meta/zones")
 async def venue_zones(user: dict = Depends(get_current_user)):
-    zones = await db.venues.distinct("zone", {"active": True})
+    zones = await db.venues.distinct("zone", {"active": True, "city": city_query_value(user.get("city", "Palma de Mallorca"))})
     return {"zones": sorted(zones)}
 
 

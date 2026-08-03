@@ -1005,13 +1005,33 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "City isolation: /api/venues, zones, feed filtered by region (each city = its own app)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
+    message: |
+      CITY ISOLATION + more venues. Test ONLY these (admin@quienva.app/admin123 is a
+      "Palma de Mallorca" user; dev DB seeded). A region groups a city with its sub-zones
+      (Palma de Mallorca region includes Magaluf/Can Picafort/Alcúdia/etc.).
+      1) VENUES ISOLATION: Register user city:"Ibiza" -> GET /api/venues returns ONLY Ibiza
+         venues (>0), every venue.city=="Ibiza" and each has lat & lng not null (map pins).
+         Repeat "Madrid","Barcelona","Marbella": each >0 all matching. As admin (Palma)
+         GET /api/venues -> only Mallorca-region cities {Palma de Mallorca, Magaluf, Can Picafort,
+         Alcúdia, Cala Rajada, Calvià, Llucmajor, Santa Ponsa, Santanyí, Mallorca}; MUST NOT
+         contain any Ibiza/Madrid/Barcelona/Marbella venue.
+      2) ZONES: GET /api/venues/meta/zones as Ibiza user -> only Ibiza zones; as admin -> only
+         Mallorca zones.
+      3) FEED REGION: admin GET /api/events includes BOTH "Palma de Mallorca" and "Magaluf"
+         events, NO other-city events. Ibiza user -> all events city=="Ibiza".
+      4) REGRESSION: GET /api/events needs auth; GET /api/cities public 5 cities;
+         GET /api/share/event/{id} returns OG html.
+      Report pass/fail with venue city distribution counts.
+
+  - agent: "main-prev"
     message: |
       FASE 3 backend. Test ONLY these (admin@quienva.app/admin123; dev DB seeded with events across cities):
       1) @USERNAME PRIVACY: Register user A (name:"Nombre Real A", username:"userA<ts>", city:"Ibiza") and user B (name:"Nombre Real B", username:"userB<ts>", city:"Ibiza").
@@ -3380,6 +3400,21 @@ frontend:
           agent: "main"
           comment: "AddStoryButton removed from EventDetail. EventAlbum gets a prominent header + upload CTA, moved above the map."
 
+  - task: "City isolation: venues, zones, and feed filtered by region"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "CITY ISOLATION + more venues. Each city operates as its own isolated app. A region groups a city with its sub-zones (Palma de Mallorca region includes Magaluf/Can Picafort/Alcúdia/etc.). Ibiza/Madrid/Barcelona/Marbella are single-city regions. GET /api/venues, GET /api/venues/meta/zones, and GET /api/events all filter by user.city using city_query_value() which returns region members via CITY_REGIONS dict."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL CITY ISOLATION FEATURES (53 tests, 100% pass): ✅ (1) VENUES ISOLATION: Ibiza user → 3 venues, all city='Ibiza', all have lat/lng. Madrid user → 1 venue, all city='Madrid', all have lat/lng. Barcelona user → 2 venues, all city='Barcelona', all have lat/lng. Marbella user → 2 venues, all city='Marbella', all have lat/lng. ✅ (2) ADMIN REGION GROUPING: Admin (Palma de Mallorca) → 37 venues, ALL in Mallorca region (Palma de Mallorca: 20, Magaluf: 3, Can Picafort: 1, Cala Rajada: 1, Alcúdia: 1, Cala d'Or: 1, Palma: 1, Santa Ponsa: 1, Mallorca: 1, Calvià: 4, Llucmajor: 1, Santanyí: 1). ZERO venues from Ibiza/Madrid/Barcelona/Marbella. All have lat/lng. ✅ (3) ZONES ISOLATION: Ibiza zones ['Ibiza', 'Platja d'en Bossa', 'Sant Rafel'] vs Admin zones ['Cala Blava', 'Cala Estància', 'Cala Rajada', 'Cala d'Or', 'Can Picafort', 'Magaluf', 'Mallorca', 'Palma', 'Palma · Dàrsena', 'Palma · Marítimo', 'Palma · Porto Pi', 'Palmanova', 'Playa de Palma', 'Port d'Alcúdia', 'Portals Nous', 'Portals Vells', 'Santa Ponsa', 'Ses Illetes']. NO LEAKAGE: Ibiza user does NOT see Mallorca zones, Admin does NOT see Ibiza zones. ✅ (4) FEED REGION: Admin → 282 events, cities: Magaluf (128), Palma de Mallorca (150), Can Picafort (4). Includes BOTH Palma AND Magaluf (region grouping working). ZERO events from Ibiza/Madrid/Barcelona/Marbella. ✅ (5) Ibiza user → 628 events, ALL city='Ibiza'. ✅ (6) REGRESSION: GET /api/events without token → 401. GET /api/cities → 200 with exactly 5 cities ['Palma de Mallorca', 'Ibiza', 'Madrid', 'Barcelona', 'Marbella / Puerto Banús']. GET /api/share/event/{id} → 200 text/html with og:title, og:description, og:image. All city isolation working perfectly with proper region grouping for Mallorca."
+
 metadata:
   created_by: "main_agent"
   version: "2.1"
@@ -3627,3 +3662,131 @@ agent_communication:
       Test file: /app/backend_test_fase3.py
       Base URL: https://nightlife-multi-city.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
+
+
+  - agent: "main"
+    message: |
+      CITY ISOLATION + more venues. Test ONLY these (admin@quienva.app/admin123 is a
+      "Palma de Mallorca" user; dev DB seeded). A region groups a city with its sub-zones
+      (Palma de Mallorca region includes Magaluf/Can Picafort/Alcúdia/etc.).
+      1) VENUES ISOLATION: Register user city:"Ibiza" -> GET /api/venues returns ONLY Ibiza
+         venues (>0), every venue.city=="Ibiza" and each has lat & lng not null (map pins).
+         Repeat "Madrid","Barcelona","Marbella": each >0 all matching. As admin (Palma)
+         GET /api/venues -> only Mallorca-region cities (Palma/Magaluf/Can Picafort/etc.),
+         MUST NOT contain any venue with city in {Ibiza, Madrid, Barcelona, Marbella}.
+         Report the city distribution counts.
+      2) ZONES ISOLATION: GET /api/venues/meta/zones as Ibiza user vs as admin: the returned
+         zones must differ and not leak across cities (Ibiza user should not see Mallorca
+         zones like "Palma · Marítimo", and admin should not see Ibiza zones).
+      3) FEED REGION: GET /api/events as admin (Palma): returned events include BOTH
+         city=="Palma de Mallorca" AND city=="Magaluf" (region grouping), and NO events with
+         city in {Ibiza, Madrid, Barcelona, Marbella}. Report the distinct city values seen.
+         As an Ibiza user: all events have city=="Ibiza".
+      4) REGRESSION: GET /api/events returns 401 without token. GET /api/cities (public)
+         returns exactly 5 cities. GET /api/share/event/{id} (pick an id from an Ibiza user's
+         /api/events) returns 200 text/html with og: meta tags.
+
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - City Isolation (2026-08-03)
+      
+      🎉 ALL TESTS PASSED: 53/53 (100% pass rate)
+      
+      ✅ TEST 1: VENUES ISOLATION - Ibiza User (6 tests)
+      - Registered Ibiza user successfully
+      - GET /api/venues → 200 with 3 venues
+      - All venues have city='Ibiza' ✓
+      - All venues have lat AND lng (not null) ✓
+      
+      ✅ TEST 2: VENUES ISOLATION - Madrid User (6 tests)
+      - Registered Madrid user successfully
+      - GET /api/venues → 200 with 1 venue
+      - All venues have city='Madrid' ✓
+      - All venues have lat AND lng ✓
+      
+      ✅ TEST 3: VENUES ISOLATION - Barcelona User (6 tests)
+      - Registered Barcelona user successfully
+      - GET /api/venues → 200 with 2 venues
+      - All venues have city='Barcelona' ✓
+      - All venues have lat AND lng ✓
+      
+      ✅ TEST 4: VENUES ISOLATION - Marbella User (6 tests)
+      - Registered Marbella user successfully
+      - GET /api/venues → 200 with 2 venues
+      - All venues have city='Marbella' ✓
+      - All venues have lat AND lng ✓
+      
+      ✅ TEST 5: VENUES ISOLATION - Admin (Palma de Mallorca) - REGION GROUPING (6 tests)
+      - Admin login successful
+      - GET /api/venues → 200 with 37 venues
+      - City distribution (ALL in Mallorca region):
+        * Palma de Mallorca: 20 venues
+        * Magaluf: 3 venues
+        * Can Picafort: 1 venue
+        * Cala Rajada: 1 venue
+        * Alcúdia: 1 venue
+        * Cala d'Or: 1 venue
+        * Palma: 1 venue
+        * Santa Ponsa: 1 venue
+        * Mallorca: 1 venue
+        * Calvià: 4 venues
+        * Llucmajor: 1 venue
+        * Santanyí: 1 venue
+      - ZERO venues from Ibiza/Madrid/Barcelona/Marbella ✓
+      - All venues have lat AND lng ✓
+      
+      ✅ TEST 6: ZONES ISOLATION - Ibiza vs Admin (6 tests)
+      - Ibiza zones: ['Ibiza', "Platja d'en Bossa", 'Sant Rafel']
+      - Admin zones: ['Cala Blava', 'Cala Estància', 'Cala Rajada', "Cala d'Or", 'Can Picafort', 
+        'Magaluf', 'Mallorca', 'Palma', 'Palma · Dàrsena', 'Palma · Marítimo', 'Palma · Porto Pi', 
+        'Palmanova', 'Playa de Palma', "Port d'Alcúdia", 'Portals Nous', 'Portals Vells', 
+        'Santa Ponsa', 'Ses Illetes']
+      - Zones differ between cities ✓
+      - NO LEAKAGE: Ibiza user does NOT see Mallorca zones ✓
+      - NO LEAKAGE: Admin does NOT see Ibiza zones ✓
+      
+      ✅ TEST 7: FEED REGION - Admin (Palma) sees Mallorca region events (5 tests)
+      - GET /api/events → 200 with 282 events
+      - Distinct cities: {'Can Picafort', 'Palma de Mallorca', 'Magaluf'}
+      - City distribution:
+        * Magaluf: 128 events
+        * Palma de Mallorca: 150 events
+        * Can Picafort: 4 events
+      - Includes city='Palma de Mallorca' ✓
+      - Includes city='Magaluf' (region grouping working) ✓
+      - ZERO events from Ibiza/Madrid/Barcelona/Marbella ✓
+      
+      ✅ TEST 8: FEED REGION - Ibiza user sees only Ibiza events (3 tests)
+      - GET /api/events → 200 with 628 events
+      - ALL events have city='Ibiza' ✓
+      - NO LEAKAGE from other cities ✓
+      
+      ✅ TEST 9: REGRESSION - GET /api/events returns 401 without token (1 test)
+      - Unauthenticated request → 401 ✓
+      
+      ✅ TEST 10: REGRESSION - GET /api/cities returns exactly 5 cities (3 tests)
+      - Public endpoint → 200 ✓
+      - Returns exactly 5 cities ✓
+      - Cities: ['Palma de Mallorca', 'Ibiza', 'Madrid', 'Barcelona', 'Marbella / Puerto Banús'] ✓
+      
+      ✅ TEST 11: REGRESSION - GET /api/share/event/{id} returns 200 with OG tags (6 tests)
+      - Got event ID from Ibiza user's events ✓
+      - GET /api/share/event/{id} → 200 ✓
+      - Contains og:title ✓
+      - Contains og:description ✓
+      - Contains og:image ✓
+      - Content-Type: text/html ✓
+      
+      🎯 CONCLUSION:
+      All city isolation features working perfectly with proper region grouping. Each city operates 
+      as its own isolated app with NO LEAKAGE between cities. The Mallorca region correctly groups 
+      Palma de Mallorca with its sub-zones (Magaluf, Can Picafort, Alcúdia, etc.) while keeping 
+      Ibiza/Madrid/Barcelona/Marbella as separate single-city regions. All venues have proper 
+      coordinates (lat/lng) for map display. Zones are properly isolated per city. Feed correctly 
+      shows region-grouped events for Mallorca users and single-city events for other cities. All 
+      regression tests pass.
+      
+      Test file: /app/city_isolation_test.py
+      Base URL: https://nightlife-multi-city.preview.emergentagent.com/api
+      Admin credentials: admin@quienva.app / admin123
+      Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
