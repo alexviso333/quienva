@@ -2211,23 +2211,47 @@ def _est_commission(ev: dict, tickets: int) -> float:
 @api_router.get("/admin/funnel")
 async def admin_funnel(admin: dict = Depends(require_admin), scope: str = Query("upcoming")):
     """Money funnel per event: views → interested/going → ticket clicks → tickets → € commission.
-    scope=upcoming (default) or all."""
+    scope=upcoming (default) or all. Uses grouped aggregations (fast even with many events)."""
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
     q = {} if scope == "all" else {"date": {"$gte": today}}
-    # bulk metrics
+    events = [ev async for ev in db.events.find(q, {"_id": 0}).sort("date", 1)]
+    ev_ids = [ev["id"] for ev in events]
+
+    # bulk metrics (views)
     metrics = {}
-    async for m in db.event_metrics.find({}, {"_id": 0}):
+    async for m in db.event_metrics.find({"event_id": {"$in": ev_ids}}, {"_id": 0}):
         metrics[m["event_id"]] = m
+
+    # grouped interest counts by (event_id, status)
+    going_map, interested_map = {}, {}
+    async for row in db.interests.aggregate([
+        {"$match": {"event_id": {"$in": ev_ids}, "status": {"$in": ["voy", "me_interesa"]}}},
+        {"$group": {"_id": {"e": "$event_id", "s": "$status"}, "n": {"$sum": 1}}},
+    ]):
+        if row["_id"]["s"] == "voy":
+            going_map[row["_id"]["e"]] = row["n"]
+        else:
+            interested_map[row["_id"]["e"]] = row["n"]
+
+    # grouped tickets + clicks
+    tickets_map = {r["_id"]: r["n"] async for r in db.tickets.aggregate([
+        {"$match": {"event_id": {"$in": ev_ids}}},
+        {"$group": {"_id": "$event_id", "n": {"$sum": 1}}},
+    ])}
+    clicks_map = {r["_id"]: r["n"] async for r in db.ticket_purchases.aggregate([
+        {"$match": {"event_id": {"$in": ev_ids}}},
+        {"$group": {"_id": "$event_id", "n": {"$sum": 1}}},
+    ])}
+
     rows = []
     totals = {"views": 0, "interested": 0, "going": 0, "clicks": 0, "tickets": 0, "commission": 0.0}
-    async for ev in db.events.find(q, {"_id": 0}).sort("date", 1):
+    for ev in events:
         eid = ev["id"]
-        m = metrics.get(eid, {})
-        going = await db.interests.count_documents({"event_id": eid, "status": "voy"})
-        interested = await db.interests.count_documents({"event_id": eid, "status": "me_interesa"})
-        tickets = await db.tickets.count_documents({"event_id": eid})
-        views = m.get("views", 0)
-        clicks = await db.ticket_purchases.count_documents({"event_id": eid})
+        going = going_map.get(eid, 0)
+        interested = interested_map.get(eid, 0)
+        tickets = tickets_map.get(eid, 0)
+        clicks = clicks_map.get(eid, 0)
+        views = metrics.get(eid, {}).get("views", 0)
         commission = _est_commission(ev, tickets)
         conv = round((tickets / clicks) * 100, 1) if clicks else 0.0
         rows.append({
@@ -2251,24 +2275,34 @@ async def admin_funnel(admin: dict = Depends(require_admin), scope: str = Query(
 
 @api_router.get("/admin/venue-report")
 async def admin_venue_report(admin: dict = Depends(require_admin)):
-    """Aggregated reach/sales by venue — the one-pager you show a club to close a deal."""
+    """Aggregated reach/sales by venue — the one-pager you show a club to close a deal.
+    Grouped aggregations (fast)."""
+    events = [ev async for ev in db.events.find({}, {"_id": 0})]
+    ev_ids = [ev["id"] for ev in events]
     metrics = {}
-    async for m in db.event_metrics.find({}, {"_id": 0}):
+    async for m in db.event_metrics.find({"event_id": {"$in": ev_ids}}, {"_id": 0}):
         metrics[m["event_id"]] = m
+    going_map, interested_map = {}, {}
+    async for row in db.interests.aggregate([
+        {"$match": {"event_id": {"$in": ev_ids}, "status": {"$in": ["voy", "me_interesa"]}}},
+        {"$group": {"_id": {"e": "$event_id", "s": "$status"}, "n": {"$sum": 1}}},
+    ]):
+        (going_map if row["_id"]["s"] == "voy" else interested_map)[row["_id"]["e"]] = row["n"]
+    tickets_map = {r["_id"]: r["n"] async for r in db.tickets.aggregate([
+        {"$match": {"event_id": {"$in": ev_ids}}}, {"$group": {"_id": "$event_id", "n": {"$sum": 1}}}])}
+    clicks_map = {r["_id"]: r["n"] async for r in db.ticket_purchases.aggregate([
+        {"$match": {"event_id": {"$in": ev_ids}}}, {"$group": {"_id": "$event_id", "n": {"$sum": 1}}}])}
     venues = {}
-    async for ev in db.events.find({}, {"_id": 0}):
+    for ev in events:
         v = ev.get("venue", "Otros")
         d = venues.setdefault(v, {"venue": v, "events": 0, "views": 0, "interested": 0, "going": 0, "clicks": 0, "tickets": 0, "commission": 0.0})
-        m = metrics.get(ev["id"], {})
-        going = await db.interests.count_documents({"event_id": ev["id"], "status": "voy"})
-        interested = await db.interests.count_documents({"event_id": ev["id"], "status": "me_interesa"})
-        tickets = await db.tickets.count_documents({"event_id": ev["id"]})
-        clicks = await db.ticket_purchases.count_documents({"event_id": ev["id"]})
+        eid = ev["id"]
+        tickets = tickets_map.get(eid, 0)
         d["events"] += 1
-        d["views"] += m.get("views", 0)
-        d["interested"] += interested
-        d["going"] += going
-        d["clicks"] += clicks
+        d["views"] += metrics.get(eid, {}).get("views", 0)
+        d["interested"] += interested_map.get(eid, 0)
+        d["going"] += going_map.get(eid, 0)
+        d["clicks"] += clicks_map.get(eid, 0)
         d["tickets"] += tickets
         d["commission"] += _est_commission(ev, tickets)
     out = list(venues.values())
@@ -2298,16 +2332,6 @@ async def admin_event_stats(event_id: str, admin: dict = Depends(require_admin))
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
     eid = event_id
-    metric = await db.event_metrics.find_one({"event_id": eid}, {"_id": 0}) or {}
-    going = await db.interests.count_documents({"event_id": eid, "status": "voy"})
-    interested = await db.interests.count_documents({"event_id": eid, "status": "me_interesa"})
-    attended = await db.interests.count_documents({"event_id": eid, "status": "estuve"})
-    tickets = await db.tickets.count_documents({"event_id": eid})
-    clicks = await db.ticket_purchases.count_documents({"event_id": eid})
-    views = metric.get("views", 0)
-    followers = await db.event_follows.count_documents({"event_id": eid})
-    album_items = await db.album_uploads.count_documents({"event_id": eid})
-    captures = await db.captures.count_documents({"event_id": eid})
 
     async def _people(status, limit=60):
         ids = await db.interests.distinct("user_id", {"event_id": eid, "status": status})
@@ -2316,11 +2340,30 @@ async def admin_event_stats(event_id: str, admin: dict = Depends(require_admin))
             people.append({"user_id": u["user_id"], "name": u.get("name", ""), "picture": u.get("picture", ""), "city": u.get("city", "")})
         return people
 
+    async def _history():
+        return [h async for h in db.event_history.find({"event_id": eid}, {"_id": 0}).sort("created_at", -1).limit(100)]
+
+    async def _metric():
+        return await db.event_metrics.find_one({"event_id": eid}, {"_id": 0}) or {}
+
+    # Run everything concurrently for speed
+    (metric, going, interested, attended, tickets, clicks, followers, album_items, captures,
+     ppl_going, ppl_interested, ppl_attended, history) = await asyncio.gather(
+        _metric(),
+        db.interests.count_documents({"event_id": eid, "status": "voy"}),
+        db.interests.count_documents({"event_id": eid, "status": "me_interesa"}),
+        db.interests.count_documents({"event_id": eid, "status": "estuve"}),
+        db.tickets.count_documents({"event_id": eid}),
+        db.ticket_purchases.count_documents({"event_id": eid}),
+        db.event_follows.count_documents({"event_id": eid}),
+        db.album_uploads.count_documents({"event_id": eid}),
+        db.captures.count_documents({"event_id": eid}),
+        _people("voy"), _people("me_interesa"), _people("estuve"),
+        _history(),
+    )
+    views = metric.get("views", 0)
     commission = _est_commission(ev, tickets)
     conv = round((tickets / clicks) * 100, 1) if clicks else 0.0
-    history = []
-    async for h in db.event_history.find({"event_id": eid}, {"_id": 0}).sort("created_at", -1).limit(100):
-        history.append(h)
     return {
         "event": {
             "id": ev["id"], "name": ev.get("name"), "venue": ev.get("venue", ""),
@@ -2338,9 +2381,9 @@ async def admin_event_stats(event_id: str, admin: dict = Depends(require_admin))
             "conversion_pct": conv, "est_commission": commission,
         },
         "people": {
-            "going": await _people("voy"),
-            "interested": await _people("me_interesa"),
-            "attended": await _people("estuve"),
+            "going": ppl_going,
+            "interested": ppl_interested,
+            "attended": ppl_attended,
         },
         "history": history,
     }
@@ -2360,6 +2403,102 @@ async def admin_notify_interested(event_id: str, inp: NotifyInterestedInput, adm
     body = inp.message.strip() or f"🎟️ Últimas entradas para {ev['name']}. ¡No te quedes fuera!"
     count = await _notify_event_audience(event_id, "tickets_reminder", ev["name"], body)
     return {"notified": count}
+
+
+# =========================================================================
+# ADMIN — preset notification broadcasts (send whenever you want)
+# =========================================================================
+ADMIN_NOTIFY_PRESETS = [
+    {"id": "on_sale", "label": "Entradas a la venta", "emoji": "🎟️", "needs_event": True,
+     "title": "¡Entradas a la venta!", "body": "🎟️ ¡Ya hay entradas para {name}! Pilla la tuya antes de que vuelen."},
+    {"id": "low_stock", "label": "Quedan pocas", "emoji": "⚡", "needs_event": True,
+     "title": "Quedan pocas entradas", "body": "⚡ Quedan pocas entradas para {name}. ¡No te quedes fuera!"},
+    {"id": "price_up_soon", "label": "El precio sube pronto", "emoji": "⏰", "needs_event": True,
+     "title": "El precio sube pronto", "body": "⏰ El precio de {name} sube pronto. Aprovecha ahora que está más barato."},
+    {"id": "price_down", "label": "Bajada de precio", "emoji": "📉", "needs_event": True,
+     "title": "¡Bajada de precio!", "body": "📉 ¡Bajada de precio en {name}! Entradas más baratas por tiempo limitado."},
+    {"id": "tonight", "label": "Es esta noche", "emoji": "🔥", "needs_event": True,
+     "title": "¡Es esta noche!", "body": "🔥 {name} es HOY. ¿Vas? Marca 'Voy' y avisa a tus colegas."},
+    {"id": "last_call", "label": "Última llamada", "emoji": "🚨", "needs_event": True,
+     "title": "Última llamada", "body": "🚨 Última llamada para {name}. Las entradas están volando."},
+    {"id": "who_goes", "label": "¿Quién va?", "emoji": "👀", "needs_event": True,
+     "title": "¿Quién va?", "body": "👀 ¿Vas a {name}? Descubre qué amigos van y organizaos."},
+    {"id": "album_reminder", "label": "Sube tus fotos", "emoji": "📸", "needs_event": True,
+     "title": "Sube tus fotos", "body": "📸 ¿Estuviste en {name}? Sube tus fotos al álbum compartido de la fiesta."},
+    {"id": "generic_new", "label": "Nuevas fiestas (a todos)", "emoji": "🆕", "needs_event": False,
+     "title": "Nuevas fiestas", "body": "🆕 Hay nuevas fiestas en la app. ¡Échales un vistazo y no te pierdas nada!"},
+    {"id": "generic_weekend", "label": "Planes del finde (a todos)", "emoji": "🕺", "needs_event": False,
+     "title": "¿Qué hacemos este finde?", "body": "🕺 Llega el finde. Mira todos los planes y decide con tus amigos."},
+]
+
+
+class AdminNotifyInput(BaseModel):
+    event_id: str = ""
+    preset_id: str = ""
+    title: str = ""
+    body: str = ""
+    audience: str = "event"  # "event" (followers/going/interested) | "all" (everyone)
+
+
+@api_router.get("/admin/notify/presets")
+async def admin_notify_presets(admin: dict = Depends(require_admin)):
+    return {"presets": ADMIN_NOTIFY_PRESETS}
+
+
+@api_router.get("/admin/events-min")
+async def admin_events_min(admin: dict = Depends(require_admin), q: str = Query("")):
+    """Lightweight event list for the notification dropdown (id/name/venue/date).
+    Fast: single projected query, no per-event counts."""
+    query = {}
+    if q:
+        query = {"name": {"$regex": q, "$options": "i"}}
+    out = []
+    async for ev in db.events.find(query, {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "sale_state": 1}).sort("date", -1).limit(500):
+        out.append(ev)
+    return {"events": out}
+
+
+async def _broadcast_all_users(ntype: str, body: str):
+    count = 0
+    async for u in db.users.find({}, {"_id": 0, "user_id": 1}):
+        await create_notification(u["user_id"], ntype, body, {"type": ntype, "url": "/feed"})
+        count += 1
+    logger.info(f"[admin_notify] broadcast to ALL → {count} users")
+
+
+@api_router.post("/admin/notify/send")
+async def admin_notify_send(inp: AdminNotifyInput, admin: dict = Depends(require_admin)):
+    """Send a preset or custom notification whenever you want.
+    audience='event' → followers + going + interested of the event.
+    audience='all'   → every user (runs in background)."""
+    preset = next((p for p in ADMIN_NOTIFY_PRESETS if p["id"] == inp.preset_id), None)
+    body = (inp.body or "").strip() or (preset["body"] if preset else "")
+    if not body:
+        raise HTTPException(status_code=400, detail="Escribe un mensaje o elige un preset")
+
+    ev = None
+    if inp.event_id:
+        ev = await db.events.find_one({"id": inp.event_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(status_code=404, detail="Evento no encontrado")
+    # Fill {name} placeholder
+    if "{name}" in body:
+        if not ev:
+            raise HTTPException(status_code=400, detail="Este mensaje necesita que elijas una fiesta")
+        body = body.replace("{name}", ev["name"])
+
+    audience = inp.audience if inp.audience in ("event", "all") else "event"
+    if audience == "event":
+        if not inp.event_id:
+            raise HTTPException(status_code=400, detail="Elige una fiesta o envía a todos")
+        count = await _notify_event_audience(inp.event_id, "admin_broadcast", ev["name"], body)
+        return {"ok": True, "audience": "event", "notified": count}
+    else:
+        # broadcast to everyone in the background so the request returns instantly
+        asyncio.create_task(_broadcast_all_users("admin_broadcast", body))
+        total = await db.users.count_documents({})
+        return {"ok": True, "audience": "all", "notified": total, "queued": True}
+
 
 
 
@@ -4292,7 +4431,11 @@ async def admin_confirm_ticket(inp: TicketConfirmInput, admin: dict = Depends(re
         raise HTTPException(status_code=404, detail="No encontrado")
     await db.ticket_purchases.update_one(
         {"id": inp.purchase_id},
-        {"$set": {"confirmed": inp.confirmed, "confirmed_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {
+            "confirmed": inp.confirmed,
+            "status": "confirmed" if inp.confirmed else "rejected",
+            "confirmed_at": datetime.now(timezone.utc).isoformat(),
+        }},
     )
     if inp.confirmed:
         await create_notification(
@@ -4380,7 +4523,7 @@ async def admin_dashboard(admin: dict = Depends(require_admin)):
 @api_router.get("/admin/tickets")
 async def admin_list_tickets(admin: dict = Depends(require_admin),
                               status: str = Query("pending")):
-    q = {"confirmed": False} if status == "pending" else {"confirmed": True}
+    q = {"confirmed": False, "status": {"$ne": "rejected"}} if status == "pending" else {"confirmed": True}
     out = []
     async for p in db.ticket_purchases.find(q, {"_id": 0}).sort("created_at", -1).limit(200):
         u = await db.users.find_one({"user_id": p["user_id"]}, {"_id": 0})

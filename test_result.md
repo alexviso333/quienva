@@ -546,6 +546,51 @@ backend:
         agent: "testing"
         comment: "NOT TESTED: Price-drop notification requires specific scenario (event price decrease between scraper runs). Would need to manually modify event pricing or wait for real price changes. Core scraper functionality verified working, notification system verified in previous tests. Recommend testing in production or with manual price manipulation."
 
+  - task: "BUG FIX: Reject pending ticket removes it from pending list"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Fixed critical bug where rejecting a pending ticket did NOT remove it from pending list. The pending filter was {confirmed:False} and reject also set confirmed:False, so rejected tickets remained visible. Now rejection sets status='rejected' and pending filter excludes {status: {$ne: 'rejected'}}. Confirmed tickets set status='confirmed' and confirmed:True."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (8 tests, 100% pass): ✅ (1) Created 2 ticket purchases as normal user via POST /tickets/click. ✅ (2) GET /admin/tickets?status=pending shows both purchases. ✅ (3) POST /admin/tickets/confirm with {purchase_id, confirmed:false} (REJECT) → 200. ✅ (4) BUG FIX VERIFIED: GET /admin/tickets?status=pending after rejection → rejected ticket NOT in list (was the bug). ✅ (5) POST /admin/tickets/confirm with {purchase_id, confirmed:true} (CONFIRM) → 200. ✅ (6) GET /admin/tickets?status=confirmed shows confirmed ticket. ✅ (7) GET /admin/tickets?status=pending does NOT show confirmed ticket. Bug fix working perfectly - rejected tickets are properly excluded from pending list."
+
+  - task: "Admin preset notifications (presets + send + events-min)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added admin notification system with 10 presets (on_sale, low_stock, price_up_soon, price_down, tonight, last_call, who_goes, album_reminder, generic_new, generic_weekend). Each preset has id/label/emoji/needs_event/title/body. New endpoints: GET /api/admin/notify/presets (returns preset list), GET /api/admin/events-min (lightweight event list with id/name/venue/date, optional ?q= filter), POST /api/admin/notify/send (sends preset or custom notification to event audience or all users). Audience 'event' notifies followers+going+interested, 'all' broadcasts to everyone (queued). Validates {name} placeholder requires event_id. All endpoints require admin role."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL NOTIFY FEATURES (10 tests, 100% pass): ✅ (1) GET /admin/notify/presets as admin → 200 with {presets:[...]} containing 10 presets, each with all required fields (id, label, emoji, needs_event, title, body). ✅ (2) GET /admin/notify/presets as non-admin → 403. ✅ (3) GET /admin/events-min as admin → 200 with {events:[...]} containing events with required fields (id, name, venue, date). ✅ (4) GET /admin/events-min?q=fiesta filters correctly → 200 with filtered results. ✅ (5) GET /admin/events-min as non-admin → 403. ✅ (6) POST /admin/notify/send with {preset_id:'low_stock', event_id:<valid>, audience:'event'} → 200 with {ok:true, audience:'event', notified:<int>}. ✅ (7) POST /admin/notify/send with {preset_id:'generic_new', audience:'all'} → 200 with {ok:true, audience:'all', notified:18, queued:true}. ✅ (8) POST /admin/notify/send with {body:'{name} test', audience:'event'} but NO event_id → 400 (validation working). ✅ (9) POST /admin/notify/send with {audience:'event'} but empty body and no preset_id → 400 (validation working). ✅ (10) POST /admin/notify/send as non-admin → 403. All endpoints working correctly with proper authorization and validation."
+
+  - task: "Perf: optimized admin funnel / venue-report / event stats"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Performance optimization pass for admin analytics endpoints. GET /api/admin/funnel?scope=all returns {rows:[...], totals:{views,interested,going,clicks,tickets,commission}}. GET /api/admin/venue-report returns {venues:[...]}. GET /api/admin/events/{id}/stats returns {event,funnel,people,history}. All endpoints optimized for faster response times."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL PERFORMANCE ENDPOINTS (3 tests, 100% pass): ✅ (1) GET /admin/funnel?scope=all → 200 with correct structure {rows:[], totals:{}} containing all required totals fields (views, interested, going, clicks, tickets, commission). Response time: 97.9ms, returned 10 rows. ✅ (2) GET /admin/venue-report → 200 with {venues:[...]}. Response time: 135.9ms, returned 7 venues. ✅ (3) GET /admin/events/{id}/stats → 200 with correct structure {event, funnel, people, history}. Response time: 109.9ms. All endpoints returning correct data structures with good performance."
+
 frontend:
   - task: "Bottom nav centered (grid-cols-5) + CompactEventCard price/sale badge"
     implemented: true
@@ -808,8 +853,8 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.6"
-  test_sequence: 7
+  version: "2.7"
+  test_sequence: 8
   run_ui: false
 
 test_plan:
@@ -819,6 +864,59 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - Iteration 2026-08-02i (Bug Fix + Notify Feature + Performance)
+      
+      🎉 ALL TESTS PASSED: 21/21 (100% pass rate)
+      
+      ✅ CRITICAL BUG FIX VERIFIED (8 tests, 100% pass):
+      - Created 2 ticket purchases as normal user via POST /tickets/click
+      - Both purchases appeared in GET /admin/tickets?status=pending
+      - Rejected first purchase with POST /admin/tickets/confirm {confirmed:false}
+      - **BUG FIX CONFIRMED**: Rejected ticket NO LONGER appears in pending list (this was the reported bug)
+      - Confirmed second purchase with POST /admin/tickets/confirm {confirmed:true}
+      - Confirmed ticket appears in GET /admin/tickets?status=confirmed
+      - Confirmed ticket does NOT appear in pending list
+      - All ticket state transitions working correctly
+      
+      ✅ NEW NOTIFY FEATURE (10 tests, 100% pass):
+      - GET /admin/notify/presets returns 10 presets with all required fields (id, label, emoji, needs_event, title, body)
+      - GET /admin/events-min returns event list with id/name/venue/date
+      - GET /admin/events-min?q=fiesta filters correctly
+      - POST /admin/notify/send with preset + event + audience=event → 200 {ok:true, audience:"event", notified:<int>}
+      - POST /admin/notify/send with preset + audience=all → 200 {ok:true, audience:"all", notified:18, queued:true}
+      - Validation working: body with {name} but no event_id → 400
+      - Validation working: no body and no preset → 400
+      - Authorization working: all endpoints return 403 for non-admin
+      
+      ✅ PERFORMANCE/REGRESSION (3 tests, 100% pass):
+      - GET /admin/funnel?scope=all → 200 with {rows:[], totals:{}} (97.9ms, 10 rows)
+      - GET /admin/venue-report → 200 with {venues:[]} (135.9ms, 7 venues)
+      - GET /admin/events/{id}/stats → 200 with {event, funnel, people, history} (109.9ms)
+      
+      All endpoints returning correct data structures with good performance. No issues found.
+      Test file: /app/backend_test.py
+
+  - agent: "main"
+    message: |
+      NEW ITERATION (2026-08-02 i) — test ONLY these (admin@quienva.app/admin123). Register a normal user for 403 checks.
+      BUG FIX (must verify against reported issue): Rejecting a pending ticket did NOT remove it because the pending filter was {confirmed:False} and reject also set confirmed:False.
+        - Create a ticket purchase as a normal user so it appears pending (inspect server.py for the buy/ticket-purchase route, e.g. POST /api/events/{id}/ticket or /buy-ticket).
+        - GET /api/admin/tickets?status=pending -> the purchase appears.
+        - POST /api/admin/tickets/confirm {purchase_id, confirmed:false} (REJECT).
+        - GET /api/admin/tickets?status=pending again -> the rejected purchase MUST be GONE. Also confirm {confirmed:true} on another -> it shows under ?status=confirmed and not in pending.
+      NEW NOTIFY FEATURE:
+        - GET /api/admin/notify/presets -> 200 {presets:[...]} each with id/label/emoji/needs_event/title/body. Non-admin 403.
+        - GET /api/admin/events-min -> 200 {events:[{id,name,venue,date}]}. Optional ?q= filters by name.
+        - POST /api/admin/notify/send:
+          * {preset_id:"low_stock", event_id:<valid>, audience:"event"} -> 200 {ok,audience:"event",notified}.
+          * {preset_id:"generic_new", audience:"all"} -> 200 {ok,audience:"all",notified,queued:true}.
+          * {body:"{name} test", audience:"event"} with NO event_id -> 400.
+          * {audience:"event"} with empty body & no preset -> 400.
+          * Non-admin -> 403.
+      PERF/REGRESSION (correct shape + 200): GET /api/admin/funnel?scope=all ({rows,totals}), GET /api/admin/venue-report ({venues}), GET /api/admin/events/{id}/stats ({event,funnel,people,history}).
+
   - agent: "main"
     message: |
       NEW ITERATION (2026-08-02 h) — test ONLY these new/changed backend endpoints (admin@quienva.app/admin123):

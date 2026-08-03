@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck, Trophy, MessageCircle, Images, Zap, Check, X, BarChart3, Radio, Euro, ChevronRight } from "lucide-react";
+import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck, Trophy, MessageCircle, Images, Zap, Check, X, BarChart3, Radio, Euro, ChevronRight, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import AdminMomentPanel from "@/components/AdminMomentPanel";
@@ -12,6 +12,7 @@ import AdminScrapersPanel from "@/components/AdminScrapersPanel";
 import AdminVenuesPanel from "@/components/AdminVenuesPanel";
 import AdminScrapeChangelog from "@/components/AdminScrapeChangelog";
 import AdminEventStats from "@/components/AdminEventStats";
+import AdminNotifyComposer from "@/components/AdminNotifyComposer";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
@@ -26,6 +27,7 @@ function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
 const TABS = [
   { id: "resumen", label: "Resumen", icon: BarChart3 },
   { id: "fiestas", label: "Fiestas", icon: PartyPopper },
+  { id: "avisos", label: "Avisos", icon: Bell },
   { id: "scrapers", label: "Scrapers", icon: Radio },
   { id: "dinero", label: "Dinero", icon: Euro },
   { id: "usuarios", label: "Usuarios", icon: Users },
@@ -53,8 +55,18 @@ export default function AdminDashboard() {
 
   const confirmTicket = useMutation({
     mutationFn: async ({ purchase_id, confirmed }) => (await api.post("/admin/tickets/confirm", { purchase_id, confirmed })).data,
-    onSuccess: () => { toast.success("Actualizado"); qc.invalidateQueries({ queryKey: ["admin-tickets"] }); qc.invalidateQueries({ queryKey: ["admin-dashboard"] }); },
-    onError: () => toast.error("Error"),
+    onMutate: async ({ purchase_id }) => {
+      // Optimistic: remove instantly from the pending list (snappy, no lag)
+      await qc.cancelQueries({ queryKey: ["admin-tickets", "pending"] });
+      const prev = qc.getQueryData(["admin-tickets", "pending"]);
+      qc.setQueryData(["admin-tickets", "pending"], (old) => (old || []).filter((t) => t.id !== purchase_id));
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["admin-tickets", "pending"], ctx.prev);
+      toast.error("Error");
+    },
+    onSuccess: () => { toast.success("Actualizado"); },
   });
 
   const { data: users = [], isLoading: loadingUsers } = useQuery({ queryKey: ["admin-users", search], queryFn: async () => (await api.get("/admin/users", { params: { search } })).data, staleTime: 15_000, enabled: tab === "usuarios" });
@@ -211,6 +223,13 @@ export default function AdminDashboard() {
               {funnelRows.length === 0 && <p className="text-center text-white/40 text-sm py-8">Ninguna fiesta coincide</p>}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ---------------- AVISOS ---------------- */}
+      {tab === "avisos" && (
+        <div className="px-4 pt-4">
+          <AdminNotifyComposer />
         </div>
       )}
 
