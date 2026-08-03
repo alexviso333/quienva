@@ -433,11 +433,16 @@ async def share_event(event_id: str, request: Request):
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
     base = f"{proto}://{host}"
-    app_url = f"{base}/event/{event_id}"
+    # The page itself is served by the BACKEND, but humans must land on the
+    # FRONTEND app. In a split deploy (Vercel frontend + Render backend) set
+    # FRONTEND_URL to the Vercel domain; otherwise fall back to the request
+    # host (works when both share one domain, e.g. the preview/ingress).
+    front = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/") or base
+    app_url = f"{front}/event/{event_id}"
 
     if not ev:
         return StarletteResponse(
-            content=f"<!doctype html><meta http-equiv=refresh content='0;url={base}/feed'>",
+            content=f"<!doctype html><meta http-equiv=refresh content='0;url={front}/feed'>",
             media_type="text/html",
         )
 
