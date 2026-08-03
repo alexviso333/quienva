@@ -864,6 +864,21 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NEW ITERATION (2026-08-02 j) — test ONLY these NEW backend endpoints (admin@quienva.app/admin123). Register a normal user for 403.
+      1) FEATURED EVENTS:
+         - PUT /api/admin/events/{event_id}/featured {featured:true} -> 200 {ok,featured:true}. Then GET /api/events (user in that event city) -> event has "featured":true and appears among the FIRST items. PUT {featured:false} -> featured:false. Non-admin -> 403. Invalid event -> 404.
+         - GET /api/admin/events/{id}/stats -> event.featured reflects current value.
+      2) NOTIFY SEGMENTATION:
+         - POST /api/admin/notify/send {preset_id:"generic_new", audience:"city", city:"Palma de Mallorca"} -> 200 {ok,audience:"city",notified,queued:true}.
+         - {body:"hola", audience:"genre", genre:"<from GET /api/events/genres>"} -> 200 {ok,audience:"genre"}. genre empty -> 400. city empty for audience city -> 400.
+      3) SCHEDULING:
+         - POST /api/admin/notify/send {preset_id:"generic_new", audience:"all", send_at:"2030-01-01T12:00:00"} -> 200 {ok,scheduled:true,id,send_at}.
+         - GET /api/admin/notify/scheduled includes it (pending). DELETE /api/admin/notify/scheduled/{id} -> {ok,cancelled:true}; gone afterwards. DELETE unknown -> 404.
+         - send_at in the PAST (2020) audience all -> sends now (NOT scheduled:true).
+      Non-admin on all notify endpoints -> 403. Regression: GET /api/admin/funnel?scope=all still {rows,totals}.
+
   - agent: "testing"
     message: |
       BACKEND TESTING COMPLETE - Iteration 2026-08-02i (Bug Fix + Notify Feature + Performance)

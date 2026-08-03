@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Flame, Users, Ticket, Lock, Clock } from "lucide-react";
+import { Flame, Users, Ticket, Lock, Clock, Star } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { mediaUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -81,6 +81,12 @@ export function CompactEventCard({ event, index = 0, width }) {
         {event.genre && (
           <span className="absolute top-2 left-2 qv-glass text-white text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border border-white/15">
             {event.genre}
+          </span>
+        )}
+
+        {event.featured && (
+          <span className="absolute top-2 left-2 mt-6 bg-gradient-to-r from-yellow-300 to-amber-400 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(253,224,71,0.5)]">
+            <Star className="w-2.5 h-2.5" fill="currentColor" /> Top
           </span>
         )}
 

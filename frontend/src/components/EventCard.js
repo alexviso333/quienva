@@ -139,8 +139,15 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#121215] via-[#121215]/40 to-transparent" />
 
-        {(event.genre || event.sale_state) && (
-          <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+        <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+            {event.featured && (
+              <span
+                data-testid={`event-featured-${event.id}`}
+                className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-gradient-to-r from-yellow-300 to-amber-400 text-black flex items-center gap-1 shadow-[0_0_14px_rgba(253,224,71,0.5)]"
+              >
+                <Star className="w-3 h-3" fill="currentColor" /> Destacada
+              </span>
+            )}
             {event.genre && (
               <span
                 data-testid={`event-genre-${event.id}`}
@@ -150,8 +157,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
               </span>
             )}
             <PriceBadge event={event} />
-          </div>
-        )}
+        </div>
 
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
           {!isPast && (

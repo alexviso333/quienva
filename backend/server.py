@@ -714,6 +714,7 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "has_commission": ev.get("has_commission", False),
         "commission_url": ev.get("commission_url", ""),
         "more_info_url": ev.get("more_info_url", ""),
+        "featured": bool(ev.get("featured", False)),
         # Pricing
         "price_tiers": ev.get("price_tiers", []),
         "sale_state": ev.get("sale_state", "no_a_la_venta"),
@@ -771,6 +772,11 @@ async def list_events(user: dict = Depends(get_current_user),
         if genre != "all" and ev.get("genre") != genre:
             continue
         filtered_events.append(ev)
+
+    # Featured events float to the top (a promoted-placement lever for the owner),
+    # but never in the "pasados" view. Date order preserved within each group.
+    if date_filter != "pasados":
+        filtered_events.sort(key=lambda e: 0 if e.get("featured") else 1)
 
     # BULK LOAD all interests for these events in ONE query (avoid N+1)
     event_ids = [ev["id"] for ev in filtered_events]
@@ -2373,6 +2379,7 @@ async def admin_event_stats(event_id: str, admin: dict = Depends(require_admin))
             "price_tiers": ev.get("price_tiers", []), "sale_state": ev.get("sale_state", "no_a_la_venta"),
             "current_price": _current_price(ev), "currency": ev.get("currency", "EUR"),
             "commission_url": ev.get("commission_url", ""), "has_commission": ev.get("has_commission", False),
+            "featured": bool(ev.get("featured", False)),
         },
         "funnel": {
             "views": views, "interested": interested, "going": going, "attended": attended,
@@ -2437,12 +2444,30 @@ class AdminNotifyInput(BaseModel):
     preset_id: str = ""
     title: str = ""
     body: str = ""
-    audience: str = "event"  # "event" (followers/going/interested) | "all" (everyone)
+    audience: str = "event"  # "event" | "all" | "city" | "genre"
+    city: str = ""
+    genre: str = ""
+    send_at: str = ""  # ISO datetime; if set & in the future -> scheduled
 
 
 @api_router.get("/admin/notify/presets")
 async def admin_notify_presets(admin: dict = Depends(require_admin)):
     return {"presets": ADMIN_NOTIFY_PRESETS}
+
+
+class FeaturedInput(BaseModel):
+    featured: bool = True
+
+
+@api_router.put("/admin/events/{event_id}/featured")
+async def admin_set_featured(event_id: str, inp: FeaturedInput, admin: dict = Depends(require_admin)):
+    """Promote (or un-promote) an event so it floats to the top of the feed."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    await db.events.update_one({"id": event_id}, {"$set": {"featured": bool(inp.featured)}})
+    _invalidate_stats_cache()
+    return {"ok": True, "featured": bool(inp.featured)}
 
 
 @api_router.get("/admin/events-min")
@@ -2458,46 +2483,121 @@ async def admin_events_min(admin: dict = Depends(require_admin), q: str = Query(
     return {"events": out}
 
 
-async def _broadcast_all_users(ntype: str, body: str):
+async def _resolve_segment_user_ids(audience: str, city: str = "", genre: str = "") -> list:
+    """Return the list of user_ids for a broadcast segment."""
+    if audience == "city" and city:
+        return await db.users.distinct("user_id", {"city": city})
+    if audience == "genre" and genre:
+        ev_ids = await db.events.distinct("id", {"genre": genre})
+        if not ev_ids:
+            return []
+        return await db.interests.distinct("user_id", {"event_id": {"$in": ev_ids}})
+    return await db.users.distinct("user_id", {})
+
+
+async def _broadcast_to_users(user_ids: list, ntype: str, body: str):
     count = 0
-    async for u in db.users.find({}, {"_id": 0, "user_id": 1}):
-        await create_notification(u["user_id"], ntype, body, {"type": ntype, "url": "/feed"})
+    for uid in user_ids:
+        await create_notification(uid, ntype, body, {"type": ntype, "url": "/feed"})
         count += 1
-    logger.info(f"[admin_notify] broadcast to ALL → {count} users")
+    logger.info(f"[admin_notify] broadcast → {count} users")
+    return count
+
+
+async def _resolve_notify_body(preset_id: str, custom_body: str, event: dict) -> str:
+    preset = next((p for p in ADMIN_NOTIFY_PRESETS if p["id"] == preset_id), None)
+    body = (custom_body or "").strip() or (preset["body"] if preset else "")
+    if not body:
+        raise HTTPException(status_code=400, detail="Escribe un mensaje o elige un preset")
+    if "{name}" in body:
+        if not event:
+            raise HTTPException(status_code=400, detail="Este mensaje necesita que elijas una fiesta")
+        body = body.replace("{name}", event["name"])
+    return body
 
 
 @api_router.post("/admin/notify/send")
 async def admin_notify_send(inp: AdminNotifyInput, admin: dict = Depends(require_admin)):
-    """Send a preset or custom notification whenever you want.
-    audience='event' → followers + going + interested of the event.
-    audience='all'   → every user (runs in background)."""
-    preset = next((p for p in ADMIN_NOTIFY_PRESETS if p["id"] == inp.preset_id), None)
-    body = (inp.body or "").strip() or (preset["body"] if preset else "")
-    if not body:
-        raise HTTPException(status_code=400, detail="Escribe un mensaje o elige un preset")
-
+    """Send a preset or custom notification now, or schedule it for later.
+    audience: event (followers/going/interested) | all | city | genre."""
     ev = None
     if inp.event_id:
         ev = await db.events.find_one({"id": inp.event_id}, {"_id": 0})
         if not ev:
             raise HTTPException(status_code=404, detail="Evento no encontrado")
-    # Fill {name} placeholder
-    if "{name}" in body:
-        if not ev:
-            raise HTTPException(status_code=400, detail="Este mensaje necesita que elijas una fiesta")
-        body = body.replace("{name}", ev["name"])
+    body = await _resolve_notify_body(inp.preset_id, inp.body, ev)
 
-    audience = inp.audience if inp.audience in ("event", "all") else "event"
+    audience = inp.audience if inp.audience in ("event", "all", "city", "genre") else "event"
+    if audience == "event" and not inp.event_id:
+        raise HTTPException(status_code=400, detail="Elige una fiesta o cambia la audiencia")
+    if audience == "city" and not inp.city:
+        raise HTTPException(status_code=400, detail="Elige una ciudad")
+    if audience == "genre" and not inp.genre:
+        raise HTTPException(status_code=400, detail="Elige un género")
+
+    # SCHEDULE for later?
+    if inp.send_at:
+        try:
+            when = datetime.fromisoformat(inp.send_at.replace("Z", "+00:00"))
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=ZoneInfo("Europe/Madrid"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Fecha/hora inválida")
+        if when > datetime.now(timezone.utc):
+            doc = {
+                "id": str(uuid.uuid4()),
+                "body": body, "audience": audience,
+                "event_id": inp.event_id, "event_name": ev["name"] if ev else "",
+                "city": inp.city, "genre": inp.genre,
+                "send_at": when.astimezone(timezone.utc).isoformat(),
+                "status": "pending",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.scheduled_notifications.insert_one(doc)
+            doc.pop("_id", None)
+            return {"ok": True, "scheduled": True, "send_at": doc["send_at"], "id": doc["id"]}
+
+    # SEND NOW
     if audience == "event":
-        if not inp.event_id:
-            raise HTTPException(status_code=400, detail="Elige una fiesta o envía a todos")
         count = await _notify_event_audience(inp.event_id, "admin_broadcast", ev["name"], body)
         return {"ok": True, "audience": "event", "notified": count}
-    else:
-        # broadcast to everyone in the background so the request returns instantly
-        asyncio.create_task(_broadcast_all_users("admin_broadcast", body))
-        total = await db.users.count_documents({})
-        return {"ok": True, "audience": "all", "notified": total, "queued": True}
+    user_ids = await _resolve_segment_user_ids(audience, inp.city, inp.genre)
+    asyncio.create_task(_broadcast_to_users(user_ids, "admin_broadcast", body))
+    return {"ok": True, "audience": audience, "notified": len(user_ids), "queued": True}
+
+
+@api_router.get("/admin/notify/scheduled")
+async def admin_notify_scheduled(admin: dict = Depends(require_admin)):
+    out = []
+    async for s in db.scheduled_notifications.find({"status": "pending"}, {"_id": 0}).sort("send_at", 1).limit(100):
+        out.append(s)
+    return {"scheduled": out}
+
+
+@api_router.delete("/admin/notify/scheduled/{sched_id}")
+async def admin_notify_cancel(sched_id: str, admin: dict = Depends(require_admin)):
+    r = await db.scheduled_notifications.update_one({"id": sched_id, "status": "pending"}, {"$set": {"status": "cancelled"}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="No encontrado o ya enviado")
+    return {"ok": True, "cancelled": True}
+
+
+async def process_scheduled_notifications():
+    """Scheduler job (runs every minute): send any due scheduled notifications."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    due = []
+    async for s in db.scheduled_notifications.find({"status": "pending", "send_at": {"$lte": now_iso}}, {"_id": 0}):
+        due.append(s)
+    for s in due:
+        try:
+            if s["audience"] == "event" and s.get("event_id"):
+                await _notify_event_audience(s["event_id"], "admin_broadcast", s.get("event_name", ""), s["body"])
+            else:
+                uids = await _resolve_segment_user_ids(s["audience"], s.get("city", ""), s.get("genre", ""))
+                await _broadcast_to_users(uids, "admin_broadcast", s["body"])
+            await db.scheduled_notifications.update_one({"id": s["id"]}, {"$set": {"status": "sent", "sent_at": datetime.now(timezone.utc).isoformat()}})
+        except Exception as e:
+            logger.warning(f"scheduled notify {s['id']} failed: {e}")
 
 
 
@@ -4699,6 +4799,9 @@ async def on_startup():
         # every day, assigns 01:00-06:00 slot to today's events not yet scheduled.
         scheduler.add_job(daily_randomize_moments, "cron", hour=18, minute=0,
                           id="daily_randomize_moments", replace_existing=True)
+        # Process scheduled admin notifications every minute
+        scheduler.add_job(process_scheduled_notifications, "interval", minutes=1,
+                          id="scheduled_notifications", replace_existing=True)
         # Scrapers — refresh all active venues every 30 min. First run 60s after
         # startup so a fresh deploy warms up the events feed quickly.
         scheduler.add_job(run_all_scrapers, "interval", minutes=30,

@@ -75,6 +75,11 @@ export default function AdminEventStats({ eventId, onClose }) {
     onSuccess: (d) => { toast.success(`El Momento lanzado (${d.notified ?? 0} avisados)`); refetch(); },
     onError: () => toast.error("No se pudo lanzar"),
   });
+  const toggleFeatured = useMutation({
+    mutationFn: async (val) => (await api.put(`/admin/events/${eventId}/featured`, { featured: val })).data,
+    onSuccess: (d) => { toast.success(d.featured ? "Fiesta destacada ⭐" : "Ya no está destacada"); refetch(); },
+    onError: () => toast.error("No se pudo actualizar"),
+  });
 
   const ev = data?.event;
   const f = data?.funnel || {};
@@ -143,6 +148,14 @@ export default function AdminEventStats({ eventId, onClose }) {
               {/* Admin quick actions */}
               <div>
                 <p className="text-[11px] uppercase tracking-widest text-white/40 font-bold mb-2">Acciones</p>
+                <button
+                  onClick={() => toggleFeatured.mutate(!ev.featured)}
+                  data-testid="act-featured"
+                  className={`w-full h-11 mb-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 border ${ev.featured ? "bg-yellow-300/20 border-yellow-300/50 text-yellow-200" : "bg-white/5 border-white/15 text-white/80"}`}
+                >
+                  <Star className="w-4 h-4" fill={ev.featured ? "currentColor" : "none"} />
+                  {ev.featured ? "Destacada en el feed · quitar" : "Destacar en el feed"}
+                </button>
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => notifyInterested.mutate()} className="h-10 rounded-xl bg-yellow-300/15 border border-yellow-300/30 text-yellow-200 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95" data-testid="act-notify-interested">
                     <Bell className="w-3.5 h-3.5" /> Avisar interesados
