@@ -30,7 +30,9 @@ export default function FeedVenuesTonight() {
       Array.isArray(v.open_days) &&
       v.open_days.includes(t) &&
       // Only the "extra" plans: no FourVenues ticketing OR explicitly free entry.
-      (!v.scraper_slug || v.free_entry)
+      (!v.scraper_slug || v.free_entry) &&
+      // Beach clubs live in their own category (map / Locales), not here.
+      v.type !== "beach_club"
   );
 
   if (open.length === 0) return null;
@@ -42,39 +44,36 @@ export default function FeedVenuesTonight() {
   };
 
   return (
-    <div className="pt-2" data-testid="feed-venues-tonight">
-      <div className="px-4 flex items-center gap-2 mb-2">
-        <Sparkles className="w-4 h-4 text-qv-secondary" />
+    <div className="pt-1" data-testid="feed-venues-tonight">
+      <div className="px-4 flex items-center gap-2 mb-1.5">
         <div className="flex-1 min-w-0">
-          <h3 className="font-display font-black text-white text-lg leading-none">También esta noche</h3>
-          <p className="text-white/50 text-xs">Pubs y sitios sin entrada anticipada · abiertos hoy ({WD[t]})</p>
+          <h3 className="text-white/70 text-xs font-bold uppercase tracking-widest">Otros planes esta noche</h3>
+          <p className="text-white/35 text-[11px]">Pubs y sitios de entrada libre abiertos hoy</p>
         </div>
-        <button onClick={() => navigate("/locales")} className="text-qv-secondary text-xs font-bold flex items-center gap-0.5 active:scale-95">
+        <button onClick={() => navigate("/locales")} className="text-white/40 text-[11px] font-bold flex items-center gap-0.5 active:scale-95">
           Locales <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-1">
+      <div className="flex gap-2 overflow-x-auto hide-scrollbar px-4 pb-1">
         {open.map((v) => (
           <button
             key={v.id}
             data-testid={`venue-tonight-${v.id}`}
             onClick={() => openLink(v)}
-            className="shrink-0 w-40 text-left rounded-2xl border border-white/10 bg-[#121215] p-3 active:scale-[0.98]"
+            className="shrink-0 w-32 text-left rounded-xl border border-white/8 bg-white/[0.03] p-2.5 active:scale-[0.98]"
           >
-            <div className="flex items-center gap-1.5 mb-1">
-              {v.type === "pub" ? <Beer className="w-3.5 h-3.5 text-amber-300" /> : <Ticket className="w-3.5 h-3.5 text-qv-secondary" />}
-              <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full ${v.free_entry ? "bg-emerald-400/20 text-emerald-200" : "bg-white/10 text-white/70"}`}>
-                {v.free_entry ? "Gratis" : "Entradas"}
-              </span>
+            <div className="flex items-center gap-1 mb-0.5">
+              {v.type === "pub" ? <Beer className="w-3 h-3 text-white/40" /> : <Ticket className="w-3 h-3 text-white/40" />}
+              {v.free_entry && <span className="text-[8px] font-bold uppercase tracking-wide text-emerald-300/80">Gratis</span>}
             </div>
-            <p className="font-display font-bold text-white text-sm leading-tight line-clamp-2">{v.name}</p>
-            <p className="text-white/45 text-[11px] mt-0.5 flex items-center gap-1 truncate">
-              <MapPin className="w-3 h-3 shrink-0" /> {v.zone || v.city}
+            <p className="font-semibold text-white/90 text-xs leading-tight line-clamp-2">{v.name}</p>
+            <p className="text-white/35 text-[10px] mt-0.5 flex items-center gap-0.5 truncate">
+              <MapPin className="w-2.5 h-2.5 shrink-0" /> {v.zone || v.city}
             </p>
-            <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-qv-secondary">
-              {v.buy_url ? <>Entradas <ChevronRight className="w-3 h-3" /></> : v.instagram ? <><Instagram className="w-3 h-3" /> Ver</> : <>Info <ChevronRight className="w-3 h-3" /></>}
-            </span>
+            {v.open_time && (
+              <p className="text-white/30 text-[10px] mt-0.5">🕒 {v.open_time}{v.close_time ? `–${v.close_time}` : ""}</p>
+            )}
           </button>
         ))}
       </div>

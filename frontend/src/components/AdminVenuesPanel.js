@@ -10,6 +10,7 @@ const TYPES = ["discoteca", "pub", "beach_club", "promotor"];
 const EMPTY = {
   name: "", zone: "Palma", city: "Palma de Mallorca", type: "discoteca",
   scraper_slug: "", free_entry: false, open_days: [], instagram: "", address: "",
+  buy_url: "", open_time: "", close_time: "",
   image_url: "", description: "", active: true, order: 100,
 };
 
@@ -78,6 +79,14 @@ function Row({ v }) {
       </div>
       <div className="flex items-center justify-between gap-2">
         <DayPicker days={edit.open_days} onToggle={toggleDay} />
+        <div className="flex items-center gap-1">
+          <input value={edit.open_time || ""} onChange={(e) => setEdit({ ...edit, open_time: e.target.value })} placeholder="23:00" className="w-14 h-7 bg-white/5 border border-white/10 rounded-lg px-1.5 text-white text-[11px] text-center" />
+          <span className="text-white/30 text-[11px]">–</span>
+          <input value={edit.close_time || ""} onChange={(e) => setEdit({ ...edit, close_time: e.target.value })} placeholder="06:00" className="w-14 h-7 bg-white/5 border border-white/10 rounded-lg px-1.5 text-white text-[11px] text-center" />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <input value={edit.buy_url || ""} onChange={(e) => setEdit({ ...edit, buy_url: e.target.value })} placeholder="Link entradas (web propia)" className="flex-1 h-7 bg-white/5 border border-white/10 rounded-lg px-2 text-white text-[11px]" />
         <div className="flex gap-1.5">
           <button onClick={() => save.mutate()} disabled={save.isPending} className="text-[11px] font-bold text-black bg-qv-primary rounded-lg px-2.5 py-1.5 flex items-center gap-1 active:scale-95">
             {save.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Guardar
@@ -138,6 +147,13 @@ export default function AdminVenuesPanel() {
           </div>
           <input placeholder="Instagram (sin @)" value={nv.instagram} onChange={(e) => setNv({ ...nv, instagram: e.target.value })} className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm" />
           <input placeholder="Dirección" value={nv.address} onChange={(e) => setNv({ ...nv, address: e.target.value })} className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm" />
+          <input placeholder="Link entradas (opcional, web propia)" value={nv.buy_url} onChange={(e) => setNv({ ...nv, buy_url: e.target.value })} className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm" />
+          <div className="flex items-center gap-2">
+            <span className="text-white/50 text-xs">Horario</span>
+            <input placeholder="23:00" value={nv.open_time} onChange={(e) => setNv({ ...nv, open_time: e.target.value })} className="w-20 h-10 bg-white/5 border border-white/10 rounded-lg px-2 text-white text-sm text-center" />
+            <span className="text-white/30">–</span>
+            <input placeholder="06:00" value={nv.close_time} onChange={(e) => setNv({ ...nv, close_time: e.target.value })} className="w-20 h-10 bg-white/5 border border-white/10 rounded-lg px-2 text-white text-sm text-center" />
+          </div>
           <div className="flex items-center justify-between">
             <DayPicker days={nv.open_days} onToggle={toggleNvDay} />
             <label className="flex items-center gap-1 text-[11px] text-white/70">

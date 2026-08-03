@@ -6106,6 +6106,41 @@ _SEED_DIRECTORY = [
     {"name": "Legends", "zone": "Port d'Alcúdia", "city": "Alcúdia", "type": "pub",
      "scraper_slug": "", "free_entry": True, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "",
      "buy_url": "", "address": "Port d'Alcúdia"},
+    # --- Beach clubs (fiesta de día · categoría propia) ---
+    {"name": "Purobeach Palma", "zone": "Cala Estància", "city": "Palma de Mallorca", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "purobeach",
+     "buy_url": "https://purobeach.com/palma/", "open_time": "11:00", "close_time": "22:00",
+     "address": "Carrer Pagell 1, Cala Estància, Palma"},
+    {"name": "Nikki Beach Mallorca", "zone": "Magaluf", "city": "Calvià", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5, 6], "instagram": "nikkibeachmallorca",
+     "buy_url": "https://mallorca.nikkibeach.com/", "open_time": "11:00", "close_time": "19:00",
+     "address": "Avinguda Notari Alemany 1, Magaluf"},
+    {"name": "Beso Beach Mallorca", "zone": "Ses Illetes", "city": "Palma de Mallorca", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "besobeach",
+     "buy_url": "https://besobeach.com/", "open_time": "12:00", "close_time": "20:00",
+     "address": "Passeig d'Illetes 7, Illetes"},
+    {"name": "UM Beach House Portals", "zone": "Portals Nous", "city": "Calvià", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "umbeachhouse",
+     "buy_url": "", "open_time": "11:00", "close_time": "21:00", "address": "Portals Nous, Calvià"},
+    {"name": "Balneario Illetas", "zone": "Ses Illetes", "city": "Palma de Mallorca", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5, 6], "instagram": "balnearioilletas",
+     "buy_url": "", "open_time": "11:00", "close_time": "20:00", "address": "Passeig d'Illetes 52, Illetes"},
+    {"name": "Mhares Sea Club", "zone": "Cala Blava", "city": "Llucmajor", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5, 6], "instagram": "mharesseaclub",
+     "buy_url": "https://mharesseaclub.com/", "open_time": "12:00", "close_time": "22:00",
+     "address": "Carretera Cala Blava, Llucmajor"},
+    {"name": "Sa Gavina", "zone": "Portals Vells", "city": "Calvià", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "",
+     "buy_url": "", "open_time": "11:00", "close_time": "20:00", "address": "Portals Vells, Calvià"},
+    {"name": "Savage Beach Club", "zone": "Palmanova", "city": "Calvià", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [3, 4, 5, 6], "instagram": "savagebeachclub",
+     "buy_url": "", "open_time": "12:00", "close_time": "21:00", "address": "Palmanova, Calvià"},
+    {"name": "NU Beach Mallorca", "zone": "Palma", "city": "Palma de Mallorca", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [4, 5, 6], "instagram": "nu_mallorca",
+     "buy_url": "", "open_time": "12:00", "close_time": "22:00", "address": "Palma de Mallorca"},
+    {"name": "Cala Gran Beach Club", "zone": "Cala d'Or", "city": "Santanyí", "type": "beach_club",
+     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "",
+     "buy_url": "", "open_time": "11:00", "close_time": "20:00", "address": "Cala d'Or, Santanyí"},
 ]
 
 
@@ -6235,6 +6270,8 @@ class VenueInput(BaseModel):
     open_days_manual: bool = False
     instagram: str = ""
     buy_url: str = ""                # external ticket page (non-FourVenues venues)
+    open_time: str = ""             # e.g. "23:00" — informative opening hour
+    close_time: str = ""            # e.g. "06:00"
     address: str = ""
     image_url: str = ""
     description: str = ""
