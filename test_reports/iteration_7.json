@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend-only validation of (1) admin panel per-city subsections and (2) progressive feed rendering. Both features work end-to-end on mobile 390x844 against REACT_APP_BACKEND_URL. Admin (admin@quienva.app/admin123): /admin renders 5 city buttons (admin-city-Palma de Mallorca / Ibiza / Madrid / Barcelona / Marbella) and 3 tab buttons (admin-tab-upcoming/momentos/past). 'Próximas' shows admin-new-event (opens dialog with admin-city select inside form); 'Momentos' HIDES admin-new-event, shows date headers (87 groups) and one admin-moment-<id> button per row; 'Pasadas' hides admin-new-event and lists past events (13 rows). Switching to Ibiza loads 765 upcoming events with the expected venues (Pacha Ibiza, Ushuaïa Ibiza, Lío Ibiza, EDEN IBIZA, Es Paradis, Ibiza Rocks, COVA SANTA, Chinois Ibiza). admin-stats-<id> opens the AdminEventStats dialog with the funnel (vistas/interesados/van/clics entrada/tienen entrada/siguen/estuvieron/álbum/momentos) and Acciones. Feed (new user @ Ibiza after Onboarding + PushPermissionGate): /feed 'Día' view mounts 105 compact-card items initially (6 day-groups) with feed-load-more sentinel; scrolling grows the list progressively 105->189->262->336->400->468->537->601->660->707->745. 'Discoteca' view also paginates 262->650->765. Only 2 non-blocking console errors observed (both 401 for a background resource) plus Radix a11y warnings.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminEventStats dialog (components/AdminEventStats.js)", "issue": "Radix warning on every open: 'DialogContent requires a DialogTitle for the component to be accessible for screen reader users.' The stats dialog is missing a <DialogTitle> (or VisuallyHidden title). Accessibility regression - fix by adding <DialogHeader><DialogTitle>Estadísticas</DialogTitle></DialogHeader> inside DialogContent.", "selector": "[data-testid=\"admin-stats-<id>\"] -> DialogContent", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Admin panel initial load", "issue": "Two 401 responses logged in the console when the admin panel first renders (likely a background auth-gated resource poll such as notifications/subscribe). Does not block admin functionality but pollutes the console.", "affected_selectors": ["/admin"]}
+    ],
+    "design_issues": [
+      {"screen": "Feed 'Día' initial mount", "issues": ["Initial page (PAGE=6 day-groups) still mounts ~105 compact cards on Ibiza because each day contains 15-20 events. Progressive rendering works, but consider paging by TOTAL cards (or events per page) rather than groups so the first paint on dense cities stays under ~30 cards."]},
+      {"screen": "Onboarding / Login age gate", "issues": ["Age gate at /onboarding uses the browser-native date picker (input type=date with mm/dd/yyyy placeholder) instead of a themed shadcn calendar - inconsistent with the rest of the dark UI."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Add a DialogTitle to AdminEventStats (VisuallyHidden if you want to keep the current design) to silence the Radix a11y console error thrown every time admin-stats-<id> is clicked.",
+    "Investigate the two 401 responses logged when /admin first renders (probably a background poll) and either gate it behind an admin/authenticated check or handle 401 quietly.",
+    "Optional: paginate the Día view by card count rather than by day-groups (PAGE=6 groups yields ~105 cards on dense cities like Ibiza)."
+  ],
+  "critical_code_review_comments": [
+    "AdminEventStats is opened as a Dialog without a DialogTitle - Radix logs an accessibility error on every open.",
+    "FeedPlans PAGE=6 is measured in groups; on dense cities a single day-group can contain 15+ events so 'initial 6 groups' still renders 100+ cards. Consider capping by rendered cards.",
+    "New Admin.js is a large single-file component (~560 lines) with the EventForm + Admin layout co-located; splitting EventForm into its own module would help maintainability."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "100% functional (both features work); 1 a11y warning + 2 background 401s"},
+  "seed_data_creation": "Registered a throw-away Ibiza user (qafeedXXXXXX@test.com / test1234) via POST /api/auth/register to test the feed pagination as a normal user. No admin data mutated.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@quienva.app/admin123 (per /app/memory/test_credentials.md)",
+  "context_for_next_testing_agent": "Admin panel and feed pagination both PASS. If retesting, note that (a) admin login goes through /onboarding age-gate that must be dismissed with 'Confirmar y entrar' after filling input[type=date]; (b) new users after registration hit onboarding slides then a PushPermissionGate overlay - dismiss with 'Continuar de todas formas' before /feed becomes interactive; (c) /feed default view is 'dia' and uses compact-card-<id> testids (not event-card-<id>) because compact=true on the main planes tab; (d) feed-load-more sentinel triggers on rootMargin 800px so window.scrollTo(0,document.body.scrollHeight) reliably pages it; (e) Ibiza has 765 upcoming events currently seeded.",
+  "rca_of_the_issue": "AdminEventStats a11y error: DialogContent is rendered without a wrapping DialogHeader/DialogTitle, so Radix's dev-time accessibility check logs an error. Not a functional bug but every stats open pollutes the console. 401s appear to originate from an authenticated background fetch running before the admin session cookie/JWT is fully applied."
+}

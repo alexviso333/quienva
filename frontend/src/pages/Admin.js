@@ -1,14 +1,23 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl, formatApiErrorDetail } from "@/lib/api";
+import AdminEventStats from "@/components/AdminEventStats";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, ArrowLeft, ImageUp, Loader2, Ticket, ExternalLink, Link as LinkIcon, Wand2, Zap, Tag, X, BellRing } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowLeft, ImageUp, Loader2, Ticket, ExternalLink, Link as LinkIcon, Wand2, Zap, Tag, X, BellRing, BarChart3, CalendarDays, History } from "lucide-react";
 import { toast } from "sonner";
+
+const CITIES = [
+  { value: "Palma de Mallorca", label: "Mallorca" },
+  { value: "Ibiza", label: "Ibiza" },
+  { value: "Madrid", label: "Madrid" },
+  { value: "Barcelona", label: "Barcelona" },
+  { value: "Marbella", label: "Marbella" },
+];
 
 const EMPTY = {
   name: "", venue: "", address: "", date: "", time: "", image_url: "",
@@ -26,10 +35,10 @@ const SALE_STATES = [
   { value: "agotado", label: "Agotado", color: "text-white/40" },
 ];
 
-function EventForm({ initial, onSaved }) {
+function EventForm({ initial, onSaved, cityDefault }) {
   const qc = useQueryClient();
   const [form, setForm] = useState(() => {
-    if (!initial) return EMPTY;
+    if (!initial) return { ...EMPTY, city: cityDefault || EMPTY.city };
     // Ensure pricing defaults are set on legacy events
     return {
       ...EMPTY,
@@ -225,6 +234,19 @@ function EventForm({ initial, onSaved }) {
       </div>
       <Input data-testid="admin-address" placeholder="Dirección" value={form.address} onChange={set("address")} className={inputCls} />
       <div className="grid grid-cols-2 gap-3">
+        <select
+          data-testid="admin-city"
+          value={form.city}
+          onChange={set("city")}
+          className={inputCls + " px-3 appearance-none"}
+        >
+          {CITIES.map((c) => (
+            <option key={c.value} value={c.value} className="bg-qv-bg text-white">{c.label}</option>
+          ))}
+        </select>
+        <div />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <Input data-testid="admin-date" type="date" value={form.date} onChange={set("date")} className={inputCls} />
         <Input data-testid="admin-time" type="time" value={form.time} onChange={set("time")} className={inputCls} />
       </div>
@@ -357,10 +379,14 @@ export default function Admin() {
   const qc = useQueryClient();
   const [openNew, setOpenNew] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [statsId, setStatsId] = useState(null);
+  const [city, setCity] = useState("Palma de Mallorca");
+  const [tab, setTab] = useState("upcoming");
 
+  const scope = tab === "past" ? "past" : "upcoming";
   const { data: events = [], isLoading } = useQuery({
-    queryKey: ["admin-events"],
-    queryFn: async () => (await api.get("/admin/events")).data,
+    queryKey: ["admin-events", city, scope],
+    queryFn: async () => (await api.get("/admin/events", { params: { city, scope } })).data,
   });
 
   const del = useMutation({
@@ -374,11 +400,59 @@ export default function Admin() {
 
   const triggerMoment = useMutation({
     mutationFn: async (id) => (await api.post(`/admin/events/${id}/moment/trigger`)).data,
-    onSuccess: (data) => {
-      toast.success(`⚡ Momento lanzado a ${data.notified} usuarios`);
-    },
+    onSuccess: (data) => toast.success(`⚡ Momento lanzado a ${data.notified} usuarios`),
     onError: () => toast.error("No se pudo lanzar"),
   });
+
+  const byDay = useMemo(() => {
+    const m = {};
+    events.forEach((e) => { (m[e.date] = m[e.date] || []).push(e); });
+    return Object.entries(m).sort(([a], [b]) => a.localeCompare(b));
+  }, [events]);
+
+  const TABS = [
+    { value: "upcoming", label: "Próximas", icon: CalendarDays },
+    { value: "momentos", label: "Momentos", icon: Zap },
+    { value: "past", label: "Pasadas", icon: History },
+  ];
+
+  const Row = ({ ev, showMoment }) => (
+    <div className="flex gap-3 bg-white/5 border border-white/10 rounded-2xl p-3" data-testid={`admin-event-${ev.id}`}>
+      {ev.image_url && (
+        <img src={mediaUrl(ev.image_url)} alt={ev.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold truncate">{ev.name}</p>
+        <p className="text-white/40 text-sm truncate">{ev.venue} · {ev.date}{ev.time ? ` · ${ev.time}` : ""}</p>
+        <span className="inline-flex items-center gap-1 text-xs mt-1 text-white/50">
+          {ev.has_commission ? <><Ticket className="w-3 h-3" /> Comisión</> : <><ExternalLink className="w-3 h-3" /> Info</>}
+        </span>
+      </div>
+      <div className="flex flex-col gap-2">
+        <button data-testid={`admin-stats-${ev.id}`} onClick={() => setStatsId(ev.id)} className="w-9 h-9 rounded-full bg-qv-secondary/20 flex items-center justify-center" title="Ver stats">
+          <BarChart3 className="w-4 h-4 text-qv-secondary" />
+        </button>
+        {tab !== "past" && (
+          <button data-testid={`admin-edit-${ev.id}`} onClick={() => setEditing(ev)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+            <Pencil className="w-4 h-4 text-white/80" />
+          </button>
+        )}
+        {showMoment && (
+          <button
+            data-testid={`admin-moment-${ev.id}`}
+            onClick={() => { if (window.confirm(`¿Lanzar 'El Momento' a los asistentes de ${ev.name}?`)) triggerMoment.mutate(ev.id); }}
+            className="w-9 h-9 rounded-full bg-yellow-300/20 flex items-center justify-center"
+            title="Lanzar Momento"
+          >
+            <Zap className="w-4 h-4 text-yellow-300" />
+          </button>
+        )}
+        <button data-testid={`admin-delete-${ev.id}`} onClick={() => del.mutate(ev.id)} className="w-9 h-9 rounded-full bg-qv-primary/20 flex items-center justify-center">
+          <Trash2 className="w-4 h-4 text-qv-primary" />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen qv-app-bg">
@@ -389,7 +463,7 @@ export default function Admin() {
           </button>
           <div>
             <h1 className="font-display text-2xl font-black tracking-tighter">Panel admin</h1>
-            <p className="text-white/40 text-xs">{events.length} eventos</p>
+            <p className="text-white/40 text-xs">{events.length} fiestas · {CITIES.find((c) => c.value === city)?.label}</p>
           </div>
           <button
             data-testid="admin-money-btn"
@@ -400,72 +474,84 @@ export default function Admin() {
           </button>
         </header>
 
-        <div className="px-5">
-          <Dialog open={openNew} onOpenChange={setOpenNew}>
-            <DialogTrigger asChild>
-              <button
-                data-testid="admin-new-event"
-                className="h-12 w-full rounded-2xl bg-qv-primary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform mb-4"
-              >
-                <Plus className="w-5 h-5" /> Nuevo evento
-              </button>
-            </DialogTrigger>
-            <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="font-display">Nuevo evento</DialogTitle>
-              </DialogHeader>
-              <EventForm onSaved={() => setOpenNew(false)} />
-            </DialogContent>
-          </Dialog>
+        {/* City selector — a separate admin per city */}
+        <div className="px-5 mb-3 flex gap-2 overflow-x-auto no-scrollbar">
+          {CITIES.map((c) => (
+            <button
+              key={c.value}
+              data-testid={`admin-city-${c.value}`}
+              onClick={() => setCity(c.value)}
+              className={`shrink-0 h-9 px-4 rounded-full text-sm font-semibold transition-colors ${city === c.value ? "bg-qv-primary text-white" : "bg-white/5 text-white/60 border border-white/10"}`}
+            >
+              {c.label}
+            </button>
+          ))}
         </div>
 
-        <div className="px-5 flex flex-col gap-3">
-          {isLoading ? (
-            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-qv-primary" /></div>
-          ) : (
-            events.map((ev) => (
-              <div key={ev.id} className="flex gap-3 bg-white/5 border border-white/10 rounded-2xl p-3" data-testid={`admin-event-${ev.id}`}>
-                {ev.image_url && (
-                  <img src={mediaUrl(ev.image_url)} alt={ev.name} className="w-16 h-16 rounded-xl object-cover shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{ev.name}</p>
-                  <p className="text-white/40 text-sm truncate">{ev.venue} · {ev.date}</p>
-                  <span className="inline-flex items-center gap-1 text-xs mt-1 text-white/50">
-                    {ev.has_commission ? <><Ticket className="w-3 h-3" /> Comisión</> : <><ExternalLink className="w-3 h-3" /> Info</>}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <button data-testid={`admin-edit-${ev.id}`} onClick={() => setEditing(ev)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
-                    <Pencil className="w-4 h-4 text-white/80" />
-                  </button>
-                  <button
-                    data-testid={`admin-moment-${ev.id}`}
-                    onClick={() => {
-                      if (window.confirm(`¿Lanzar 'El Momento' a los asistentes de ${ev.name}?`)) triggerMoment.mutate(ev.id);
-                    }}
-                    className="w-9 h-9 rounded-full bg-yellow-300/20 flex items-center justify-center"
-                    title="Lanzar Momento"
-                  >
-                    <Zap className="w-4 h-4 text-yellow-300" />
-                  </button>
-                  <button data-testid={`admin-delete-${ev.id}`} onClick={() => del.mutate(ev.id)} className="w-9 h-9 rounded-full bg-qv-primary/20 flex items-center justify-center">
-                    <Trash2 className="w-4 h-4 text-qv-primary" />
-                  </button>
+        {/* Sub-sections within Fiestas */}
+        <div className="px-5 mb-4 flex gap-2">
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.value}
+                data-testid={`admin-tab-${t.value}`}
+                onClick={() => setTab(t.value)}
+                className={`flex-1 h-10 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${tab === t.value ? "bg-white/15 text-white" : "bg-white/5 text-white/50"}`}
+              >
+                <Icon className="w-4 h-4" /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {tab === "upcoming" && (
+          <div className="px-5">
+            <Dialog open={openNew} onOpenChange={setOpenNew}>
+              <DialogTrigger asChild>
+                <button data-testid="admin-new-event" className="h-12 w-full rounded-2xl bg-qv-primary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform mb-4">
+                  <Plus className="w-5 h-5" /> Nueva fiesta
+                </button>
+              </DialogTrigger>
+              <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle className="font-display">Nueva fiesta</DialogTitle></DialogHeader>
+                <EventForm cityDefault={city} onSaved={() => setOpenNew(false)} />
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-qv-primary" /></div>
+        ) : events.length === 0 ? (
+          <p className="px-5 py-10 text-center text-white/40 text-sm">
+            {tab === "past" ? "No hay fiestas pasadas (se borran a los 3 días)." : "No hay fiestas en esta ciudad."}
+          </p>
+        ) : tab === "momentos" ? (
+          <div className="px-5 flex flex-col gap-4">
+            {byDay.map(([day, evs]) => (
+              <div key={day}>
+                <p className="text-xs font-bold uppercase tracking-widest text-qv-secondary mb-2">{day}</p>
+                <div className="flex flex-col gap-3">
+                  {evs.map((ev) => <Row key={ev.id} ev={ev} showMoment />)}
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="px-5 flex flex-col gap-3">
+            {events.map((ev) => <Row key={ev.id} ev={ev} showMoment={false} />)}
+          </div>
+        )}
 
         <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
           <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="font-display">Editar evento</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle className="font-display">Editar fiesta</DialogTitle></DialogHeader>
             {editing && <EventForm initial={editing} onSaved={() => setEditing(null)} />}
           </DialogContent>
         </Dialog>
+
+        {statsId && <AdminEventStats eventId={statsId} onClose={() => setStatsId(null)} />}
       </div>
     </div>
   );

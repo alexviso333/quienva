@@ -2736,9 +2736,24 @@ async def admin_stats(admin: dict = Depends(require_admin)):
 
 
 @api_router.get("/admin/events")
-async def admin_list_events(admin: dict = Depends(require_admin)):
+async def admin_list_events(admin: dict = Depends(require_admin),
+                            city: str = Query(""), scope: str = Query("all")):
+    """Admin party list, filterable by app-city (region-aware) and time scope.
+    Lightweight projection — the heavy per-event serialization is not needed here."""
+    q = {}
+    if city:
+        q["city"] = city_query_value(city)
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    if scope == "upcoming":
+        q["date"] = {"$gte": today}
+    elif scope == "past":
+        q["date"] = {"$lt": today}
+    proj = {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1,
+            "image_url": 1, "has_commission": 1, "city": 1, "sale_state": 1,
+            "featured": 1, "source": 1, "price_tiers": 1}
+    sort_dir = -1 if scope == "past" else 1
     events = []
-    async for ev in db.events.find({}, {"_id": 0}).sort("date", 1):
+    async for ev in db.events.find(q, proj).sort("date", sort_dir):
         events.append(ev)
     return events
 
@@ -5294,6 +5309,29 @@ async def cleanup_demo_events():
             logger.info(f"Eliminadas {res.deleted_count} fiestas demo")
 
 
+async def cleanup_old_events():
+    """Delete parties (and their engagement data) once 3 days have passed since
+    the event date. Past-party stats live for a 3-day window then vanish; also
+    keeps the DB lean, which speeds up the feed."""
+    try:
+        cutoff = (datetime.now(ZoneInfo("Europe/Madrid")).date() - timedelta(days=3)).isoformat()
+        old = [e["id"] async for e in db.events.find(
+            {"date": {"$lt": cutoff}}, {"_id": 0, "id": 1})]
+        if not old:
+            return
+        await db.events.delete_many({"id": {"$in": old}})
+        for coll in (db.interests, db.tickets, db.event_follows, db.event_metrics,
+                     db.event_history, db.ticket_purchases, db.album_items,
+                     db.moment_captures):
+            try:
+                await coll.delete_many({"event_id": {"$in": old}})
+            except Exception:
+                pass
+        logger.info(f"cleanup_old_events: removed {len(old)} events >3 days old")
+    except Exception as e:
+        logger.warning(f"cleanup_old_events failed: {e}")
+
+
 @app.on_event("startup")
 async def on_startup():
     try:
@@ -5376,6 +5414,10 @@ async def on_startup():
         pass
     try:
         await migrate_midnight_events()
+    except Exception as _:
+        pass
+    try:
+        await cleanup_old_events()
     except Exception as _:
         pass
     await cleanup_demo_events()
@@ -6105,6 +6147,10 @@ async def run_all_scrapers():
         pass
     try:
         await sync_xceed_venues_to_directory()
+    except Exception:
+        pass
+    try:
+        await cleanup_old_events()
     except Exception:
         pass
     return results
