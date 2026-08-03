@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck, Trophy, MessageCircle, Images, Zap, Check, X, BarChart3, Radio, Euro, ChevronRight, Bell } from "lucide-react";
+import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck, Trophy, MessageCircle, Images, Zap, Check, X, BarChart3, Radio, Euro, ChevronRight, ChevronDown, History, Moon, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import AdminMomentPanel from "@/components/AdminMomentPanel";
@@ -47,6 +47,8 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState("");
   const [eventSearch, setEventSearch] = useState("");
   const [statsEventId, setStatsEventId] = useState(null);
+  const [momentOpen, setMomentOpen] = useState(false);
+  const [pastOpen, setPastOpen] = useState(false);
 
   const { data: stats } = useQuery({ queryKey: ["admin-stats"], queryFn: async () => (await api.get("/admin/stats")).data, staleTime: 30_000 });
   const { data: dashboard } = useQuery({ queryKey: ["admin-dashboard"], queryFn: async () => (await api.get("/admin/dashboard")).data, staleTime: 30_000 });
@@ -83,6 +85,28 @@ export default function AdminDashboard() {
   });
 
   const funnelRows = (funnel?.rows || []).filter((r) => !eventSearch || r.name.toLowerCase().includes(eventSearch.toLowerCase()) || (r.venue || "").toLowerCase().includes(eventSearch.toLowerCase()));
+  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
+  const upcomingRows = funnelRows.filter((r) => (r.date || "") >= todayStr);
+  const pastRows = funnelRows.filter((r) => (r.date || "") < todayStr);
+
+  const EventRow = (r) => {
+    const sl = SALE_LABEL[r.sale_state] || SALE_LABEL.no_a_la_venta;
+    return (
+      <button key={r.id} data-testid={`admin-event-row-${r.id}`} onClick={() => setStatsEventId(r.id)} className="text-left rounded-xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center gap-3 active:scale-[0.99]">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm text-white truncate">{r.name}</p>
+          <p className="text-white/45 text-[11px] truncate">{r.venue} · {r.date}</p>
+          <div className="flex items-center gap-2 mt-1 text-[10px] text-white/50">
+            <span className="flex items-center gap-0.5"><Users className="w-3 h-3 text-qv-primary" />{r.going}</span>
+            <span className="flex items-center gap-0.5"><Star className="w-3 h-3 text-yellow-300" />{r.interested}</span>
+            <span className="flex items-center gap-0.5"><Ticket className="w-3 h-3 text-emerald-300" />{r.tickets}</span>
+            <span className={`px-1.5 py-0.5 rounded-full ${sl.c}`}>{r.price ? `${Math.round(r.price)}€ · ` : ""}{sl.t}</span>
+          </div>
+        </div>
+        <ChevronRight className="w-5 h-5 text-white/30 shrink-0" />
+      </button>
+    );
+  };
 
   return (
     <div className="min-h-screen qv-app-bg pb-16" data-testid="admin-dashboard">
