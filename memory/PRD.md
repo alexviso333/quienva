@@ -93,3 +93,15 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - #18: filtros (entradas+géneros) colapsados tras botón "Filtros". #19: barra inferior a 5 pestañas (quitado Mapa). #20: eliminado /events/discover (404).
 - #21: onboarding de 3 slides mejorado (menciona El Momento, foto de grupo, entradas). #22: skeletons en carga del feed.
 - Backend probado: 10/10 nuevos endpoints + regresión OK. Frontend verificado en pantalla (feed, /admin/dinero, ficha). Bug de hooks en EventDetail corregido.
+
+## Update 2026-08-03 — Fase 1 (privacidad, bugs, UX) + Descubrir
+- **Privacidad por defecto = Solo amigos**: `attendance_privacy` ahora "amigos" por defecto (registro, Google y lectura de usuarios existentes sin el campo). Ajuste sigue editable (todos/amigos/nadie).
+- **Nuevo `moment_privacy`** ("amigos" por defecto | "publico"): controla si tus capturas de El Momento pueden salir en Descubrir. Editable en Ajustes. Validación 400 para valores inválidos.
+- **Bug mensaje leído (fix)**: al abrir un DM (`GET /dm/{id}/messages`) ahora también se marcan como leídas las notificaciones tipo "dm" de esa persona; frontend invalida los badges. Ya no queda "pendiente".
+- **Recap del lunes = semana entera**: `generate_weekend_recap` cubre lunes→domingo (antes solo vie→dom); mensaje "Recuerdo de la semana".
+- **Modo compacto por defecto**: `useCompactMode` ahora compacto salvo que el usuario elija "vista completa" ("0"). Tarjeta compacta con **botón "Voy" mini** (optimista) esquina inferior derecha.
+- **Notificaciones**: botón "Activar notificaciones" siempre visible en Ajustes (si el navegador no lo soporta, avisa).
+- **"?" en archivo de historias (fix)**: `SafeImg` con fallback de imagen rota (evita el glifo "?" del navegador) en archivo, visor y Descubrir.
+- **Descubrir** (`GET /api/discover` + página `/descubrir`, acceso desde Amigos): perfiles recomendados de tu ciudad (excluye amigos/pendientes/bloqueados/uno mismo) + feed de "El Momento" público (solo de quien activó moment_privacy=publico). Pensado para recién llegados/guiris. Cargado bajo demanda (no afecta al feed).
+- NOTA: .env (backend+frontend) borrados otra vez en dev y restaurados (DB quienva, admin re-seed, VAPID regenerado). Multi-ciudad (Fase 2) aplazada a petición del usuario.
+- Backend probado: 7/7 OK. Frontend compila; login verificado en pantalla.
