@@ -51,6 +51,30 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 
+# FourVenues affiliate/RRPP: every FourVenues ticket link is rewritten to go
+# through THIS promoter slug so the sale is attributed to us. Configurable via
+# env so it survives if the slug ever changes; empty string disables the rewrite.
+AFFILIATE_SLUG = os.environ.get("FOURVENUES_AFFILIATE_SLUG", "quienva").strip()
+
+
+def affiliate_ticket_url(url: str) -> str:
+    """Rewrite any FourVenues event URL to our affiliate promoter link:
+        .../<anything>/events/<code>  ->  https://www.fourvenues.com/<slug>/events/<code>
+    Non-FourVenues links (venue websites, Instagram, Xceed, etc.) are left as-is,
+    so nothing that isn't ours to monetise ever breaks. Idempotent."""
+    if not url or not AFFILIATE_SLUG:
+        return url
+    if "fourvenues.com" not in url or "/events/" not in url:
+        return url
+    try:
+        code = url.split("/events/", 1)[1].split("?", 1)[0].split("#", 1)[0].strip("/")
+        if not code:
+            return url
+        return f"https://www.fourvenues.com/{AFFILIATE_SLUG}/events/{code}"
+    except Exception:
+        return url
+
+
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:hola@quienva.app")
@@ -1136,7 +1160,7 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "genre": ev.get("genre", ""),
         "city": ev.get("city", ""),
         "has_commission": ev.get("has_commission", False),
-        "commission_url": ev.get("commission_url", ""),
+        "commission_url": affiliate_ticket_url(ev.get("commission_url", "")),
         "more_info_url": ev.get("more_info_url", ""),
         "featured": bool(ev.get("featured", False)),
         # Pricing
