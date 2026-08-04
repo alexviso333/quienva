@@ -9,11 +9,32 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
+    // Optimistic hydrate from the last-known user so the app opens INSTANTLY
+    // (even with poor/no coverage) instead of flashing the login screen.
+    let hadCached = false;
+    try {
+      const cached = localStorage.getItem("qv_user");
+      const token = localStorage.getItem("qv_token");
+      if (cached && token) {
+        setUser(JSON.parse(cached));
+        hadCached = true;
+      }
+    } catch (e) { /* ignore */ }
     try {
       const { data } = await api.get("/auth/me");
       setUser(data);
+      try { localStorage.setItem("qv_user", JSON.stringify(data)); } catch (e) { /* ignore */ }
     } catch (e) {
-      setUser(null);
+      const status = e?.response?.status;
+      if (status === 401 || status === 403) {
+        // Real auth failure → log out and clear the cached session.
+        setUser(null);
+        try { localStorage.removeItem("qv_user"); } catch (er) { /* ignore */ }
+      } else if (!hadCached) {
+        // Network error and nothing cached → treat as logged out.
+        setUser(null);
+      }
+      // Network error WITH a cached session → keep it (offline-friendly).
     } finally {
       setLoading(false);
     }
@@ -32,6 +53,7 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/login", { email, password });
     if (data.token) localStorage.setItem("qv_token", data.token);
     setUser(data.user);
+    try { localStorage.setItem("qv_user", JSON.stringify(data.user)); } catch (e) { /* ignore */ }
     return data.user;
   };
 
@@ -39,6 +61,7 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/register", payload);
     if (data.token) localStorage.setItem("qv_token", data.token);
     setUser(data.user);
+    try { localStorage.setItem("qv_user", JSON.stringify(data.user)); } catch (e) { /* ignore */ }
     return data.user;
   };
 
@@ -46,14 +69,16 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/google/session", { session_id: sessionId });
     if (data.token) localStorage.setItem("qv_token", data.token);
     setUser(data.user);
+    try { localStorage.setItem("qv_user", JSON.stringify(data.user)); } catch (e) { /* ignore */ }
     return data.user;
   };
 
   const logout = async () => {
     try {
       await api.post("/auth/logout");
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
     localStorage.removeItem("qv_token");
+    try { localStorage.removeItem("qv_user"); } catch (e) { /* ignore */ }
     setUser(null);
   };
 
