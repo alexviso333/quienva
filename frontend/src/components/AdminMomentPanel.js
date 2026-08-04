@@ -43,9 +43,14 @@ export default function AdminMomentPanel({ embedded = false }) {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin-moments"] });
 
   const randomizeAll = useMutation({
-    mutationFn: async () => (await api.post("/admin/moments/randomize-all")).data,
+    mutationFn: async (scope = "all") =>
+      (await api.post(
+        "/admin/moments/randomize-all",
+        null,
+        scope && scope !== "all" ? { params: { scope } } : undefined,
+      )).data,
     onSuccess: (d) => {
-      toast.success(`${d.updated} eventos randomizados`);
+      toast.success(`${d.updated} horas randomizadas`);
       invalidate();
     },
     onError: () => toast.error("No se pudo randomizar"),
@@ -142,14 +147,22 @@ export default function AdminMomentPanel({ embedded = false }) {
   return (
     <div className={embedded ? "mt-3" : "px-4 mt-6"} data-testid="admin-moment-panel">
       {embedded ? (
-        <div className="flex items-center justify-end mb-2">
+        <div className="flex items-center justify-end gap-2 mb-2">
           <button
-            onClick={() => randomizeAll.mutate()}
+            onClick={() => randomizeAll.mutate("tonight")}
+            disabled={randomizeAll.isPending || tonightEvents.length === 0}
+            className="text-xs font-bold text-black bg-white rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
+            data-testid="moment-randomize-tonight"
+          >
+            <Shuffle className="w-3.5 h-3.5" /> Randomizar hoy
+          </button>
+          <button
+            onClick={() => randomizeAll.mutate("all")}
             disabled={randomizeAll.isPending || totalEvents === 0}
             className="text-xs font-bold text-black bg-fuchsia-300 rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
             data-testid="moment-randomize-all"
           >
-            <Shuffle className="w-3.5 h-3.5" /> Randomizar todos
+            <Shuffle className="w-3.5 h-3.5" /> Todos
           </button>
         </div>
       ) : (
@@ -160,12 +173,20 @@ export default function AdminMomentPanel({ embedded = false }) {
               El Momento · esta noche
             </h2>
             <button
-              onClick={() => randomizeAll.mutate()}
+              onClick={() => randomizeAll.mutate("tonight")}
+              disabled={randomizeAll.isPending || tonightEvents.length === 0}
+              className="text-xs font-bold text-black bg-white rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
+              data-testid="moment-randomize-tonight"
+            >
+              <Shuffle className="w-3.5 h-3.5" /> Hoy
+            </button>
+            <button
+              onClick={() => randomizeAll.mutate("all")}
               disabled={randomizeAll.isPending || totalEvents === 0}
               className="text-xs font-bold text-black bg-fuchsia-300 rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
               data-testid="moment-randomize-all"
             >
-              <Shuffle className="w-3.5 h-3.5" /> Randomizar todos
+              <Shuffle className="w-3.5 h-3.5" /> Todos
             </button>
           </div>
           <p className="text-white/40 text-[11px] mb-3 leading-snug">

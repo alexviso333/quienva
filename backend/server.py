@@ -4891,15 +4891,29 @@ async def admin_moment_randomize(event_id: str, admin: dict = Depends(require_ad
 
 
 @api_router.post("/admin/moments/randomize-all")
-async def admin_moment_randomize_all(admin: dict = Depends(require_admin)):
-    """Assign a random 01:00-05:59 time to ALL events in the current window
-    (yesterday, today, tomorrow) that haven't fired yet."""
+async def admin_moment_randomize_all(scope: str = Query("all"), admin: dict = Depends(require_admin)):
+    """Assign a random 01:00-05:59 time to events in the current window that
+    haven't fired yet.
+
+    scope:
+      - "tonight": only the night in progress (before 06:00 = previous day's night).
+      - "later":   the remaining days in the window.
+      - "all"  :   the whole window (yesterday, today, tomorrow). Default.
+    """
     now = datetime.now(ZoneInfo("Europe/Madrid"))
     today = now.date().isoformat()
     yesterday = (now.date() - timedelta(days=1)).isoformat()
     tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    window = [yesterday, today, tomorrow]
+    tonight_date = yesterday if now.hour < 6 else today
+    if scope == "tonight":
+        dates = [tonight_date]
+    elif scope == "later":
+        dates = [d for d in window if d != tonight_date]
+    else:
+        dates = window
     count = 0
-    async for ev in db.events.find({"date": {"$in": [yesterday, today, tomorrow]}}, {"_id": 0}):
+    async for ev in db.events.find({"date": {"$in": dates}}, {"_id": 0}):
         # Skip if already fired
         existing = await db.moment_prompts.find_one({"event_id": ev["id"]})
         if existing:

@@ -3820,3 +3820,23 @@ agent_communication:
       message: "Please test ONLY GET /api/admin/moments with scope=tonight, scope=later, scope=all and no scope (should behave like all). Verify: (1) requires admin auth (401/403 without token), (2) tonight+later counts equal all (no overlap, no gaps within the window), (3) each item still has fields: id, name, venue, date, time, planned_moment_at, moment_cancelled, has_fired, fired_at, voy_count, captures_count. Admin creds: admin@quienva.app / admin123. Do NOT test other endpoints."
     - agent: "testing"
       message: "BACKEND TESTING COMPLETE - GET /api/admin/moments scope parameter. 🎉 ALL TESTS PASSED (9/9, 100% success rate). ✅ Auth guard working (401 without token). ✅ All four scope variants tested: scope=tonight (6 events), scope=later (27 events), scope=all (33 events), no scope (33 events). ✅ CRITICAL ASSERTION VERIFIED: tonight + later == all (6 + 27 = 33, no overlap, no gaps). ✅ All items contain required fields: id, name, venue, date, time, planned_moment_at, moment_cancelled, has_fired, fired_at, voy_count, captures_count. ✅ Unknown scope value (scope=foo) does NOT error (500), falls back to 'all' behavior gracefully. The scope parameter is working perfectly with correct authorization, backward compatibility (no scope behaves like all), and proper partitioning of events into tonight vs later. Test file: /app/admin_moments_scope_test.py"
+
+#====================================================================================================
+# 2026-08-04 b — /admin/moments/randomize-all scope param (main agent)
+#====================================================================================================
+backend:
+  - task: "POST /api/admin/moments/randomize-all supports scope=tonight|later|all"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added `scope` query param to POST /api/admin/moments/randomize-all (same tonight/later/all logic as GET /admin/moments). Randomizes planned_moment_at (01:00-05:59) only for events in the chosen scope that haven't fired. Manual curl (admin): tonight=6, later=27, all=33, no-scope=33, no-auth=401. Powers the new 'Randomizar hoy' button."
+
+agent_communication:
+    - agent: "main"
+      message: "Please test ONLY POST /api/admin/moments/randomize-all with scope=tonight, scope=later, scope=all and no scope. Verify: (1) requires admin auth (401/403 without token), (2) returns JSON {updated: <int>}, (3) count(tonight)+count(later) is consistent with count(all) on a fresh run where nothing has fired (tonight+later == all), (4) unknown scope (e.g. ?scope=foo) does not 500 and behaves like all. It is a state-changing endpoint (sets planned_moment_at) — that is expected/safe. Admin creds: admin@quienva.app / admin123. Do NOT test other endpoints."

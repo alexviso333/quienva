@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import PushPermissionGate from "@/components/PushPermissionGate";
 import MomentGate from "@/components/MomentGate";
 import AgeGate from "@/components/AgeGate";
+import OfflineBanner from "@/components/OfflineBanner";
 import { Loader2 } from "lucide-react";
 // Eager: first-paint / auth-critical screens.
 import Login from "@/pages/Login";
@@ -98,6 +99,7 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <AppRouter />
+          <OfflineBanner />
           <PushPermissionGate />
           <MomentGate />
           <AgeGate />
