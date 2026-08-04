@@ -59,6 +59,7 @@ GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 AFFILIATE_SLUG = os.environ.get("FOURVENUES_AFFILIATE_SLUG", "quienva").strip()
 _AFFILIATE_IDS: set = set()     # FourVenues event ids we carry (e.g. "abc123")
 _AFFILIATE_CODES: set = set()   # FourVenues event slugs we carry (fallback match)
+_AFFILIATE_VENUES: list = []    # [{venue, city, events}] breakdown (admin insight)
 _AFFILIATE_TS: float = 0.0      # last successful refresh (epoch seconds)
 
 
@@ -5804,7 +5805,7 @@ async def refresh_affiliate_events() -> int:
     affiliate link; everything else keeps its normal link. Runs on startup and
     every scraper cycle, so being added to new promoters is picked up on its own.
     Never clears the cache on a transient failure (keeps last known good)."""
-    global _AFFILIATE_IDS, _AFFILIATE_CODES, _AFFILIATE_TS
+    global _AFFILIATE_IDS, _AFFILIATE_CODES, _AFFILIATE_VENUES, _AFFILIATE_TS
     if not AFFILIATE_SLUG:
         return 0
     token = await _get_fourvenues_token()
@@ -5823,6 +5824,7 @@ async def refresh_affiliate_events() -> int:
     }
     ids: set = set()
     codes: set = set()
+    venue_agg: dict = {}   # (venue, city) -> count
     try:
         async with httpx.AsyncClient(timeout=15, headers=headers) as client:
             page = 1
@@ -5847,13 +5849,27 @@ async def refresh_affiliate_events() -> int:
                         ids.add(_id)
                     if _code:
                         codes.add(_code)
+                    # Breakdown so admin knows which venues/cities to add to the app.
+                    org = it.get("organization") or {}
+                    loc = it.get("location") or {}
+                    vname = str(org.get("name") or "").strip() or "?"
+                    vcity = str(loc.get("city") or loc.get("town") or "").strip()
+                    if not vcity:
+                        addr = str(loc.get("addressComplete") or loc.get("address") or "")
+                        vcity = addr.split(",")[-1].strip() if addr else ""
+                    key = (vname, vcity)
+                    venue_agg[key] = venue_agg.get(key, 0) + 1
                 if len(items) < 200:
                     break
                 page += 1
         _AFFILIATE_IDS = ids
         _AFFILIATE_CODES = codes
+        _AFFILIATE_VENUES = sorted(
+            [{"venue": v, "city": c, "events": n} for (v, c), n in venue_agg.items()],
+            key=lambda x: (-x["events"], x["venue"]),
+        )
         _AFFILIATE_TS = time.time()
-        logger.info(f"[affiliate] '{AFFILIATE_SLUG}' → {len(ids)} events are mine (affiliate links applied to those only)")
+        logger.info(f"[affiliate] '{AFFILIATE_SLUG}' → {len(ids)} events across {len(_AFFILIATE_VENUES)} venues are mine")
         return len(ids)
     except Exception as e:
         logger.warning(f"[affiliate] refresh failed ({e}); keeping previous affiliate set of {len(_AFFILIATE_IDS)}")
@@ -6588,6 +6604,7 @@ async def admin_affiliate_status(admin: dict = Depends(require_admin)):
         "slug": AFFILIATE_SLUG,
         "mine_count": len(_AFFILIATE_IDS),
         "codes_count": len(_AFFILIATE_CODES),
+        "venues": _AFFILIATE_VENUES,
         "updated_at": (_dt.fromtimestamp(_AFFILIATE_TS, _tz.utc).isoformat() if _AFFILIATE_TS else None),
     }
 
