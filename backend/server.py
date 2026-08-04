@@ -66,8 +66,34 @@ _AFFILIATE_VENUES: list = []    # [{venue, city, events}] breakdown (admin insig
 _AFFILIATE_TS: float = 0.0      # last successful refresh (epoch seconds)
 
 
-def _affiliate_key(venue: str, date: str, name: str) -> tuple:
-    return (_norm_name(venue or ""), str(date or ""), _norm_name(name or ""))
+def _city_from_address(addr: str) -> str:
+    """Extract the real city from a FourVenues addressComplete string, e.g.
+    'C/ Marqués de Campo, 42, 03700 Dénia, Alicante, España' -> 'Dénia'."""
+    if not addr:
+        return ""
+    m = re.search(r"\b\d{5}\s+([^,()]+)", addr)  # postal code + city
+    if m:
+        return m.group(1).strip()
+    parts = [p.strip() for p in addr.split(",") if p.strip()]
+    if parts and parts[-1].lower() in ("españa", "spain"):
+        parts = parts[:-1]
+    return parts[-1] if parts else ""
+
+
+def _city_in_app(city: str) -> bool:
+    """Whether a parsed city already maps to one of the app's supported cities."""
+    c = _norm_name(city)
+    if not c:
+        return False
+    for sc in SUPPORTED_CITIES:
+        s = _norm_name(sc.get("label") or sc.get("name") or sc.get("id") or "")
+        if not s:
+            continue
+        if c == s or c in s or s in c or s.split()[0] == c:
+            return True
+    return False
+
+
 
 
 def _event_is_mine(ev: dict) -> bool:
