@@ -6,7 +6,7 @@ Additional verification for pricing history details
 import requests
 import json
 
-BASE_URL = "https://perf-boost-103.preview.emergentagent.com/api"
+BASE_URL = "https://club-distance-app.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 
