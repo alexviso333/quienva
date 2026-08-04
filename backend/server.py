@@ -467,8 +467,10 @@ async def create_session(user_id: str, token: Optional[str] = None) -> str:
 # Cities + social share (WhatsApp Open Graph preview)
 # ---------------------------------------------------------------------------
 @api_router.get("/cities")
-async def list_cities():
+async def list_cities(response: Response):
     """Public list of supported cities for the registration / settings selector."""
+    # Static content — let the browser/CDN cache it for an hour to skip round-trips.
+    response.headers["Cache-Control"] = "public, max-age=3600"
     return {"cities": SUPPORTED_CITIES}
 
 
@@ -7053,7 +7055,7 @@ async def _venue_event_counts() -> dict:
 
 
 @app.get("/api/venues")
-async def list_venues(zone: str = None, type: str = None, user: dict = Depends(get_current_user)):
+async def list_venues(response: Response, zone: str = None, type: str = None, user: dict = Depends(get_current_user)):
     q = {"active": True, "city": city_query_value(user.get("city", "Palma de Mallorca"))}
     if zone:
         q["zone"] = zone
@@ -7075,6 +7077,9 @@ async def list_venues(zone: str = None, type: str = None, user: dict = Depends(g
         else:
             vid = slug_to_id.get(v.get("scraper_slug") or "")
             v["upcoming_events"] = counts.get(vid, 0) if vid else 0
+    # Venue directory changes rarely; a short private cache makes the Locales/Map
+    # pages feel instant on repeat opens without ever showing another user's data.
+    response.headers["Cache-Control"] = "private, max-age=120"
     return venues
 
 
