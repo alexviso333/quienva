@@ -9,7 +9,7 @@ import time
 import json
 
 # Base URL from frontend/.env
-BASE_URL = "https://club-distance-app.preview.emergentagent.com/api"
+BASE_URL = "https://admin-event-ranking.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
