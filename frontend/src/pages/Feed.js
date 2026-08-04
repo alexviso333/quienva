@@ -12,6 +12,7 @@ import FeedPlans, { FeedPlansControls } from "@/components/FeedPlans";
 import FeedVenuesTonight from "@/components/FeedVenuesTonight";
 import { useAuth } from "@/context/AuthContext";
 import { useCompactMode } from "@/hooks/useCompactMode";
+import InstallPwaBanner from "@/components/InstallPwaBanner";
 import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,28 +30,32 @@ export default function Feed() {
 
   // Curated carousels only decorate the default "Día" view (no genre filter).
   const isDefaultView = view === "dia" && genre === "all";
+  // City is part of every event-related cache key: switching cities in Ajustes
+  // must instantly swap to that city's cache (and refetch) instead of showing
+  // the previous city's parties while a slow background refetch runs.
+  const cityKey = user?.city || "-";
 
   const { data: topEvent } = useQuery({
-    queryKey: ["top-weekend"],
+    queryKey: ["top-weekend", cityKey],
     queryFn: async () => (await api.get("/events/top-weekend")).data,
     staleTime: 60_000,
   });
 
   const { data: carousels } = useQuery({
-    queryKey: ["carousels"],
+    queryKey: ["carousels", cityKey],
     queryFn: async () => (await api.get("/events/carousels")).data,
     enabled: isDefaultView,
     staleTime: 60_000,
   });
 
   const { data: genres = [] } = useQuery({
-    queryKey: ["genres"],
+    queryKey: ["genres", cityKey],
     queryFn: async () => (await api.get("/events/genres")).data,
     staleTime: 5 * 60_000,
   });
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["events", "all", genre],
+    queryKey: ["events", cityKey, "all", genre],
     queryFn: async () => (await api.get("/events", { params: { date_filter: "all", genre } })).data,
     staleTime: 30_000,
   });
@@ -152,6 +157,8 @@ export default function Feed() {
       </header>
 
       <StoriesBar />
+
+      <InstallPwaBanner />
 
       {noFriends && (
         <div className="px-4 pt-1 pb-1">

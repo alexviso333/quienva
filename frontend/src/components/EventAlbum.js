@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl, mediaThumb, mediaDownload } from "@/lib/api";
+import api, { mediaUrl, mediaThumb, downloadMedia } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import {
   Plus, Play, Trash2, Images, Loader2, X, Share2, Lock, Users, Check, Globe,
@@ -312,17 +312,15 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
                   <p className="text-white text-sm font-semibold truncate">{preview.author?.name}</p>
                   <p className="text-white/40 text-xs">{new Date(preview.created_at).toLocaleString("es-ES")}</p>
                 </div>
-                <a
+                <button
+                  type="button"
                   data-testid="album-download-btn"
-                  href={mediaDownload(preview.media_url)}
-                  target="_blank"
-                  rel="noreferrer"
-                  download
+                  onClick={() => downloadMedia(preview.media_url)}
                   className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
                   title="Descargar en calidad completa"
                 >
                   <Download className="w-4 h-4 text-white/80" />
-                </a>
+                </button>
                 {preview.is_mine && (
                   <button
                     data-testid="album-delete-btn"

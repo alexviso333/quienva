@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaThumb, API } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
@@ -37,6 +37,17 @@ function FriendRow({ title, color, friends }) {
 export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Robust "back": if the user landed here directly (shared link, notification,
+  // refresh) there is no in-app history to pop, so navigate(-1) would do nothing
+  // or leave the app. In that case fall back to the feed.
+  const goBack = () => {
+    if (location.key && location.key !== "default") {
+      navigate(-1);
+    } else {
+      navigate("/feed");
+    }
+  };
   const qc = useQueryClient();
 
   const { data: event, isLoading } = useQuery({
@@ -156,7 +167,7 @@ export default function EventDetail() {
 
           <button
             data-testid="detail-back"
-            onClick={() => navigate(-1)}
+            onClick={goBack}
             className="absolute top-6 left-4 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
           >
             <ArrowLeft className="w-5 h-5" />

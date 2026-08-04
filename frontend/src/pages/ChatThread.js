@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl, mediaThumb, mediaDownload } from "@/lib/api";
+import api, { mediaUrl, mediaThumb, downloadMedia } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X, ImagePlus, Download } from "lucide-react";
@@ -374,17 +374,15 @@ export default function ChatThread({ kind }) {
               >
                 <X className="w-5 h-5 text-white" />
               </button>
-              <a
+              <button
+                type="button"
                 data-testid="chat-photo-download"
-                href={mediaDownload(lightbox)}
-                target="_blank"
-                rel="noreferrer"
-                download
+                onClick={() => downloadMedia(lightbox)}
                 className="absolute top-3 left-3 z-10 w-9 h-9 rounded-full bg-black/60 flex items-center justify-center"
                 title="Descargar en calidad completa"
               >
                 <Download className="w-4 h-4 text-white" />
-              </a>
+              </button>
               <img src={mediaThumb(lightbox, 1200)} alt="Foto" className="w-full max-h-[80vh] object-contain" />
             </div>
           )}

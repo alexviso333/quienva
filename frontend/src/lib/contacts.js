@@ -31,9 +31,18 @@ export function inviteUrl(code) {
 
 export function inviteText(code) {
   const url = inviteUrl(code);
-  return `Únete a mí en ¿Quién va? 🎉 Descubre las fiestas del finde en Palma y mira a qué van tus amigos.${
-    code ? ` Usa mi código ${code} y ganamos +100 pts.` : ""
-  } ${url}`;
+  // Warm, personal, benefit-led invite — reads like a friend recommending an
+  // app, not like spam. No city name (the app is multi-city).
+  const lines = [
+    "¡Hola! 👋 Estoy usando *¿Quién va?* para descubrir las mejores fiestas y ver a qué van mis amigos.",
+    "",
+    "Móntate el finde conmigo y no te pierdas ningún plan 🎉",
+  ];
+  if (code) {
+    lines.push("", `🎁 Entra con mi código *${code}* y los dos ganamos 100 puntos.`);
+  }
+  lines.push("", url);
+  return lines.join("\n");
 }
 
 export function inviteWhatsApp(code) {

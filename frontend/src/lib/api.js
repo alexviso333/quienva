@@ -51,6 +51,47 @@ export function mediaDownload(url) {
   return cloudinaryTransform(full, "fl_attachment");
 }
 
+// Robust cross-browser/mobile download. Opening a Cloudinary `fl_attachment`
+// URL in a new tab often shows a blank page on iOS/Android instead of saving.
+// Fetching the bytes and saving a Blob works everywhere (and falls back to a
+// direct link if the fetch is blocked by CORS).
+export async function downloadMedia(url, filename) {
+  const src = mediaDownload(url);
+  const name =
+    filename ||
+    (() => {
+      try {
+        const clean = (mediaUrl(url) || "").split("?")[0];
+        const last = clean.substring(clean.lastIndexOf("/") + 1);
+        return last || `quienva-${Date.now()}`;
+      } catch {
+        return `quienva-${Date.now()}`;
+      }
+    })();
+  try {
+    const res = await fetch(src, { mode: "cors" });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+    return true;
+  } catch (e) {
+    // Fallback: open in a new tab so the user can save manually.
+    try {
+      window.open(src, "_blank", "noopener,noreferrer");
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+}
+
 export function formatApiErrorDetail(detail) {
   if (detail == null) return "Algo salió mal. Inténtalo de nuevo.";
   if (typeof detail === "string") return detail;

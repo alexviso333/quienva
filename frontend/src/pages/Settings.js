@@ -11,11 +11,12 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 import { StoriesArchive } from "@/components/Stories";
 import { useCompactMode } from "@/hooks/useCompactMode";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function Settings() {
   const { user, setUser, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const fileRef = useRef(null);
   const [name, setName] = useState(user?.name || "");
   const [city, setCity] = useState(user?.city || "Palma de Mallorca");
@@ -134,10 +135,22 @@ export default function Settings() {
 
   const save = async () => {
     setSaving(true);
+    const cityChanged = city !== (user?.city);
     try {
       const { data } = await api.put("/auth/profile", { name, city });
       setUser(data);
-      toast.success("Perfil actualizado");
+      if (cityChanged) {
+        // Drop the old city's cached parties so the feed reloads instantly for
+        // the new city instead of showing stale events during a slow refetch.
+        queryClient.removeQueries({ queryKey: ["events"] });
+        queryClient.removeQueries({ queryKey: ["carousels"] });
+        queryClient.removeQueries({ queryKey: ["top-weekend"] });
+        queryClient.removeQueries({ queryKey: ["genres"] });
+        queryClient.invalidateQueries({ queryKey: ["venues"] });
+        toast.success(`Ciudad cambiada a ${data.city} 🎉`);
+      } else {
+        toast.success("Perfil actualizado");
+      }
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail));
     } finally { setSaving(false); }

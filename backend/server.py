@@ -1170,6 +1170,17 @@ async def list_events(user: dict = Depends(get_current_user),
     query = {"city": city_query_value(user.get("city", "Palma de Mallorca"))}
     sort_dir = -1 if date_filter == "pasados" else 1
 
+    # Push the date window straight into the Mongo query so we never load
+    # irrelevant events (past ones for the default/upcoming feed) into memory.
+    # This is the single biggest win when switching to a city with hundreds of
+    # events: the DB uses the (city, date) index and returns only what's shown.
+    _today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    if date_filter == "pasados":
+        query["date"] = {"$lt": _today_iso}
+    else:
+        # "all"/"hoy"/"finde"/"semana" are all upcoming (today and future).
+        query["date"] = {"$gte": _today_iso}
+
     # Preload friend users once (avoid N+1 lookups inside serialize_event)
     users_map: dict = {}
     if friend_ids:
@@ -5696,6 +5707,55 @@ async def _get_fourvenues_token() -> str:
     _FV_TOKEN_CACHE["ts"] = now
     return token
 
+
+async def _fourvenues_token_is_valid(token: str) -> Optional[bool]:
+    """Live check against FourVenues. Returns True/False, or None if the check
+    itself couldn't run (network error) so we don't false-alarm."""
+    if not token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://cli-api-service.fourvenues.com/api/microsites/amok/metadata",
+                headers={"Authorization": f"Bearer {token}",
+                         "Origin": "https://site.fourvenues.com",
+                         "User-Agent": "Mozilla/5.0"},
+            )
+        return r.status_code == 200
+    except Exception:
+        return None
+
+
+async def _alert_admins_token_expired():
+    """Notify ONLY admin users that the FourVenues guest token has expired, so
+    the scraper stopped importing new parties. Throttled to once per 12h so a
+    persistent expiry doesn't spam the admin every scraper run."""
+    try:
+        flag = await db.app_settings.find_one({"_id": "fv_token_alert"}, {"_id": 0})
+        last_at = (flag or {}).get("at")
+        if last_at:
+            try:
+                delta = datetime.now(timezone.utc) - datetime.fromisoformat(last_at)
+                if delta.total_seconds() < 12 * 3600:
+                    return
+            except Exception:
+                pass
+        msg = ("⚠️ El token de FourVenues ha caducado. El scraper NO está importando "
+               "fiestas nuevas. Renueva el token en Panel → Scrapers.")
+        n = 0
+        async for a in db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1}):
+            await create_notification(a["user_id"], "admin_token_expired", msg,
+                                      {"type": "admin_token_expired", "url": "/admin"})
+            n += 1
+        await db.app_settings.update_one(
+            {"_id": "fv_token_alert"},
+            {"$set": {"at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+        logger.warning(f"[fourvenues] token expired → alerted {n} admin(s)")
+    except Exception as e:
+        logger.warning(f"_alert_admins_token_expired failed: {e}")
+
 # Preseeded list of venues (Palma de Mallorca). Admin can add more via UI.
 # All FourVenues-powered clubs use the universal 'fourvenues_api' adapter
 # (rich data: real prices, sold-out & few-left flags). Only the club/promoter
@@ -6151,6 +6211,16 @@ async def run_all_scrapers():
     total_new = sum(r["created"] for r in results)
     total_upd = sum(r["updated"] for r in results)
     logger.info(f"[scrapers] Completed: {len(results)} venues, {total_new} new events, {total_upd} updated")
+    # If any FourVenues venue is configured, verify the guest token is still
+    # valid; if it expired, alert ONLY the admin (throttled) so parties keep flowing.
+    try:
+        if any(v.get("adapter_type") == "fourvenues_api" for v in venues):
+            _tok = await _get_fourvenues_token()
+            _valid = await _fourvenues_token_is_valid(_tok)
+            if _valid is False:
+                await _alert_admins_token_expired()
+    except Exception:
+        pass
     try:
         await db.app_settings.update_one(
             {"_id": "last_scrape_batch"},
@@ -6259,29 +6329,33 @@ async def admin_list_scrapers(admin: dict = Depends(require_admin)):
 
 
 @app.get("/api/admin/scrape-changelog")
-async def admin_scrape_changelog(limit: int = 60, admin: dict = Depends(require_admin)):
-    """What changed in the LAST scraper run: new parties, price up/down, sale-state
-    changes and sold-outs. Only visible to admin. Lightweight (indexed + capped)."""
+async def admin_scrape_changelog(limit: int = 80, admin: dict = Depends(require_admin)):
+    """Recent scraper changes: new parties, price up/down, sale-state changes and
+    sold-outs. Shows the LATEST changes across recent runs (not only the last one)
+    so the admin keeps context, but capped so it never grows unbounded.
+    Only visible to admin. Lightweight (indexed + capped)."""
     limit = max(1, min(limit, 200))
     last = await db.app_settings.find_one({"_id": "last_scrape_batch"}, {"_id": 0})
     entries = []
-    q = {}
-    if last and last.get("batch_id"):
-        q = {"batch_id": last["batch_id"]}
-    async for c in db.scrape_changelog.find(q, {"_id": 0}).sort("created_at", -1).limit(limit):
+    # Show the most recent changes overall (across runs), newest first, capped.
+    async for c in db.scrape_changelog.find({}, {"_id": 0}).sort("created_at", -1).limit(limit):
         entries.append(c)
-    # Fallback: if the last batch had zero changes, show the most recent changes overall
-    if not entries and not last:
-        async for c in db.scrape_changelog.find({}, {"_id": 0}).sort("created_at", -1).limit(limit):
-            entries.append(c)
     counts = {"new": 0, "price_up": 0, "price_down": 0, "state": 0, "sold_out": 0, "on_sale": 0}
+    last_batch_id = (last or {}).get("batch_id")
+    last_run_counts = dict(counts)
     for e in entries:
         k = e.get("kind")
         if k in counts:
             counts[k] += 1
+        # Also tally just the latest run, so the UI can highlight "nuevo".
+        if last_batch_id and e.get("batch_id") == last_batch_id and k in last_run_counts:
+            last_run_counts[k] += 1
+        # Flag entries from the latest run for the frontend badge.
+        e["is_last_run"] = bool(last_batch_id and e.get("batch_id") == last_batch_id)
     return {
         "last_run": last,
         "counts": counts,
+        "last_run_counts": last_run_counts,
         "total": len(entries),
         "entries": entries,
     }
@@ -7079,6 +7153,55 @@ async def health_root():
 # GZip compression: shrinks JSON responses ~5-10x on the wire.
 # Only compress payloads >= 500 bytes (small responses aren't worth CPU).
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+# ---------------------------------------------------------------------------
+# Security: hardening headers + lightweight brute-force protection on auth.
+# A public app must look and behave "serious": no clickjacking, no MIME
+# sniffing, a strict referrer policy, and abuse throttling on credentials.
+# ---------------------------------------------------------------------------
+_RATE_BUCKET: dict = {}          # ip+path -> [timestamps]
+_RATE_LIMITS = {                 # path suffix -> (max_hits, window_seconds)
+    "/api/auth/login": (12, 60),
+    "/api/auth/register": (8, 300),
+    "/api/auth/google/callback": (20, 60),
+}
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    # --- brute-force / abuse throttle on sensitive auth endpoints ---
+    path = request.url.path
+    limit = _RATE_LIMITS.get(path)
+    if limit and request.method == "POST":
+        max_hits, window = limit
+        ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+              or (request.client.host if request.client else "?"))
+        key = f"{ip}:{path}"
+        now = time.time()
+        hits = [t for t in _RATE_BUCKET.get(key, []) if now - t < window]
+        if len(hits) >= max_hits:
+            return StarletteResponse(
+                content=json.dumps({"detail": "Demasiados intentos. Espera un momento e inténtalo de nuevo."}),
+                status_code=429,
+                media_type="application/json",
+            )
+        hits.append(now)
+        _RATE_BUCKET[key] = hits
+        # keep the bucket from growing unbounded
+        if len(_RATE_BUCKET) > 5000:
+            _RATE_BUCKET.clear()
+
+    response = await call_next(request)
+
+    # --- hardening headers on every response ---
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(self), camera=(self), microphone=()"
+    response.headers["X-XSS-Protection"] = "0"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 _cors_env = os.environ.get('CORS_ORIGINS', '*').strip()

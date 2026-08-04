@@ -137,7 +137,7 @@ export default function Login() {
     <div className="min-h-screen qv-app-bg flex flex-col">
       <div className="max-w-md mx-auto w-full flex-1 flex flex-col justify-center px-6 py-10">
         <div className="mb-10">
-          <p className="text-xs tracking-[0.3em] uppercase text-qv-secondary font-bold mb-3">Palma de Mallorca</p>
+          <p className="text-xs tracking-[0.3em] uppercase text-qv-secondary font-bold mb-3">Tu ciudad, de fiesta</p>
           <h1 className="font-display text-5xl font-black tracking-tighter leading-[0.95]">
             ¿Quién<br />
             <span className="text-qv-primary">va?</span>
