@@ -5494,11 +5494,12 @@ async def on_startup():
                           id="scheduled_notifications", replace_existing=True)
         # Scrapers — refresh all active venues every 30 min. First run 60s after
         # startup so a fresh deploy warms up the events feed quickly.
-        scheduler.add_job(run_all_scrapers, "interval", minutes=30,
+        scheduler.add_job(run_all_scrapers, "interval", minutes=20,
                           id="scrapers_all", replace_existing=True,
+                          max_instances=1, coalesce=True, misfire_grace_time=300,
                           next_run_time=datetime.now(timezone.utc) + timedelta(seconds=60))
         scheduler.start()
-        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00 + scrapers cada 30min)")
+        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00 + scrapers cada 20min)")
     except Exception as e:
         logger.error(f"Scheduler init falló: {e}")
 
