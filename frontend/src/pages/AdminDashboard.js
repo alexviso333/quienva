@@ -11,6 +11,7 @@ import AdminMomentPanel from "@/components/AdminMomentPanel";
 import AdminScrapersPanel from "@/components/AdminScrapersPanel";
 import AdminVenuesPanel from "@/components/AdminVenuesPanel";
 import AdminScrapeChangelog from "@/components/AdminScrapeChangelog";
+import AdminAffiliatePanel from "@/components/AdminAffiliatePanel";
 import AdminEventStats from "@/components/AdminEventStats";
 import AdminNotifyComposer from "@/components/AdminNotifyComposer";
 
@@ -270,6 +271,7 @@ export default function AdminDashboard() {
       {tab === "scrapers" && (
         <div className="px-4 pt-4">
           <AdminScrapeChangelog />
+          <AdminAffiliatePanel />
           <AdminScrapersPanel />
           <AdminVenuesPanel />
         </div>

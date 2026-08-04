@@ -5877,7 +5877,7 @@ async def refresh_affiliate_events() -> int:
                     vcity = str(loc.get("city") or loc.get("town") or "").strip()
                     if not vcity:
                         addr = str(loc.get("addressComplete") or loc.get("address") or "")
-                        vcity = addr.split(",")[-1].strip() if addr else ""
+                        vcity = _city_from_address(addr)
                     vk = (venue or "?", vcity)
                     venue_agg[vk] = venue_agg.get(vk, 0) + 1
                 if len(items) < 200:
@@ -5888,7 +5888,8 @@ async def refresh_affiliate_events() -> int:
             return len(_AFFILIATE_MAP)
         _AFFILIATE_MAP = amap
         _AFFILIATE_VENUES = sorted(
-            [{"venue": v, "city": c, "events": n} for (v, c), n in venue_agg.items()],
+            [{"venue": v, "city": c, "events": n, "in_app": _city_in_app(c)}
+             for (v, c), n in venue_agg.items()],
             key=lambda x: (-x["events"], x["venue"]),
         )
         _AFFILIATE_TS = time.time()
