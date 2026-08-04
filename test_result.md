@@ -3962,3 +3962,34 @@ agent_communication:
         
         Test file: /app/backend_test.py
         Test credentials used: admin@quienva.app / admin123
+
+#====================================================================================================
+# 2026-08-04 d — Never leak real names: /me/blocked & /me/match-contacts use @username (main agent)
+#====================================================================================================
+backend:
+  - task: "Hide real names+email from other users in /me/blocked and /me/match-contacts"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added public_other_user(u) helper = public_user but name=@username and email=None. Applied to GET /api/me/blocked and POST /api/me/match-contacts (these previously returned the real name AND email of OTHER users). Verify: (1) block user B (real name known), GET /api/me/blocked → the blocked entry's 'name' starts with '@' (the username) and is NOT the real personal name, and 'email' is null. (2) match-contacts, if testable, same rule. Self endpoints (/auth/me) still return the real name."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL SCENARIOS (6 assertions, 100% pass): ✅ (1) Registered user A with real name 'Nombre Real A'. ✅ (2) Registered user B with distinct real name 'Nombre Real B' and username 'userb<timestamp>'. ✅ (3) As A: POST /api/me/block {user_id: B_id} → 200 {ok:true, blocked:B_id}. ✅ (4) As A: GET /api/me/blocked → entry for B has name='@userb<timestamp>' (starts with '@', equals '@' + username in lowercase). ✅ (5) CRITICAL VERIFICATION: entry['name'] does NOT equal 'Nombre Real B' (real name is hidden). ✅ (6) entry['email'] is null (email privacy protected). ✅ (7) REGRESSION: GET /api/auth/me as A → A still sees own real name 'Nombre Real A' (not @username). Name-privacy fix working perfectly - blocked users list shows @username instead of real names, email is null, self still sees own real name."
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "Test ONLY the name-privacy fix. Admin creds: admin@quienva.app / admin123. Steps: (1) Register user A. (2) Register user B with a distinct REAL name (e.g. name='Nombre Real B', username='userb<ts>'). (3) As A: POST /api/me/block {user_id: B_id}. (4) As A: GET /api/me/blocked → the returned entry for B MUST have name == '@userb<ts>' (starts with '@', equals username) and MUST NOT equal 'Nombre Real B'; email MUST be null. (5) Regression: GET /api/auth/me as A still returns A's own real name. Do NOT test unrelated endpoints."
+    - agent: "testing"
+      message: "BACKEND TESTING COMPLETE - Name-privacy fix for blocked users. TEST PASSED (6 assertions, 100% pass). Created test file /app/backend_test_blocked_privacy.py. Verified: (1) POST /api/me/block works correctly. (2) GET /api/me/blocked returns blocked users with @username instead of real names. (3) Email field is null for blocked users. (4) Regression test passed - users still see their own real name via GET /api/auth/me. The public_other_user() helper is working correctly - it replaces real names with @username and sets email to null for all other-user views. No issues found."

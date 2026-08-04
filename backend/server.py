@@ -406,6 +406,16 @@ def display_name(u) -> str:
     return f"@{un}" if un else (u.get("name") or "Usuario")
 
 
+def public_other_user(u: dict) -> dict:
+    """Serialize a user as seen by SOMEONE ELSE: the @username replaces the real
+    name and the email is stripped. Never leaks a real personal name/email to
+    anyone but the account owner."""
+    pu = public_user(u)
+    pu["name"] = display_name(u)
+    pu["email"] = None
+    return pu
+
+
 async def get_token_from_request(request: Request) -> Optional[str]:
     token = request.cookies.get("session_token")
     if not token:
@@ -953,7 +963,7 @@ async def list_blocked(user: dict = Depends(get_current_user)):
     ids = list(await blocked_by_me(user["user_id"]))
     out = []
     async for u in db.users.find({"user_id": {"$in": ids}}, {"_id": 0}):
-        out.append(public_user(u))
+        out.append(public_other_user(u))
     return out
 
 
@@ -1020,7 +1030,7 @@ async def match_contacts(inp: MatchContactsInput, user: dict = Depends(get_curre
         rel = fmap.get(u["user_id"])
         if rel and rel.get("status") == "accepted":
             continue  # already friends
-        pu = public_user(u)
+        pu = public_other_user(u)
         pu["relationship"] = rel or {"status": "none"}
         pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
         out.append(pu)

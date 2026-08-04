@@ -53,3 +53,23 @@ export function formatPartyDate(dateStr, time) {
   const hour = parseInt(m[1], 10);
   return `${dateLabel} · ${hour}:${m[2]}`;
 }
+
+// Haversine distance in km between two [lat, lng] points.
+export function haversineKm(a, b) {
+  if (!a || !b) return Infinity;
+  const R = 6371;
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+  const dLng = ((b[1] - a[1]) * Math.PI) / 180;
+  const lat1 = (a[0] * Math.PI) / 180;
+  const lat2 = (b[0] * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Human label for a distance in km: "350 m" / "2,4 km".
+export function formatKm(km) {
+  if (km == null || !Number.isFinite(km)) return "";
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1).replace(".", ",")} km`;
+}

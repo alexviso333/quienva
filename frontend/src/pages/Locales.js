@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { useMyLocation } from "@/hooks/useMyLocation";
+import { haversineKm, formatKm } from "@/lib/format";
 import { AppShell } from "@/components/AppShell";
-import { Loader2, MapPin, Instagram, Ticket, PartyPopper, ChevronDown, ChevronUp, DoorOpen, Map } from "lucide-react";
+import { Loader2, MapPin, Instagram, Ticket, PartyPopper, ChevronDown, ChevronUp, DoorOpen, Map, LocateFixed, Navigation } from "lucide-react";
 
 const DAYS = ["L", "M", "X", "J", "V", "S", "D"];
 const TYPE_LABEL = { discoteca: "Discoteca", pub: "Pub", beach_club: "Beach club", promotor: "Promotor" };
@@ -48,6 +51,11 @@ function VenueCard({ v }) {
           </div>
           <p className="text-white/45 text-[11px] mt-0.5 flex items-center gap-1">
             <MapPin className="w-3 h-3" /> {v.zone}
+            {v._dist != null && Number.isFinite(v._dist) && (
+              <span className="ml-1 inline-flex items-center gap-0.5 text-qv-secondary font-bold">
+                <Navigation className="w-3 h-3" /> a {formatKm(v._dist)} de ti
+              </span>
+            )}
           </p>
           {/* Open days */}
           <div className="flex items-center gap-1 mt-2">
@@ -152,25 +160,42 @@ function VenueCard({ v }) {
 
 export default function Locales() {
   const [zone, setZone] = useState("");
+  const [sortByDist, setSortByDist] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { pos, state: geoState, locate } = useMyLocation({ auto: true });
   const { data: venues = [], isLoading } = useQuery({
-    queryKey: ["venues"],
+    queryKey: ["venues", user?.city],
     queryFn: async () => (await api.get("/venues")).data,
     staleTime: 60_000,
   });
 
   const zones = Array.from(new Set(venues.map((v) => v.zone)));
-  const filtered = zone ? venues.filter((v) => v.zone === zone) : venues;
+
+  const filtered = useMemo(() => {
+    let list = zone ? venues.filter((v) => v.zone === zone) : venues.slice();
+    if (pos) {
+      list = list.map((v) =>
+        v.lat != null && v.lng != null
+          ? { ...v, _dist: haversineKm(pos, [v.lat, v.lng]) }
+          : { ...v, _dist: null },
+      );
+      if (sortByDist) {
+        list.sort((a, b) => (a._dist ?? Infinity) - (b._dist ?? Infinity));
+      }
+    }
+    return list;
+  }, [venues, zone, pos, sortByDist]);
 
   return (
     <AppShell>
       <header className="px-5 pt-8 pb-2 flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">Mallorca</p>
+          <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">{user?.city || "Tu ciudad"}</p>
           <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
             Locales<span className="text-qv-primary">.</span>
           </h1>
-          <p className="text-white/50 text-sm mt-1">Discotecas y pubs de la isla, con días de apertura y sus fiestas.</p>
+          <p className="text-white/50 text-sm mt-1">Discotecas y pubs, con días de apertura y sus fiestas.</p>
         </div>
         <button
           data-testid="locales-map-btn"
@@ -180,6 +205,32 @@ export default function Locales() {
           <Map className="w-4 h-4" /> Mapa
         </button>
       </header>
+
+      {/* Distance controls */}
+      <div className="px-4 pb-2 flex items-center gap-2">
+        <button
+          data-testid="locales-sortdist-btn"
+          onClick={() => {
+            if (!pos) locate();
+            setSortByDist((s) => !s);
+          }}
+          className={`flex items-center gap-1.5 text-xs font-bold rounded-full px-3 py-1.5 border transition-colors ${
+            sortByDist ? "bg-qv-primary text-black border-qv-primary" : "bg-white/5 text-white/70 border-white/15"
+          }`}
+        >
+          <Navigation className="w-3.5 h-3.5" /> Más cercanas
+        </button>
+        {!pos && (
+          <button
+            data-testid="locales-locate-btn"
+            onClick={locate}
+            className="flex items-center gap-1.5 text-xs font-bold rounded-full px-3 py-1.5 border border-qv-secondary/40 bg-qv-secondary/15 text-qv-secondary"
+          >
+            {geoState === "locating" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
+            Usar mi ubicación
+          </button>
+        )}
+      </div>
 
       {/* Zone filter */}
       <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">

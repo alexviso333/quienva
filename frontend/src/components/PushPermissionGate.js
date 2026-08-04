@@ -104,14 +104,11 @@ export default function PushPermissionGate() {
           Sí, activar
         </button>
         {!failed && (
-          <button
-            onClick={markDone}
-            disabled={submitting}
-            className="mt-3 w-full py-3 rounded-2xl bg-white/5 border border-white/15 text-white/80 font-display font-bold text-sm active:scale-[0.98] disabled:opacity-60"
-            data-testid="push-permission-decline"
-          >
-            No, gracias
-          </button>
+          <p className="mt-3 text-white/45 text-xs leading-relaxed">
+            Pulsa <span className="text-white/70 font-semibold">Sí, activar</span> y elige{" "}
+            <span className="text-white/70 font-semibold">Permitir</span> o{" "}
+            <span className="text-white/70 font-semibold">Bloquear</span> en tu navegador. Podrás cambiarlo cuando quieras en Ajustes.
+          </p>
         )}
         {failed && (
           <>

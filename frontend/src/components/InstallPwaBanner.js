@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { Download, X, Share, Plus } from "lucide-react";
 
-const DISMISS_KEY = "qv_pwa_dismissed_v1";
+const DISMISS_KEY = "qv_pwa_dismissed_at_v2";
+const SNOOZE_DAYS = 4; // re-show the install reminder after this many days
 
 // Detects the platform so we can show the right "add to home screen" flow.
 function detectPlatform() {
@@ -37,7 +38,10 @@ export default function InstallPwaBanner() {
 
   useEffect(() => {
     if (isStandalone()) return; // already installed
-    if (localStorage.getItem(DISMISS_KEY) === "1") return;
+    // Snooze: only stay hidden for SNOOZE_DAYS after the last dismissal, then
+    // gently remind again (unless the app is already installed).
+    const dismissedAt = Number(localStorage.getItem(DISMISS_KEY) || 0);
+    if (dismissedAt && Date.now() - dismissedAt < SNOOZE_DAYS * 24 * 3600 * 1000) return;
 
     const onBeforeInstall = (e) => {
       e.preventDefault();
@@ -53,7 +57,7 @@ export default function InstallPwaBanner() {
   }, [platform]);
 
   const dismiss = useCallback(() => {
-    localStorage.setItem(DISMISS_KEY, "1");
+    localStorage.setItem(DISMISS_KEY, String(Date.now()));
     setVisible(false);
     setShowIosSteps(false);
   }, []);
