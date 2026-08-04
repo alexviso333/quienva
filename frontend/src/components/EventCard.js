@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList } from "lucide-react";
+import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList, Euro } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import api, { mediaThumb, API } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
@@ -134,6 +134,15 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
         <div className="absolute inset-0 bg-gradient-to-t from-[#121215] via-[#121215]/40 to-transparent" />
 
         <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+            {event.is_affiliate && (
+              <span
+                data-testid={`event-affiliate-${event.id}`}
+                title="Lleva tu link de afiliado (solo lo ves tú)"
+                className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-gradient-to-r from-lime-300 to-green-500 text-black flex items-center gap-1 shadow-[0_0_14px_rgba(132,204,22,0.6)]"
+              >
+                <Euro className="w-3 h-3" /> Mi link
+              </span>
+            )}
             {event.featured && (
               <span
                 data-testid={`event-featured-${event.id}`}

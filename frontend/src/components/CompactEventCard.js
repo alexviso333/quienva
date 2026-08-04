@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList } from "lucide-react";
+import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList, Euro } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import api, { mediaThumb } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
@@ -106,17 +106,27 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c]/50 to-transparent" />
 
-        {event.genre && (
-          <span className="absolute top-2 left-2 qv-glass text-white text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border border-white/15">
-            {event.genre}
-          </span>
-        )}
-
-        {event.featured && (
-          <span className="absolute top-2 left-2 mt-6 bg-gradient-to-r from-yellow-300 to-amber-400 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(253,224,71,0.5)]">
-            <Star className="w-2.5 h-2.5" fill="currentColor" /> Top
-          </span>
-        )}
+        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-20">
+          {event.is_affiliate && (
+            <span
+              data-testid={`compact-affiliate-${event.id}`}
+              title="Lleva tu link de afiliado (solo lo ves tú)"
+              className="bg-gradient-to-r from-lime-300 to-green-500 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(132,204,22,0.6)]"
+            >
+              <Euro className="w-2.5 h-2.5" /> Mi link
+            </span>
+          )}
+          {event.genre && (
+            <span className="qv-glass text-white text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border border-white/15">
+              {event.genre}
+            </span>
+          )}
+          {event.featured && (
+            <span className="bg-gradient-to-r from-yellow-300 to-amber-400 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(253,224,71,0.5)]">
+              <Star className="w-2.5 h-2.5" fill="currentColor" /> Top
+            </span>
+          )}
+        </div>
 
         {friendCount > 0 && (
           <span className="absolute top-2 right-10 bg-qv-primary/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">

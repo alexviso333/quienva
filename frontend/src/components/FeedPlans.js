@@ -55,9 +55,16 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
   }, [shown]);
 
   const byVenue = useMemo(() => {
-    const map = {};
-    for (const e of shown) { const v = e.venue || "Otros"; (map[v] = map[v] || []).push(e); }
-    return Object.keys(map).sort((a, b) => a.localeCompare(b)).map((v) => ({
+    // Preserve the order venues first appear in the (already server-sorted) list
+    // instead of sorting alphabetically. The backend floats our own events to the
+    // top, so their venues naturally come first — with no visible marker.
+    const map = {}; const order = [];
+    for (const e of shown) {
+      const v = e.venue || "Otros";
+      if (!map[v]) { map[v] = []; order.push(v); }
+      map[v].push(e);
+    }
+    return order.map((v) => ({
       venue: v, items: map[v].sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))),
     }));
   }, [shown]);

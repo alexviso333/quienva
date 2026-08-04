@@ -57,53 +57,36 @@ GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 # them would break checkout). The set of "our" events is refreshed periodically
 # from the FourVenues API, so as we're added to more promoters it updates itself.
 AFFILIATE_SLUG = os.environ.get("FOURVENUES_AFFILIATE_SLUG", "quienva").strip()
-_AFFILIATE_IDS: set = set()     # FourVenues event ids we carry (e.g. "abc123")
-_AFFILIATE_CODES: set = set()   # FourVenues event slugs we carry (fallback match)
+# Key = (normalized venue/org name, YYYY-MM-DD, normalized event name) -> OUR slug.
+# We match by (venue, date, name) because FourVenues gives a DIFFERENT event id/code
+# per microsite, so the venue-scraped event and our promoter event never share ids.
+# (venue, date, name) is the same real occurrence across microsites and is reliable.
+_AFFILIATE_MAP: dict = {}
 _AFFILIATE_VENUES: list = []    # [{venue, city, events}] breakdown (admin insight)
 _AFFILIATE_TS: float = 0.0      # last successful refresh (epoch seconds)
 
 
-def _fv_event_code(url: str) -> str:
-    """Extract the FourVenues event code/slug from any FV event URL, or ''."""
-    if not url or "fourvenues.com" not in url or "/events/" not in url:
-        return ""
-    try:
-        return url.split("/events/", 1)[1].split("?", 1)[0].split("#", 1)[0].strip("/")
-    except Exception:
-        return ""
+def _affiliate_key(venue: str, date: str, name: str) -> tuple:
+    return (_norm_name(venue or ""), str(date or ""), _norm_name(name or ""))
 
 
 def _event_is_mine(ev: dict) -> bool:
-    """True only if this scraped event belongs to our affiliate profile — matched
-    by FourVenues event id (external_id 'fv:<id>') or, as a fallback, by slug."""
-    if not AFFILIATE_SLUG:
+    """True only if this event is one WE carry in our promoter profile, matched by
+    (venue, date, name). Only those get our affiliate link; everything else keeps
+    its normal link so checkout never breaks."""
+    if not AFFILIATE_SLUG or not _AFFILIATE_MAP:
         return False
-    ext = str(ev.get("external_id") or "")
-    if ext.startswith("fv:") and ext[3:] in _AFFILIATE_IDS:
-        return True
-    code = _fv_event_code(ev.get("commission_url", ""))
-    return bool(code) and code in _AFFILIATE_CODES
-
-
-def affiliate_ticket_url(url: str) -> str:
-    """Rewrite a FourVenues event URL to our affiliate promoter link:
-        .../<anything>/events/<code>  ->  https://www.fourvenues.com/<slug>/events/<code>
-    Caller must first check the event is ours (_event_is_mine). Idempotent."""
-    if not url or not AFFILIATE_SLUG:
-        return url
-    code = _fv_event_code(url)
-    if not code:
-        return url
-    return f"https://www.fourvenues.com/{AFFILIATE_SLUG}/events/{code}"
+    return _affiliate_key(ev.get("venue", ""), ev.get("date", ""), ev.get("name", "")) in _AFFILIATE_MAP
 
 
 def _commission_url_for(ev: dict) -> str:
-    """The ticket link served to buyers: our affiliate link ONLY for events we
-    carry, otherwise the original (untouched) link so checkout never breaks."""
-    url = ev.get("commission_url", "") or ""
-    if url and _event_is_mine(ev):
-        return affiliate_ticket_url(url)
-    return url
+    """The ticket link served to buyers: OUR affiliate link (with OUR event slug)
+    ONLY for events we carry; otherwise the original untouched link."""
+    if AFFILIATE_SLUG and _AFFILIATE_MAP:
+        slug = _AFFILIATE_MAP.get(_affiliate_key(ev.get("venue", ""), ev.get("date", ""), ev.get("name", "")))
+        if slug:
+            return f"https://www.fourvenues.com/{AFFILIATE_SLUG}/events/{slug}"
+    return ev.get("commission_url", "") or ""
 
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
@@ -1192,6 +1175,9 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "city": ev.get("city", ""),
         "has_commission": ev.get("has_commission", False),
         "commission_url": _commission_url_for(ev),
+        # Admin-only flag so the owner can spot their affiliate events in the feed.
+        # Sent as null to everyone else → no marker, no info leak.
+        "is_affiliate": (_event_is_mine(ev) if (user or {}).get("role") == "admin" else None),
         "more_info_url": ev.get("more_info_url", ""),
         "featured": bool(ev.get("featured", False)),
         # Pricing
@@ -1267,6 +1253,10 @@ async def list_events(user: dict = Depends(get_current_user),
     # but never in the "pasados" view. Date order preserved within each group.
     if date_filter != "pasados":
         filtered_events.sort(key=lambda e: 0 if e.get("featured") else 1)
+        # Revenue lever: our own affiliate events get top placement (stable sort
+        # keeps the existing featured/date order within the two groups). No visual
+        # marker is added for regular users — it just reorders silently.
+        filtered_events.sort(key=lambda e: 0 if _event_is_mine(e) else 1)
 
     # BULK LOAD all interests for these events in ONE query (avoid N+1)
     event_ids = [ev["id"] for ev in filtered_events]
@@ -5805,13 +5795,13 @@ async def refresh_affiliate_events() -> int:
     affiliate link; everything else keeps its normal link. Runs on startup and
     every scraper cycle, so being added to new promoters is picked up on its own.
     Never clears the cache on a transient failure (keeps last known good)."""
-    global _AFFILIATE_IDS, _AFFILIATE_CODES, _AFFILIATE_VENUES, _AFFILIATE_TS
+    global _AFFILIATE_MAP, _AFFILIATE_VENUES, _AFFILIATE_TS
     if not AFFILIATE_SLUG:
         return 0
     token = await _get_fourvenues_token()
     if not token:
         logger.info("[affiliate] no FourVenues token yet; keeping previous affiliate set")
-        return len(_AFFILIATE_IDS)
+        return len(_AFFILIATE_MAP)
     now = datetime.now(timezone.utc)
     start = int((now - timedelta(days=1)).timestamp())
     end = int((now + timedelta(days=200)).timestamp())
@@ -5822,9 +5812,9 @@ async def refresh_affiliate_events() -> int:
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
     }
-    ids: set = set()
-    codes: set = set()
-    venue_agg: dict = {}   # (venue, city) -> count
+    mad = ZoneInfo("Europe/Madrid")
+    amap: dict = {}          # (norm venue, date, norm name) -> our event slug
+    venue_agg: dict = {}     # (venue, city) -> count
     try:
         async with httpx.AsyncClient(timeout=15, headers=headers) as client:
             page = 1
@@ -5836,44 +5826,51 @@ async def refresh_affiliate_events() -> int:
                 )
                 if r.status_code == 401:
                     logger.warning("[affiliate] token invalid (401); keeping previous affiliate set")
-                    return len(_AFFILIATE_IDS)
+                    return len(_AFFILIATE_MAP)
                 r.raise_for_status()
                 payload = r.json()
                 items = payload.get("data", []) if isinstance(payload, dict) else payload
                 if not isinstance(items, list) or not items:
                     break
                 for it in items:
-                    _id = str(it.get("id") or "")
-                    _code = str(it.get("code") or "")
-                    if _id:
-                        ids.add(_id)
-                    if _code:
-                        codes.add(_code)
-                    # Breakdown so admin knows which venues/cities to add to the app.
+                    name = str(it.get("name") or "").strip()
+                    dates = it.get("dates") or {}
+                    ts = dates.get("start") or dates.get("date")
+                    if not name or not ts:
+                        continue
+                    # Same date formula the scraper uses, so keys line up exactly.
+                    date_str = datetime.fromtimestamp(int(ts), tz=mad).strftime("%Y-%m-%d")
                     org = it.get("organization") or {}
+                    venue = str(org.get("name") or "").strip()
+                    slug = str(it.get("slug") or it.get("code") or "").strip()
+                    if not slug:
+                        continue
+                    amap[_affiliate_key(venue, date_str, name)] = slug
+                    # Breakdown so admin knows which venues/cities to add to the app.
                     loc = it.get("location") or {}
-                    vname = str(org.get("name") or "").strip() or "?"
                     vcity = str(loc.get("city") or loc.get("town") or "").strip()
                     if not vcity:
                         addr = str(loc.get("addressComplete") or loc.get("address") or "")
                         vcity = addr.split(",")[-1].strip() if addr else ""
-                    key = (vname, vcity)
-                    venue_agg[key] = venue_agg.get(key, 0) + 1
+                    vk = (venue or "?", vcity)
+                    venue_agg[vk] = venue_agg.get(vk, 0) + 1
                 if len(items) < 200:
                     break
                 page += 1
-        _AFFILIATE_IDS = ids
-        _AFFILIATE_CODES = codes
+        if not amap:
+            logger.info("[affiliate] API returned 0 events for our slug; keeping previous set")
+            return len(_AFFILIATE_MAP)
+        _AFFILIATE_MAP = amap
         _AFFILIATE_VENUES = sorted(
             [{"venue": v, "city": c, "events": n} for (v, c), n in venue_agg.items()],
             key=lambda x: (-x["events"], x["venue"]),
         )
         _AFFILIATE_TS = time.time()
-        logger.info(f"[affiliate] '{AFFILIATE_SLUG}' → {len(ids)} events across {len(_AFFILIATE_VENUES)} venues are mine")
-        return len(ids)
+        logger.info(f"[affiliate] '{AFFILIATE_SLUG}' → {len(amap)} events across {len(_AFFILIATE_VENUES)} venues are mine")
+        return len(amap)
     except Exception as e:
-        logger.warning(f"[affiliate] refresh failed ({e}); keeping previous affiliate set of {len(_AFFILIATE_IDS)}")
-        return len(_AFFILIATE_IDS)
+        logger.warning(f"[affiliate] refresh failed ({e}); keeping previous affiliate set of {len(_AFFILIATE_MAP)}")
+        return len(_AFFILIATE_MAP)
 
 
 
@@ -6602,8 +6599,7 @@ async def admin_affiliate_status(admin: dict = Depends(require_admin)):
     from datetime import datetime as _dt, timezone as _tz
     return {
         "slug": AFFILIATE_SLUG,
-        "mine_count": len(_AFFILIATE_IDS),
-        "codes_count": len(_AFFILIATE_CODES),
+        "mine_count": len(_AFFILIATE_MAP),
         "venues": _AFFILIATE_VENUES,
         "updated_at": (_dt.fromtimestamp(_AFFILIATE_TS, _tz.utc).isoformat() if _AFFILIATE_TS else None),
     }
@@ -7266,12 +7262,28 @@ async def list_venues(response: Response, zone: str = None, type: str = None, us
             slug_to_id[s["slug"]] = s["id"]
     counts = await _venue_event_counts()
     xc_counts = await _xceed_venue_counts()
+    # Which venues have at least one of OUR affiliate events (for silent priority
+    # ordering — no visual marker). Only scanned when we actually carry events.
+    affiliate_venue_ids: set = set()
+    if _AFFILIATE_MAP:
+        _today = date.today().isoformat()
+        async for e in db.events.find(
+            {"city": q["city"], "date": {"$gte": _today}, "external_id": {"$regex": "^fv:"}},
+            {"_id": 0, "venue": 1, "date": 1, "name": 1, "scraper_venue_id": 1},
+        ):
+            if e.get("scraper_venue_id") and _event_is_mine(e):
+                affiliate_venue_ids.add(e["scraper_venue_id"])
     for v in venues:
         if v.get("xceed_venue"):
             v["upcoming_events"] = xc_counts.get((_norm_name(v.get("name")), v.get("city")), 0)
+            v["has_affiliate"] = False
         else:
             vid = slug_to_id.get(v.get("scraper_slug") or "")
             v["upcoming_events"] = counts.get(vid, 0) if vid else 0
+            v["has_affiliate"] = bool(vid and vid in affiliate_venue_ids)
+    # Silent revenue priority: venues with our affiliate events first, then the
+    # rest in their existing (order, name) order. Stable sort keeps that order.
+    venues.sort(key=lambda v: 0 if v.get("has_affiliate") else 1)
     # Venue directory changes rarely; a short private cache makes the Locales/Map
     # pages feel instant on repeat opens without ever showing another user's data.
     response.headers["Cache-Control"] = "private, max-age=120"
