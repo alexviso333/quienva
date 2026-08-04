@@ -4812,17 +4812,31 @@ async def _moment_event_view(ev: dict) -> dict:
 
 
 @api_router.get("/admin/moments")
-async def admin_moments_list(admin: dict = Depends(require_admin)):
-    """List all events for tonight's "moment window": today + yesterday (for
-    after-midnight parties). Ordered by planned_moment_at (unscheduled first).
+async def admin_moments_list(scope: str = Query("all"), admin: dict = Depends(require_admin)):
+    """List events for the "moment window": yesterday + today + tomorrow (yesterday
+    covers after-midnight parties). Ordered by planned_moment_at (unscheduled first).
+
+    scope:
+      - "tonight": only the night currently in progress (before 06:00 that is
+        still the previous calendar day's night). Loads fast → shown first.
+      - "later":  the remaining days in the window (the following nights).
+      - "all"  :  everything (backward compatible).
     """
     now = datetime.now(ZoneInfo("Europe/Madrid"))
     today = now.date().isoformat()
     yesterday = (now.date() - timedelta(days=1)).isoformat()
     tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    window = [yesterday, today, tomorrow]
+    tonight_date = yesterday if now.hour < 6 else today
+    if scope == "tonight":
+        dates = [tonight_date]
+    elif scope == "later":
+        dates = [d for d in window if d != tonight_date]
+    else:
+        dates = window
     out = []
     async for ev in db.events.find(
-        {"date": {"$in": [yesterday, today, tomorrow]}}, {"_id": 0}
+        {"date": {"$in": dates}}, {"_id": 0}
     ).sort("date", 1):
         out.append(await _moment_event_view(ev))
     # Sort: no time first, then earliest planned time

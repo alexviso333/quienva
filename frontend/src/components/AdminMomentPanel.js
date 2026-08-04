@@ -20,12 +20,25 @@ export default function AdminMomentPanel({ embedded = false }) {
   const [minute, setMinute] = useState(0);
   const [laterOpen, setLaterOpen] = useState(false);
 
-  const { data: events = [], isLoading } = useQuery({
-    queryKey: ["admin-moments"],
-    queryFn: async () => (await api.get("/admin/moments")).data,
+  // Prioridad de carga: primero las fiestas de ESTA NOCHE (rápido) y, una vez
+  // cargadas, se piden las de los PRÓXIMOS DÍAS.
+  const tonightQuery = useQuery({
+    queryKey: ["admin-moments", "tonight"],
+    queryFn: async () => (await api.get("/admin/moments", { params: { scope: "tonight" } })).data,
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
+  const laterQuery = useQuery({
+    queryKey: ["admin-moments", "later"],
+    queryFn: async () => (await api.get("/admin/moments", { params: { scope: "later" } })).data,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    enabled: tonightQuery.isSuccess, // arranca SOLO tras cargar las de hoy
+  });
+  const tonightEvents = tonightQuery.data || [];
+  const laterEvents = laterQuery.data || [];
+  const isLoading = tonightQuery.isLoading;
+  const totalEvents = tonightEvents.length + laterEvents.length;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin-moments"] });
 
@@ -132,7 +145,7 @@ export default function AdminMomentPanel({ embedded = false }) {
         <div className="flex items-center justify-end mb-2">
           <button
             onClick={() => randomizeAll.mutate()}
-            disabled={randomizeAll.isPending || events.length === 0}
+            disabled={randomizeAll.isPending || totalEvents === 0}
             className="text-xs font-bold text-black bg-fuchsia-300 rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
             data-testid="moment-randomize-all"
           >
@@ -148,7 +161,7 @@ export default function AdminMomentPanel({ embedded = false }) {
             </h2>
             <button
               onClick={() => randomizeAll.mutate()}
-              disabled={randomizeAll.isPending || events.length === 0}
+              disabled={randomizeAll.isPending || totalEvents === 0}
               className="text-xs font-bold text-black bg-fuchsia-300 rounded-full px-3 py-1.5 flex items-center gap-1 active:scale-95 disabled:opacity-50"
               data-testid="moment-randomize-all"
             >
@@ -168,21 +181,13 @@ export default function AdminMomentPanel({ embedded = false }) {
         </div>
       )}
 
-      {!isLoading && events.length === 0 && (
+      {!isLoading && laterQuery.isFetched && totalEvents === 0 && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center text-white/50 text-sm">
           No hay eventos programados para esta noche.
         </div>
       )}
 
       {(() => {
-        // "Esta noche" = la noche en curso. Antes de las 6:00 sigue contando
-        // como la noche del día anterior (fiestas de after / madrugada).
-        const _now = new Date();
-        const _base = new Date(_now);
-        if (_now.getHours() < 6) _base.setDate(_base.getDate() - 1);
-        const tonightStr = `${_base.getFullYear()}-${String(_base.getMonth() + 1).padStart(2, "0")}-${String(_base.getDate()).padStart(2, "0")}`;
-        const tonightEvents = events.filter((e) => e.date === tonightStr);
-        const laterEvents = events.filter((e) => e.date !== tonightStr);
         const renderEvent = (ev) => {
           const isEditing = editingId === ev.id;
           const cancelled = ev.moment_cancelled;
@@ -334,6 +339,11 @@ export default function AdminMomentPanel({ embedded = false }) {
             {tonightEvents.length > 0 && (
               <div className="flex flex-col gap-2" data-testid="moment-tonight-list">
                 {tonightEvents.map(renderEvent)}
+              </div>
+            )}
+            {tonightQuery.isSuccess && laterEvents.length === 0 && laterQuery.isLoading && (
+              <div className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-white/50 text-xs" data-testid="moment-later-loading">
+                <Loader2 className="w-4 h-4 animate-spin" /> Cargando próximos días…
               </div>
             )}
             {laterEvents.length > 0 && (

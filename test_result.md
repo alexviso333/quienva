@@ -3790,3 +3790,33 @@ agent_communication:
       Base URL: https://perf-boost-103.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
+
+#====================================================================================================
+# 2026-08-04 — /admin/moments scope param (main agent)
+#====================================================================================================
+backend:
+  - task: "GET /api/admin/moments supports scope=tonight|later|all"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added `scope` query param to /api/admin/moments. tonight = the night in progress (before 06:00 Madrid it is the previous calendar day's night); later = the remaining days in the yesterday/today/tomorrow window; all (default) = full window (backward compatible). Manual curl (admin) verified: tonight=6, later=27, all=33 (6+27==33). Requires admin auth (401 without). Goal: front loads tonight first then later."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL SCOPE SCENARIOS (9 tests, 100% pass): ✅ (1) Auth guard: GET /admin/moments WITHOUT token → 401 (with and without scope param). ✅ (2) GET /admin/moments?scope=tonight as admin → 200 with 6 events. ✅ (3) GET /admin/moments?scope=later as admin → 200 with 27 events. ✅ (4) GET /admin/moments?scope=all as admin → 200 with 33 events. ✅ (5) GET /admin/moments (no scope) as admin → 200 with 33 events (behaves identically to scope=all). ✅ (6) CRITICAL ASSERTION: len(tonight) + len(later) == len(all) → 6 + 27 = 33 (no overlap, no gaps within the yesterday/today/tomorrow window). ✅ (7) Each item in all responses contains required fields: id, name, venue, date, time, planned_moment_at, moment_cancelled, has_fired, fired_at, voy_count, captures_count. ✅ (8) Sanity check: unknown scope value (scope=foo) → 200 with 33 events (falls back to 'all' behavior, does NOT error 500). All scope functionality working perfectly with correct authorization and backward compatibility."
+
+test_plan:
+  current_focus: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "Please test ONLY GET /api/admin/moments with scope=tonight, scope=later, scope=all and no scope (should behave like all). Verify: (1) requires admin auth (401/403 without token), (2) tonight+later counts equal all (no overlap, no gaps within the window), (3) each item still has fields: id, name, venue, date, time, planned_moment_at, moment_cancelled, has_fired, fired_at, voy_count, captures_count. Admin creds: admin@quienva.app / admin123. Do NOT test other endpoints."
+    - agent: "testing"
+      message: "BACKEND TESTING COMPLETE - GET /api/admin/moments scope parameter. 🎉 ALL TESTS PASSED (9/9, 100% success rate). ✅ Auth guard working (401 without token). ✅ All four scope variants tested: scope=tonight (6 events), scope=later (27 events), scope=all (33 events), no scope (33 events). ✅ CRITICAL ASSERTION VERIFIED: tonight + later == all (6 + 27 = 33, no overlap, no gaps). ✅ All items contain required fields: id, name, venue, date, time, planned_moment_at, moment_cancelled, has_fired, fired_at, voy_count, captures_count. ✅ Unknown scope value (scope=foo) does NOT error (500), falls back to 'all' behavior gracefully. The scope parameter is working perfectly with correct authorization, backward compatibility (no scope behaves like all), and proper partitioning of events into tonight vs later. Test file: /app/admin_moments_scope_test.py"

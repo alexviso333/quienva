@@ -54,7 +54,7 @@ export default function AdminDashboard() {
   const { data: dashboard } = useQuery({ queryKey: ["admin-dashboard"], queryFn: async () => (await api.get("/admin/dashboard")).data, staleTime: 30_000 });
   const { data: pendingTickets = [] } = useQuery({ queryKey: ["admin-tickets", "pending"], queryFn: async () => (await api.get("/admin/tickets?status=pending")).data, staleTime: 20_000 });
   const { data: funnel } = useQuery({ queryKey: ["admin-funnel", "all"], queryFn: async () => (await api.get("/admin/funnel?scope=all")).data, staleTime: 30_000, enabled: tab === "fiestas" || tab === "dinero" });
-  const { data: momentEvents = [] } = useQuery({ queryKey: ["admin-moments"], queryFn: async () => (await api.get("/admin/moments")).data, staleTime: 15_000, enabled: tab === "fiestas" });
+  const { data: momentEvents = [] } = useQuery({ queryKey: ["admin-moments", "tonight"], queryFn: async () => (await api.get("/admin/moments", { params: { scope: "tonight" } })).data, staleTime: 15_000, enabled: tab === "fiestas" });
 
   const confirmTicket = useMutation({
     mutationFn: async ({ purchase_id, confirmed }) => (await api.post("/admin/tickets/confirm", { purchase_id, confirmed })).data,
