@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import {
-  Sparkles, TrendingUp, TrendingDown, Ticket, Flame, Lock, Loader2, RefreshCw,
+  Sparkles, TrendingUp, TrendingDown, Ticket, Flame, Lock, Loader2, RefreshCw, Tag,
 } from "lucide-react";
 
 const KIND_META = {
@@ -12,6 +12,7 @@ const KIND_META = {
   on_sale: { label: "A la venta", icon: Ticket, cls: "text-emerald-300 bg-emerald-400/15" },
   state: { label: "Pocas entradas", icon: Flame, cls: "text-orange-300 bg-orange-400/15" },
   sold_out: { label: "Agotado", icon: Lock, cls: "text-white/60 bg-white/10" },
+  renamed: { label: "Nuevo nombre", icon: Tag, cls: "text-fuchsia-300 bg-fuchsia-400/15" },
 };
 
 function whenText(iso) {
@@ -86,6 +87,7 @@ export default function AdminScrapeChangelog() {
             let detail = "";
             if (e.kind === "price_up" && e.new_price != null) detail = `→ ${Math.round(e.new_price)}€`;
             else if (e.kind === "price_down" && e.new_price != null) detail = `→ desde ${Math.round(e.new_price)}€`;
+            else if (e.kind === "renamed" && e.old_name) detail = `(antes: ${e.old_name})`;
             else if (e.new_state) detail = `→ ${e.new_state.replace(/_/g, " ")}`;
             return (
               <button

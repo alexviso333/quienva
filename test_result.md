@@ -3993,3 +3993,19 @@ agent_communication:
       message: "Test ONLY the name-privacy fix. Admin creds: admin@quienva.app / admin123. Steps: (1) Register user A. (2) Register user B with a distinct REAL name (e.g. name='Nombre Real B', username='userb<ts>'). (3) As A: POST /api/me/block {user_id: B_id}. (4) As A: GET /api/me/blocked → the returned entry for B MUST have name == '@userb<ts>' (starts with '@', equals username) and MUST NOT equal 'Nombre Real B'; email MUST be null. (5) Regression: GET /api/auth/me as A still returns A's own real name. Do NOT test unrelated endpoints."
     - agent: "testing"
       message: "BACKEND TESTING COMPLETE - Name-privacy fix for blocked users. TEST PASSED (6 assertions, 100% pass). Created test file /app/backend_test_blocked_privacy.py. Verified: (1) POST /api/me/block works correctly. (2) GET /api/me/blocked returns blocked users with @username instead of real names. (3) Email field is null for blocked users. (4) Regression test passed - users still see their own real name via GET /api/auth/me. The public_other_user() helper is working correctly - it replaces real names with @username and sets email to null for all other-user views. No issues found."
+
+#====================================================================================================
+# 2026-08-04 e — Scraper detects significant NAME changes (rename → Novedades + notify) (main agent)
+#====================================================================================================
+backend:
+  - task: "Scraper name-change detection (renamed) → changelog + event_renamed notification"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Added _significant_rename(old,new) (accent/case/space-insensitive, ignores trivial). In _apply_scraped_event UPDATE path, when an existing event's name changes significantly: records scrape_changelog kind='renamed' {old_name,new_name}, records event_history 'renamed', and notifies followers/interested (type 'event_renamed', body '🎤 Ya hay cartel: <new>'). Added 'renamed' to changelog counts. Frontend AdminScrapeChangelog shows 'Nuevo nombre' (Tag icon) + '(antes: X)'. VERIFIED deterministically via harness: create→rename logs renamed entry with old/new name + history; trivial case/accent change does NOT log. Changelog endpoint counts now include 'renamed' key (curl admin confirmed)."

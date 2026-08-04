@@ -6003,6 +6003,16 @@ async def _record_event_history(event_id: str, kind: str, source: str = "scraper
         logger.warning(f"event history insert failed: {e}")
 
 
+def _significant_rename(old: str, new: str) -> bool:
+    """True if an event's name changed meaningfully (not just accents/spacing/case).
+    Used to surface Fitz-style placeholder→real-name reveals as a real 'novedad'."""
+    o = _norm_name(old or "")
+    n = _norm_name(new or "")
+    if not n or n == o or len(n) < 3:
+        return False
+    return True
+
+
 async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "") -> str:
     """Diff a single scraped event against the DB and apply changes:
     - CREATE if not found → fires "new event" push to city.
@@ -6147,6 +6157,23 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
         await _notify_event_audience(existing["id"], "tickets_price_down", existing["name"], body)
         await _record_scrape_change(batch_id, "price_down", existing, {"new_price": drop_price})
         await _record_event_history(existing["id"], "price_down", "scraper", {"new_price": drop_price})
+    # Name change (e.g. Fitz's placeholder "Jueves Fitz" → real artist/party name).
+    new_name = patch.get("name")
+    if new_name and _significant_rename(existing.get("name", ""), new_name):
+        old_name = existing.get("name", "")
+        await _record_scrape_change(
+            batch_id, "renamed", {**existing, "name": new_name},
+            {"old_name": old_name, "new_name": new_name},
+        )
+        await _record_event_history(
+            existing["id"], "renamed", "scraper",
+            {"old_name": old_name, "new_name": new_name},
+        )
+        try:
+            body = f"🎤 Ya hay cartel: {new_name}"
+            await _notify_event_audience(existing["id"], "event_renamed", new_name, body)
+        except Exception:
+            pass
     return "updated"
 
 
@@ -6352,7 +6379,7 @@ async def admin_scrape_changelog(limit: int = 80, admin: dict = Depends(require_
     # Show the most recent changes overall (across runs), newest first, capped.
     async for c in db.scrape_changelog.find({}, {"_id": 0}).sort("created_at", -1).limit(limit):
         entries.append(c)
-    counts = {"new": 0, "price_up": 0, "price_down": 0, "state": 0, "sold_out": 0, "on_sale": 0}
+    counts = {"new": 0, "price_up": 0, "price_down": 0, "state": 0, "sold_out": 0, "on_sale": 0, "renamed": 0}
     last_batch_id = (last or {}).get("batch_id")
     last_run_counts = dict(counts)
     for e in entries:
