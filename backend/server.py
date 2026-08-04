@@ -51,28 +51,58 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 
-# FourVenues affiliate/RRPP: every FourVenues ticket link is rewritten to go
-# through THIS promoter slug so the sale is attributed to us. Configurable via
-# env so it survives if the slug ever changes; empty string disables the rewrite.
+# FourVenues affiliate/RRPP: ONLY the events that belong to OUR promoter profile
+# (our microsite slug) get their ticket link rewritten to go through us, so the
+# sale is attributed. Events we don't carry keep their normal link (rewriting
+# them would break checkout). The set of "our" events is refreshed periodically
+# from the FourVenues API, so as we're added to more promoters it updates itself.
 AFFILIATE_SLUG = os.environ.get("FOURVENUES_AFFILIATE_SLUG", "quienva").strip()
+_AFFILIATE_IDS: set = set()     # FourVenues event ids we carry (e.g. "abc123")
+_AFFILIATE_CODES: set = set()   # FourVenues event slugs we carry (fallback match)
+_AFFILIATE_TS: float = 0.0      # last successful refresh (epoch seconds)
+
+
+def _fv_event_code(url: str) -> str:
+    """Extract the FourVenues event code/slug from any FV event URL, or ''."""
+    if not url or "fourvenues.com" not in url or "/events/" not in url:
+        return ""
+    try:
+        return url.split("/events/", 1)[1].split("?", 1)[0].split("#", 1)[0].strip("/")
+    except Exception:
+        return ""
+
+
+def _event_is_mine(ev: dict) -> bool:
+    """True only if this scraped event belongs to our affiliate profile — matched
+    by FourVenues event id (external_id 'fv:<id>') or, as a fallback, by slug."""
+    if not AFFILIATE_SLUG:
+        return False
+    ext = str(ev.get("external_id") or "")
+    if ext.startswith("fv:") and ext[3:] in _AFFILIATE_IDS:
+        return True
+    code = _fv_event_code(ev.get("commission_url", ""))
+    return bool(code) and code in _AFFILIATE_CODES
 
 
 def affiliate_ticket_url(url: str) -> str:
-    """Rewrite any FourVenues event URL to our affiliate promoter link:
+    """Rewrite a FourVenues event URL to our affiliate promoter link:
         .../<anything>/events/<code>  ->  https://www.fourvenues.com/<slug>/events/<code>
-    Non-FourVenues links (venue websites, Instagram, Xceed, etc.) are left as-is,
-    so nothing that isn't ours to monetise ever breaks. Idempotent."""
+    Caller must first check the event is ours (_event_is_mine). Idempotent."""
     if not url or not AFFILIATE_SLUG:
         return url
-    if "fourvenues.com" not in url or "/events/" not in url:
+    code = _fv_event_code(url)
+    if not code:
         return url
-    try:
-        code = url.split("/events/", 1)[1].split("?", 1)[0].split("#", 1)[0].strip("/")
-        if not code:
-            return url
-        return f"https://www.fourvenues.com/{AFFILIATE_SLUG}/events/{code}"
-    except Exception:
-        return url
+    return f"https://www.fourvenues.com/{AFFILIATE_SLUG}/events/{code}"
+
+
+def _commission_url_for(ev: dict) -> str:
+    """The ticket link served to buyers: our affiliate link ONLY for events we
+    carry, otherwise the original (untouched) link so checkout never breaks."""
+    url = ev.get("commission_url", "") or ""
+    if url and _event_is_mine(ev):
+        return affiliate_ticket_url(url)
+    return url
 
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
@@ -1160,7 +1190,7 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "genre": ev.get("genre", ""),
         "city": ev.get("city", ""),
         "has_commission": ev.get("has_commission", False),
-        "commission_url": affiliate_ticket_url(ev.get("commission_url", "")),
+        "commission_url": _commission_url_for(ev),
         "more_info_url": ev.get("more_info_url", ""),
         "featured": bool(ev.get("featured", False)),
         # Pricing
@@ -5522,6 +5552,10 @@ async def on_startup():
                           id="scrapers_all", replace_existing=True,
                           max_instances=1, coalesce=True, misfire_grace_time=300,
                           next_run_time=datetime.now(timezone.utc) + timedelta(seconds=60))
+        scheduler.add_job(refresh_affiliate_events, "interval", minutes=20,
+                          id="affiliate_refresh", replace_existing=True,
+                          max_instances=1, coalesce=True, misfire_grace_time=300,
+                          next_run_time=datetime.now(timezone.utc) + timedelta(seconds=25))
         scheduler.start()
         logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00 + scrapers cada 20min)")
     except Exception as e:
@@ -5761,6 +5795,71 @@ async def _fourvenues_token_is_valid(token: str) -> Optional[bool]:
         return r.status_code == 200
     except Exception:
         return None
+
+
+async def refresh_affiliate_events() -> int:
+    """Refresh the set of events that belong to OUR affiliate profile (our
+    microsite slug). We call the same FourVenues events API used by the scraper,
+    but for OUR slug, and cache the event ids/codes. Only these events get the
+    affiliate link; everything else keeps its normal link. Runs on startup and
+    every scraper cycle, so being added to new promoters is picked up on its own.
+    Never clears the cache on a transient failure (keeps last known good)."""
+    global _AFFILIATE_IDS, _AFFILIATE_CODES, _AFFILIATE_TS
+    if not AFFILIATE_SLUG:
+        return 0
+    token = await _get_fourvenues_token()
+    if not token:
+        logger.info("[affiliate] no FourVenues token yet; keeping previous affiliate set")
+        return len(_AFFILIATE_IDS)
+    now = datetime.now(timezone.utc)
+    start = int((now - timedelta(days=1)).timestamp())
+    end = int((now + timedelta(days=200)).timestamp())
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Origin": "https://site.fourvenues.com",
+        "Referer": "https://site.fourvenues.com/",
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+    }
+    ids: set = set()
+    codes: set = set()
+    try:
+        async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+            page = 1
+            while page <= 10:  # safety cap
+                r = await client.get(
+                    "https://cli-api-service.fourvenues.com/api/events",
+                    params={"startDate": start, "endDate": end, "slug": AFFILIATE_SLUG,
+                            "pageSize": 200, "page": page, "orderBy": "startDate", "orderType": "asc"},
+                )
+                if r.status_code == 401:
+                    logger.warning("[affiliate] token invalid (401); keeping previous affiliate set")
+                    return len(_AFFILIATE_IDS)
+                r.raise_for_status()
+                payload = r.json()
+                items = payload.get("data", []) if isinstance(payload, dict) else payload
+                if not isinstance(items, list) or not items:
+                    break
+                for it in items:
+                    _id = str(it.get("id") or "")
+                    _code = str(it.get("code") or "")
+                    if _id:
+                        ids.add(_id)
+                    if _code:
+                        codes.add(_code)
+                if len(items) < 200:
+                    break
+                page += 1
+        _AFFILIATE_IDS = ids
+        _AFFILIATE_CODES = codes
+        _AFFILIATE_TS = time.time()
+        logger.info(f"[affiliate] '{AFFILIATE_SLUG}' → {len(ids)} events are mine (affiliate links applied to those only)")
+        return len(ids)
+    except Exception as e:
+        logger.warning(f"[affiliate] refresh failed ({e}); keeping previous affiliate set of {len(_AFFILIATE_IDS)}")
+        return len(_AFFILIATE_IDS)
+
+
 
 
 async def _alert_admins_token_expired():
@@ -6315,6 +6414,12 @@ async def run_all_scrapers():
         await cleanup_old_events()
     except Exception:
         pass
+    # Refresh which events are OURS (affiliate) so their ticket links use our
+    # promoter link; everything else keeps its normal link.
+    try:
+        await refresh_affiliate_events()
+    except Exception:
+        pass
     return results
 
 
@@ -6472,6 +6577,27 @@ async def admin_run_scraper(venue_id: str, admin: dict = Depends(require_admin))
     if not v:
         raise HTTPException(status_code=404, detail="Venue no encontrado")
     return await run_scraper_for_venue(v)
+
+
+@app.get("/api/admin/affiliate-status")
+async def admin_affiliate_status(admin: dict = Depends(require_admin)):
+    """How many scraped events currently match OUR affiliate profile (our slug).
+    Only these events get our affiliate ticket link; the rest keep the normal one."""
+    from datetime import datetime as _dt, timezone as _tz
+    return {
+        "slug": AFFILIATE_SLUG,
+        "mine_count": len(_AFFILIATE_IDS),
+        "codes_count": len(_AFFILIATE_CODES),
+        "updated_at": (_dt.fromtimestamp(_AFFILIATE_TS, _tz.utc).isoformat() if _AFFILIATE_TS else None),
+    }
+
+
+@app.post("/api/admin/affiliate-refresh")
+async def admin_affiliate_refresh(admin: dict = Depends(require_admin)):
+    """Manually re-read our affiliate events from FourVenues (also runs auto every 20 min)."""
+    n = await refresh_affiliate_events()
+    return {"slug": AFFILIATE_SLUG, "mine_count": n}
+
 
 
 @app.post("/api/admin/scrapers/run-all")
