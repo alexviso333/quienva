@@ -146,12 +146,31 @@ def _event_is_mine(ev: dict) -> bool:
     return _affiliate_match(ev) is not None
 
 
+_FV_CODE_RE = re.compile(r"/events/([A-Za-z0-9]+)/?$")
+
+
+def _fv_event_code(url: str) -> str:
+    """The trailing FourVenues event code (e.g. .../events/127U -> '127U')."""
+    if not url:
+        return ""
+    m = _FV_CODE_RE.search(url.split("?")[0].rstrip("/"))
+    return m.group(1) if m else ""
+
+
 def _commission_url_for(ev: dict) -> str:
-    """The ticket link served to buyers: OUR affiliate link (with OUR event slug)
-    ONLY for events we carry; otherwise the original untouched link."""
-    slug = _affiliate_slug_for(ev)
-    if slug:
-        return f"https://www.fourvenues.com/{AFFILIATE_SLUG}/events/{slug}"
+    """The ticket link served to buyers: OUR affiliate link ONLY for events we
+    carry; otherwise the original untouched link. We use the canonical code-based
+    microsite URL (site.fourvenues.com/es/<affiliate>/events/<code>) — the exact
+    format the affiliate microsite itself links to, so it resolves INSTANTLY. (The
+    pretty name-date-code URL is SSR-generated on demand and 404s for ~1 min until
+    FourVenues caches it.)"""
+    m = _affiliate_match(ev)
+    if m:
+        # Prefer the code from the event's own (already-working) scraped ticket
+        # link; fall back to the code captured from the affiliate feed.
+        code = _fv_event_code(ev.get("commission_url", "")) or (m[0] or "")
+        if code:
+            return f"https://site.fourvenues.com/es/{AFFILIATE_SLUG}/events/{code}"
     return ev.get("commission_url", "") or ""
 
 
@@ -6457,25 +6476,17 @@ async def refresh_affiliate_events() -> int:
                             pass
                     org = it.get("organization") or {}
                     venue = str(org.get("name") or "").strip()
-                    # Build the FULL public affiliate slug for the ticket link:
-                    #   www.fourvenues.com/<affiliate>/events/<name>-<DD-MM-YYYY>-<CODE>
-                    # A bare name-slug OR the 4-char code alone both 404. The CODE is
-                    # the same one the scraper stores; DD-MM-YYYY is the (normalized)
-                    # party date — verified: FourVenues uses the "night" date (the day
-                    # BEFORE a 00:00 start), which is exactly our normalized date_str.
-                    code = str(it.get("code") or "").strip()
-                    api_slug = str(it.get("slug") or "").strip().strip("/")
-                    url_date = "-".join(reversed(date_str.split("-"))) if date_str.count("-") == 2 else ""
-                    if api_slug and re.search(r"-\d{2}-\d{2}-\d{4}-", api_slug):
-                        slug = api_slug                       # API already gave the full public slug
-                    elif code and url_date:
-                        slug = f"{_slugify(name)}-{url_date}-{code}"
-                    else:
-                        slug = api_slug or code
-                    if not slug:
+                    # Store the event CODE (e.g. "127U"). The affiliate ticket link
+                    # is the canonical microsite URL
+                    # site.fourvenues.com/es/<affiliate>/events/<code> — the SAME
+                    # code-based URL the microsite itself links to, so it resolves
+                    # INSTANTLY (the pretty name-date-code URL is SSR-generated on
+                    # demand and 404s for ~1 min until FourVenues caches it).
+                    code = str(it.get("code") or it.get("slug") or "").strip().strip("/")
+                    if not code:
                         continue
-                    amap[_affiliate_key(venue, date_str, name)] = slug
-                    by_dn.setdefault((date_str, _norm_name(name)), []).append((venue, slug))
+                    amap[_affiliate_key(venue, date_str, name)] = code
+                    by_dn.setdefault((date_str, _norm_name(name)), []).append((venue, code))
                     # Breakdown so admin knows which venues/cities to add to the app.
                     loc = it.get("location") or {}
                     addr = str(loc.get("addressComplete") or loc.get("address") or "")
