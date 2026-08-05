@@ -6457,7 +6457,21 @@ async def refresh_affiliate_events() -> int:
                             pass
                     org = it.get("organization") or {}
                     venue = str(org.get("name") or "").strip()
-                    slug = str(it.get("slug") or it.get("code") or "").strip()
+                    # Build the FULL public affiliate slug for the ticket link:
+                    #   www.fourvenues.com/<affiliate>/events/<name>-<DD-MM-YYYY>-<CODE>
+                    # A bare name-slug OR the 4-char code alone both 404. The CODE is
+                    # the same one the scraper stores; DD-MM-YYYY is the (normalized)
+                    # party date — verified: FourVenues uses the "night" date (the day
+                    # BEFORE a 00:00 start), which is exactly our normalized date_str.
+                    code = str(it.get("code") or "").strip()
+                    api_slug = str(it.get("slug") or "").strip().strip("/")
+                    url_date = "-".join(reversed(date_str.split("-"))) if date_str.count("-") == 2 else ""
+                    if api_slug and re.search(r"-\d{2}-\d{2}-\d{4}-", api_slug):
+                        slug = api_slug                       # API already gave the full public slug
+                    elif code and url_date:
+                        slug = f"{_slugify(name)}-{url_date}-{code}"
+                    else:
+                        slug = api_slug or code
                     if not slug:
                         continue
                     amap[_affiliate_key(venue, date_str, name)] = slug
