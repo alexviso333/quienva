@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Backend URL from frontend/.env
-BASE_URL = "https://6ddc88ff-0b94-4edf-bb0b-c4e233c8af3e.preview.emergentagent.com/api"
+BASE_URL = "https://events-priority-feed.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

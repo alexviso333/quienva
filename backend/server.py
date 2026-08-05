@@ -5928,8 +5928,21 @@ async def refresh_affiliate_events() -> int:
                     ts = dates.get("start") or dates.get("date")
                     if not name or not ts:
                         continue
-                    # Same date formula the scraper uses, so keys line up exactly.
-                    date_str = datetime.fromtimestamp(int(ts), tz=mad).strftime("%Y-%m-%d")
+                    # Same date formula the scraper uses (start ts, Madrid tz), THEN
+                    # the SAME midnight normalization the ingestion applies: a party
+                    # whose start is 00:00 really belongs to the previous night, so
+                    # it is stored as 23:59 of the day before. The affiliate refresh
+                    # MUST replicate this or the key is off by one day for every
+                    # midnight-starting party (most clubs) → no match, no link, no
+                    # badge. This was the root cause of missing "Mi link" markers.
+                    _dt = datetime.fromtimestamp(int(ts), tz=mad)
+                    date_str = _dt.strftime("%Y-%m-%d")
+                    _time_str = _dt.strftime("%H:%M") if dates.get("start") else ""
+                    if _time_str in ("00:00", "0:00", "00:00:00"):
+                        try:
+                            date_str = (date.fromisoformat(date_str) - timedelta(days=1)).isoformat()
+                        except Exception:
+                            pass
                     org = it.get("organization") or {}
                     venue = str(org.get("name") or "").strip()
                     slug = str(it.get("slug") or it.get("code") or "").strip()
@@ -6087,6 +6100,24 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/medias-puri"},
     {"name": "Florida Park", "slug": "florida-park", "city": "Madrid",
      "url": "https://site.fourvenues.com/es/florida-park"},
+    # Clubs carried via our RRPP link (quienva) — added so our affiliate events
+    # exist in the feed, get the "Mi link" marker and rank first. Verified live.
+    {"name": "Fitz Madrid", "slug": "fitz-madrid", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/fitz-madrid"},
+    {"name": "TIFFANY'S THE CLUB", "slug": "tiffanys-the-club1", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/tiffanys-the-club1"},
+    {"name": "CrisTo Social Club", "slug": "cristo-social-club", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/cristo-social-club"},
+    {"name": "Gunilla Club", "slug": "gunilla-club", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/gunilla-club"},
+    {"name": "Todos Santos", "slug": "todos-santos", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/todos-santos"},
+    {"name": "Teatro Magno", "slug": "teatro-magno", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/teatro-magno"},
+    {"name": "Shôko Madrid", "slug": "shoko-madrid", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/shoko-madrid"},
+    {"name": "PERRO NEGRO MADRID", "slug": "perro-negro-madrid", "city": "Madrid",
+     "url": "https://site.fourvenues.com/es/perro-negro-madrid"},
 
     # ---- BARCELONA (FourVenues, verified live) ----
     {"name": "Opium Barcelona", "slug": "opium-barcelona", "city": "Barcelona",
@@ -6119,6 +6150,10 @@ _SEED_VENUES = [
      "url": "https://site.fourvenues.com/es/opium-marbella"},
     {"name": "Tibu Marbella", "slug": "tibu-marbella", "city": "Marbella",
      "url": "https://site.fourvenues.com/es/tibu-marbella"},
+    {"name": "Funky Buddha Puerto Banús", "slug": "funky-buddha-puerto-banus", "city": "Marbella",
+     "url": "https://site.fourvenues.com/es/funky-buddha-puerto-banus"},
+    {"name": "Xcess Banús", "slug": "xcess-banus", "city": "Marbella",
+     "url": "https://site.fourvenues.com/es/xcess-banus"},
     # The Night League official-site scrapers (Ibiza superclubs, real prices via
     # embedded ClubTickets/JSON-LD availability — no FourVenues, no auth).
     {"name": "Ushuaïa Ibiza", "slug": "ushuaia-ibiza", "city": "Ibiza",

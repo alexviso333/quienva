@@ -1092,7 +1092,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://6ddc88ff-0b94-4edf-bb0b-c4e233c8af3e.preview.emergentagent.com/api
+      Base URL: https://events-priority-feed.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -1206,7 +1206,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://admin-event-ranking.preview.emergentagent.com/api
+      Base URL: https://events-priority-feed.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -3569,7 +3569,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://admin-event-ranking.preview.emergentagent.com/api
+        Base URL: https://events-priority-feed.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -3634,7 +3634,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://admin-event-ranking.preview.emergentagent.com/api
+      Base URL: https://events-priority-feed.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -3742,7 +3742,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://admin-event-ranking.preview.emergentagent.com/api
+      Base URL: https://events-priority-feed.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -3869,7 +3869,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://admin-event-ranking.preview.emergentagent.com/api
+      Base URL: https://events-priority-feed.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -4186,3 +4186,10 @@ agent_communication:
       message: "✅ ALL AFFILIATE TESTS PASSED (100% success). Tested FourVenues affiliate logic with admin@quienva.app. (A) Affiliate status endpoints working: POST /api/admin/affiliate-refresh and GET /api/admin/affiliate-status return slug='quienva', mine_count=172 (>0 as expected), venues list with 44 entries. Non-admin correctly gets 403. (B) NEGATIVE case (core bug fix) VERIFIED: Events we DON'T carry (created with venue='Local Random Inexistente', name='Fiesta Random No Mia') are NOT rewritten - commission_url remains unchanged (does NOT contain '/quienva/'), is_affiliate=false. (C) POSITIVE case VERIFIED: Events we DO carry (created with venue='REGGAETON MILLENNIAL FEST', name='REGGAETON MILLENNIAL FEST 2026 - ALICANTE', date='2026-08-07' matching FourVenues API) ARE rewritten to 'https://www.fourvenues.com/quienva/events/reggaeton-millennial-fest-2026---alicante-07-08-2026', is_affiliate=true for admin, null for normal users. POST /api/admin/events correctly persists venue and name fields verbatim. All functionality working perfectly. Test file: /app/affiliate_test.py"
     - agent: "main"
       message: "NEW WORK TO TEST (Palma de Mallorca admin: admin@quienva.app / admin123; use Bearer token from login 'token' field, cookie won't work on http). Focus ONLY on these 3 tasks: (1) GET /api/events feed ordering — verify events are ordered by CLUB IMPORTANCE (venue.order, lower=first). In seed data 'Selva Club' has order=30 and appears before order=100 venues (Sotano Club, Es Gremi, Hidropark, Es Bosq). Also verify within the same venue-importance tier, events are ordered by popularity: sale_state urgency (pocas_entradas > a_la_venta > no_a_la_venta > agotado) and by user activity (more 'voy'/'me interesa' first). is_affiliate must be a boolean (false here, no FourVenues token) for admin and null for a normal (non-admin) user. Endpoint must return 200 (not 500). (2) PUT /api/admin/venues/reorder with body {venue_ids:[...]} — admin-only (403 for non-admin). Sending a venue id list should set venue.order=position; after calling it, GET /api/events should reflect the new venue order (e.g. put Sotano Club first -> it appears before Selva Club). Return {ok:true, updated:N}. Please RESTORE original order after (put Selva Club id first). (3) Regression safety for the _affiliate_key fix: POST /api/admin/affiliate-refresh and GET /api/admin/affiliate-status must return 200 without any server error (no FourVenues token here so mine_count will be 0 and slug='quienva'); non-admin gets 403. Do NOT test unrelated endpoints."
+
+#====================================================================================================
+# 2026-08-05 i — FIX matching afiliado (desfase 1 día 00:00) + clubs que llevo (Madrid/Marbella)
+#====================================================================================================
+agent_communication:
+    - agent: "main"
+      message: "ROOT CAUSE encontrado y corregido (verificado por API/DB, sin agente de pruebas por petición del usuario). (1) refresh_affiliate_events usaba dates.start (medianoche) y NO aplicaba la normalización 00:00->día anterior 23:59 que SÍ aplica la ingesta -> la clave (venue,date,name) quedaba 1 día por delante del evento guardado -> 0 match para casi todas las fiestas que empiezan a las 00:00 (la mayoría). Ahora replica la misma normalización. (2) _SEED_VENUES: añadidos 10 clubs que llevo por el link quienva y que no estaban sembrados (Madrid: Fitz Madrid, TIFFANY'S THE CLUB, CrisTo Social Club, Gunilla Club, Todos Santos, Teatro Magno, Shôko Madrid, PERRO NEGRO MADRID; Marbella: Funky Buddha Puerto Banús, Xcess Banús). Verificación HTTP real: feed Madrid Fitz Madrid=27, is_affiliate=true en 7 (los que llevo), false en el resto; feed Palma amok=70 is_affiliate=0 (falso positivo resuelto), Fitz Mallorca 7 marcados, top-7 del feed son afiliados (orden correcto). Frontend NO tocado (badge 'Mi link' admin-only + orden ya estaban bien)."
