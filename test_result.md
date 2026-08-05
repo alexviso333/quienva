@@ -4200,3 +4200,10 @@ agent_communication:
 agent_communication:
     - agent: "main"
       message: "Continuación del fix afiliado (verificado por API/DB, sin agente de pruebas por petición del usuario). (1) PAGINACIÓN: la API FourVenues devuelve ~170 items/página (< pageSize 200); el bucle paraba con 'len<200' -> solo 172 de 700 eventos (solo ~2 semanas). Ahora pagina hasta página vacía -> 700 eventos/58 venues. Verificado HTTP: Fitz Mallorca 27/27 y Fitz Madrid 27/27 con is_affiliate=true (fechas Ago 5–31). (2) AUTO-SEMBRADO: _auto_seed_affiliate_clubs crea scraper para cada club que llevo (org.slug) en ciudad soportada no cubierta; corre cada 20min. Ciudad por segmento tras el CP + más frecuente (robusto para promotores); dedup por slug + subconjunto de tokens del nombre (Chango no se duplica; KANDHALA/Jávea ya no cae en Palma tras quitar token 'arenal'). Marca auto_affiliate=True. Frontend NO tocado."
+
+#====================================================================================================
+# 2026-08-05 k — 4 mejoras afiliado (orden precio, marco discoteca admin, alerta token, panel cobertura)
+#====================================================================================================
+agent_communication:
+    - agent: "main"
+      message: "4 mejoras (verificadas por API/DB/compilación, sin agente de pruebas por petición). (1) list_events: tier 0 (mis eventos) ordenados por precio DESC (más caro primero) → fecha; tier 1 igual que antes. Verificado 40→35→30→…→20. (2) FeedPlans.js vista Discotecas: cabecera con marco lima + chip 'Mi link' si el club es mío (mine=items.some(is_affiliate)); invisible para usuarios normales (is_affiliate null). (3) Alerta token caducado (in-app+push, ya existía tras scrape) ahora también desde refresh_affiliate_events en 401. (4) GET /admin/affiliate-status devuelve matched_count + matched por venue (fiestas próximas realmente marcadas); AdminAffiliatePanel muestra 'marcadas/llevadas' y resalta en rojo clubs míos con 0 marcadas (matched_count=322 en dev). Frontend compila limpio; lint OK."

@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { EventCard } from "@/components/EventCard";
 import { CompactEventCard } from "@/components/CompactEventCard";
-import { CalendarDays, LayoutList, Building2, ChevronLeft, ChevronRight, PartyPopper, SlidersHorizontal } from "lucide-react";
+import { CalendarDays, LayoutList, Building2, ChevronLeft, ChevronRight, PartyPopper, SlidersHorizontal, Euro } from "lucide-react";
 
 const SALE_FILTERS = [
   { key: "all", label: "Todas" },
@@ -66,6 +66,8 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
     }
     return order.map((v) => ({
       venue: v, items: map[v].sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))),
+      // Admin-only: this club is one I carry via my link (any event marked).
+      mine: map[v].some((e) => e.is_affiliate),
     }));
   }, [shown]);
 
@@ -153,12 +155,25 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
       {/* DISCOTECA */}
       {view === "disco" && shownGroups.map((g) => (
         <div key={g.venue} className="flex flex-col gap-3">
-          <div className="flex items-center gap-2 pt-1">
-            <Building2 className="w-4 h-4 text-qv-secondary" />
-            <span className="text-white font-display font-black text-lg truncate">{g.venue}</span>
-            <span className="text-white/30 text-xs">{g.items.length}</span>
-            <div className="flex-1 h-px bg-white/10" />
-          </div>
+          {g.mine ? (
+            // Admin-only: club I carry via my link → highlighted header frame.
+            // (is_affiliate is null for normal users, so g.mine is always false for them.)
+            <div className="flex items-center gap-2 pt-1 rounded-xl border border-lime-400/70 bg-lime-400/10 px-2.5 py-1.5 shadow-[0_0_12px_rgba(132,204,22,0.35)]">
+              <Building2 className="w-4 h-4 text-lime-300" />
+              <span className="text-white font-display font-black text-lg truncate">{g.venue}</span>
+              <span className="bg-gradient-to-r from-lime-300 to-green-500 text-black text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                <Euro className="w-2.5 h-2.5" /> Mi link
+              </span>
+              <span className="text-white/40 text-xs ml-auto">{g.items.length}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 pt-1">
+              <Building2 className="w-4 h-4 text-qv-secondary" />
+              <span className="text-white font-display font-black text-lg truncate">{g.venue}</span>
+              <span className="text-white/30 text-xs">{g.items.length}</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+          )}
           {compact ? <div className="grid grid-cols-2 gap-3">{g.items.map(renderCard)}</div> : g.items.map(renderCard)}
         </div>
       ))}

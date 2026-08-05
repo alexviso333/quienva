@@ -1347,13 +1347,26 @@ async def list_events(user: dict = Depends(get_current_user),
             urgency = _SALE_URGENCY.get(e.get("sale_state", "no_a_la_venta"), 1)
             return activity + urgency
 
-        filtered_events.sort(key=lambda e: (
-            0 if _event_is_mine(e) else 1,
-            _venue_rank(e),
-            0 if e.get("featured") else 1,
-            -_popularity(e),
-            e.get("date", ""),
-        ))
+        def _price_for_sort(e):
+            p = _current_price(e)
+            try:
+                return float(p) if p is not None else 0.0
+            except Exception:
+                return 0.0
+
+        # Two-tier ordering. The FIRST key (mine=0 / others=1) guarantees our
+        # affiliate events always come first, so the remaining keys are only ever
+        # compared WITHIN the same tier (Python stops at the first differing key).
+        #   • OUR events (tier 0): most EXPENSIVE first (higher price ≈ higher
+        #     commission / better club), then soonest date. (padding keeps equal shape)
+        #   • Everyone else (tier 1): club importance → featured → popularity → date.
+        def _feed_sort_key(e):
+            if _event_is_mine(e):
+                return (0, -_price_for_sort(e), e.get("date", ""), 0, 0.0)
+            return (1, _venue_rank(e), 0 if e.get("featured") else 1,
+                    -_popularity(e), e.get("date", ""))
+
+        filtered_events.sort(key=_feed_sort_key)
 
     # Load user's followed events (for is_following flag)
     follows_set: set = set()
@@ -6011,6 +6024,10 @@ async def refresh_affiliate_events() -> int:
                 )
                 if r.status_code == 401:
                     logger.warning("[affiliate] token invalid (401); keeping previous affiliate set")
+                    try:
+                        await _alert_admins_token_expired()
+                    except Exception:
+                        pass
                     return len(_AFFILIATE_MAP)
                 r.raise_for_status()
                 payload = r.json()
@@ -6833,12 +6850,35 @@ async def admin_run_scraper(venue_id: str, admin: dict = Depends(require_admin))
 @app.get("/api/admin/affiliate-status")
 async def admin_affiliate_status(admin: dict = Depends(require_admin)):
     """How many scraped events currently match OUR affiliate profile (our slug).
-    Only these events get our affiliate ticket link; the rest keep the normal one."""
+    Only these events get our affiliate ticket link; the rest keep the normal one.
+    Also reports, per venue, how many UPCOMING events actually show up MARKED in
+    the app right now (real coverage) vs how many we carry per the RRPP link."""
     from datetime import datetime as _dt, timezone as _tz
+    # Real coverage: count upcoming events in the DB that currently match as ours,
+    # grouped by normalized venue name (join key with _AFFILIATE_VENUES).
+    _today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    matched_by_venue: dict = {}
+    total_matched = 0
+    async for ev in db.events.find({"date": {"$gte": _today}},
+                                   {"_id": 0, "venue": 1, "date": 1, "name": 1, "city": 1}):
+        if _event_is_mine(ev):
+            total_matched += 1
+            k = _norm_name(ev.get("venue", ""))
+            matched_by_venue[k] = matched_by_venue.get(k, 0) + 1
+    venues_out = []
+    for v in _AFFILIATE_VENUES:
+        vv = dict(v)
+        vv["matched"] = matched_by_venue.get(_norm_name(v.get("venue", "")), 0)
+        venues_out.append(vv)
+    # Surface venues we carry in a supported city but that show 0 marked events
+    # (coverage gaps worth a look) first, then by carried volume.
+    venues_out.sort(key=lambda x: (0 if (x.get("in_app") and not x.get("matched")) else 1,
+                                   -x.get("events", 0), x.get("venue", "")))
     return {
         "slug": AFFILIATE_SLUG,
         "mine_count": len(_AFFILIATE_MAP),
-        "venues": _AFFILIATE_VENUES,
+        "matched_count": total_matched,
+        "venues": venues_out,
         "updated_at": (_dt.fromtimestamp(_AFFILIATE_TS, _tz.utc).isoformat() if _AFFILIATE_TS else None),
     }
 

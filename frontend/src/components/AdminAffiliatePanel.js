@@ -37,10 +37,12 @@ export default function AdminAffiliatePanel() {
   const inApp = venues.filter((v) => v.in_app);
   const pending = venues.filter((v) => !v.in_app);
 
-  const VenueRow = (v, i, pendingRow) => (
+  const renderVenueRow = (v, i, pendingRow) => {
+    const gap = !pendingRow && (v.matched || 0) === 0; // in-app club with 0 marked → coverage gap
+    return (
     <div
       key={`${v.venue}-${v.city}-${i}`}
-      className="flex items-center gap-2.5 p-2 rounded-xl bg-white/[0.03] border border-white/5"
+      className={`flex items-center gap-2.5 p-2 rounded-xl border ${gap ? "bg-red-500/10 border-red-400/40" : "bg-white/[0.03] border-white/5"}`}
       data-testid={`affiliate-venue-${pendingRow ? "pending" : "inapp"}-${i}`}
     >
       <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${pendingRow ? "bg-orange-400/15 text-orange-300" : "bg-emerald-400/15 text-emerald-300"}`}>
@@ -50,9 +52,19 @@ export default function AdminAffiliatePanel() {
         <p className="text-white text-xs font-semibold truncate">{v.venue}</p>
         <p className="text-white/40 text-[10px] truncate">{v.city || "Ciudad desconocida"}</p>
       </div>
-      <span className="text-white/50 text-[10px] font-bold shrink-0 bg-white/5 rounded-full px-2 py-0.5">{v.events} {v.events === 1 ? "fiesta" : "fiestas"}</span>
+      {pendingRow ? (
+        <span className="text-white/50 text-[10px] font-bold shrink-0 bg-white/5 rounded-full px-2 py-0.5">{v.events} {v.events === 1 ? "fiesta" : "fiestas"}</span>
+      ) : (
+        <span
+          className={`text-[10px] font-bold shrink-0 rounded-full px-2 py-0.5 ${gap ? "bg-red-400/20 text-red-300" : "bg-emerald-400/15 text-emerald-300"}`}
+          title="Fiestas marcadas en la app / fiestas que llevas por tu link"
+        >
+          {v.matched ?? 0}/{v.events} marcadas
+        </span>
+      )}
     </div>
-  );
+    );
+  };
 
   return (
     <div className="rounded-3xl bg-white/[0.03] border border-white/10 p-4 mb-6" data-testid="admin-affiliate-panel">
@@ -74,7 +86,7 @@ export default function AdminAffiliatePanel() {
 
       {data && (
         <p className="text-white/40 text-[11px] mb-3">
-          Slug <span className="text-qv-secondary font-semibold">{data.slug}</span> · {data.mine_count} fiestas tuyas · {venues.length} locales · act. {whenText(data.updated_at)}
+          Slug <span className="text-qv-secondary font-semibold">{data.slug}</span> · {data.mine_count} fiestas tuyas · {typeof data.matched_count === "number" ? `${data.matched_count} marcadas · ` : ""}{venues.length} locales · act. {whenText(data.updated_at)}
         </p>
       )}
 
@@ -91,7 +103,7 @@ export default function AdminAffiliatePanel() {
               </p>
               <p className="text-white/40 text-[10px] mb-2">Sitios de tu slug que aún NO están en la app. Pídelos para que se scrapeen.</p>
               <div className="space-y-1.5">
-                {pending.map((v, i) => VenueRow(v, i, true))}
+                {pending.map((v, i) => renderVenueRow(v, i, true))}
               </div>
             </div>
           )}
@@ -101,7 +113,7 @@ export default function AdminAffiliatePanel() {
                 <CheckCircle2 className="w-3.5 h-3.5" /> Ya en la app ({inApp.length})
               </p>
               <div className="space-y-1.5">
-                {inApp.map((v, i) => VenueRow(v, i, false))}
+                {inApp.map((v, i) => renderVenueRow(v, i, false))}
               </div>
             </div>
           )}
