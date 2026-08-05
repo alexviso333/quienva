@@ -239,3 +239,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - FIX: index.html tenía OG con dominio preview obsoleto (events-priority-feed...) -> cambiado a https://quienva-vnnx.vercel.app; textos "Palma" generalizados ("tu ciudad", "Los planes del finde").
 - CONFIG PRODUCCIÓN CRÍTICA: en Render hay que fijar FRONTEND_URL=https://quienva-vnnx.vercel.app; si no, share_event redirige al dominio del backend (Render) y los links compartidos no abren la app. En preview se fijó FRONTEND_URL al dominio del preview.
 - PENDIENTE opcional (no hecho, usuario no confirmó): vista previa pública de evento al abrir link compartido sin cuenta (hoy /event/:id es protegida -> muro de login).
+
+## Update 2026-08-05 f — SEO por ciudad + imagen para Instagram Stories
+- SEO (backend, público, server-rendered): GET /api/ciudad/{slug} = página crawlable "Fiestas en {ciudad} hoy y este finde" con lista real de eventos (póster, local·fecha·precio, links a /event/{id}), OG/canonical, enlaces a otras ciudades. GET /api/sitemap.xml (portada+feed+5 ciudades) y GET /api/robots.txt. Slugs desde SUPPORTED_CITIES (+ alias palma/mallorca/eivissa/puerto-banus). Verificado: madrid 200, 60 eventos, sitemap 7 urls.
+- frontend/vercel.json: añadidas rewrites para servir bajo el dominio Vercel: /fiestas/:city, /sitemap.xml, /robots.txt -> https://quienva.onrender.com/api/... (OJO: si el dominio de Render cambia, actualizar estas destinations).
+- Instagram Stories (backend Pillow): GET /api/story-image/{event_id} = JPEG 1080x1920 (fondo póster difuminado+oscurecido, tarjeta del póster con esquinas redondeadas+sombra, marca ¿QUIÉN VA?, nombre, local·fecha, pill de precio, footer). Fuentes FreeSans/FreeSansBold empaquetadas en backend/assets/fonts (funcionan en Render). Verificado visualmente.
+- Frontend: EventDetail botón "Stories" (icono Instagram) junto al de WhatsApp -> fetch de la imagen + navigator.share({files}) en móvil, con fallback a descarga en desktop.
+- Producción: requiere FRONTEND_URL en Render y "Save to GitHub". Tras deploy: enviar sitemap en Google Search Console.

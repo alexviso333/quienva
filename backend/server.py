@@ -662,6 +662,272 @@ async def share_event(event_id: str, request: Request):
 
 
 # ---------------------------------------------------------------------------
+# SEO: public, server-rendered city pages + sitemap (indexable by Google) and
+# Instagram-Story image generator. These are the only public HTML/image routes;
+# everything else is the SPA behind auth.
+# ---------------------------------------------------------------------------
+_ASSETS_FONTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "fonts")
+
+
+def _slugify(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+
+
+# slug -> canonical app-city id (built from SUPPORTED_CITIES)
+_CITY_SLUGS = {_slugify(c["id"]): c["id"] for c in SUPPORTED_CITIES}
+_CITY_SLUGS.update({"palma": "Palma de Mallorca", "mallorca": "Palma de Mallorca",
+                    "puerto-banus": "Marbella", "eivissa": "Ibiza"})
+
+
+def _price_line(ev: dict) -> str:
+    tiers = ev.get("price_tiers") or []
+    prices = [t.get("price") for t in tiers if isinstance(t, dict) and t.get("price")]
+    if ev.get("sale_state") == "agotado":
+        return "Agotado"
+    if prices:
+        return f"desde {int(min(prices))}\u20ac"
+    return ""
+
+
+def _frontend_base(request: Request) -> str:
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    base = f"{proto}://{host}"
+    return (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/") or base
+
+
+async def _upcoming_for_city(city_id: str, limit: int = 60) -> list:
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    cur = db.events.find(
+        {"city": city_query_value(city_id), "date": {"$gte": today}},
+        {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "city": 1,
+         "image_url": 1, "price_tiers": 1, "sale_state": 1},
+    ).sort("date", 1).limit(limit)
+    return [e async for e in cur]
+
+
+@api_router.get("/ciudad/{slug}")
+async def seo_city_page(slug: str, request: Request):
+    """Server-rendered, crawlable page: 'Fiestas en {ciudad} hoy y este finde'.
+    Real HTML content (no JS needed) so Google can index it; links push users
+    into the app. Meant to be served on the main domain via a Vercel rewrite
+    (/fiestas/:city -> {backend}/api/ciudad/:city)."""
+    import html as _html
+    e = _html.escape
+    city_id = _CITY_SLUGS.get(slug.lower())
+    front = _frontend_base(request)
+    if not city_id:
+        return StarletteResponse(
+            content=f"<!doctype html><meta http-equiv=refresh content='0;url={front}/feed'>",
+            media_type="text/html", status_code=404)
+    events = await _upcoming_for_city(city_id)
+    label = next((c["label"] for c in SUPPORTED_CITIES if c["id"] == city_id), city_id)
+    canonical = f"{front}/fiestas/{slug.lower()}"
+    n = len(events)
+    title = e(f"Fiestas y discotecas en {label} hoy y este fin de semana | \u00bfQui\u00e9n va?")
+    desc = e(f"Todas las fiestas de {label}: {n} planes con horarios, precios y qu\u00e9 amigos van. "
+             f"Descubre las discotecas de esta semana en \u00bfQui\u00e9n va?")
+    og_img = ""
+    for ev in events:
+        if ev.get("image_url", "").startswith("http"):
+            og_img = e(ev["image_url"]); break
+
+    items_html = []
+    for ev in events:
+        pl = _price_line(ev)
+        line2 = " \u00b7 ".join([x for x in [e(ev.get("venue", "")), _es_share_date(ev.get("date", "")), e(pl)] if x])
+        app_url = f"{front}/event/{ev.get('id')}"
+        img = ev.get("image_url", "")
+        img_tag = f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy" width="72" height="72">' if img.startswith("http") else ""
+        items_html.append(
+            f'<li><a href="{e(app_url)}">{img_tag}<div><span class="n">{e(ev.get("name","Fiesta"))}</span>'
+            f'<span class="m">{line2}</span></div></a></li>')
+    if not items_html:
+        items_html.append('<li class="empty">Pronto publicaremos las pr\u00f3ximas fiestas de esta ciudad.</li>')
+
+    other_cities = "".join(
+        f'<a href="{front}/fiestas/{_slugify(c["id"])}">{e(c["label"])}</a>'
+        for c in SUPPORTED_CITIES if c["id"] != city_id)
+
+    html_out = f"""<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{e(canonical)}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
+<meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
+<meta property="og:url" content="{e(canonical)}">
+{f'<meta property="og:image" content="{og_img}">' if og_img else ''}
+<meta name="twitter:card" content="summary_large_image">
+<style>
+:root{{color-scheme:dark}}
+body{{margin:0;background:#0a0a0c;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}}
+.wrap{{max-width:720px;margin:0 auto;padding:24px 18px 60px}}
+h1{{font-size:26px;margin:12px 0 6px}}
+p.sub{{color:#a1a1aa;margin:0 0 22px}}
+ul{{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}}
+li a{{display:flex;gap:12px;align-items:center;background:#141417;border:1px solid #26262b;border-radius:14px;padding:10px 12px;text-decoration:none;color:#fff}}
+li img{{border-radius:10px;object-fit:cover;flex:0 0 auto}}
+.n{{display:block;font-weight:700}}
+.m{{display:block;color:#a1a1aa;font-size:14px}}
+.empty{{color:#a1a1aa;padding:20px;text-align:center}}
+.cta{{display:inline-block;margin:22px 0;background:linear-gradient(90deg,#00f0ff,#7c3aed);color:#001014;font-weight:800;padding:12px 20px;border-radius:999px;text-decoration:none}}
+.cities{{margin-top:34px;border-top:1px solid #26262b;padding-top:18px}}
+.cities a{{color:#00f0ff;margin-right:14px;text-decoration:none;display:inline-block;margin-bottom:8px}}
+footer{{margin-top:30px;color:#71717a;font-size:13px}}
+</style></head>
+<body><div class="wrap">
+<h1>Fiestas en {e(label)} hoy y este fin de semana</h1>
+<p class="sub">{n} planes esta semana \u00b7 horarios, precios y qu\u00e9 amigos van. Con \u00bfQui\u00e9n va?</p>
+<a class="cta" href="{front}/feed">Abrir \u00bfQui\u00e9n va?</a>
+<ul>{''.join(items_html)}</ul>
+<div class="cities"><b>Otras ciudades:</b><br>{other_cities}</div>
+<footer>\u00bfQui\u00e9n va? \u2014 descubre los planes del finde y mira qu\u00e9 amigos van a cada sitio.</footer>
+</div></body></html>"""
+    return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
+                             headers={"Cache-Control": "public, max-age=1800"})
+
+
+@api_router.get("/sitemap.xml")
+async def seo_sitemap(request: Request):
+    front = _frontend_base(request)
+    urls = [f"{front}/", f"{front}/feed"]
+    urls += [f"{front}/fiestas/{_slugify(c['id'])}" for c in SUPPORTED_CITIES]
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    body = "".join(f"<url><loc>{u}</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>" for u in urls)
+    xml = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>'
+    return StarletteResponse(content=xml, media_type="application/xml",
+                             headers={"Cache-Control": "public, max-age=3600"})
+
+
+@api_router.get("/robots.txt")
+async def seo_robots(request: Request):
+    front = _frontend_base(request)
+    txt = f"User-agent: *\nAllow: /\nSitemap: {front}/sitemap.xml\n"
+    return StarletteResponse(content=txt, media_type="text/plain",
+                             headers={"Cache-Control": "public, max-age=3600"})
+
+
+@api_router.get("/story-image/{event_id}")
+async def story_image(event_id: str, request: Request):
+    """A ready-to-post 1080x1920 Instagram-Story image for a party: blurred poster
+    background + the poster card + name/venue/date/price + branding."""
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        return StarletteResponse(content="not found", status_code=404, media_type="text/plain")
+    W, H = 1080, 1920
+
+    def font(bold, size):
+        return ImageFont.truetype(os.path.join(_ASSETS_FONTS, "FreeSansBold.ttf" if bold else "FreeSans.ttf"), size)
+
+    # Fetch the poster (server-side, avoids browser CORS/tainted-canvas issues).
+    poster = None
+    img_url = ev.get("image_url") or ""
+    if img_url.startswith("http"):
+        try:
+            async with httpx.AsyncClient(timeout=8, follow_redirects=True) as c:
+                r = await c.get(img_url)
+                if r.status_code == 200:
+                    poster = Image.open(io.BytesIO(r.content)).convert("RGB")
+        except Exception:
+            poster = None
+
+    # Background: blurred cover of the poster, darkened; else a purple gradient.
+    if poster is not None:
+        bw, bh = poster.size
+        scale = max(W / bw, H / bh)
+        bg = poster.resize((int(bw * scale) + 1, int(bh * scale) + 1))
+        bx = (bg.width - W) // 2; by = (bg.height - H) // 2
+        bg = bg.crop((bx, by, bx + W, by + H)).filter(ImageFilter.GaussianBlur(40))
+    else:
+        bg = Image.new("RGB", (W, H))
+        for y in range(H):
+            t = y / H
+            bg.paste((int(20 + 90 * t), int(10 + 20 * t), int(40 + 120 * (1 - t))), (0, y, W, y + 1))
+    dark = Image.new("RGB", (W, H), (0, 0, 0))
+    bg = Image.blend(bg, dark, 0.55)
+    img = bg
+    draw = ImageDraw.Draw(img)
+
+    # Brand header.
+    brand = "\u00bfQUI\u00c9N VA?"
+    fb = font(True, 60)
+    draw.text(((W - draw.textlength(brand, font=fb)) / 2, 96), brand, font=fb, fill=(0, 240, 255))
+    sub = "los planes del finde"
+    fs = font(False, 34)
+    draw.text(((W - draw.textlength(sub, font=fs)) / 2, 172), sub, font=fs, fill=(230, 230, 240))
+
+    # Poster card (rounded).
+    card_top = 300
+    if poster is not None:
+        pw = 820
+        ph = int(poster.height * (pw / poster.width))
+        ph = min(ph, 1040)
+        pc = poster.resize((pw, int(poster.height * (pw / poster.width))))
+        pc = pc.crop((0, 0, pw, ph))
+        radius = 44
+        mask = Image.new("L", (pw, ph), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, pw, ph), radius=radius, fill=255)
+        px = (W - pw) // 2
+        # soft shadow
+        shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(shadow).rounded_rectangle((px, card_top, px + pw, card_top + ph), radius=radius, fill=(0, 0, 0, 150))
+        shadow = shadow.filter(ImageFilter.GaussianBlur(24))
+        img = Image.alpha_composite(img.convert("RGBA"), shadow).convert("RGB")
+        img.paste(pc, (px, card_top), mask)
+        draw = ImageDraw.Draw(img)
+        text_y = card_top + ph + 56
+    else:
+        text_y = 640
+
+    def wrap(text, f, max_w):
+        out, cur = [], ""
+        for w in text.split():
+            t = (cur + " " + w).strip()
+            if draw.textlength(t, font=f) <= max_w or not cur:
+                cur = t
+            else:
+                out.append(cur); cur = w
+        if cur:
+            out.append(cur)
+        return out[:3]
+
+    name = ev.get("name") or "Fiesta"
+    fn = font(True, 66)
+    for ln in wrap(name, fn, W - 140):
+        draw.text(((W - draw.textlength(ln, font=fn)) / 2, text_y), ln, font=fn, fill=(255, 255, 255))
+        text_y += 78
+    line2 = " \u00b7 ".join([x for x in [ev.get("venue", ""), _es_share_date(ev.get("date", ""))] if x])
+    if line2:
+        f2 = font(False, 40)
+        draw.text(((W - draw.textlength(line2, font=f2)) / 2, text_y + 6), line2, font=f2, fill=(200, 200, 210))
+        text_y += 70
+    pl = _price_line(ev)
+    if pl:
+        f3 = font(True, 40)
+        tw = draw.textlength(pl, font=f3)
+        px0 = (W - tw) / 2 - 34
+        draw.rounded_rectangle((px0, text_y + 8, px0 + tw + 68, text_y + 76), radius=34, fill=(190, 242, 60))
+        draw.text(((W - tw) / 2, text_y + 20), pl, font=f3, fill=(10, 10, 12))
+        text_y += 92
+
+    foot = "Míralo en \u00bfQui\u00e9n va?"
+    ff = font(False, 34)
+    draw.text(((W - draw.textlength(foot, font=ff)) / 2, H - 110), foot, font=ff, fill=(0, 240, 255))
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=88)
+    buf.seek(0)
+    return StarletteResponse(content=buf.getvalue(), media_type="image/jpeg",
+                             headers={"Cache-Control": "public, max-age=3600",
+                                      "Content-Disposition": f'inline; filename="quienva-{event_id}.jpg"'})
+
+
+
+# ---------------------------------------------------------------------------
 # Auth endpoints
 # ---------------------------------------------------------------------------
 @api_router.post("/auth/register")

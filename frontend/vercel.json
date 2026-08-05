@@ -1,5 +1,8 @@
 {
   "rewrites": [
+    { "source": "/fiestas/:city", "destination": "https://quienva.onrender.com/api/ciudad/:city" },
+    { "source": "/sitemap.xml", "destination": "https://quienva.onrender.com/api/sitemap.xml" },
+    { "source": "/robots.txt", "destination": "https://quienva.onrender.com/api/robots.txt" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

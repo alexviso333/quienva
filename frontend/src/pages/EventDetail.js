@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaThumb, API } from "@/lib/api";
@@ -6,7 +7,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
 import {
-  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell,
+  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,6 +38,7 @@ function FriendRow({ title, color, friends }) {
 export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [storyBusy, setStoryBusy] = useState(false);
   const location = useLocation();
   // Robust "back": if the user landed here directly (shared link, notification,
   // refresh) there is no in-app history to pop, so navigate(-1) would do nothing
@@ -141,6 +143,36 @@ export default function EventDetail() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   };
 
+  // One-tap Instagram Story: fetch the ready-made 1080x1920 image from the
+  // backend and open the native share sheet (Instagram/Stories) with the file;
+  // if the device can't share files, download it so it can be posted manually.
+  const shareStory = async () => {
+    if (storyBusy) return;
+    setStoryBusy(true);
+    try {
+      const res = await fetch(`${API}/story-image/${event.id}`);
+      if (!res.ok) throw new Error("img");
+      const blob = await res.blob();
+      const file = new File([blob], `quienva-${event.id}.jpg`, { type: "image/jpeg" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: event.name, text: `${event.name} — ¿vienes? 👀` });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `quienva-${event.id}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+    } catch (_e) {
+      /* user cancelled or share unsupported — ignore */
+    } finally {
+      setStoryBusy(false);
+    }
+  };
+
   const hasInterest = !!event.my_status && event.my_status !== "none";
 
   const onTicketClick = () => {
@@ -179,6 +211,15 @@ export default function EventDetail() {
             aria-label="Avisarme de cambios"
           >
             <Bell className={`w-5 h-5 ${event.is_following ? "text-qv-secondary" : "text-white"}`} fill={event.is_following ? "currentColor" : "none"} />
+          </button>
+          <button
+            data-testid="detail-share-story"
+            onClick={shareStory}
+            disabled={storyBusy}
+            aria-label="Compartir en Instagram Stories"
+            className="absolute top-6 right-16 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform disabled:opacity-60"
+          >
+            {storyBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Instagram className="w-5 h-5" />}
           </button>
           <button
             data-testid="detail-share"
