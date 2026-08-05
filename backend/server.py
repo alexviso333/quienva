@@ -62,6 +62,12 @@ AFFILIATE_SLUG = os.environ.get("FOURVENUES_AFFILIATE_SLUG", "quienva").strip()
 # per microsite, so the venue-scraped event and our promoter event never share ids.
 # (venue, date, name) is the same real occurrence across microsites and is reliable.
 _AFFILIATE_MAP: dict = {}
+# Fallback index for clubs we carry under a DIFFERENT org name than the one the
+# app scrapes (e.g. quienva's "CHANGO CLUB MADRID" vs the scraped "CHANGO MADRID").
+# Keyed by (date, normalized event name) -> list of (original venue name, our slug),
+# so an event can still be matched by same night+party when the venue names are
+# aliases of the same physical club.
+_AFFILIATE_BY_DN: dict = {}
 _AFFILIATE_VENUES: list = []    # [{venue, city, events}] breakdown (admin insight)
 _AFFILIATE_TS: float = 0.0      # last successful refresh (epoch seconds)
 
@@ -103,22 +109,49 @@ def _affiliate_key(venue: str, date: str, name: str) -> tuple:
     return (_norm_name(venue or ""), str(date or ""), _norm_name(name or ""))
 
 
-def _event_is_mine(ev: dict) -> bool:
-    """True only if this event is one WE carry in our promoter profile, matched by
-    (venue, date, name). Only those get our affiliate link; everything else keeps
-    its normal link so checkout never breaks."""
+def _affiliate_match(ev: dict):
+    """Return (our_event_slug, affiliate_venue_norm) if we carry this event, else
+    None. (1) EXACT match on (venue, date, name). (2) Fallback for clubs we carry
+    under a DIFFERENT org name than the app scrapes: same (date, party name) AND the
+    two club names are aliases of the same physical venue (distinctive-token subset,
+    city words ignored) — so e.g. our 'CHANGO CLUB MADRID' marks the scraped
+    'CHANGO MADRID'. It NEVER matches on date+name alone (that would mislabel other
+    clubs' identically-named nights). affiliate_venue_norm is the normalized name of
+    OUR carried club (used for coverage stats)."""
     if not AFFILIATE_SLUG or not _AFFILIATE_MAP:
-        return False
-    return _affiliate_key(ev.get("venue", ""), ev.get("date", ""), ev.get("name", "")) in _AFFILIATE_MAP
+        return None
+    v = _norm_name(ev.get("venue", ""))
+    d = str(ev.get("date") or "")
+    n = _norm_name(ev.get("name", ""))
+    slug = _AFFILIATE_MAP.get((v, d, n))
+    if slug:
+        return (slug, v)
+    if _AFFILIATE_BY_DN and n:
+        ev_venue = ev.get("venue", "")
+        for (aff_venue, aff_slug) in _AFFILIATE_BY_DN.get((d, n), ()):
+            if _venue_alias(aff_venue, ev_venue):
+                return (aff_slug, _norm_name(aff_venue))
+    return None
+
+
+def _affiliate_slug_for(ev: dict) -> Optional[str]:
+    m = _affiliate_match(ev)
+    return m[0] if m else None
+
+
+def _event_is_mine(ev: dict) -> bool:
+    """True only if this event is one WE carry in our promoter profile (exact or
+    venue-alias). Only those get our affiliate link; everything else keeps its
+    normal link so checkout never breaks."""
+    return _affiliate_match(ev) is not None
 
 
 def _commission_url_for(ev: dict) -> str:
     """The ticket link served to buyers: OUR affiliate link (with OUR event slug)
     ONLY for events we carry; otherwise the original untouched link."""
-    if AFFILIATE_SLUG and _AFFILIATE_MAP:
-        slug = _AFFILIATE_MAP.get(_affiliate_key(ev.get("venue", ""), ev.get("date", ""), ev.get("name", "")))
-        if slug:
-            return f"https://www.fourvenues.com/{AFFILIATE_SLUG}/events/{slug}"
+    slug = _affiliate_slug_for(ev)
+    if slug:
+        return f"https://www.fourvenues.com/{AFFILIATE_SLUG}/events/{slug}"
     return ev.get("commission_url", "") or ""
 
 
@@ -5914,6 +5947,25 @@ def _name_tokens(s: str) -> set:
     return {t for t in re.split(r"[^a-z0-9]+", s) if t}
 
 
+# City/region words that are NOT distinctive of a club (so 'Chango Madrid' and
+# 'Opium Madrid' don't look like the same place just because both say 'madrid').
+_CITY_TOKENS = {
+    "madrid", "barcelona", "ibiza", "eivissa", "marbella", "banus", "puerto",
+    "palma", "mallorca", "magaluf", "club", "the", "de", "la", "el",
+}
+
+
+def _venue_alias(a: str, b: str) -> bool:
+    """Do two club names refer to the SAME physical venue, ignoring city/filler
+    words? True when the distinctive-token set of one is a (non-empty) subset of
+    the other. e.g. 'CHANGO CLUB MADRID' vs 'CHANGO MADRID' -> {chango} match."""
+    ta = _name_tokens(a) - _CITY_TOKENS
+    tb = _name_tokens(b) - _CITY_TOKENS
+    if not ta or not tb:
+        return False
+    return ta <= tb or tb <= ta
+
+
 def _supported_city_for(addr: str) -> Optional[str]:
     """Map a FourVenues address to one of the app's supported cities, or None.
     Uses only the city segment after the postal code to avoid street-name traps."""
@@ -5992,7 +6044,7 @@ async def refresh_affiliate_events() -> int:
     affiliate link; everything else keeps its normal link. Runs on startup and
     every scraper cycle, so being added to new promoters is picked up on its own.
     Never clears the cache on a transient failure (keeps last known good)."""
-    global _AFFILIATE_MAP, _AFFILIATE_VENUES, _AFFILIATE_TS
+    global _AFFILIATE_MAP, _AFFILIATE_BY_DN, _AFFILIATE_VENUES, _AFFILIATE_TS
     if not AFFILIATE_SLUG:
         return 0
     token = await _get_fourvenues_token()
@@ -6011,6 +6063,7 @@ async def refresh_affiliate_events() -> int:
     }
     mad = ZoneInfo("Europe/Madrid")
     amap: dict = {}          # (norm venue, date, norm name) -> our event slug
+    by_dn: dict = {}         # (date, norm name) -> [(venue original, our slug)] alias fallback
     venue_agg: dict = {}     # (venue, city) -> count
     org_seed: dict = {}      # org_slug -> (org_name, app_city) for auto-seeding
     try:
@@ -6061,6 +6114,7 @@ async def refresh_affiliate_events() -> int:
                     if not slug:
                         continue
                     amap[_affiliate_key(venue, date_str, name)] = slug
+                    by_dn.setdefault((date_str, _norm_name(name)), []).append((venue, slug))
                     # Breakdown so admin knows which venues/cities to add to the app.
                     loc = it.get("location") or {}
                     addr = str(loc.get("addressComplete") or loc.get("address") or "")
@@ -6090,6 +6144,7 @@ async def refresh_affiliate_events() -> int:
             logger.info("[affiliate] API returned 0 events for our slug; keeping previous set")
             return len(_AFFILIATE_MAP)
         _AFFILIATE_MAP = amap
+        _AFFILIATE_BY_DN = by_dn
         _AFFILIATE_VENUES = sorted(
             [{"venue": v, "city": c, "events": n, "in_app": _city_in_app(c)}
              for (v, c), n in venue_agg.items()],
@@ -6861,10 +6916,10 @@ async def admin_affiliate_status(admin: dict = Depends(require_admin)):
     total_matched = 0
     async for ev in db.events.find({"date": {"$gte": _today}},
                                    {"_id": 0, "venue": 1, "date": 1, "name": 1, "city": 1}):
-        if _event_is_mine(ev):
+        m = _affiliate_match(ev)
+        if m:
             total_matched += 1
-            k = _norm_name(ev.get("venue", ""))
-            matched_by_venue[k] = matched_by_venue.get(k, 0) + 1
+            matched_by_venue[m[1]] = matched_by_venue.get(m[1], 0) + 1
     venues_out = []
     for v in _AFFILIATE_VENUES:
         vv = dict(v)

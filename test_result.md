@@ -4173,6 +4173,21 @@ backend:
           agent: "testing"
           comment: "TESTED ALL AFFILIATE SCENARIOS (100% pass): ✅ (A) AFFILIATE STATUS ENDPOINTS: (1) POST /api/admin/affiliate-refresh as admin → 200 with {slug:'quienva', mine_count:172}. (2) GET /api/admin/affiliate-status as admin → 200 with {slug:'quienva', mine_count:172, venues:[44 entries], updated_at}. Verified venues structure includes venue, city, events fields. mine_count=172 confirms affiliate map is populated (expected ~172). (3) GET /api/admin/affiliate-status as non-admin user → 403 (authorization working). ✅ (B) NEGATIVE CASE (core bug fix): Created event we DON'T carry via POST /api/admin/events with name='Fiesta Random No Mia', venue='Local Random Inexistente', city='Madrid', date='2030-06-04', has_commission=true, commission_url='https://site.fourvenues.com/es/amok@amok/events/random-ZZ'. GET /api/events/{id} as admin → commission_url='https://site.fourvenues.com/es/amok@amok/events/random-ZZ' (UNCHANGED, does NOT contain '/quienva/'), is_affiliate=false. CRITICAL BUG FIX VERIFIED: Events we DON'T carry are NOT rewritten. ✅ (C) POSITIVE CASE: Created event we DO carry via POST /api/admin/events with name='REGGAETON MILLENNIAL FEST 2026 - ALICANTE', venue='REGGAETON MILLENNIAL FEST', city='Madrid', date='2026-08-07', has_commission=true, commission_url='https://site.fourvenues.com/es/whatever/events/x'. GET /api/events/{id} as ADMIN → commission_url='https://www.fourvenues.com/quienva/events/reggaeton-millennial-fest-2026---alicante-07-08-2026' (correctly rewritten to OUR slug), is_affiliate=true. GET same event as normal user → commission_url is SAME rewritten URL, is_affiliate=null (correctly hidden from normal users). ✅ POST /api/admin/events correctly persists 'venue' and 'name' fields verbatim (verified via GET response). All affiliate logic working perfectly: matching by (venue,date,name), rewriting ONLY our events, admin-only is_affiliate field."
 
+  - task: "Affiliate fallback matching by club name alias (fix for org name mismatch)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "BUG FIX: clubs que llevo por mi link pero cuyo NOMBRE DE ORGANIZACIÓN en quienva difiere del que scrapea la app (p.ej. quienva 'CHANGO CLUB MADRID' vs scrapeado 'CHANGO MADRID') no se marcaban como míos (huecos rojos en panel). Fix: nuevo fallback _affiliate_match -> (1) match exacto (venue,date,name); (2) fallback por (date, nombre-fiesta exacto) + alias de club (_venue_alias: subconjunto de tokens distintivos ignorando ciudad/filler). Nunca marca por date+name solo. Endpoint /api/admin/affiliate-status ahora atribuye 'matched' al club de afiliado. Verificado por mí (API): Chango 6/6 marcados (4 exacto + 2 alias 'Vacanciones'), panel CHANGO MADRID 4/4 y CHANGO CLUB MADRID 2/2 (sin rojo), amok=1 (correcto: quienva SÍ lleva 'El Tardeo de Reggaeton Viejo' en AMOK el 05-09, match exacto)."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL AFFILIATE FALLBACK SCENARIOS (8 steps, 100% pass): ✅ (1) Admin login successful. ✅ (2) Retrieved 82 scrapers, found all target venues (Amok Mallorca, Chango Madrid, Fitz Madrid, Fitz Mallorca). ✅ (3) Ran scrapers: Amok Mallorca (70 events), Chango Madrid (10 events), Fitz Madrid (27 events), Fitz Mallorca (27 events). ✅ (4) POST /api/admin/affiliate-refresh → 200 with slug='quienva', mine_count=700. ✅ (5) GET /api/admin/affiliate-status → matched_count=324 (>0 ✓). CRITICAL VERIFICATION: CHANGO MADRID (events=4, matched=4) and CHANGO CLUB MADRID (events=2, matched=2) - ALL CHANGO venues have matched > 0 (NO red gaps). ✅ (6) Madrid feed test: Found 10 Chango events total. Events with 'Vacanciones' and is_affiliate=true: 2 (ALIAS MATCH working). Events with 'CHANGO' in name and is_affiliate=true: 4 (EXACT MATCH working). All 6 affiliate Chango events have commission_url starting with 'https://www.fourvenues.com/quienva/events/'. ✅ (7) ORDERING REGRESSION: 239 affiliate events in Madrid feed, ALL appear before non-affiliate events. Affiliate events sorted by price descending: [45.0, 30.0, 30.0, 30.0, 30.0, 25.0, 25.0, 25.0, 25.0, 25.0] ✓. ✅ (8) Palma feed test: Fitz Mallorca 27/27 events with is_affiliate=true. AMOK 'El Tardeo de Reggaeton Viejo' on 2026-09-05 correctly marked as affiliate (EXACT MATCH). NO massive false positives - other AMOK events NOT marked. AFFILIATE FALLBACK FIX WORKING PERFECTLY: Clubs with org name mismatch (CHANGO CLUB MADRID vs CHANGO MADRID) now correctly matched via alias fallback. No false positives. Ordering preserved."
+
 test_plan:
   current_focus: []
   stuck_tasks: []
@@ -4207,3 +4222,67 @@ agent_communication:
 agent_communication:
     - agent: "main"
       message: "4 mejoras (verificadas por API/DB/compilación, sin agente de pruebas por petición). (1) list_events: tier 0 (mis eventos) ordenados por precio DESC (más caro primero) → fecha; tier 1 igual que antes. Verificado 40→35→30→…→20. (2) FeedPlans.js vista Discotecas: cabecera con marco lima + chip 'Mi link' si el club es mío (mine=items.some(is_affiliate)); invisible para usuarios normales (is_affiliate null). (3) Alerta token caducado (in-app+push, ya existía tras scrape) ahora también desde refresh_affiliate_events en 401. (4) GET /admin/affiliate-status devuelve matched_count + matched por venue (fiestas próximas realmente marcadas); AdminAffiliatePanel muestra 'marcadas/llevadas' y resalta en rojo clubs míos con 0 marcadas (matched_count=322 en dev). Frontend compila limpio; lint OK."
+
+#====================================================================================================
+# 2026-08-05 l — FIX hueco Chango: match afiliado por alias de nombre de club (aunque org difiera)
+#====================================================================================================
+agent_communication:
+    - agent: "main"
+      message: "BUG FIX a verificar por testing agent. Problema: clubs que llevo por mi link pero cuyo NOMBRE DE ORGANIZACIÓN en quienva difiere del que scrapea la app (p.ej. quienva 'CHANGO CLUB MADRID' vs scrapeado 'CHANGO MADRID') no se marcaban como míos (huecos rojos en panel). Fix: nuevo fallback _affiliate_match -> (1) match exacto (venue,date,name); (2) fallback por (date, nombre-fiesta exacto) + alias de club (_venue_alias: subconjunto de tokens distintivos ignorando ciudad/filler). Nunca marca por date+name solo. Endpoint /api/admin/affiliate-status ahora atribuye 'matched' al club de afiliado. Verificado por mí (API): Chango 6/6 marcados (4 exacto + 2 alias 'Vacanciones'), panel CHANGO MADRID 4/4 y CHANGO CLUB MADRID 2/2 (sin rojo), amok=1 (correcto: quienva SÍ lleva 'El Tardeo de Reggaeton Viejo' en AMOK el 05-09, match exacto). Credenciales admin en memory/test_credentials.md."
+
+test_focus_2026_08_05_l:
+  goal: "Verificar el matching de afiliado (marca 'Mi link' / is_affiliate) tras el fix de alias de club, SIN romper nada."
+  auth: "Admin: admin@quienva.app / admin123 (POST /api/auth/login -> token). is_affiliate SOLO va a admins."
+  steps:
+    - "Login admin. Ejecutar POST /api/admin/scrapers/{id}/run para 'Chango Madrid', 'Fitz Mallorca', 'Fitz Madrid', 'Amok Mallorca' (obtener ids de GET /api/admin/scrapers)."
+    - "POST /api/admin/affiliate-refresh."
+    - "GET /api/admin/affiliate-status -> matched_count > 0; comprobar que las filas de Chango (CHANGO MADRID y CHANGO CLUB MADRID) tienen matched == events (>0), NO 0."
+    - "PUT /api/auth/profile {city:'Madrid'}; GET /api/events?date_filter=all -> eventos de Chango con is_affiliate=true deben incluir los 2 'Vacanciones' (match por alias) y los 'CHANGO' (match exacto); su commission_url debe empezar por https://www.fourvenues.com/quienva/events/."
+    - "Regresión ordenación: en el feed, TODOS los eventos con is_affiliate=true deben ir ANTES que los is_affiliate=false, y entre los is_affiliate=true, current_price debe ser NO creciente (más caro primero)."
+    - "PUT /api/auth/profile {city:'Palma de Mallorca'}; GET /api/events -> Fitz Mallorca debe salir marcado; NO debe haber falsos positivos absurdos (eventos marcados de clubs claramente no llevados salvo el Tardeo de Amok del 05-09 que SÍ es correcto)."
+  do_not: "No probar login social, push, ni endpoints no relacionados con afiliado/feed."
+
+agent_communication:
+    - agent: "testing"
+      message: |
+        ✅ AFFILIATE FALLBACK FIX VERIFICATION COMPLETE - ALL TESTS PASSED (8/8 steps, 100% success)
+        
+        TESTED: Affiliate system fix for club name mismatch (CHANGO CLUB MADRID vs CHANGO MADRID) using fallback matching by (date + exact party name) + club name alias.
+        
+        RESULTS:
+        ✅ Step 1: Admin login successful (admin@quienva.app)
+        ✅ Step 2: Retrieved 82 scrapers, found all target venues
+        ✅ Step 3: Ran scrapers successfully:
+           - Amok Mallorca: 70 events
+           - Chango Madrid: 10 events  
+           - Fitz Madrid: 27 events
+           - Fitz Mallorca: 27 events
+        ✅ Step 4: POST /api/admin/affiliate-refresh → slug='quienva', mine_count=700
+        ✅ Step 5: GET /api/admin/affiliate-status → matched_count=324 (>0 ✓)
+           CRITICAL FIX VERIFIED: 
+           - CHANGO MADRID: events=4, matched=4 (NO red gaps)
+           - CHANGO CLUB MADRID: events=2, matched=2 (NO red gaps)
+           ALL CHANGO venues now correctly matched despite org name mismatch
+        ✅ Step 6: Madrid feed verification:
+           - Total Chango events: 10
+           - 'Vacanciones' events with is_affiliate=true: 2 (ALIAS MATCH working ✓)
+           - 'CHANGO' events with is_affiliate=true: 4 (EXACT MATCH working ✓)
+           - All 6 affiliate events have correct commission_url format (https://www.fourvenues.com/quienva/events/...)
+        ✅ Step 7: Ordering regression verified:
+           - 239 affiliate events in Madrid feed
+           - ALL affiliate events appear BEFORE non-affiliate events ✓
+           - Affiliate events sorted by price descending: [45.0, 30.0, 30.0, 30.0, 30.0, 25.0, 25.0, 25.0, 25.0, 25.0] ✓
+        ✅ Step 8: Palma feed verification:
+           - Fitz Mallorca: 27/27 events with is_affiliate=true ✓
+           - AMOK 'El Tardeo de Reggaeton Viejo' on 2026-09-05: correctly marked as affiliate (exact match) ✓
+           - NO massive false positives: other AMOK events NOT marked ✓
+        
+        🎯 CONCLUSION:
+        The affiliate fallback matching fix is working perfectly. Clubs with organization name mismatch (e.g., FourVenues "CHANGO CLUB MADRID" vs scraped "CHANGO MADRID") are now correctly matched via the alias fallback mechanism. The fix successfully matches:
+        1. Exact matches by (venue, date, name)
+        2. Fallback matches by (date, exact party name) + club name alias
+        
+        No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
+        
+        Test file: /app/backend_test.py
+        Base URL: https://3f5bdffe-1626-4b84-8aca-a16675ba995d.preview.emergentagent.com/api
