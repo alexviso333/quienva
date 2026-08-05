@@ -39,7 +39,6 @@ export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [storyBusy, setStoryBusy] = useState(false);
-  const [storyPicker, setStoryPicker] = useState(false);
   const location = useLocation();
   // Robust "back": if the user landed here directly (shared link, notification,
   // refresh) there is no in-app history to pop, so navigate(-1) would do nothing
@@ -167,7 +166,6 @@ export default function EventDetail() {
         a.remove();
         URL.revokeObjectURL(url);
       }
-      setStoryPicker(false);
     } catch (_e) {
       /* user cancelled or share unsupported — ignore */
     } finally {
@@ -257,7 +255,7 @@ export default function EventDetail() {
           </button>
           <button
             data-testid="detail-share-story"
-            onClick={() => setStoryPicker(true)}
+            onClick={() => shareStory("neon")}
             disabled={storyBusy}
             aria-label="Compartir en Instagram Stories"
             className="absolute top-6 right-16 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform disabled:opacity-60"
