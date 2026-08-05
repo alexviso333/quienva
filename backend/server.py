@@ -843,9 +843,10 @@ async def story_image(event_id: str, request: Request):
         except Exception:
             poster = None
 
-    style = (request.query_params.get("style") or "neon").lower()
-    if style not in ("neon", "full", "minimal"):
-        style = "neon"
+    # Single unified "¿Quién va?" story style: blurred poster background with
+    # clean white typography. (The 3-style selector was removed for performance.)
+    style = "neon"        # blurred-poster background
+    neon_accents = False  # white brand + white poster border (minimal look)
     CYAN, MAGENTA, LIME = (0, 240, 255), (168, 85, 247), (190, 242, 60)
 
     def _cover(im):
@@ -927,7 +928,7 @@ async def story_image(event_id: str, request: Request):
     fb = font("title", bsize, 900)
     while draw.textlength(brand, font=fb) > W - 150 and bsize > 30:
         bsize -= 2; fb = font("title", bsize, 900)
-    if style == "neon":
+    if neon_accents:
         gtext(92, brand, fb, CYAN, MAGENTA)
     else:
         ctext(92, brand, fb, fill=(255, 255, 255), shadow=True)
@@ -959,14 +960,14 @@ async def story_image(event_id: str, request: Request):
         px = (W - pw) // 2
         shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         ImageDraw.Draw(shadow).rounded_rectangle((px, card_top, px + pw, card_top + ph), radius=radius,
-                                                 fill=(0, 0, 0, 170 if style == "neon" else 120))
+                                                 fill=(0, 0, 0, 170 if neon_accents else 120))
         shadow = shadow.filter(ImageFilter.GaussianBlur(28))
         img = Image.alpha_composite(img.convert("RGBA"), shadow).convert("RGB")
         img.paste(pc, (px, card_top), mask)
         draw = ImageDraw.Draw(img)
         draw.rounded_rectangle((px, card_top, px + pw, card_top + ph), radius=radius,
-                               outline=(CYAN if style == "neon" else (255, 255, 255)),
-                               width=4 if style == "neon" else 3)
+                               outline=(CYAN if neon_accents else (255, 255, 255)),
+                               width=4 if neon_accents else 3)
         text_y = card_top + ph + 60
     elif style == "full":
         text_y = max(560, (H - 170) - block_h)  # bottom-anchored, over the poster

@@ -256,3 +256,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - index.html: añadida meta google-site-verification (content JmiHtiZWYlDwQ4ax4u9kWdXeciixgyShawQZJLQcFFQ).
 - story_image acepta ?style=neon|full|minimal (default neon). neon=fondo póster difuminado+degradado neón+borde cian; full=póster a sangre con scrims arriba/abajo y texto abajo; minimal=fondo oscuro limpio + tarjeta con borde blanco. Verificado visualmente los 3.
 - Frontend EventDetail: el botón Instagram abre un SELECTOR (overlay) con 3 miniaturas (preview vía /story-image?style=..); al tocar una se comparte/descarga ese estilo. Estados storyPicker/storyBusy. Lint OK.
+
+## Update 2026-08-06 — FIX crash EventDetail (selector 3 estilos) + estilo Stories unificado
+- **Root cause del bloqueo (P0)**: una reversión previa quedó a medias — se quitó el estado `storyPicker`/`setStoryPicker` pero el overlay JSX que lo usaba seguía en `EventDetail.js` (línea ~190) → ReferenceError → ficha del evento en blanco y botones inertes. Además el botón IG y la campana se solapaban en `right-16`.
+- **Fix frontend** (`EventDetail.js`): eliminado por completo el overlay del selector de 3 estilos. El botón de Instagram ahora comparte 1 sola imagen directamente (`shareStory("neon")`) → sin generación múltiple, sin bloqueo. Recolocados los botones de cabecera (campana `right-28`, IG `right-16`, WhatsApp `right-4`) sin solaparse.
+- **Estilo Stories unificado** (`server.py` `story_image`): a petición del usuario (le gusta el fondo difuminado del neón pero las letras del minimal) → estilo único = fondo póster difuminado (neon) + tipografía limpia BLANCA + borde blanco del póster (minimal). Se ignora el parámetro `?style`. Verificado por API (200, JPEG 1080x1920) y visualmente.
+- Verificado: backend genera la imagen OK; frontend compila sin errores (crash resuelto). NO se usó agente de pruebas (petición del usuario).
+- **Producción**: cambio de código → requiere "Save to GitHub" para desplegar a Vercel (front) + Render (back).

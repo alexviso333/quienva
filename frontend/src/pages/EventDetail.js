@@ -187,47 +187,6 @@ export default function EventDetail() {
 
   return (
     <div className="min-h-screen qv-app-bg">
-      {storyPicker && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col" data-testid="story-picker">
-          <div className="max-w-md w-full mx-auto flex-1 flex flex-col p-5 overflow-y-auto">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-white font-display font-black text-xl">Elige tu estilo</h3>
-              <button onClick={() => setStoryPicker(false)} aria-label="Cerrar"
-                className="w-9 h-9 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90">✕</button>
-            </div>
-            <p className="text-white/50 text-xs mb-4">Toca uno y se abrirá para compartir en tus Stories.</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { key: "neon", label: "Neón" },
-                { key: "full", label: "Póster" },
-                { key: "minimal", label: "Minimal" },
-              ].map((s) => (
-                <button
-                  key={s.key}
-                  data-testid={`story-style-${s.key}`}
-                  onClick={() => shareStory(s.key)}
-                  disabled={storyBusy}
-                  className="group relative rounded-2xl overflow-hidden border border-white/15 bg-white/5 active:scale-95 transition-transform disabled:opacity-60"
-                >
-                  <img
-                    src={`${API}/story-image/${event.id}?style=${s.key}`}
-                    alt={s.label}
-                    loading="lazy"
-                    className="w-full aspect-[9/16] object-cover"
-                  />
-                  <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[11px] font-bold py-1 text-center">{s.label}</span>
-                </button>
-              ))}
-            </div>
-            {storyBusy && (
-              <div className="flex items-center justify-center gap-2 text-white/70 text-sm mt-5">
-                <Loader2 className="w-4 h-4 animate-spin" /> Preparando imagen…
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="max-w-md mx-auto min-h-screen pb-10">
         {/* Hero */}
         <div className="relative h-72">
@@ -248,7 +207,7 @@ export default function EventDetail() {
           <button
             data-testid="detail-follow"
             onClick={() => setFollow.mutate(!event.is_following)}
-            className="absolute top-6 right-16 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
+            className="absolute top-6 right-28 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
             aria-label="Avisarme de cambios"
           >
             <Bell className={`w-5 h-5 ${event.is_following ? "text-qv-secondary" : "text-white"}`} fill={event.is_following ? "currentColor" : "none"} />
