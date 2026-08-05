@@ -39,6 +39,7 @@ export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [storyBusy, setStoryBusy] = useState(false);
+  const [storyPicker, setStoryPicker] = useState(false);
   const location = useLocation();
   // Robust "back": if the user landed here directly (shared link, notification,
   // refresh) there is no in-app history to pop, so navigate(-1) would do nothing
@@ -146,11 +147,11 @@ export default function EventDetail() {
   // One-tap Instagram Story: fetch the ready-made 1080x1920 image from the
   // backend and open the native share sheet (Instagram/Stories) with the file;
   // if the device can't share files, download it so it can be posted manually.
-  const shareStory = async () => {
+  const shareStory = async (style = "neon") => {
     if (storyBusy) return;
     setStoryBusy(true);
     try {
-      const res = await fetch(`${API}/story-image/${event.id}`);
+      const res = await fetch(`${API}/story-image/${event.id}?style=${style}`);
       if (!res.ok) throw new Error("img");
       const blob = await res.blob();
       const file = new File([blob], `quienva-${event.id}.jpg`, { type: "image/jpeg" });
@@ -166,6 +167,7 @@ export default function EventDetail() {
         a.remove();
         URL.revokeObjectURL(url);
       }
+      setStoryPicker(false);
     } catch (_e) {
       /* user cancelled or share unsupported — ignore */
     } finally {
@@ -187,6 +189,47 @@ export default function EventDetail() {
 
   return (
     <div className="min-h-screen qv-app-bg">
+      {storyPicker && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col" data-testid="story-picker">
+          <div className="max-w-md w-full mx-auto flex-1 flex flex-col p-5 overflow-y-auto">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-white font-display font-black text-xl">Elige tu estilo</h3>
+              <button onClick={() => setStoryPicker(false)} aria-label="Cerrar"
+                className="w-9 h-9 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90">✕</button>
+            </div>
+            <p className="text-white/50 text-xs mb-4">Toca uno y se abrirá para compartir en tus Stories.</p>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { key: "neon", label: "Neón" },
+                { key: "full", label: "Póster" },
+                { key: "minimal", label: "Minimal" },
+              ].map((s) => (
+                <button
+                  key={s.key}
+                  data-testid={`story-style-${s.key}`}
+                  onClick={() => shareStory(s.key)}
+                  disabled={storyBusy}
+                  className="group relative rounded-2xl overflow-hidden border border-white/15 bg-white/5 active:scale-95 transition-transform disabled:opacity-60"
+                >
+                  <img
+                    src={`${API}/story-image/${event.id}?style=${s.key}`}
+                    alt={s.label}
+                    loading="lazy"
+                    className="w-full aspect-[9/16] object-cover"
+                  />
+                  <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[11px] font-bold py-1 text-center">{s.label}</span>
+                </button>
+              ))}
+            </div>
+            {storyBusy && (
+              <div className="flex items-center justify-center gap-2 text-white/70 text-sm mt-5">
+                <Loader2 className="w-4 h-4 animate-spin" /> Preparando imagen…
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="max-w-md mx-auto min-h-screen pb-10">
         {/* Hero */}
         <div className="relative h-72">
@@ -214,7 +257,7 @@ export default function EventDetail() {
           </button>
           <button
             data-testid="detail-share-story"
-            onClick={shareStory}
+            onClick={() => setStoryPicker(true)}
             disabled={storyBusy}
             aria-label="Compartir en Instagram Stories"
             className="absolute top-6 right-16 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform disabled:opacity-60"

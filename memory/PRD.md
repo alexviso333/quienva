@@ -251,3 +251,8 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - story_image ahora usa las fuentes de marca: Unbounded (variable, weight 800/900) para marca+título y Outfit para texto (empaquetadas en backend/assets/fonts como Unbounded.ttf/Outfit.ttf, cargadas con set_variation_by_axes).
 - Marca "¿QUIÉN VA?" con degradado neón cian->magenta + sombra suave (helper gtext). Subtítulo "LOS PLANES DEL FINDE" con tracking. Póster con borde neón cian + sombra. Nombre en Unbounded 800 blanco con sombra (auto-encoge a 50 si 3 líneas). line2 Outfit, pill de precio lima, footer pill "Míralo en ¿Quién va?" con borde cian. Scrim inferior para legibilidad. Nombre: se limpian sufijos ruido (**, _, ~, |).
 - Verificado visualmente: acabado mucho más pro/coherente con la marca.
+
+## Update 2026-08-05 h — 3 estilos de imagen Stories + verificación Google
+- index.html: añadida meta google-site-verification (content JmiHtiZWYlDwQ4ax4u9kWdXeciixgyShawQZJLQcFFQ).
+- story_image acepta ?style=neon|full|minimal (default neon). neon=fondo póster difuminado+degradado neón+borde cian; full=póster a sangre con scrims arriba/abajo y texto abajo; minimal=fondo oscuro limpio + tarjeta con borde blanco. Verificado visualmente los 3.
+- Frontend EventDetail: el botón Instagram abre un SELECTOR (overlay) con 3 miniaturas (preview vía /story-image?style=..); al tocar una se comparte/descarga ese estilo. Estados storyPicker/storyBusy. Lint OK.
