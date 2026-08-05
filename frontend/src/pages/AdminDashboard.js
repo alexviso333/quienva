@@ -10,6 +10,7 @@ import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tool
 import AdminMomentPanel from "@/components/AdminMomentPanel";
 import AdminScrapersPanel from "@/components/AdminScrapersPanel";
 import AdminVenuesPanel from "@/components/AdminVenuesPanel";
+import AdminVenuePriority from "@/components/AdminVenuePriority";
 import AdminScrapeChangelog from "@/components/AdminScrapeChangelog";
 import AdminAffiliatePanel from "@/components/AdminAffiliatePanel";
 import AdminEventStats from "@/components/AdminEventStats";
@@ -273,6 +274,7 @@ export default function AdminDashboard() {
           <AdminScrapeChangelog />
           <AdminAffiliatePanel />
           <AdminScrapersPanel />
+          <AdminVenuePriority />
           <AdminVenuesPanel />
         </div>
       )}

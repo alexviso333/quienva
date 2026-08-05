@@ -96,6 +96,13 @@ def _city_in_app(city: str) -> bool:
 
 
 
+def _affiliate_key(venue: str, date: str, name: str) -> tuple:
+    """Match key shared by the affiliate refresh and event lookup: normalized
+    (venue/org name, YYYY-MM-DD, event name). Accent/punctuation-insensitive so
+    the FourVenues org name lines up with the scraped venue name."""
+    return (_norm_name(venue or ""), str(date or ""), _norm_name(name or ""))
+
+
 def _event_is_mine(ev: dict) -> bool:
     """True only if this event is one WE carry in our promoter profile, matched by
     (venue, date, name). Only those get our affiliate link; everything else keeps
@@ -1241,6 +1248,35 @@ def _current_price(ev: dict) -> Optional[float]:
     return float(tiers[-1].get("price", 0))
 
 
+async def _venue_priority_maps(city):
+    """Admin-curated club importance for ordering the feed.
+
+    Returns (order_by_scraper_venue_id, order_by_norm_venue_name) for a city,
+    both mapping to `venues.order` (lower = more important). The admin controls
+    this order from the "Prioridad de discotecas" panel. Used only to REORDER
+    the feed; nothing is added, removed or marked."""
+    order_by_name: dict = {}
+    slug_to_order: dict = {}
+    async for v in db.venues.find(
+        {"city": city}, {"_id": 0, "name": 1, "order": 1, "scraper_slug": 1}
+    ):
+        o = v.get("order", 10_000)
+        nm = _norm_name(v.get("name", ""))
+        if nm:
+            order_by_name[nm] = o
+        sl = v.get("scraper_slug") or ""
+        if sl:
+            slug_to_order[sl] = o
+    order_by_sid: dict = {}
+    if slug_to_order:
+        async for s in db.scraped_venues.find(
+            {"slug": {"$in": list(slug_to_order.keys())}}, {"_id": 0, "slug": 1, "id": 1}
+        ):
+            if s.get("id"):
+                order_by_sid[s["id"]] = slug_to_order.get(s.get("slug"), 10_000)
+    return order_by_sid, order_by_name
+
+
 @api_router.get("/events")
 async def list_events(user: dict = Depends(get_current_user),
                       date_filter: str = Query("all"),
@@ -1275,21 +1311,49 @@ async def list_events(user: dict = Depends(get_current_user),
             continue
         filtered_events.append(ev)
 
-    # Featured events float to the top (a promoted-placement lever for the owner),
-    # but never in the "pasados" view. Date order preserved within each group.
-    if date_filter != "pasados":
-        filtered_events.sort(key=lambda e: 0 if e.get("featured") else 1)
-        # Revenue lever: our own affiliate events get top placement (stable sort
-        # keeps the existing featured/date order within the two groups). No visual
-        # marker is added for regular users — it just reorders silently.
-        filtered_events.sort(key=lambda e: 0 if _event_is_mine(e) else 1)
-
-    # BULK LOAD all interests for these events in ONE query (avoid N+1)
+    # BULK LOAD all interests for these events in ONE query (avoid N+1). Loaded
+    # BEFORE sorting so the feed can rank by real engagement (popularity).
     event_ids = [ev["id"] for ev in filtered_events]
     interests_by_event: dict = {eid: [] for eid in event_ids}
     if event_ids:
         async for it in db.interests.find({"event_id": {"$in": event_ids}}):
             interests_by_event.setdefault(it["event_id"], []).append(it)
+
+    # Feed ordering (never in the "pasados" view, which stays newest-first by date).
+    # This only REORDERS events — nothing is added, removed or visually marked, so
+    # regular users can't tell it's intentional. Priority, top to bottom:
+    #   1) OUR affiliate events (slug quienva) — always first (revenue lever).
+    #   2) club importance — the admin-curated venue order (lower = higher).
+    #   3) featured events within the same club-importance tier.
+    #   4) popularity — real user activity (voy/me interesa) blended with how close
+    #      the event is to selling (pocas entradas > a la venta > próximamente > agotado).
+    #   5) date — keeps each tier chronological.
+    if date_filter != "pasados":
+        order_by_sid, order_by_name = await _venue_priority_maps(query["city"])
+
+        def _venue_rank(e):
+            sid = e.get("scraper_venue_id")
+            if sid and sid in order_by_sid:
+                return order_by_sid[sid]
+            return order_by_name.get(_norm_name(e.get("venue", "")), 10_000)
+
+        _SALE_URGENCY = {"pocas_entradas": 3, "a_la_venta": 2, "no_a_la_venta": 1, "agotado": 0}
+
+        def _popularity(e):
+            its = interests_by_event.get(e["id"], [])
+            going = sum(1 for it in its if it.get("status") == "voy")
+            interested = sum(1 for it in its if it.get("status") == "me_interesa")
+            activity = going * 2 + interested
+            urgency = _SALE_URGENCY.get(e.get("sale_state", "no_a_la_venta"), 1)
+            return activity + urgency
+
+        filtered_events.sort(key=lambda e: (
+            0 if _event_is_mine(e) else 1,
+            _venue_rank(e),
+            0 if e.get("featured") else 1,
+            -_popularity(e),
+            e.get("date", ""),
+        ))
 
     # Load user's followed events (for is_following flag)
     follows_set: set = set()
@@ -7256,6 +7320,10 @@ class VenueInput(BaseModel):
     order: int = 100
 
 
+class VenueReorderInput(BaseModel):
+    venue_ids: List[str]
+
+
 async def _venue_event_counts() -> dict:
     """Map scraper_venue_id -> count of upcoming events (date >= today)."""
     today = date.today().isoformat()
@@ -7365,6 +7433,19 @@ async def admin_create_venue(inp: VenueInput, admin: dict = Depends(require_admi
     await db.venues.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+
+@app.put("/api/admin/venues/reorder")
+async def admin_reorder_venues(inp: VenueReorderInput, admin: dict = Depends(require_admin)):
+    """Set the club-importance priority in one shot. Receives the venue ids in the
+    desired order (top = most important) and stores order = position. This is the
+    "Prioridad de discotecas" list the owner can rearrange anytime; the feed uses
+    it right below our own affiliate events."""
+    n = 0
+    for i, vid in enumerate(inp.venue_ids):
+        r = await db.venues.update_one({"id": vid}, {"$set": {"order": i}})
+        n += r.matched_count
+    return {"ok": True, "updated": n}
 
 
 @app.put("/api/admin/venues/{venue_id}")
