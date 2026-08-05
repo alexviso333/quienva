@@ -246,3 +246,8 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Instagram Stories (backend Pillow): GET /api/story-image/{event_id} = JPEG 1080x1920 (fondo póster difuminado+oscurecido, tarjeta del póster con esquinas redondeadas+sombra, marca ¿QUIÉN VA?, nombre, local·fecha, pill de precio, footer). Fuentes FreeSans/FreeSansBold empaquetadas en backend/assets/fonts (funcionan en Render). Verificado visualmente.
 - Frontend: EventDetail botón "Stories" (icono Instagram) junto al de WhatsApp -> fetch de la imagen + navigator.share({files}) en móvil, con fallback a descarga en desktop.
 - Producción: requiere FRONTEND_URL en Render y "Save to GitHub". Tras deploy: enviar sitemap en Google Search Console.
+
+## Update 2026-08-05 g — Story image: tipografía de marca (Unbounded/Outfit) + acabado
+- story_image ahora usa las fuentes de marca: Unbounded (variable, weight 800/900) para marca+título y Outfit para texto (empaquetadas en backend/assets/fonts como Unbounded.ttf/Outfit.ttf, cargadas con set_variation_by_axes).
+- Marca "¿QUIÉN VA?" con degradado neón cian->magenta + sombra suave (helper gtext). Subtítulo "LOS PLANES DEL FINDE" con tracking. Póster con borde neón cian + sombra. Nombre en Unbounded 800 blanco con sombra (auto-encoge a 50 si 3 líneas). line2 Outfit, pill de precio lima, footer pill "Míralo en ¿Quién va?" con borde cian. Scrim inferior para legibilidad. Nombre: se limpian sufijos ruido (**, _, ~, |).
+- Verificado visualmente: acabado mucho más pro/coherente con la marca.

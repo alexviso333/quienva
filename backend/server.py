@@ -820,8 +820,16 @@ async def story_image(event_id: str, request: Request):
         return StarletteResponse(content="not found", status_code=404, media_type="text/plain")
     W, H = 1080, 1920
 
-    def font(bold, size):
-        return ImageFont.truetype(os.path.join(_ASSETS_FONTS, "FreeSansBold.ttf" if bold else "FreeSans.ttf"), size)
+    def font(kind, size, weight=None):
+        # kind: 'title' -> Unbounded (brand display), 'body' -> Outfit
+        fname = "Unbounded.ttf" if kind == "title" else "Outfit.ttf"
+        f = ImageFont.truetype(os.path.join(_ASSETS_FONTS, fname), size)
+        if weight is not None:
+            try:
+                f.set_variation_by_axes([weight])
+            except Exception:
+                pass
+        return f
 
     # Fetch the poster (server-side, avoids browser CORS/tainted-canvas issues).
     poster = None
@@ -841,47 +849,79 @@ async def story_image(event_id: str, request: Request):
         scale = max(W / bw, H / bh)
         bg = poster.resize((int(bw * scale) + 1, int(bh * scale) + 1))
         bx = (bg.width - W) // 2; by = (bg.height - H) // 2
-        bg = bg.crop((bx, by, bx + W, by + H)).filter(ImageFilter.GaussianBlur(40))
+        bg = bg.crop((bx, by, bx + W, by + H)).filter(ImageFilter.GaussianBlur(46))
     else:
         bg = Image.new("RGB", (W, H))
         for y in range(H):
             t = y / H
-            bg.paste((int(20 + 90 * t), int(10 + 20 * t), int(40 + 120 * (1 - t))), (0, y, W, y + 1))
-    dark = Image.new("RGB", (W, H), (0, 0, 0))
-    bg = Image.blend(bg, dark, 0.55)
+            bg.paste((int(24 + 90 * t), int(8 + 20 * t), int(48 + 130 * (1 - t))), (0, y, W, y + 1))
+    bg = Image.blend(bg, Image.new("RGB", (W, H), (8, 8, 12)), 0.5)
+    # Bottom scrim so the text always reads, applied BEFORE the poster so the
+    # poster itself stays bright.
+    ramp = Image.new("L", (1, H), 0)
+    for y in range(H):
+        ramp.putpixel((0, y), 0 if y < H * 0.42 else int(215 * ((y - H * 0.42) / (H * 0.58))))
+    bg = Image.composite(Image.new("RGB", (W, H), (5, 5, 9)), bg, ramp.resize((W, H)))
     img = bg
     draw = ImageDraw.Draw(img)
 
-    # Brand header.
-    brand = "\u00bfQUI\u00c9N VA?"
-    fb = font(True, 60)
-    draw.text(((W - draw.textlength(brand, font=fb)) / 2, 96), brand, font=fb, fill=(0, 240, 255))
-    sub = "los planes del finde"
-    fs = font(False, 34)
-    draw.text(((W - draw.textlength(sub, font=fs)) / 2, 172), sub, font=fs, fill=(230, 230, 240))
+    CYAN, MAGENTA, LIME = (0, 240, 255), (168, 85, 247), (190, 242, 60)
 
-    # Poster card (rounded).
-    card_top = 300
+    def gtext(y, text, f, c1, c2):
+        """Centered horizontal-gradient text with a soft drop shadow (for the brand)."""
+        tw = int(draw.textlength(text, font=f)); th = int(f.size * 1.7)
+        x0 = int((W - tw) / 2) - 6
+        mask = Image.new("L", (tw + 12, th), 0)
+        ImageDraw.Draw(mask).text((6, 0), text, font=f, fill=255)
+        sh = Image.new("L", (tw + 12, th), 0)
+        ImageDraw.Draw(sh).text((6, 0), text, font=f, fill=190)
+        sh = sh.filter(ImageFilter.GaussianBlur(9))
+        img.paste(Image.new("RGB", (tw + 12, th), (0, 0, 0)), (x0, int(y) + 5), sh)
+        grad = Image.new("RGB", (tw + 12, th))
+        for x in range(tw + 12):
+            t = x / max(1, tw + 11)
+            grad.paste(tuple(int(a + (b - a) * t) for a, b in zip(c1, c2)), (x, 0, x + 1, th))
+        img.paste(grad, (x0, int(y)), mask)
+
+    def ctext(y, text, f, fill=(255, 255, 255), shadow=True):
+        x = (W - draw.textlength(text, font=f)) / 2
+        if shadow:
+            draw.text((x + 2, y + 3), text, font=f, fill=(0, 0, 0))
+        draw.text((x, y), text, font=f, fill=fill)
+
+    # Brand header (Unbounded 900, neon gradient) + tagline (Outfit).
+    brand = "\u00bfQUI\u00c9N VA?"
+    bsize = 60
+    fb = font("title", bsize, 900)
+    while draw.textlength(brand, font=fb) > W - 150 and bsize > 30:
+        bsize -= 2; fb = font("title", bsize, 900)
+    gtext(92, brand, fb, CYAN, MAGENTA)
+    sub = "L O S   P L A N E S   D E L   F I N D E"
+    fs = font("body", 26, 500)
+    ctext(96 + int(bsize * 1.35), sub, fs, fill=(200, 205, 220), shadow=False)
+
+    # Poster card (rounded) with soft shadow + subtle neon border.
+    card_top = 320
     if poster is not None:
-        pw = 820
-        ph = int(poster.height * (pw / poster.width))
-        ph = min(ph, 1040)
-        pc = poster.resize((pw, int(poster.height * (pw / poster.width))))
-        pc = pc.crop((0, 0, pw, ph))
-        radius = 44
+        pw = 840
+        full_h = int(poster.height * (pw / poster.width))
+        ph = min(full_h, 1020)
+        pc = poster.resize((pw, full_h)).crop((0, 0, pw, ph))
+        radius = 48
         mask = Image.new("L", (pw, ph), 0)
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, pw, ph), radius=radius, fill=255)
         px = (W - pw) // 2
-        # soft shadow
         shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ImageDraw.Draw(shadow).rounded_rectangle((px, card_top, px + pw, card_top + ph), radius=radius, fill=(0, 0, 0, 150))
-        shadow = shadow.filter(ImageFilter.GaussianBlur(24))
+        ImageDraw.Draw(shadow).rounded_rectangle((px, card_top, px + pw, card_top + ph), radius=radius, fill=(0, 0, 0, 170))
+        shadow = shadow.filter(ImageFilter.GaussianBlur(28))
         img = Image.alpha_composite(img.convert("RGBA"), shadow).convert("RGB")
         img.paste(pc, (px, card_top), mask)
         draw = ImageDraw.Draw(img)
-        text_y = card_top + ph + 56
+        draw.rounded_rectangle((px, card_top, px + pw, card_top + ph), radius=radius,
+                               outline=(0, 240, 255), width=4)
+        text_y = card_top + ph + 60
     else:
-        text_y = 640
+        text_y = 660
 
     def wrap(text, f, max_w):
         out, cur = [], ""
@@ -895,28 +935,41 @@ async def story_image(event_id: str, request: Request):
             out.append(cur)
         return out[:3]
 
-    name = ev.get("name") or "Fiesta"
-    fn = font(True, 66)
-    for ln in wrap(name, fn, W - 140):
-        draw.text(((W - draw.textlength(ln, font=fn)) / 2, text_y), ln, font=fn, fill=(255, 255, 255))
-        text_y += 78
-    line2 = " \u00b7 ".join([x for x in [ev.get("venue", ""), _es_share_date(ev.get("date", ""))] if x])
+    # Event name (Unbounded 800, white with shadow).
+    name = (ev.get("name") or "Fiesta").strip()
+    name = re.sub(r"[\s*_~|]+$", "", name) or "Fiesta"
+    nsize = 60
+    fn = font("title", nsize, 800)
+    lines = wrap(name, fn, W - 150)
+    if len(lines) >= 3:
+        nsize = 50; fn = font("title", nsize, 800); lines = wrap(name, fn, W - 140)
+    for ln in lines:
+        ctext(text_y, ln, fn)
+        text_y += int(nsize * 1.24)
+    text_y += 6
+
+    line2 = "  \u00b7  ".join([x for x in [ev.get("venue", ""), _es_share_date(ev.get("date", ""))] if x])
     if line2:
-        f2 = font(False, 40)
-        draw.text(((W - draw.textlength(line2, font=f2)) / 2, text_y + 6), line2, font=f2, fill=(200, 200, 210))
-        text_y += 70
+        f2 = font("body", 40, 500)
+        ctext(text_y, line2, f2, fill=(214, 216, 226))
+        text_y += 66
     pl = _price_line(ev)
     if pl:
-        f3 = font(True, 40)
+        f3 = font("body", 40, 700)
         tw = draw.textlength(pl, font=f3)
-        px0 = (W - tw) / 2 - 34
-        draw.rounded_rectangle((px0, text_y + 8, px0 + tw + 68, text_y + 76), radius=34, fill=(190, 242, 60))
-        draw.text(((W - tw) / 2, text_y + 20), pl, font=f3, fill=(10, 10, 12))
-        text_y += 92
+        px0 = (W - tw) / 2 - 36
+        draw.rounded_rectangle((px0, text_y + 10, px0 + tw + 72, text_y + 84), radius=37, fill=LIME)
+        draw.text(((W - tw) / 2, text_y + 22), pl, font=f3, fill=(10, 12, 8))
+        text_y += 104
 
-    foot = "Míralo en \u00bfQui\u00e9n va?"
-    ff = font(False, 34)
-    draw.text(((W - draw.textlength(foot, font=ff)) / 2, H - 110), foot, font=ff, fill=(0, 240, 255))
+    # Footer CTA pill.
+    foot = "M\u00edralo en \u00bfQui\u00e9n va?"
+    ff = font("body", 34, 600)
+    fw = draw.textlength(foot, font=ff)
+    fx = (W - fw) / 2
+    draw.rounded_rectangle((fx - 40, H - 132, fx + fw + 40, H - 56), radius=40, fill=(18, 20, 30))
+    draw.rounded_rectangle((fx - 40, H - 132, fx + fw + 40, H - 56), radius=40, outline=(0, 240, 255), width=3)
+    draw.text((fx, H - 118), foot, font=ff, fill=(0, 240, 255))
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=88)
