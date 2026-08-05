@@ -5878,6 +5878,100 @@ async def _fourvenues_token_is_valid(token: str) -> Optional[bool]:
         return None
 
 
+# City keyword sets used to classify an affiliate club's address into one of the
+# app's supported cities. Matched as WHOLE tokens against the city part extracted
+# AFTER the postal code (via _city_from_address), never against the raw address —
+# so street names like "Calle Barcelona" (in Benicasim) or "Las Palmas" can't
+# false-match "Barcelona"/"Palma".
+_CITY_KEYWORDS = {
+    "Palma de Mallorca": {"palma", "mallorca", "magaluf", "calvia", "alcudia",
+                          "andratx", "manacor", "santanyi", "peguera",
+                          "portals", "llucmajor", "picafort", "pollensa"},
+    "Ibiza": {"ibiza", "eivissa", "bossa"},
+    "Madrid": {"madrid", "alcorcon", "mostoles", "getafe", "leganes"},
+    "Barcelona": {"barcelona"},
+    "Marbella": {"marbella", "banus", "estepona"},  # "san pedro" handled below
+}
+
+
+def _name_tokens(s: str) -> set:
+    """Accent/case-insensitive word tokens (kept SEPARATE, unlike _norm_name which
+    strips spaces). Used for city classification and duplicate-club detection."""
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+    return {t for t in re.split(r"[^a-z0-9]+", s) if t}
+
+
+def _supported_city_for(addr: str) -> Optional[str]:
+    """Map a FourVenues address to one of the app's supported cities, or None.
+    Uses only the city segment after the postal code to avoid street-name traps."""
+    city = _city_from_address(addr)
+    toks = _name_tokens(city)
+    if not toks:
+        return None
+    if {"san", "pedro"} <= toks or {"puerto", "banus"} <= _name_tokens(addr):
+        return "Marbella"
+    for app_city, kws in _CITY_KEYWORDS.items():
+        if toks & kws:
+            return app_city
+    return None
+
+
+def _names_refer_same(a: str, b: str) -> bool:
+    """Heuristic: do two venue names refer to the same physical club? True when
+    one token set is a subset of the other (e.g. 'Chango Madrid' vs 'CHANGO CLUB
+    MADRID'). Prevents auto-seeding a duplicate scraper for an already-covered club."""
+    ta, tb = _name_tokens(a), _name_tokens(b)
+    if not ta or not tb:
+        return False
+    return ta == tb or ta <= tb or tb <= ta
+
+
+async def _auto_seed_affiliate_clubs(org_seed: dict) -> int:
+    """Ensure every club we carry (from our RRPP link) that sits in a SUPPORTED
+    city has its own FourVenues scraper, so its events show up in the feed, get
+    the 'Mi link' marker and rank first — WITHOUT us hand-adding each new club.
+    Deduped by slug AND by name (so we never duplicate a club already scraped).
+    org_seed: {org_slug: [org_name, {app_city: count}]}. Returns how many added."""
+    if not org_seed:
+        return 0
+    try:
+        existing_slugs = set()
+        existing_names = []  # (norm-ready name)
+        async for v in db.scraped_venues.find({}, {"_id": 0, "slug": 1, "name": 1}):
+            if v.get("slug"):
+                existing_slugs.add(v["slug"])
+            if v.get("name"):
+                existing_names.append(v["name"])
+        added = 0
+        for slug, (name, city_counts) in org_seed.items():
+            if not slug or slug in existing_slugs:
+                continue
+            if not city_counts:
+                continue
+            city = max(city_counts.items(), key=lambda kv: kv[1])[0]
+            if any(_names_refer_same(name, en) for en in existing_names):
+                continue  # a scraper for this club already exists under another slug
+            doc = {
+                "id": str(uuid.uuid4()), "name": name, "slug": slug, "city": city,
+                "adapter_type": "fourvenues_api", "active": True,
+                "url": f"https://site.fourvenues.com/es/{slug}",
+                "auto_affiliate": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "last_run_at": None, "last_run_ok": None, "last_run_events": 0,
+                "last_run_new": 0, "last_run_updated": 0, "last_run_error": None,
+            }
+            await db.scraped_venues.insert_one(doc)
+            existing_slugs.add(slug)
+            existing_names.append(name)
+            added += 1
+        if added:
+            logger.info(f"[affiliate] auto-seeded {added} new carried club(s) in supported cities")
+        return added
+    except Exception as e:
+        logger.warning(f"[affiliate] auto-seed failed: {e}")
+        return 0
+
+
 async def refresh_affiliate_events() -> int:
     """Refresh the set of events that belong to OUR affiliate profile (our
     microsite slug). We call the same FourVenues events API used by the scraper,
@@ -5905,10 +5999,11 @@ async def refresh_affiliate_events() -> int:
     mad = ZoneInfo("Europe/Madrid")
     amap: dict = {}          # (norm venue, date, norm name) -> our event slug
     venue_agg: dict = {}     # (venue, city) -> count
+    org_seed: dict = {}      # org_slug -> (org_name, app_city) for auto-seeding
     try:
-        async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+        async with httpx.AsyncClient(timeout=20, headers=headers) as client:
             page = 1
-            while page <= 10:  # safety cap
+            while page <= 40:  # safety cap (paginate until an EMPTY page)
                 r = await client.get(
                     "https://cli-api-service.fourvenues.com/api/events",
                     params={"startDate": start, "endDate": end, "slug": AFFILIATE_SLUG,
@@ -5951,14 +6046,28 @@ async def refresh_affiliate_events() -> int:
                     amap[_affiliate_key(venue, date_str, name)] = slug
                     # Breakdown so admin knows which venues/cities to add to the app.
                     loc = it.get("location") or {}
+                    addr = str(loc.get("addressComplete") or loc.get("address") or "")
                     vcity = str(loc.get("city") or loc.get("town") or "").strip()
                     if not vcity:
-                        addr = str(loc.get("addressComplete") or loc.get("address") or "")
                         vcity = _city_from_address(addr)
                     vk = (venue or "?", vcity)
                     venue_agg[vk] = venue_agg.get(vk, 0) + 1
-                if len(items) < 200:
-                    break
+                    # Auto-seed data: the CLUB microsite slug (org.slug, not the
+                    # per-event slug) + a tally of the supported cities its events
+                    # fall in, so a scraper can be created for every carried club
+                    # (classified by its MOST COMMON supported city → robust for
+                    # touring promoters) without hand-adding each one.
+                    org_slug = str(org.get("slug") or "").strip()
+                    if org_slug:
+                        app_city = _supported_city_for(addr)
+                        if app_city:
+                            rec = org_seed.setdefault(org_slug, [venue or org_slug, {}])
+                            rec[1][app_city] = rec[1].get(app_city, 0) + 1
+                # The FourVenues API returns a VARIABLE page size (~170) that is
+                # SMALLER than the requested pageSize=200, so we must NOT stop on
+                # "len < pageSize" (that quit after page 1 → only ~172 of ~700
+                # events, i.e. just the next ~2 weeks). Keep paging until the API
+                # returns an EMPTY page.
                 page += 1
         if not amap:
             logger.info("[affiliate] API returned 0 events for our slug; keeping previous set")
@@ -5971,6 +6080,9 @@ async def refresh_affiliate_events() -> int:
         )
         _AFFILIATE_TS = time.time()
         logger.info(f"[affiliate] '{AFFILIATE_SLUG}' → {len(amap)} events across {len(_AFFILIATE_VENUES)} venues are mine")
+        # Self-maintaining coverage: create a scraper for any carried club in a
+        # supported city that we don't already scrape (deduped by slug + name).
+        await _auto_seed_affiliate_clubs(org_seed)
         return len(amap)
     except Exception as e:
         logger.warning(f"[affiliate] refresh failed ({e}); keeping previous affiliate set of {len(_AFFILIATE_MAP)}")
