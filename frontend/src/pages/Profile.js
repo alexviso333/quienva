@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
@@ -23,6 +25,14 @@ function QuickAction({ icon: Icon, label, onClick, color, testid }) {
 export default function Profile() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Show the Wrapped banner only if LAST month had activity (defaults to last month).
+  const { data: wrapped } = useQuery({
+    queryKey: ["wrapped-banner"],
+    queryFn: async () => (await api.get("/me/wrapped")).data,
+    staleTime: 5 * 60 * 1000,
+  });
+  const showWrapped = !!wrapped?.has_data;
 
   return (
     <AppShell>
@@ -49,7 +59,8 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Wrapped — monthly recap */}
+      {/* Wrapped — monthly recap (only shown if last month had activity) */}
+      {showWrapped && (
       <div className="px-5 mb-5">
         <button
           data-testid="wrapped-banner"
@@ -60,12 +71,13 @@ export default function Profile() {
             <Sparkles className="w-6 h-6 text-yellow-300" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-display font-black text-white text-lg leading-tight">Tu Wrapped del mes</p>
+            <p className="font-display font-black text-white text-lg leading-tight">Tu Wrapped de {wrapped?.month_label}</p>
             <p className="text-white/60 text-xs">Tu resumen de fiesta, listo para compartir ✨</p>
           </div>
           <ChevronRight className="w-5 h-5 text-white/50 shrink-0" />
         </button>
       </div>
+      )}
 
       {/* Quick actions */}
       <div className="px-5 grid grid-cols-4 gap-2 mb-5">

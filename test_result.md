@@ -4748,3 +4748,115 @@ agent_communication:
         
         Test file: /app/backend_test_wrapped.py
         Test credentials used: admin@quienva.app / admin123 + fresh test user U1
+
+test_focus_2026_08_wrapped_lastmonth_gallery:
+  goal: "Cambios Wrapped: (1) /api/me/wrapped SIN param ahora = MES ANTERIOR (mes actual=2026-08 => default 2026-07). (2) Nuevo campo 'gallery' con fotos de album + momentos de las FIESTAS de ese periodo (por event_id, no por fecha de subida). Entorno LOCAL, sin token FourVenues."
+  auth: "Admin: admin@quienva.app / admin123. Usuarios via POST /api/auth/register."
+  notes: "Mes actual del sistema = 2026-08. El mes anterior es 2026-07."
+  steps:
+    - "Seed JULIO: Login admin. Crear 2 eventos con date en 2026-07 (p.ej. 2026-07-12, 2026-07-20). Crear 1 evento en 2026-08 (2026-08-05) para comprobar que NO sale en el default."
+    - "Usuario U1: registrar/loguear. POST /api/events/{id}/interest {status:'estuve'} en los 3 eventos (2 de julio + 1 de agosto)."
+    - "Media en JULIO: subir 1 foto al primer evento de julio (POST /api/events/{evJul1}/album, campo multipart segun endpoint). Admin: POST /api/admin/events/{evJul1}/moment/trigger. U1: POST /api/events/{evJul1}/moment/upload (campo 'file', imagen). (Las subidas ocurren 'ahora' en agosto, pero deben contar para julio porque se cuentan por evento)."
+    - "VERIFICAR default = mes anterior: Como U1 GET /api/me/wrapped (SIN month) -> month=='2026-07', has_data==true, parties==2 (solo los de julio, NO el de agosto), photos>=1, moments>=1, gallery es una lista con >=2 items, cada item tiene 'url' (string no vacio) y 'kind' in ['photo','moment'] (debe haber al menos un 'photo' y un 'moment')."
+    - "VERIFICAR agosto aparte: GET /api/me/wrapped?month=2026-08 -> parties==1 (el evento de agosto)."
+    - "Anual incluye gallery: GET /api/me/wrapped/year?year=2026 -> parties==3, gallery presente (lista)."
+  do_not: "No probar afiliado/scrapers/token FourVenues, push."
+
+agent_communication:
+    - agent: "main"
+      message: "Cambios: /api/me/wrapped sin param -> mes ANTERIOR (default). Nuevo 'gallery' (lista {url,kind:'photo'|'moment'}) con fotos de album + capturas de El Momento de las fiestas del periodo, contadas por event_id (no por created_at). photos/moments tambien pasan a contarse por event_id. Verificar default=mes anterior y que gallery trae fotos y momentos. El mensual y anual comparten el core. Probar SOLO backend (local, sin token)."
+
+
+backend:
+  - task: "Wrapped verification: default month, gallery field, year endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Re-run Wrapped verification in FRESH LOCAL environment (empty MongoDB; NO FourVenues token). IMPORTANT multipart field names: album upload uses field name 'files' (PLURAL, list); moment upload uses field name 'file' (singular). System current month is 2026-08 → previous month 2026-07."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL WRAPPED SCENARIOS (10 verification steps, 100% pass): ✅ SEED PHASE: (1) Admin login successful. (2) Created 3 events: evJul1 (2026-07-12, Sala J, Reggaeton), evJul2 (2026-07-20, Sala K, Techno), evAug (2026-08-05, Sala A, House). (3) Registered user U1. (4) U1 marked 'estuve' on all 3 events. (5) U1 uploaded album photo to evJul1 using field name 'files' (PLURAL) → 200 with media_url. (6) Admin triggered moment for evJul1. (7) U1 uploaded moment capture to evJul1 using field name 'file' (SINGULAR) → 200 with image_url, on_time=true. ✅ VERIFY 1 - GET /me/wrapped (NO month param): month=='2026-07' ✓, has_data==true ✓, parties==2 (only July events, NOT August) ✓, photos==1 (>=1) ✓, moments==1 (>=1) ✓, gallery is list with length==2 (>=2) ✓, every gallery item has non-empty 'url' and 'kind' in ['photo','moment'] ✓, at least one kind=='photo' AND at least one kind=='moment' ✓. Gallery items: [0] kind=photo, [1] kind=moment. ALL 8 CHECKS PASSED. ✅ VERIFY 2 - GET /me/wrapped?month=2026-08: parties==1 ✓. ✅ VERIFY 3 - GET /me/wrapped/year?year=2026: parties==3 ✓, gallery present (list) ✓, gallery length==2 ✓. Wrapped verification COMPLETE - all features working perfectly: (1) Default month is PREVIOUS month (2026-07), (2) Gallery field combines photos and moments with correct structure, (3) Month filtering works correctly (July=2 parties, August=1 party), (4) Year endpoint aggregates all parties (3 total), (5) Multipart field names correct ('files' for album, 'file' for moment)."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.7"
+  test_sequence: 8
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      ✅ WRAPPED VERIFICATION COMPLETE - ALL TESTS PASSED (10/10 steps, 100% success)
+      
+      TESTED: Wrapped feature verification in FRESH LOCAL environment (empty MongoDB, NO FourVenues token).
+      System current month: 2026-08, previous month: 2026-07.
+      
+      SEED PHASE (7 steps):
+      ✅ Step 1: Admin login successful (admin@quienva.app)
+      ✅ Step 2: Created 3 events:
+         - evJul1: 2026-07-12, Sala J, Reggaeton
+         - evJul2: 2026-07-20, Sala K, Techno
+         - evAug: 2026-08-05, Sala A, House
+      ✅ Step 3: Registered user U1
+      ✅ Step 4: U1 marked 'estuve' on all 3 events
+      ✅ Step 5: U1 uploaded album photo to evJul1
+         - VERIFIED: Used multipart field name "files" (PLURAL) ✓
+         - Response: 200 with media_url
+      ✅ Step 6: Admin triggered moment for evJul1
+      ✅ Step 7: U1 uploaded moment capture to evJul1
+         - VERIFIED: Used multipart field name "file" (SINGULAR) ✓
+         - Response: 200 with image_url, on_time=true
+      
+      VERIFICATION PHASE (3 steps):
+      
+      ✅ VERIFY 1: GET /api/me/wrapped (NO month param) - 8 checks
+         - month: "2026-07" ✓ (defaults to PREVIOUS month, not current)
+         - has_data: true ✓
+         - parties: 2 ✓ (only July events evJul1 + evJul2, NOT August evAug)
+         - photos: 1 (>=1) ✓
+         - moments: 1 (>=1) ✓
+         - gallery: list with length 2 (>=2) ✓
+         - Every gallery item has non-empty "url" and "kind" in ["photo","moment"] ✓
+         - At least one kind=="photo" AND at least one kind=="moment" ✓
+         
+         Gallery items:
+         [0] kind=photo, url=/api/files/quienva/albums/...
+         [1] kind=moment, url=/api/files/quienva/moments/...
+      
+      ✅ VERIFY 2: GET /api/me/wrapped?month=2026-08 - 1 check
+         - parties: 1 ✓ (only August event evAug)
+      
+      ✅ VERIFY 3: GET /api/me/wrapped/year?year=2026 - 3 checks
+         - parties: 3 ✓ (all events: evJul1 + evJul2 + evAug)
+         - gallery: present (list) ✓
+         - gallery length: 2 ✓
+      
+      🎯 CONCLUSION:
+      All Wrapped features working perfectly:
+      1. ✅ Default month is PREVIOUS month (2026-07), not current month (2026-08)
+      2. ✅ Gallery field combines photos and moments with correct structure
+      3. ✅ Each gallery item has "url" (non-empty string) and "kind" (photo|moment)
+      4. ✅ Gallery contains at least one photo AND at least one moment
+      5. ✅ Month filtering works correctly (July=2 parties, August=1 party)
+      6. ✅ Year endpoint aggregates all parties across the year (3 total)
+      7. ✅ Multipart field names correct: "files" (PLURAL) for album, "file" (SINGULAR) for moment
+      8. ✅ Photos and moments counted by event_id (not by upload date)
+      
+      NO ISSUES FOUND. All requirements from review request satisfied.
+      
+      Test file: /app/backend_test.py
+      Base URL: https://204b173e-f0b3-4059-a373-e97cae5b5cd7.preview.emergentagent.com/api
+      Admin: admin@quienva.app / admin123
+      Test user: u1test1786031593@test.com

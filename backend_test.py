@@ -1,286 +1,313 @@
 #!/usr/bin/env python3
 """
-Backend test for two bug fixes:
-1. Notification bell (follow) persistence on single event
-2. City-wide change alerts ON by default
+Wrapped Verification Test
+Tests the Wrapped feature with specific seeding and verification requirements.
+System current month: 2026-08, previous month: 2026-07
 """
 
 import requests
-import json
-import time
-from datetime import datetime, timedelta
+import os
+from io import BytesIO
+from PIL import Image
 
-# Base URL from frontend/.env
-BASE_URL = "https://204b173e-f0b3-4059-a373-e97cae5b5cd7.preview.emergentagent.com/api"
+# Backend URL from environment
+BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://204b173e-f0b3-4059-a373-e97cae5b5cd7.preview.emergentagent.com")
+BASE_URL = f"{BACKEND_URL}/api"
 
-# Admin credentials from test_credentials.md
-ADMIN_EMAIL = "admin@quienva.app"
-ADMIN_PASSWORD = "admin123"
+def create_test_image():
+    """Create a small test image in memory"""
+    img = Image.new('RGB', (100, 100), color='red')
+    img_bytes = BytesIO()
+    img.save(img_bytes, format='JPEG')
+    img_bytes.seek(0)
+    return img_bytes
 
-def log(msg):
-    print(f"[TEST] {msg}")
-
-def test_fix_1_notification_bell_persistence():
+def test_wrapped_verification():
     """
-    FIX #1: Notification bell (follow) on a single event must persist
-    Bug: bell "unselected itself" because is_following returned null
-    Fix: is_following now returns true/false correctly
-    """
-    log("=" * 80)
-    log("FIX #1: Testing notification bell persistence")
-    log("=" * 80)
+    Test Wrapped verification in FRESH LOCAL environment (empty MongoDB; NO FourVenues token).
     
-    # Step 1: Login as admin
-    log("Step 1: Login as admin")
-    admin_login_resp = requests.post(f"{BASE_URL}/auth/login", json={
-        "email": ADMIN_EMAIL,
-        "password": ADMIN_PASSWORD
+    SEED:
+    1. Login admin. Create events via POST /api/admin/events:
+       - evJul1: date 2026-07-12, venue "Sala J", genre "Reggaeton"
+       - evJul2: date 2026-07-20, venue "Sala K", genre "Techno"
+       - evAug: date 2026-08-05, venue "Sala A", genre "House"
+    2. Register/login user U1. POST /api/events/{id}/interest {"status":"estuve"} for all three.
+    3. As U1, POST /api/events/{evJul1}/album with multipart field name "files" (send one small image) -> expect 200.
+    4. As admin POST /api/admin/events/{evJul1}/moment/trigger. As U1 POST /api/events/{evJul1}/moment/upload with multipart field name "file" (one small image) -> expect 200.
+    
+    VERIFY:
+    5. As U1: GET /api/me/wrapped (NO month param) -> month=="2026-07"; has_data==true; parties==2 (only July events, NOT August); photos>=1; moments>=1; `gallery` is a list length>=2; every item has non-empty "url" and "kind" in ["photo","moment"]; at least one kind=="photo" AND at least one kind=="moment".
+    6. As U1: GET /api/me/wrapped?month=2026-08 -> parties==1.
+    7. As U1: GET /api/me/wrapped/year?year=2026 -> parties==3; `gallery` present (list).
+    """
+    
+    print("=" * 80)
+    print("WRAPPED VERIFICATION TEST")
+    print("=" * 80)
+    
+    # Step 1: Admin login
+    print("\n[STEP 1] Admin login...")
+    admin_resp = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": "admin@quienva.app",
+        "password": "admin123"
     })
-    assert admin_login_resp.status_code == 200, f"Admin login failed: {admin_login_resp.status_code} {admin_login_resp.text}"
-    admin_token = admin_login_resp.json()["token"]
-    log(f"✓ Admin logged in successfully")
+    assert admin_resp.status_code == 200, f"Admin login failed: {admin_resp.status_code} {admin_resp.text}"
+    admin_token = admin_resp.json()["token"]
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    print(f"✅ Admin login successful")
     
-    # Step 2: Create an event via POST /api/admin/events
-    log("Step 2: Create a test event")
-    future_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
-    event_data = {
-        "name": "Test Event for Bell Persistence",
-        "venue": "Test Venue",
-        "date": future_date,
-        "time": "23:00",
+    # Step 2: Create 3 events
+    print("\n[STEP 2] Creating 3 events...")
+    
+    # evJul1: 2026-07-12, Sala J, Reggaeton
+    evJul1_resp = requests.post(f"{BASE_URL}/admin/events", headers=admin_headers, json={
+        "name": "Fiesta Reggaeton Julio 1",
+        "venue": "Sala J",
         "city": "Palma de Mallorca",
-        "genre": "Electrónica",
-        "image_url": "https://example.com/test.jpg",
-        "price_tiers": [{"name": "General", "price": 20.0}],
-        "sale_state": "a_la_venta"
+        "date": "2026-07-12",
+        "time": "23:00",
+        "genre": "Reggaeton",
+        "image_url": "https://example.com/image1.jpg"
+    })
+    assert evJul1_resp.status_code == 200, f"Failed to create evJul1: {evJul1_resp.status_code} {evJul1_resp.text}"
+    evJul1_id = evJul1_resp.json()["id"]
+    print(f"✅ Created evJul1 (id={evJul1_id}): 2026-07-12, Sala J, Reggaeton")
+    
+    # evJul2: 2026-07-20, Sala K, Techno
+    evJul2_resp = requests.post(f"{BASE_URL}/admin/events", headers=admin_headers, json={
+        "name": "Fiesta Techno Julio 2",
+        "venue": "Sala K",
+        "city": "Palma de Mallorca",
+        "date": "2026-07-20",
+        "time": "23:00",
+        "genre": "Techno",
+        "image_url": "https://example.com/image2.jpg"
+    })
+    assert evJul2_resp.status_code == 200, f"Failed to create evJul2: {evJul2_resp.status_code} {evJul2_resp.text}"
+    evJul2_id = evJul2_resp.json()["id"]
+    print(f"✅ Created evJul2 (id={evJul2_id}): 2026-07-20, Sala K, Techno")
+    
+    # evAug: 2026-08-05, Sala A, House
+    evAug_resp = requests.post(f"{BASE_URL}/admin/events", headers=admin_headers, json={
+        "name": "Fiesta House Agosto",
+        "venue": "Sala A",
+        "city": "Palma de Mallorca",
+        "date": "2026-08-05",
+        "time": "23:00",
+        "genre": "House",
+        "image_url": "https://example.com/image3.jpg"
+    })
+    assert evAug_resp.status_code == 200, f"Failed to create evAug: {evAug_resp.status_code} {evAug_resp.text}"
+    evAug_id = evAug_resp.json()["id"]
+    print(f"✅ Created evAug (id={evAug_id}): 2026-08-05, Sala A, House")
+    
+    # Step 3: Register user U1
+    print("\n[STEP 3] Registering user U1...")
+    import time
+    ts = int(time.time())
+    u1_email = f"u1test{ts}@test.com"
+    u1_username = f"u1test{ts}"
+    
+    u1_reg_resp = requests.post(f"{BASE_URL}/auth/register", json={
+        "email": u1_email,
+        "password": "password123",
+        "username": u1_username,
+        "name": "User One Test",
+        "birthdate": "1995-01-01",
+        "city": "Palma de Mallorca"
+    })
+    assert u1_reg_resp.status_code == 200, f"Failed to register U1: {u1_reg_resp.status_code} {u1_reg_resp.text}"
+    u1_token = u1_reg_resp.json()["token"]
+    u1_headers = {"Authorization": f"Bearer {u1_token}"}
+    print(f"✅ Registered U1: {u1_email}")
+    
+    # Step 4: U1 marks "estuve" on all three events
+    print("\n[STEP 4] U1 marking 'estuve' on all three events...")
+    
+    for event_id, event_name in [(evJul1_id, "evJul1"), (evJul2_id, "evJul2"), (evAug_id, "evAug")]:
+        interest_resp = requests.post(f"{BASE_URL}/events/{event_id}/interest", 
+                                     headers=u1_headers, 
+                                     json={"status": "estuve"})
+        assert interest_resp.status_code == 200, f"Failed to mark estuve on {event_name}: {interest_resp.status_code} {interest_resp.text}"
+        print(f"✅ U1 marked 'estuve' on {event_name}")
+    
+    # Step 5: U1 uploads album photo to evJul1 (field name "files" PLURAL)
+    print("\n[STEP 5] U1 uploading album photo to evJul1 (field name 'files')...")
+    
+    img_bytes = create_test_image()
+    files = {'files': ('test_album.jpg', img_bytes, 'image/jpeg')}
+    
+    album_resp = requests.post(f"{BASE_URL}/events/{evJul1_id}/album/upload", 
+                               headers=u1_headers, 
+                               files=files)
+    assert album_resp.status_code == 200, f"Failed to upload album photo: {album_resp.status_code} {album_resp.text}"
+    album_data = album_resp.json()
+    print(f"✅ U1 uploaded album photo to evJul1")
+    print(f"   Album response: {album_data}")
+    
+    # Step 6: Admin triggers moment for evJul1
+    print("\n[STEP 6] Admin triggering moment for evJul1...")
+    
+    moment_trigger_resp = requests.post(f"{BASE_URL}/admin/events/{evJul1_id}/moment/trigger", 
+                                       headers=admin_headers)
+    assert moment_trigger_resp.status_code == 200, f"Failed to trigger moment: {moment_trigger_resp.status_code} {moment_trigger_resp.text}"
+    print(f"✅ Admin triggered moment for evJul1")
+    
+    # Step 7: U1 uploads moment capture (field name "file" SINGULAR)
+    print("\n[STEP 7] U1 uploading moment capture to evJul1 (field name 'file')...")
+    
+    # Need to mark 'voy' first to upload moment
+    voy_resp = requests.post(f"{BASE_URL}/events/{evJul1_id}/interest", 
+                            headers=u1_headers, 
+                            json={"status": "voy"})
+    assert voy_resp.status_code == 200, f"Failed to mark voy: {voy_resp.status_code} {voy_resp.text}"
+    
+    img_bytes2 = create_test_image()
+    files2 = {'file': ('test_moment.jpg', img_bytes2, 'image/jpeg')}
+    
+    moment_resp = requests.post(f"{BASE_URL}/events/{evJul1_id}/moment/upload", 
+                               headers=u1_headers, 
+                               files=files2)
+    assert moment_resp.status_code == 200, f"Failed to upload moment: {moment_resp.status_code} {moment_resp.text}"
+    moment_data = moment_resp.json()
+    print(f"✅ U1 uploaded moment capture to evJul1")
+    print(f"   Moment response: {moment_data}")
+    
+    # VERIFICATION PHASE
+    print("\n" + "=" * 80)
+    print("VERIFICATION PHASE")
+    print("=" * 80)
+    
+    # Step 8: GET /api/me/wrapped (no month param) - should default to 2026-07
+    print("\n[VERIFY 1] GET /api/me/wrapped (no month param)...")
+    
+    wrapped_resp = requests.get(f"{BASE_URL}/me/wrapped", headers=u1_headers)
+    assert wrapped_resp.status_code == 200, f"Failed to get wrapped: {wrapped_resp.status_code} {wrapped_resp.text}"
+    wrapped_data = wrapped_resp.json()
+    
+    print(f"\nWrapped data (default month):")
+    print(f"  month: {wrapped_data.get('month')}")
+    print(f"  has_data: {wrapped_data.get('has_data')}")
+    print(f"  parties: {wrapped_data.get('parties')}")
+    print(f"  photos: {wrapped_data.get('photos')}")
+    print(f"  moments: {wrapped_data.get('moments')}")
+    print(f"  gallery length: {len(wrapped_data.get('gallery', []))}")
+    
+    # Verify month == "2026-07"
+    assert wrapped_data.get("month") == "2026-07", f"Expected month='2026-07', got '{wrapped_data.get('month')}'"
+    print(f"✅ month == '2026-07'")
+    
+    # Verify has_data == true
+    assert wrapped_data.get("has_data") == True, f"Expected has_data=true, got {wrapped_data.get('has_data')}"
+    print(f"✅ has_data == true")
+    
+    # Verify parties == 2 (only July events, NOT August)
+    assert wrapped_data.get("parties") == 2, f"Expected parties=2 (July events only), got {wrapped_data.get('parties')}"
+    print(f"✅ parties == 2 (only July events, NOT August)")
+    
+    # Verify photos >= 1
+    assert wrapped_data.get("photos", 0) >= 1, f"Expected photos>=1, got {wrapped_data.get('photos')}"
+    print(f"✅ photos >= 1 (actual: {wrapped_data.get('photos')})")
+    
+    # Verify moments >= 1
+    assert wrapped_data.get("moments", 0) >= 1, f"Expected moments>=1, got {wrapped_data.get('moments')}"
+    print(f"✅ moments >= 1 (actual: {wrapped_data.get('moments')})")
+    
+    # Verify gallery is a list with length >= 2
+    gallery = wrapped_data.get("gallery", [])
+    assert isinstance(gallery, list), f"Expected gallery to be a list, got {type(gallery)}"
+    assert len(gallery) >= 2, f"Expected gallery length>=2, got {len(gallery)}"
+    print(f"✅ gallery is a list with length >= 2 (actual: {len(gallery)})")
+    
+    # Verify every item has non-empty "url" and "kind" in ["photo","moment"]
+    has_photo = False
+    has_moment = False
+    for i, item in enumerate(gallery):
+        assert "url" in item and item["url"], f"Gallery item {i} missing or empty 'url': {item}"
+        assert "kind" in item and item["kind"] in ["photo", "moment"], f"Gallery item {i} has invalid 'kind': {item}"
+        if item["kind"] == "photo":
+            has_photo = True
+        if item["kind"] == "moment":
+            has_moment = True
+    print(f"✅ Every gallery item has non-empty 'url' and 'kind' in ['photo','moment']")
+    
+    # Verify at least one kind=="photo" AND at least one kind=="moment"
+    assert has_photo, "Gallery must have at least one item with kind='photo'"
+    assert has_moment, "Gallery must have at least one item with kind='moment'"
+    print(f"✅ Gallery has at least one kind='photo' AND at least one kind='moment'")
+    
+    print(f"\nGallery items:")
+    for i, item in enumerate(gallery):
+        print(f"  [{i}] kind={item['kind']}, url={item['url'][:60]}...")
+    
+    # Step 9: GET /api/me/wrapped?month=2026-08 - should have parties==1
+    print("\n[VERIFY 2] GET /api/me/wrapped?month=2026-08...")
+    
+    wrapped_aug_resp = requests.get(f"{BASE_URL}/me/wrapped?month=2026-08", headers=u1_headers)
+    assert wrapped_aug_resp.status_code == 200, f"Failed to get wrapped for Aug: {wrapped_aug_resp.status_code} {wrapped_aug_resp.text}"
+    wrapped_aug_data = wrapped_aug_resp.json()
+    
+    print(f"\nWrapped data (2026-08):")
+    print(f"  month: {wrapped_aug_data.get('month')}")
+    print(f"  parties: {wrapped_aug_data.get('parties')}")
+    
+    # Verify parties == 1
+    assert wrapped_aug_data.get("parties") == 1, f"Expected parties=1 for August, got {wrapped_aug_data.get('parties')}"
+    print(f"✅ parties == 1 for August")
+    
+    # Step 10: GET /api/me/wrapped/year?year=2026 - should have parties==3
+    print("\n[VERIFY 3] GET /api/me/wrapped/year?year=2026...")
+    
+    wrapped_year_resp = requests.get(f"{BASE_URL}/me/wrapped/year?year=2026", headers=u1_headers)
+    assert wrapped_year_resp.status_code == 200, f"Failed to get wrapped year: {wrapped_year_resp.status_code} {wrapped_year_resp.text}"
+    wrapped_year_data = wrapped_year_resp.json()
+    
+    print(f"\nWrapped year data (2026):")
+    print(f"  year: {wrapped_year_data.get('year')}")
+    print(f"  parties: {wrapped_year_data.get('parties')}")
+    print(f"  gallery present: {'gallery' in wrapped_year_data}")
+    print(f"  gallery length: {len(wrapped_year_data.get('gallery', []))}")
+    
+    # Verify parties == 3
+    assert wrapped_year_data.get("parties") == 3, f"Expected parties=3 for year 2026, got {wrapped_year_data.get('parties')}"
+    print(f"✅ parties == 3 for year 2026")
+    
+    # Verify gallery is present (list)
+    year_gallery = wrapped_year_data.get("gallery")
+    assert year_gallery is not None, "Expected 'gallery' field to be present in year wrapped"
+    assert isinstance(year_gallery, list), f"Expected gallery to be a list, got {type(year_gallery)}"
+    print(f"✅ gallery is present and is a list (length: {len(year_gallery)})")
+    
+    print("\n" + "=" * 80)
+    print("✅ ALL WRAPPED VERIFICATION TESTS PASSED")
+    print("=" * 80)
+    
+    return {
+        "evJul1_id": evJul1_id,
+        "evJul2_id": evJul2_id,
+        "evAug_id": evAug_id,
+        "u1_email": u1_email,
+        "wrapped_july": wrapped_data,
+        "wrapped_august": wrapped_aug_data,
+        "wrapped_year": wrapped_year_data
     }
-    create_event_resp = requests.post(
-        f"{BASE_URL}/admin/events",
-        json=event_data,
-        headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    assert create_event_resp.status_code == 200, f"Create event failed: {create_event_resp.status_code} {create_event_resp.text}"
-    event_id = create_event_resp.json()["id"]
-    log(f"✓ Event created with id: {event_id}")
-    
-    # Step 3: Register a normal user
-    log("Step 3: Register a normal user")
-    timestamp = int(time.time())
-    user_email = f"testuser{timestamp}@test.com"
-    user_password = "testpass123"
-    register_resp = requests.post(f"{BASE_URL}/auth/register", json={
-        "email": user_email,
-        "password": user_password,
-        "username": f"testuser{timestamp}",
-        "name": f"Test User {timestamp}",
-        "birthdate": "1995-01-01",
-        "city": "Palma de Mallorca"
-    })
-    assert register_resp.status_code == 200, f"Register failed: {register_resp.status_code} {register_resp.text}"
-    log(f"✓ User registered: {user_email}")
-    
-    # Step 4: Login as the normal user
-    log("Step 4: Login as normal user")
-    user_login_resp = requests.post(f"{BASE_URL}/auth/login", json={
-        "email": user_email,
-        "password": user_password
-    })
-    assert user_login_resp.status_code == 200, f"User login failed: {user_login_resp.status_code} {user_login_resp.text}"
-    user_token = user_login_resp.json()["token"]
-    log(f"✓ User logged in successfully")
-    
-    # Step 5: GET /api/events/{id} -> is_following must be false (NOT null)
-    log("Step 5: GET event - is_following should be false (not null)")
-    get_event_resp = requests.get(
-        f"{BASE_URL}/events/{event_id}",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert get_event_resp.status_code == 200, f"Get event failed: {get_event_resp.status_code} {get_event_resp.text}"
-    event_data = get_event_resp.json()
-    assert "is_following" in event_data, "is_following field missing"
-    assert event_data["is_following"] is False, f"Expected is_following=false, got {event_data['is_following']}"
-    log(f"✓ is_following = {event_data['is_following']} (correct: false, not null)")
-    
-    # Step 6: POST /api/events/{id}/follow -> expect {following:true}
-    log("Step 6: Follow the event")
-    follow_resp = requests.post(
-        f"{BASE_URL}/events/{event_id}/follow",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert follow_resp.status_code == 200, f"Follow failed: {follow_resp.status_code} {follow_resp.text}"
-    follow_data = follow_resp.json()
-    assert follow_data.get("following") is True, f"Expected following=true, got {follow_data}"
-    log(f"✓ Follow successful: {follow_data}")
-    
-    # Step 7: GET /api/events/{id} AGAIN -> is_following MUST be true (CORE FIX)
-    log("Step 7: GET event again - is_following MUST be true (CORE FIX)")
-    get_event_resp2 = requests.get(
-        f"{BASE_URL}/events/{event_id}",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert get_event_resp2.status_code == 200, f"Get event failed: {get_event_resp2.status_code} {get_event_resp2.text}"
-    event_data2 = get_event_resp2.json()
-    assert "is_following" in event_data2, "is_following field missing"
-    assert event_data2["is_following"] is True, f"CORE BUG: Expected is_following=true after follow, got {event_data2['is_following']}"
-    log(f"✓✓✓ CORE FIX VERIFIED: is_following = {event_data2['is_following']} (persists correctly!)")
-    
-    # Step 8: DELETE /api/events/{id}/follow -> then GET -> is_following must be false
-    log("Step 8: Unfollow the event")
-    unfollow_resp = requests.delete(
-        f"{BASE_URL}/events/{event_id}/follow",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert unfollow_resp.status_code == 200, f"Unfollow failed: {unfollow_resp.status_code} {unfollow_resp.text}"
-    log(f"✓ Unfollow successful")
-    
-    log("Step 9: GET event after unfollow - is_following should be false")
-    get_event_resp3 = requests.get(
-        f"{BASE_URL}/events/{event_id}",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert get_event_resp3.status_code == 200, f"Get event failed: {get_event_resp3.status_code}"
-    event_data3 = get_event_resp3.json()
-    assert event_data3["is_following"] is False, f"Expected is_following=false after unfollow, got {event_data3['is_following']}"
-    log(f"✓ is_following = {event_data3['is_following']} (correct after unfollow)")
-    
-    # Step 10: Call GET /api/events/{id} multiple times to confirm stability (idempotent)
-    log("Step 10: Test idempotency - call GET multiple times")
-    for i in range(5):
-        get_event_resp_test = requests.get(
-            f"{BASE_URL}/events/{event_id}",
-            headers={"Authorization": f"Bearer {user_token}"}
-        )
-        assert get_event_resp_test.status_code == 200
-        event_data_test = get_event_resp_test.json()
-        assert event_data_test["is_following"] is False, f"Iteration {i+1}: is_following not stable, got {event_data_test['is_following']}"
-    log(f"✓ is_following value is STABLE across 5 calls (idempotent)")
-    
-    log("=" * 80)
-    log("✅ FIX #1 PASSED: Notification bell persistence working correctly!")
-    log("=" * 80)
-    return True
-
-def test_fix_2_city_alerts_default_on():
-    """
-    FIX #2: City-wide change alerts ON by default
-    Previously: city_change_alerts defaulted to false
-    Fix: Now defaults to true for new users
-    """
-    log("\n" + "=" * 80)
-    log("FIX #2: Testing city-wide change alerts default ON")
-    log("=" * 80)
-    
-    # Step 1: Register a brand-new user
-    log("Step 1: Register a brand-new user")
-    timestamp = int(time.time())
-    user_email = f"newuser{timestamp}@test.com"
-    user_password = "testpass123"
-    register_resp = requests.post(f"{BASE_URL}/auth/register", json={
-        "email": user_email,
-        "password": user_password,
-        "username": f"newuser{timestamp}",
-        "name": f"New User {timestamp}",
-        "birthdate": "1995-01-01",
-        "city": "Palma de Mallorca"
-    })
-    assert register_resp.status_code == 200, f"Register failed: {register_resp.status_code} {register_resp.text}"
-    user_token = register_resp.json()["token"]
-    log(f"✓ New user registered: {user_email}")
-    
-    # Step 2: GET /api/auth/me -> city_change_alerts MUST be true (CORE FIX)
-    log("Step 2: GET /auth/me - city_change_alerts MUST be true (CORE FIX)")
-    me_resp = requests.get(
-        f"{BASE_URL}/auth/me",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert me_resp.status_code == 200, f"Get /auth/me failed: {me_resp.status_code} {me_resp.text}"
-    me_data = me_resp.json()
-    assert "city_change_alerts" in me_data, "city_change_alerts field missing"
-    assert me_data["city_change_alerts"] is True, f"CORE BUG: Expected city_change_alerts=true by default, got {me_data['city_change_alerts']}"
-    log(f"✓✓✓ CORE FIX VERIFIED: city_change_alerts = {me_data['city_change_alerts']} (default is TRUE!)")
-    
-    # Step 3: PUT /api/me/city-alerts {enabled:false} -> {city_change_alerts:false}
-    log("Step 3: Toggle OFF - PUT /me/city-alerts {enabled:false}")
-    toggle_off_resp = requests.put(
-        f"{BASE_URL}/me/city-alerts",
-        json={"enabled": False},
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert toggle_off_resp.status_code == 200, f"Toggle OFF failed: {toggle_off_resp.status_code} {toggle_off_resp.text}"
-    toggle_off_data = toggle_off_resp.json()
-    assert toggle_off_data.get("city_change_alerts") is False, f"Expected city_change_alerts=false, got {toggle_off_data}"
-    log(f"✓ Toggle OFF successful: {toggle_off_data}")
-    
-    # Step 4: GET /api/auth/me -> verify it reflects false
-    log("Step 4: GET /auth/me - verify city_change_alerts is false")
-    me_resp2 = requests.get(
-        f"{BASE_URL}/auth/me",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert me_resp2.status_code == 200
-    me_data2 = me_resp2.json()
-    assert me_data2["city_change_alerts"] is False, f"Expected city_change_alerts=false, got {me_data2['city_change_alerts']}"
-    log(f"✓ city_change_alerts = {me_data2['city_change_alerts']} (persisted correctly)")
-    
-    # Step 5: PUT /api/me/city-alerts {enabled:true} -> {city_change_alerts:true}
-    log("Step 5: Toggle ON - PUT /me/city-alerts {enabled:true}")
-    toggle_on_resp = requests.put(
-        f"{BASE_URL}/me/city-alerts",
-        json={"enabled": True},
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert toggle_on_resp.status_code == 200, f"Toggle ON failed: {toggle_on_resp.status_code} {toggle_on_resp.text}"
-    toggle_on_data = toggle_on_resp.json()
-    assert toggle_on_data.get("city_change_alerts") is True, f"Expected city_change_alerts=true, got {toggle_on_data}"
-    log(f"✓ Toggle ON successful: {toggle_on_data}")
-    
-    # Step 6: GET /api/auth/me -> verify it reflects true
-    log("Step 6: GET /auth/me - verify city_change_alerts is true")
-    me_resp3 = requests.get(
-        f"{BASE_URL}/auth/me",
-        headers={"Authorization": f"Bearer {user_token}"}
-    )
-    assert me_resp3.status_code == 200
-    me_data3 = me_resp3.json()
-    assert me_data3["city_change_alerts"] is True, f"Expected city_change_alerts=true, got {me_data3['city_change_alerts']}"
-    log(f"✓ city_change_alerts = {me_data3['city_change_alerts']} (toggle works both ways)")
-    
-    log("=" * 80)
-    log("✅ FIX #2 PASSED: City-wide change alerts default ON working correctly!")
-    log("=" * 80)
-    return True
-
-def main():
-    log("Starting backend tests for 2 bug fixes")
-    log(f"Base URL: {BASE_URL}")
-    log(f"Admin: {ADMIN_EMAIL}")
-    
-    try:
-        # Test FIX #1
-        fix1_passed = test_fix_1_notification_bell_persistence()
-        
-        # Test FIX #2
-        fix2_passed = test_fix_2_city_alerts_default_on()
-        
-        # Summary
-        log("\n" + "=" * 80)
-        log("FINAL SUMMARY")
-        log("=" * 80)
-        log(f"FIX #1 (Notification bell persistence): {'✅ PASS' if fix1_passed else '❌ FAIL'}")
-        log(f"FIX #2 (City alerts default ON): {'✅ PASS' if fix2_passed else '❌ FAIL'}")
-        
-        if fix1_passed and fix2_passed:
-            log("\n🎉 ALL TESTS PASSED! Both fixes working correctly.")
-            return 0
-        else:
-            log("\n❌ SOME TESTS FAILED")
-            return 1
-            
-    except Exception as e:
-        log(f"\n❌ TEST FAILED WITH EXCEPTION: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
 
 if __name__ == "__main__":
-    exit(main())
+    try:
+        result = test_wrapped_verification()
+        print("\n✅ Test completed successfully!")
+        print(f"\nTest summary:")
+        print(f"  - Created 3 events (2 in July, 1 in August)")
+        print(f"  - User marked 'estuve' on all 3 events")
+        print(f"  - Uploaded 1 album photo and 1 moment capture to July event")
+        print(f"  - Verified Wrapped for July (default): 2 parties, photos>=1, moments>=1, gallery>=2 items")
+        print(f"  - Verified Wrapped for August: 1 party")
+        print(f"  - Verified Wrapped for year 2026: 3 parties, gallery present")
+    except AssertionError as e:
+        print(f"\n❌ Test failed: {e}")
+        exit(1)
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
+        exit(1)

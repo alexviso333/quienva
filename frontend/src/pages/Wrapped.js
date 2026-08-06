@@ -5,7 +5,7 @@ import api, { mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import {
   X, ChevronLeft, ChevronRight, Share2, Download, Loader2,
-  Sparkles, PartyPopper, Building2, Music2, Camera, Users, CalendarDays,
+  Sparkles, PartyPopper, Building2, Music2, Camera, Users, CalendarDays, Images, Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,7 +44,7 @@ export default function Wrapped() {
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const isYear = params.has("year");
-  const month = params.get("month") || thisMonth();
+  const month = params.get("month") || prevMonth(thisMonth());
   const year = params.get("year") || thisYear();
   const period = isYear ? year : month;
   const [idx, setIdx] = useState(0);
@@ -67,6 +67,7 @@ export default function Wrapped() {
     if (data.top_venue) s.push({ key: "venue" });
     if (data.top_genre) s.push({ key: "genre" });
     if ((data.photos || 0) + (data.moments || 0) > 0) s.push({ key: "media" });
+    if ((data.gallery || []).length > 0) s.push({ key: "gallery" });
     if ((data.friends_coincided || 0) > 0) s.push({ key: "friends" });
     s.push({ key: "final" });
     return s;
@@ -86,7 +87,7 @@ export default function Wrapped() {
     }
   };
 
-  const isCurrent = isYear ? (year === thisYear()) : (month === thisMonth());
+  const isCurrent = isYear ? (year === thisYear()) : (month === prevMonth(thisMonth()));
 
   // ---- Shareable image ----
   const buildImage = async () => {
@@ -217,7 +218,7 @@ export default function Wrapped() {
       {slides.length >= 0 && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 p-1 rounded-full bg-black/45 backdrop-blur">
           <button
-            onClick={() => setParams({ month: thisMonth() })}
+            onClick={() => setParams({ month: prevMonth(thisMonth()) })}
             className={`px-3 py-1 rounded-full text-xs font-bold ${!isYear ? "bg-white text-black" : "text-white/70"}`}
             data-testid="wrapped-mode-month"
           >
@@ -332,6 +333,28 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
           <div><div className="font-display font-black text-qv-secondary text-6xl leading-none">{data.moments}</div><div className="text-white/70 mt-2">momentos</div></div>
         </div>
         {data.moments_ontime > 0 && <p className="text-white/60 mt-6">{data.moments_ontime} momento{data.moments_ontime === 1 ? "" : "s"} capturado{data.moments_ontime === 1 ? "" : "s"} a tiempo ⚡</p>}
+      </div>
+    );
+  }
+  if (k === "gallery") {
+    const g = (data.gallery || []).slice(0, 9);
+    return (
+      <div className="animate-fade-in w-full max-w-sm">
+        <Images className="w-12 h-12 text-white/80 mx-auto mb-4" />
+        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-4">Tus fotos y momentos</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {g.map((it, i) => (
+            <div key={i} className="aspect-square rounded-xl overflow-hidden bg-white/5 relative">
+              <img src={mediaThumb(it.url, 400)} alt="" className="w-full h-full object-cover" loading="lazy" />
+              {it.kind === "moment" && (
+                <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-yellow-300 flex items-center justify-center">
+                  <Zap className="w-3 h-3 text-black" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <p className="text-white/45 text-xs mt-4">{data.photos} foto{data.photos === 1 ? "" : "s"} · {data.moments} momento{data.moments === 1 ? "" : "s"} este {data.is_year ? "año" : "mes"}</p>
       </div>
     );
   }

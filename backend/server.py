@@ -2892,7 +2892,6 @@ def _wrapped_title(top_genre: str, parties: int) -> str:
 async def _wrapped_core(user: dict, start_iso: str, end_excl: str) -> dict:
     """Shared Wrapped aggregation over [start_iso, end_excl) by event.date."""
     uid = user["user_id"]
-    start_dt, end_dt = f"{start_iso}T00:00:00", f"{end_excl}T00:00:00"
     my_ev_ids = []
     async for it in db.interests.find(
         {"user_id": uid, "status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "event_id": 1}):
@@ -2920,12 +2919,29 @@ async def _wrapped_core(user: dict, start_iso: str, end_excl: str) -> dict:
     top_genre = max(genre_counts.items(), key=lambda kv: kv[1])[0] if genre_counts else ""
     top_venue = max(venue_counts.items(), key=lambda kv: kv[1]) if venue_counts else None
 
-    photos = await db.album_uploads.count_documents(
-        {"user_id": uid, "created_at": {"$gte": start_dt, "$lt": end_dt}})
-    moments = await db.captures.count_documents(
-        {"user_id": uid, "created_at": {"$gte": start_dt, "$lt": end_dt}})
-    moments_ontime = await db.captures.count_documents(
-        {"user_id": uid, "on_time": True, "created_at": {"$gte": start_dt, "$lt": end_dt}})
+    # Photos + moments are counted/collected for the PARTIES of this period (by
+    # event), so a photo uploaded a few days later still belongs to that recap.
+    ev_id_list = list(events.keys())
+    photos = moments = moments_ontime = 0
+    gallery = []
+    if ev_id_list:
+        photos = await db.album_uploads.count_documents(
+            {"user_id": uid, "event_id": {"$in": ev_id_list}, "media_type": {"$ne": "video"}})
+        moments = await db.captures.count_documents(
+            {"user_id": uid, "event_id": {"$in": ev_id_list}})
+        moments_ontime = await db.captures.count_documents(
+            {"user_id": uid, "event_id": {"$in": ev_id_list}, "on_time": True})
+        async for a in db.album_uploads.find(
+            {"user_id": uid, "event_id": {"$in": ev_id_list}, "media_type": {"$ne": "video"}},
+            {"_id": 0, "media_url": 1}).sort("created_at", -1).limit(9):
+            if a.get("media_url"):
+                gallery.append({"url": a["media_url"], "kind": "photo"})
+        async for c in db.captures.find(
+            {"user_id": uid, "event_id": {"$in": ev_id_list}},
+            {"_id": 0, "image_url": 1}).sort("created_at", -1).limit(9):
+            if c.get("image_url"):
+                gallery.append({"url": c["image_url"], "kind": "moment"})
+        gallery = gallery[:12]
 
     top_friends, friends_coincided = [], 0
     if events:
@@ -2933,7 +2949,7 @@ async def _wrapped_core(user: dict, start_iso: str, end_excl: str) -> dict:
         if friend_ids:
             tally = {}
             async for it in db.interests.find(
-                {"event_id": {"$in": list(events.keys())},
+                {"event_id": {"$in": ev_id_list},
                  "user_id": {"$in": friend_ids},
                  "status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "user_id": 1}):
                 tally[it["user_id"]] = tally.get(it["user_id"], 0) + 1
@@ -2956,6 +2972,7 @@ async def _wrapped_core(user: dict, start_iso: str, end_excl: str) -> dict:
         "moments_ontime": moments_ontime,
         "friends_coincided": friends_coincided,
         "top_friends": top_friends,
+        "gallery": gallery,
         "poster": poster,
         "month_tally": month_tally,
     }
@@ -3017,10 +3034,12 @@ async def _compute_wrapped_year(user: dict, year_str: str) -> dict:
 @api_router.get("/me/wrapped")
 async def my_wrapped(month: str = Query(""), user: dict = Depends(get_current_user)):
     """Monthly 'Wrapped' (Spotify-Wrapped style) for the current user. Defaults to
-    the current month (Europe/Madrid). Pass ?month=YYYY-MM for a specific month."""
+    the PREVIOUS month (Europe/Madrid) — the last closed month. Pass ?month=YYYY-MM
+    for a specific month."""
     if not month:
         now = datetime.now(ZoneInfo("Europe/Madrid"))
-        month = f"{now.year:04d}-{now.month:02d}"
+        prev = now.replace(day=1) - timedelta(days=1)
+        month = f"{prev.year:04d}-{prev.month:02d}"
     return await _compute_wrapped(user, month)
 
 
