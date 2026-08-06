@@ -4362,3 +4362,95 @@ agent_communication:
         Base URL: https://204b173e-f0b3-4059-a373-e97cae5b5cd7.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
 
+
+test_focus_2026_08_06_recuerdos_bug:
+  goal: "BUG: fiestas pasadas (recuerdos) desaparecian ~3 dias despues porque cleanup_old_events borraba TODO evento con date < hoy-3d, incluidas las fiestas a las que el usuario asistio (y su album/momento). FIX: cleanup ahora PRESERVA todo evento que sea un recuerdo (alguien con voy/estuve, o con foto de album_uploads, o con captura en captures) y solo borra eventos viejos SIN interaccion. Ademas, El Momento ahora se puede ver en fiestas pasadas (frontend). Entorno LOCAL: BD vacia, sin token FourVenues (no probar afiliado)."
+  auth: "Admin: admin@quienva.app / admin123 (POST /api/auth/login)."
+  steps:
+    - "FIX BUG (preservar recuerdo por asistencia): Login admin. Crear evento A via POST /api/admin/events con date ANTIGUA (p.ej. hace 10 dias, formato YYYY-MM-DD, < hoy-3d). Crear evento B tambien antiguo (misma fecha vieja) SIN interaccion. Registrar/loguear un usuario normal. Como usuario: POST /api/events/{A}/interest {status:'estuve'}. Como admin: POST /api/admin/maintenance/cleanup-old-events -> respuesta {deleted, kept, old_total}; kept>=1 y deleted>=1. Verificar que A SIGUE existiendo: GET /api/events/{A} -> 200. Verificar que B fue BORRADO: GET /api/events/{B} -> 404. Como usuario: GET /api/me/past-events -> la lista DEBE incluir el evento A (id A presente)."
+    - "FIX BUG (preservar recuerdo por El Momento): Login admin. Crear evento C con date ANTIGUA (hace 10 dias). Como admin: POST /api/admin/events/{C}/moment/trigger (crea el prompt). Registrar/loguear otro usuario normal U2 (o reutilizar). Como U2: POST /api/events/{C}/moment/upload con un archivo de imagen (campo 'file') -> 200 (crea una captura). NO marcar interes en C. Como admin: POST /api/admin/maintenance/cleanup-old-events. Verificar que C SIGUE existiendo (GET /api/events/{C} -> 200) porque tiene una captura de El Momento (aunque nadie marco voy/estuve)."
+    - "El Momento en pasados (backend): Como U2 (que subio la captura en C): GET /api/events/{C}/moment/status -> my_capture NO nulo. GET /api/events/{C}/moment/gallery -> 200 con una lista que incluye la captura de U2 (aunque el evento sea pasado). Esto confirma que el momento es visible como recuerdo."
+    - "Regresion: repetir GET /api/me/past-events y GET /api/events/{A} varias veces -> estables (no desaparecen)."
+  do_not: "No probar afiliado/scrapers/token FourVenues. No push. No login social."
+
+agent_communication:
+    - agent: "main"
+      message: "BUG FIX + feature a verificar. (1) BUG recuerdos: cleanup_old_events ya NO borra eventos que sean recuerdo (asistentes voy/estuve, album_uploads o captures); solo borra eventos viejos sin interaccion. Antes borraba todos los date<hoy-3d, por eso las fiestas pasadas desaparecian al pasar unos dias. Nuevo endpoint admin POST /api/admin/maintenance/cleanup-old-events para dispararlo y devuelve {deleted,kept,old_total}. (2) Feature: El Momento ahora se muestra en fiestas pasadas (EventDetail pasa past=isPast a EventMoment; backend moment/status y moment/gallery ya funcionan para pasados). Probar SOLO backend (entorno local sin token FourVenues, no tocar afiliado). Credenciales en memory/test_credentials.md."
+    - agent: "testing"
+      message: |
+        ✅ BUG FIX VERIFICATION COMPLETE - ALL TESTS PASSED (4/4, 100% success)
+        
+        TESTED: cleanup_old_events bug fix that preserves memories (recuerdos) in fresh local environment (empty MongoDB, no FourVenues token).
+        
+        BUG CONTEXT:
+        - OLD BEHAVIOR: cleanup_old_events deleted ALL events with date < today-3days, including events users attended (and their album/moment)
+        - NEW BEHAVIOR: cleanup now PRESERVES any event that is a memory (someone with interest voy/estuve, OR any album_uploads photo, OR any moment capture in captures), and only deletes old events with NO engagement
+        - NEW ENDPOINT: POST /api/admin/maintenance/cleanup-old-events
+        
+        TEST RESULTS:
+        
+        ✅ TEST 1: Attended past event preserved; unengaged old event deleted (9 steps)
+           - Admin login successful with admin@quienva.app
+           - Created Event A with old date 2026-07-27 (10 days ago, < today-3days)
+           - Created Event B with old date 2026-07-27 (no engagement)
+           - Registered user U1 (user1test)
+           - U1 marked 'estuve' on Event A
+           - POST /api/admin/maintenance/cleanup-old-events → {deleted:1, kept:1, old_total:2}
+           - CORE FIX VERIFIED: Event A still exists (GET /events/{A} → 200) - preserved as memory
+           - CORE FIX VERIFIED: Event B was deleted (GET /events/{B} → 404) - no engagement
+           - GET /api/me/past-events as U1 → Event A present in items list
+        
+        ✅ TEST 2: Moment capture preserves event even without interest (8 steps)
+           - Created Event C with old date 2026-07-27
+           - Admin triggered moment for Event C (POST /admin/events/{C}/moment/trigger)
+           - Registered user U2 (user2test)
+           - U2 marked 'voy' on Event C (required to upload moment)
+           - U2 uploaded moment capture (POST /events/{C}/moment/upload with image file)
+           - U2 removed interest (marked 'none' to test moment alone preserves)
+           - POST /api/admin/maintenance/cleanup-old-events → {deleted:0, kept:2, old_total:2}
+           - CORE FIX VERIFIED: Event C still exists (GET /events/{C} → 200) - preserved by moment capture even without interest
+        
+        ✅ TEST 3: Moment is retrievable for PAST event (memory) (2 steps)
+           - GET /api/events/{C}/moment/status as U2 → 200, my_capture is NOT null
+           - GET /api/events/{C}/moment/gallery as U2 → 200 with 1 capture
+           - U2's capture present in gallery (verified user_id match)
+           - Moment is retrievable for past event (works even though event date is in the past)
+        
+        ✅ TEST 4: Stability regression - past events stay present (10 API calls)
+           - Called GET /api/me/past-events 5 times → Event A present in all 5 calls
+           - Called GET /api/events/{A} 5 times → Event A exists (200) in all 5 calls
+           - Event A is stable across 10 API calls (does not disappear)
+        
+        🎯 CONCLUSION:
+        The cleanup_old_events bug fix is working perfectly. Past parties (recuerdos) are preserved when users have attended (voy/estuve) or uploaded moments/photos. Unengaged old events are correctly deleted. The /me/past-events endpoint returns stable results and moments are retrievable for past events.
+        
+        DETAILED VERIFICATION:
+        - cleanup_old_events() correctly identifies memories by checking:
+          1. interests collection for status "voy" or "estuve"
+          2. album_uploads collection for any photos
+          3. captures collection for any "El Momento" captures
+        - Events with ANY of the above are kept FOREVER (never deleted)
+        - Events with NONE of the above are deleted after 3 days
+        - Admin endpoint POST /api/admin/maintenance/cleanup-old-events returns correct structure: {deleted, kept, old_total}
+        - /api/me/past-events correctly returns events with status voy/estuve and date < today
+        - Moment endpoints work for past events (status and gallery)
+        
+        Test file: /app/cleanup_test.py
+        Base URL: http://localhost:8001/api
+        Admin: admin@quienva.app / admin123
+
+backend:
+  - task: "BUG FIX: cleanup_old_events preserves memories (recuerdos)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "BUG FIX: cleanup_old_events was deleting ALL events with date < today-3days, including events users attended (and their album/moment). FIX: cleanup now PRESERVES any event that is a memory (someone with interest voy/estuve, OR any album_uploads photo, OR any moment capture in captures), and only deletes old events with NO engagement. New admin endpoint POST /api/admin/maintenance/cleanup-old-events returns {deleted, kept, old_total}."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (4 tests, 100% pass): ✅ (1) TEST 1: Attended past event preserved; unengaged old event deleted - Created 2 old events (10 days ago), user marked 'estuve' on Event A, cleanup deleted Event B (404) but preserved Event A (200), Event A appears in /me/past-events. ✅ (2) TEST 2: Moment capture preserves event even without interest - Created Event C, triggered moment, user uploaded capture then removed interest, cleanup preserved Event C (200) because of moment capture. ✅ (3) TEST 3: Moment is retrievable for PAST event - GET /events/{C}/moment/status returns my_capture (not null), GET /events/{C}/moment/gallery returns 1 capture, works for past events. ✅ (4) TEST 4: Stability regression - Called /me/past-events and /events/{A} 10 times total, Event A present in all calls (does not disappear). Bug fix working perfectly - past parties are preserved as memories."

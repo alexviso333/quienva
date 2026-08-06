@@ -11,7 +11,7 @@ import { Zap, Camera, Timer } from "lucide-react";
  * Admin triggers the prompt; users have 2 minutes to upload for on-time points.
  * After uploading, users can see their friends' captures side-by-side.
  */
-export function EventMoment({ eventId, hasInterest }) {
+export function EventMoment({ eventId, hasInterest, past = false }) {
   const navigate = useNavigate();
   const [secLeft, setSecLeft] = useState(null);
 
@@ -48,6 +48,11 @@ export function EventMoment({ eventId, hasInterest }) {
   }, [status?.prompt?.on_time_deadline, status?.my_capture]);
 
   if (!hasInterest) return null;
+
+  // Memories mode (past party): show ONLY the gallery of moments captured that
+  // night, next to the shared album. No capture CTA. If I didn't capture, there's
+  // nothing of mine to show, so render nothing.
+  if (past && !status?.my_capture) return null;
 
   // No active prompt yet
   if (!status?.prompt) {

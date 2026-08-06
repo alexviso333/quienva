@@ -378,8 +378,8 @@ export default function EventDetail() {
               everyone's phone. Comes right after the friends block. */}
           <EventAlbum eventId={event.id} hasInterest={hasInterest} prominent />
 
-          {/* El Momento — only during event window; component handles empty states */}
-          {!isPast && <EventMoment eventId={event.id} hasInterest={hasInterest} />}
+          {/* El Momento — live during the party, and as a memory on past events */}
+          <EventMoment eventId={event.id} hasInterest={hasInterest} past={isPast} />
 
           {/* Map + directions */}
           <div>

@@ -5917,26 +5917,46 @@ async def cleanup_demo_events():
 
 
 async def cleanup_old_events():
-    """Delete parties (and their engagement data) once 3 days have passed since
-    the event date. Past-party stats live for a 3-day window then vanish; also
-    keeps the DB lean, which speeds up the feed."""
+    """Delete OLD parties that NOBODY engaged with (keeps the DB lean + feed fast),
+    but PRESERVE every event that is someone's memory: any attendee (voy/estuve),
+    a shared-album photo, or an 'El Momento' capture. Those stay FOREVER so
+    'Recuerdos' / 'Fiestas pasadas' never loses a past night."""
     try:
         cutoff = (datetime.now(ZoneInfo("Europe/Madrid")).date() - timedelta(days=3)).isoformat()
-        old = [e["id"] async for e in db.events.find(
+        old_ids = [e["id"] async for e in db.events.find(
             {"date": {"$lt": cutoff}}, {"_id": 0, "id": 1})]
-        if not old:
-            return
-        await db.events.delete_many({"id": {"$in": old}})
+        if not old_ids:
+            return {"deleted": 0, "kept": 0, "old_total": 0}
+        # Events to KEEP as memories: anyone marked voy/estuve, uploaded an album
+        # photo, or captured 'El Momento'. Everything else is a stale scraped event.
+        keep = set()
+        async for it in db.interests.find(
+            {"event_id": {"$in": old_ids}, "status": {"$in": ["voy", "estuve"]}},
+            {"_id": 0, "event_id": 1}):
+            keep.add(it["event_id"])
+        async for a in db.album_uploads.find(
+            {"event_id": {"$in": old_ids}}, {"_id": 0, "event_id": 1}):
+            keep.add(a["event_id"])
+        async for c in db.captures.find(
+            {"event_id": {"$in": old_ids}}, {"_id": 0, "event_id": 1}):
+            keep.add(c["event_id"])
+        to_delete = [eid for eid in old_ids if eid not in keep]
+        if not to_delete:
+            logger.info(f"cleanup_old_events: 0 removed (kept {len(keep)} memories)")
+            return {"deleted": 0, "kept": len(keep), "old_total": len(old_ids)}
+        await db.events.delete_many({"id": {"$in": to_delete}})
         for coll in (db.interests, db.tickets, db.event_follows, db.event_metrics,
-                     db.event_history, db.ticket_purchases, db.album_items,
-                     db.moment_captures):
+                     db.event_history, db.ticket_purchases, db.album_uploads,
+                     db.captures):
             try:
-                await coll.delete_many({"event_id": {"$in": old}})
+                await coll.delete_many({"event_id": {"$in": to_delete}})
             except Exception:
                 pass
-        logger.info(f"cleanup_old_events: removed {len(old)} events >3 days old")
+        logger.info(f"cleanup_old_events: removed {len(to_delete)} unengaged events >3 days old (kept {len(keep)} memories)")
+        return {"deleted": len(to_delete), "kept": len(keep), "old_total": len(old_ids)}
     except Exception as e:
         logger.warning(f"cleanup_old_events failed: {e}")
+        return {"deleted": 0, "kept": 0, "old_total": 0, "error": str(e)}
 
 
 @app.on_event("startup")
@@ -7389,6 +7409,14 @@ async def admin_affiliate_refresh(admin: dict = Depends(require_admin)):
     """Manually re-read our affiliate events from FourVenues (also runs auto every 20 min)."""
     n = await refresh_affiliate_events()
     return {"slug": AFFILIATE_SLUG, "mine_count": n}
+
+
+@app.post("/api/admin/maintenance/cleanup-old-events")
+async def admin_cleanup_old_events(admin: dict = Depends(require_admin)):
+    """Run the stale-event cleanup on demand. Deletes ONLY old events nobody
+    engaged with; preserves every event that is a memory (attendee/album/moment)."""
+    res = await cleanup_old_events()
+    return res or {"deleted": 0, "kept": 0, "old_total": 0}
 
 
 
