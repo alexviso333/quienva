@@ -92,6 +92,47 @@ export async function downloadMedia(url, filename) {
   }
 }
 
+// Native share of a media file (image/video). Fetches the bytes and uses the
+// Web Share API with a File when supported (best on mobile: opens the OS share
+// sheet with WhatsApp/Instagram/etc). Falls back to sharing the URL, and then
+// to a plain download. Returns "shared" | "downloaded" | "cancelled".
+export async function shareMedia(url, { title = "¿Quién va?", text = "", filename } = {}) {
+  const displaySrc = mediaUrl(url);
+  const dlSrc = mediaDownload(url);
+  const name = filename || `quienva-${Date.now()}.jpg`;
+  try {
+    const res = await fetch(dlSrc, { mode: "cors" });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const blob = await res.blob();
+    const file = new File([blob], name, { type: blob.type || "image/jpeg" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title, text });
+      return "shared";
+    }
+    // No file-share support: try sharing the URL, else download the blob.
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url: displaySrc });
+        return "shared";
+      } catch (_e) { /* fall through to download */ }
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+    return "downloaded";
+  } catch (e) {
+    // Likely a user cancel (AbortError) or CORS/network issue.
+    if (e && e.name === "AbortError") return "cancelled";
+    try {
+      if (navigator.share) { await navigator.share({ title, text, url: displaySrc }); return "shared"; }
+      window.open(dlSrc, "_blank", "noopener,noreferrer");
+    } catch { /* ignore */ }
+    return "downloaded";
+  }
+}
+
 export function formatApiErrorDetail(detail) {
   if (detail == null) return "Algo salió mal. Inténtalo de nuevo.";
   if (typeof detail === "string") return detail;

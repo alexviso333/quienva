@@ -633,6 +633,21 @@ backend:
         agent: "testing"
         comment: "TESTED ALL NOTIFY FEATURES (10 tests, 100% pass): ✅ (1) GET /admin/notify/presets as admin → 200 with {presets:[...]} containing 10 presets, each with all required fields (id, label, emoji, needs_event, title, body). ✅ (2) GET /admin/notify/presets as non-admin → 403. ✅ (3) GET /admin/events-min as admin → 200 with {events:[...]} containing events with required fields (id, name, venue, date). ✅ (4) GET /admin/events-min?q=fiesta filters correctly → 200 with filtered results. ✅ (5) GET /admin/events-min as non-admin → 403. ✅ (6) POST /admin/notify/send with {preset_id:'low_stock', event_id:<valid>, audience:'event'} → 200 with {ok:true, audience:'event', notified:<int>}. ✅ (7) POST /admin/notify/send with {preset_id:'generic_new', audience:'all'} → 200 with {ok:true, audience:'all', notified:18, queued:true}. ✅ (8) POST /admin/notify/send with {body:'{name} test', audience:'event'} but NO event_id → 400 (validation working). ✅ (9) POST /admin/notify/send with {audience:'event'} but empty body and no preset_id → 400 (validation working). ✅ (10) POST /admin/notify/send as non-admin → 403. All endpoints working correctly with proper authorization and validation."
 
+  - task: "Admin signup notification alerts (global on/off setting)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added admin signup notification system. When a new user registers, all admins receive an in-app notification (type 'admin_new_signup') with the new user's @username, name, and city. Global on/off setting via GET/PUT /api/admin/settings/signup-alerts (default ON). Setting stored in app_settings collection. Function _notify_admins_new_signup checks setting before creating notifications. Both endpoints require admin role."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SIGNUP ALERT FEATURES (5 steps, 100% pass): ✅ STEP 1 - DEFAULT ON: GET /admin/settings/signup-alerts returns {enabled:true} by default. ✅ STEP 2 - ALERT ON SIGNUP: Registered user U1, admin received notification with type='admin_new_signup' mentioning @username in message. Notification count increased from 1 to 2. ✅ STEP 3 - DISABLE: PUT /admin/settings/signup-alerts {enabled:false} → 200 {enabled:false}. Registered user U2, NO new notification created (count stayed at 2). Verified U2's @username NOT in notifications. ✅ STEP 4 - RE-ENABLE: PUT /admin/settings/signup-alerts {enabled:true} → 200 {enabled:true}. Registered user U3, admin received new notification mentioning U3's @username. Count increased from 2 to 3. ✅ STEP 5 - PERMISSIONS: GET/PUT as non-admin user → 403. GET/PUT without auth → 401. All functionality working perfectly - default ON, toggle works bidirectionally, notifications created only when enabled, proper authorization."
+
   - task: "Perf: optimized admin funnel / venue-report / event stats"
     implemented: true
     working: true
@@ -4454,3 +4469,20 @@ backend:
       - working: true
         agent: "testing"
         comment: "TESTED ALL SCENARIOS (4 tests, 100% pass): ✅ (1) TEST 1: Attended past event preserved; unengaged old event deleted - Created 2 old events (10 days ago), user marked 'estuve' on Event A, cleanup deleted Event B (404) but preserved Event A (200), Event A appears in /me/past-events. ✅ (2) TEST 2: Moment capture preserves event even without interest - Created Event C, triggered moment, user uploaded capture then removed interest, cleanup preserved Event C (200) because of moment capture. ✅ (3) TEST 3: Moment is retrievable for PAST event - GET /events/{C}/moment/status returns my_capture (not null), GET /events/{C}/moment/gallery returns 1 capture, works for past events. ✅ (4) TEST 4: Stability regression - Called /me/past-events and /events/{A} 10 times total, Event A present in all calls (does not disappear). Bug fix working perfectly - past parties are preserved as memories."
+
+test_focus_2026_08_06_signup_alerts:
+  goal: "Nuevo: el admin recibe una notificacion cada vez que alguien se registra, con opcion de desactivarlo (global). Entorno LOCAL, BD vacia, sin token FourVenues (no probar afiliado)."
+  auth: "Admin: admin@quienva.app / admin123. Usuarios nuevos via POST /api/auth/register."
+  steps:
+    - "Default ON: Login admin. GET /api/admin/settings/signup-alerts -> {enabled:true}."
+    - "Aviso al registrarse: Registrar usuario nuevo U1 (POST /api/auth/register con email/username unicos). Como admin: GET /api/notifications -> debe existir una notificacion con type=='admin_new_signup' cuyo message contiene el @username de U1."
+    - "Desactivar: Como admin PUT /api/admin/settings/signup-alerts {enabled:false} -> {enabled:false}. Registrar usuario U2. Como admin: GET /api/notifications -> NO debe aparecer una nueva notificacion admin_new_signup para U2 (el conteo de admin_new_signup no aumenta respecto a antes de U2)."
+    - "Reactivar: Como admin PUT {enabled:true} -> {enabled:true}. Registrar U3. GET /api/notifications -> aparece admin_new_signup para U3."
+    - "Permisos: GET y PUT /api/admin/settings/signup-alerts como usuario normal -> 403; sin auth -> 401."
+  do_not: "No probar afiliado/scrapers/token FourVenues, push, ni login social."
+
+agent_communication:
+    - agent: "main"
+      message: "Nuevo feature backend: aviso de nuevos registros al admin. Al registrarse un usuario (email y google) se llama _notify_admins_new_signup que crea notificacion type='admin_new_signup' a cada admin, salvo que app_settings key 'admin_signup_alerts'.value == False. Endpoints admin: GET/PUT /api/admin/settings/signup-alerts {enabled}. Default ON. Probar SOLO esto en backend (local, sin token FourVenues). Tambien hay cambios frontend (descargar/compartir Momento y album, tarjeta 'Repaso de la noche', toggle en panel admin) que se probaran aparte con permiso del usuario."
+    - agent: "testing"
+      message: "✅ BACKEND TESTING COMPLETE - Admin signup alerts feature fully tested and working perfectly. All 5 test scenarios passed (default ON, alert on signup, disable/enable toggle, permissions). Created comprehensive test file /app/test_admin_signup_alerts.py with detailed verification of notification creation, counting, and authorization. Feature is production-ready. NO ISSUES FOUND."

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import api, { mediaThumb } from "@/lib/api";
+import api, { mediaThumb, mediaUrl, downloadMedia, shareMedia } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { ReportFlag } from "@/components/ReportBlock";
-import { Zap, Camera, Timer } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Zap, Camera, Timer, Download, Share2, X } from "lucide-react";
+import { toast } from "sonner";
 
 /**
  * "El Momento" — our own take on the BeReal-style capture during a party.
@@ -14,6 +16,7 @@ import { Zap, Camera, Timer } from "lucide-react";
 export function EventMoment({ eventId, hasInterest, past = false }) {
   const navigate = useNavigate();
   const [secLeft, setSecLeft] = useState(null);
+  const [preview, setPreview] = useState(null);
 
   const { data: status } = useQuery({
     queryKey: ["moment-status", eventId],
@@ -83,7 +86,12 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
         </p>
         <div className="grid grid-cols-3 gap-1.5" data-testid="moment-gallery">
           {gallery.map((c) => (
-            <div key={c.id} className="aspect-square rounded-xl overflow-hidden bg-black relative">
+            <div
+              key={c.id}
+              onClick={() => setPreview(c)}
+              data-testid={`moment-item-${c.id}`}
+              className="aspect-square rounded-xl overflow-hidden bg-black relative cursor-pointer active:scale-95 transition-transform"
+            >
               <img src={mediaThumb(c.image_url, 500)} alt="" className="w-full h-full object-cover" loading="lazy" />
               <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/50 rounded-full px-1.5 py-0.5">
                 <AvatarCircle name={c.author?.name || ""} picture={c.author?.picture || ""} size={16} ring={false} />
@@ -93,13 +101,58 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
                 <div className="absolute top-1 right-1 bg-yellow-300 text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">A TIEMPO</div>
               )}
               {!c.is_mine && (
-                <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center">
+                <div
+                  className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <ReportFlag targetType="moment" targetId={c.id} />
                 </div>
               )}
             </div>
           ))}
         </div>
+
+        {/* Viewer with download + share (great for saving your Momento memory) */}
+        <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
+          <DialogContent className="bg-black border-white/10 text-white max-w-md rounded-2xl p-0 overflow-hidden">
+            {preview && (
+              <div className="relative">
+                <button onClick={() => setPreview(null)} className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/60 flex items-center justify-center">
+                  <X className="w-5 h-5 text-white" />
+                </button>
+                <img src={mediaUrl(preview.image_url)} alt="" className="w-full max-h-[62vh] object-contain" />
+                <div className="p-4 flex items-center gap-3">
+                  <AvatarCircle name={preview.author?.name || ""} picture={preview.author?.picture || ""} size={32} ring={false} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-semibold truncate">{preview.author?.name}</p>
+                    <p className="text-white/40 text-xs">El Momento</p>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="moment-download-btn"
+                    onClick={() => downloadMedia(preview.image_url, `momento-${preview.id}.jpg`)}
+                    className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
+                    title="Descargar"
+                  >
+                    <Download className="w-4 h-4 text-white/80" />
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="moment-share-btn"
+                    onClick={async () => {
+                      const r = await shareMedia(preview.image_url, { title: "Mi Momento", text: "Mi Momento en ¿Quién va? ✨", filename: `momento-${preview.id}.jpg` });
+                      if (r === "downloaded") toast.success("Descargado ✅");
+                    }}
+                    className="w-10 h-10 rounded-full bg-yellow-300 flex items-center justify-center active:scale-95"
+                    title="Compartir"
+                  >
+                    <Share2 className="w-4 h-4 text-black" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

@@ -1030,6 +1030,32 @@ async def story_image(event_id: str, request: Request):
 # ---------------------------------------------------------------------------
 # Auth endpoints
 # ---------------------------------------------------------------------------
+async def _notify_admins_new_signup(new_user: dict):
+    """Notify every admin that a new user just registered. Global, opt-out via
+    app_settings key 'admin_signup_alerts' (ON by default). Never blocks signup."""
+    try:
+        s = await db.app_settings.find_one({"key": "admin_signup_alerts"}, {"_id": 0})
+        if s is not None and s.get("value") is False:
+            return  # disabled by admin
+        uname = new_user.get("username", "")
+        name = new_user.get("name", "")
+        city = new_user.get("city", "")
+        provider = new_user.get("auth_provider", "email")
+        msg = f"🆕 Nuevo registro: @{uname}" + (f" ({name})" if name else "")
+        if city:
+            msg += f" · {city}"
+        async for a in db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1}):
+            if a["user_id"] == new_user.get("user_id"):
+                continue
+            await create_notification(a["user_id"], "admin_new_signup", msg,
+                                      {"type": "admin_new_signup",
+                                       "new_user_id": new_user.get("user_id"),
+                                       "username": uname, "provider": provider,
+                                       "url": "/admin"})
+    except Exception as e:
+        logger.warning(f"[signup-alert] failed: {e}")
+
+
 @api_router.post("/auth/register")
 async def register(inp: RegisterInput, response: Response):
     email = inp.email.lower().strip()
@@ -1062,6 +1088,7 @@ async def register(inp: RegisterInput, response: Response):
     if ph:
         user["phone_hash"] = ph
     await db.users.insert_one(user)
+    await _notify_admins_new_signup(user)
     token = await create_session(user["user_id"])
     set_session_cookie(response, token)
     return {"user": public_user(user), "token": token}
@@ -1141,6 +1168,7 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user)
+        await _notify_admins_new_signup(user)
 
     token = await create_session(user["user_id"])
     set_session_cookie(response, token)
@@ -7417,6 +7445,29 @@ async def admin_cleanup_old_events(admin: dict = Depends(require_admin)):
     engaged with; preserves every event that is a memory (attendee/album/moment)."""
     res = await cleanup_old_events()
     return res or {"deleted": 0, "kept": 0, "old_total": 0}
+
+
+class SignupAlertsInput(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/admin/settings/signup-alerts")
+async def admin_get_signup_alerts(admin: dict = Depends(require_admin)):
+    """Whether admins get a notification on every new user signup (ON by default)."""
+    s = await db.app_settings.find_one({"key": "admin_signup_alerts"}, {"_id": 0})
+    enabled = not (s is not None and s.get("value") is False)
+    return {"enabled": enabled}
+
+
+@app.put("/api/admin/settings/signup-alerts")
+async def admin_set_signup_alerts(inp: SignupAlertsInput, admin: dict = Depends(require_admin)):
+    await db.app_settings.update_one(
+        {"key": "admin_signup_alerts"},
+        {"$set": {"key": "admin_signup_alerts", "value": bool(inp.enabled),
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"enabled": bool(inp.enabled)}
 
 
 

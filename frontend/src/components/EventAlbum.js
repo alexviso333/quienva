@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api, { mediaUrl, mediaThumb, downloadMedia } from "@/lib/api";
+import api, { mediaUrl, mediaThumb, downloadMedia, shareMedia } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import {
   Plus, Play, Trash2, Images, Loader2, X, Share2, Lock, Users, Check, Globe,
@@ -321,6 +321,20 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
                 >
                   <Download className="w-4 h-4 text-white/80" />
                 </button>
+                {preview.media_type !== "video" && (
+                  <button
+                    type="button"
+                    data-testid="album-share-native-btn"
+                    onClick={async () => {
+                      const r = await shareMedia(preview.media_url, { title: "Foto de la fiesta", text: "Foto en ¿Quién va? 📸" });
+                      if (r === "downloaded") toast.success("Descargado ✅");
+                    }}
+                    className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
+                    title="Compartir"
+                  >
+                    <Share2 className="w-4 h-4 text-white/80" />
+                  </button>
+                )}
                 {preview.is_mine && (
                   <button
                     data-testid="album-delete-btn"

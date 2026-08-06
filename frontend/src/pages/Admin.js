@@ -404,6 +404,27 @@ export default function Admin() {
     onError: () => toast.error("No se pudo lanzar"),
   });
 
+  // Signup alerts (notify admin on every new registration) — ON by default.
+  const { data: signupAlerts } = useQuery({
+    queryKey: ["admin-signup-alerts"],
+    queryFn: async () => (await api.get("/admin/settings/signup-alerts")).data,
+  });
+  const toggleSignupAlerts = useMutation({
+    mutationFn: async (enabled) => (await api.put("/admin/settings/signup-alerts", { enabled })).data,
+    onMutate: async (enabled) => {
+      await qc.cancelQueries({ queryKey: ["admin-signup-alerts"] });
+      const prev = qc.getQueryData(["admin-signup-alerts"]);
+      qc.setQueryData(["admin-signup-alerts"], { enabled });
+      return { prev };
+    },
+    onSuccess: (d) => toast.success(d.enabled ? "Te avisaremos de cada registro 🔔" : "Avisos de registro desactivados"),
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["admin-signup-alerts"], ctx.prev);
+      toast.error("No se pudo actualizar");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-signup-alerts"] }),
+  });
+
   const byDay = useMemo(() => {
     const m = {};
     events.forEach((e) => { (m[e.date] = m[e.date] || []).push(e); });
@@ -474,6 +495,24 @@ export default function Admin() {
           </button>
         </header>
 
+        {/* Ajuste: avisos de nuevos registros */}
+        <div className="px-5 mb-3">
+          <div className="flex items-center gap-3 rounded-2xl bg-white/[0.04] border border-white/10 p-3" data-testid="admin-signup-alerts-row">
+            <div className="w-9 h-9 rounded-full bg-qv-secondary/20 flex items-center justify-center shrink-0">
+              <BellRing className="w-4.5 h-4.5 text-qv-secondary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white leading-tight">Avisarme de nuevos registros</p>
+              <p className="text-white/45 text-xs">Recibe una notificación cuando alguien se registre.</p>
+            </div>
+            <Switch
+              data-testid="admin-signup-alerts-switch"
+              checked={!!signupAlerts?.enabled}
+              onCheckedChange={(v) => toggleSignupAlerts.mutate(v)}
+            />
+          </div>
+        </div>
+
         {/* City selector — a separate admin per city */}
         <div className="px-5 mb-3 flex gap-2 overflow-x-auto no-scrollbar">
           {CITIES.map((c) => (
@@ -525,7 +564,7 @@ export default function Admin() {
           <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-qv-primary" /></div>
         ) : events.length === 0 ? (
           <p className="px-5 py-10 text-center text-white/40 text-sm">
-            {tab === "past" ? "No hay fiestas pasadas (se borran a los 3 días)." : "No hay fiestas en esta ciudad."}
+            {tab === "past" ? "No hay fiestas pasadas todavía." : "No hay fiestas en esta ciudad."}
           </p>
         ) : tab === "momentos" ? (
           <div className="px-5 flex flex-col gap-4">

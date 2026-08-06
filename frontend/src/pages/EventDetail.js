@@ -6,6 +6,7 @@ import { formatPartyDate } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
+import { NightRecapCard } from "@/components/NightRecapCard";
 import {
   ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram,
 } from "lucide-react";
@@ -373,6 +374,9 @@ export default function EventDetail() {
               </p>
             )}
           </div>
+
+          {/* Repaso de la noche — shareable recap for past parties */}
+          {isPast && <NightRecapCard event={event} />}
 
           {/* Shared album — elevated so friends' photos don't get stuck in
               everyone's phone. Comes right after the friends block. */}
