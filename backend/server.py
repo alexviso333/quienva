@@ -6432,6 +6432,46 @@ async def _auto_seed_affiliate_clubs(org_seed: dict) -> int:
         return 0
 
 
+async def _notify_new_carried_clubs(all_orgs: dict):
+    """Notify admins when a club NEWLY appears in our RRPP link (a new discoteca
+    added to our promoter profile). Purely additive: does NOT touch matching or
+    ticket links. The FIRST run only records the current clubs as a baseline
+    (no notifications), so we never spam every existing club as 'new'."""
+    if not all_orgs:
+        return
+    try:
+        doc = await db.app_settings.find_one({"key": "known_carried_clubs"}, {"_id": 0})
+        current = set(all_orgs.keys())
+        if not doc:
+            await db.app_settings.update_one(
+                {"key": "known_carried_clubs"},
+                {"$set": {"key": "known_carried_clubs", "slugs": sorted(current),
+                          "updated_at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True,
+            )
+            return
+        known = set(doc.get("slugs", []))
+        new_slugs = current - known
+        if not new_slugs:
+            return
+        admin_ids = [a["user_id"] async for a in db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1})]
+        for slug in sorted(new_slugs):
+            name = all_orgs.get(slug, slug)
+            msg = f"🎉 Nueva discoteca en tu link RPP: {name}. Ya usa tu link de compra automáticamente."
+            for uid in admin_ids:
+                await create_notification(uid, "new_carried_club", msg,
+                                          {"type": "new_carried_club", "slug": slug, "url": "/admin"})
+        await db.app_settings.update_one(
+            {"key": "known_carried_clubs"},
+            {"$set": {"slugs": sorted(known | current),
+                      "updated_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+        logger.info(f"[affiliate] {len(new_slugs)} new carried club(s) → alerted {len(admin_ids)} admin(s)")
+    except Exception as e:
+        logger.warning(f"[affiliate] new-club notify failed: {e}")
+
+
 async def refresh_affiliate_events() -> int:
     """Refresh the set of events that belong to OUR affiliate profile (our
     microsite slug). We call the same FourVenues events API used by the scraper,
@@ -6461,6 +6501,7 @@ async def refresh_affiliate_events() -> int:
     by_dn: dict = {}         # (date, norm name) -> [(venue original, our slug)] alias fallback
     venue_agg: dict = {}     # (venue, city) -> count
     org_seed: dict = {}      # org_slug -> (org_name, app_city) for auto-seeding
+    all_orgs: dict = {}      # org_slug -> venue name (every carried club in our RRPP)
     try:
         async with httpx.AsyncClient(timeout=20, headers=headers) as client:
             page = 1
@@ -6531,6 +6572,7 @@ async def refresh_affiliate_events() -> int:
                     # touring promoters) without hand-adding each one.
                     org_slug = str(org.get("slug") or "").strip()
                     if org_slug:
+                        all_orgs[org_slug] = venue or org_slug
                         app_city = _supported_city_for(addr)
                         if app_city:
                             rec = org_seed.setdefault(org_slug, [venue or org_slug, {}])
@@ -6556,6 +6598,9 @@ async def refresh_affiliate_events() -> int:
         # Self-maintaining coverage: create a scraper for any carried club in a
         # supported city that we don't already scrape (deduped by slug + name).
         await _auto_seed_affiliate_clubs(org_seed)
+        # Alert admins when a NEW club appears in our RRPP link (additive; does not
+        # affect matching/linking). First run only records a baseline (no spam).
+        await _notify_new_carried_clubs(all_orgs)
         return len(amap)
     except Exception as e:
         logger.warning(f"[affiliate] refresh failed ({e}); keeping previous affiliate set of {len(_AFFILIATE_MAP)}")

@@ -24,6 +24,7 @@ export default function Momento() {
   // Which camera fires FIRST (BeReal-style). Default: front ("user"). The other
   // camera is captured ~2.5s later, with a visible countdown so there's time to pose.
   const [firstCam, setFirstCam] = useState("user"); // "user" (frontal) | "environment" (trasera)
+  const [poseMs, setPoseMs] = useState(3000);        // tiempo para posar entre las 2 cámaras
   const [countdown, setCountdown] = useState(null);  // big number shown between the two shots
   const fallbackRef = useRef(null);
 
@@ -96,10 +97,10 @@ export default function Momento() {
 
   const waitFrames = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  // Visible ~2.5s countdown between the two shots so there's time to pose
-  // (BeReal-style). Shows 3 → 2 → 1 big on screen.
-  const runCountdown = async (totalMs = 2500) => {
-    const steps = 3;
+  // Visible countdown between the two shots so there's time to pose
+  // (BeReal-style). One number per second: e.g. 3 → 2 → 1.
+  const runCountdown = async (totalMs = 3000) => {
+    const steps = Math.max(1, Math.round(totalMs / 1000));
     const each = Math.round(totalMs / steps);
     for (let i = steps; i >= 1; i--) {
       setCountdown(i);
@@ -142,7 +143,7 @@ export default function Momento() {
       await startCamera(secondCam);
       // small buffer so the new camera stream is live before the countdown frames
       await waitFrames(400);
-      await runCountdown(2500);
+      await runCountdown(poseMs);
       const shot2 = grabFrame();
       stopStream();
 
@@ -410,6 +411,21 @@ export default function Momento() {
                 Trasera primero
               </button>
             </div>
+            {/* Tiempo para posar entre las dos cámaras */}
+            <div className="flex items-center gap-1 p-1 rounded-full bg-white/10 mb-4" data-testid="momento-pose-toggle">
+              <span className="text-white/50 text-[11px] font-semibold pl-2 pr-1">Pose</span>
+              {[2, 3, 4].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => !busy && setPoseMs(s * 1000)}
+                  disabled={busy}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${poseMs === s * 1000 ? "bg-yellow-300 text-black" : "text-white/70"}`}
+                  data-testid={`momento-pose-${s}`}
+                >
+                  {s}s
+                </button>
+              ))}
+            </div>
             <button
               onClick={captureBoth}
               disabled={!camReady || busy}
@@ -420,7 +436,7 @@ export default function Momento() {
                 <Camera className="w-7 h-7 text-black" />
               </div>
             </button>
-            <p className="text-white/50 text-xs mt-3">Un toque: primero la {firstCam === "user" ? "frontal" : "trasera"} y, tras 2,5 s para posar, la otra</p>
+            <p className="text-white/50 text-xs mt-3">Un toque: primero la {firstCam === "user" ? "frontal" : "trasera"} y, tras {poseMs / 1000} s para posar, la otra</p>
           </div>
         ) : null}
       </div>
