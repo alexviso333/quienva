@@ -1055,6 +1055,7 @@ async def register(inp: RegisterInput, response: Response):
         "attendance_privacy": "amigos",
         "moment_privacy": "amigos",
         "blocked_users": [],
+        "city_change_alerts": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     ph = phone_hash(inp.phone) if inp.phone else None
@@ -1136,6 +1137,7 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
             "attendance_privacy": "amigos",
             "moment_privacy": "amigos",
             "blocked_users": [],
+            "city_change_alerts": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user)
@@ -2663,7 +2665,14 @@ async def get_event(event_id: str, user: dict = Depends(get_current_user)):
     except Exception:
         pass
     friend_ids = await accepted_friend_ids(user["user_id"])
-    return await serialize_event(ev, user, friend_ids)
+    # Load follow state so is_following is accurate on the detail page (fixes the
+    # notification bell "unselecting itself" after refetch).
+    follows_set: set = set()
+    _f = await db.event_follows.find_one(
+        {"user_id": user["user_id"], "event_id": event_id}, {"_id": 0, "event_id": 1})
+    if _f:
+        follows_set.add(event_id)
+    return await serialize_event(ev, user, friend_ids, follows_set=follows_set)
 
 
 @api_router.post("/events/{event_id}/interest")
@@ -6019,6 +6028,32 @@ async def on_startup():
     except Exception as _:
         pass
     await cleanup_demo_events()
+    # One-time migration: enable city-wide change alerts by default for everyone
+    # (owner requested it ON by default). Idempotent via a settings flag so it
+    # only runs once and never re-flips users who later opt out.
+    try:
+        _flag = await db.app_settings.find_one({"key": "city_alerts_default_on_v1"}, {"_id": 0})
+        if not _flag:
+            res = await db.users.update_many(
+                {"city_change_alerts": {"$ne": True}},
+                {"$set": {"city_change_alerts": True}},
+            )
+            await db.app_settings.update_one(
+                {"key": "city_alerts_default_on_v1"},
+                {"$set": {"key": "city_alerts_default_on_v1", "value": True,
+                          "migrated": getattr(res, "modified_count", 0),
+                          "at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True,
+            )
+            logger.info(f"[migration] city_change_alerts default ON → {getattr(res,'modified_count',0)} users updated")
+    except Exception as e:
+        logger.warning(f"[migration] city_alerts default failed: {e}")
+    # Restore persisted affiliate coverage so 'Mi link' works immediately after a
+    # restart, before the first live FourVenues refresh runs.
+    try:
+        await _load_affiliate_cache()
+    except Exception:
+        pass
     global scheduler
     try:
         scheduler = AsyncIOScheduler(timezone="Europe/Madrid")
@@ -6403,6 +6438,51 @@ async def _auto_seed_affiliate_clubs(org_seed: dict) -> int:
         return 0
 
 
+async def _persist_affiliate_cache():
+    """Persist the in-memory affiliate match set to MongoDB so a Render restart
+    (or a momentary FourVenues outage) doesn't wipe our coverage. Loaded at
+    startup before the first scheduled refresh. Keeps 'Mi link' stable."""
+    try:
+        amap_list = [[k[0], k[1], k[2], v] for k, v in _AFFILIATE_MAP.items()]
+        by_dn_list = [[k[0], k[1], [[a, b] for (a, b) in v]] for k, v in _AFFILIATE_BY_DN.items()]
+        await db.app_settings.update_one(
+            {"key": "affiliate_cache"},
+            {"$set": {"key": "affiliate_cache", "amap": amap_list, "by_dn": by_dn_list,
+                      "venues": _AFFILIATE_VENUES, "ts": _AFFILIATE_TS,
+                      "updated_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+    except Exception as e:
+        logger.warning(f"[affiliate] persist failed: {e}")
+
+
+async def _load_affiliate_cache():
+    """Restore the affiliate match set from MongoDB at startup so events keep
+    their 'Mi link' immediately, even before the first live refresh completes."""
+    global _AFFILIATE_MAP, _AFFILIATE_BY_DN, _AFFILIATE_VENUES, _AFFILIATE_TS
+    if _AFFILIATE_MAP:
+        return
+    try:
+        doc = await db.app_settings.find_one({"key": "affiliate_cache"}, {"_id": 0})
+        if not doc:
+            return
+        amap = {}
+        for row in doc.get("amap", []):
+            if len(row) == 4:
+                amap[(row[0], row[1], row[2])] = row[3]
+        by_dn = {}
+        for row in doc.get("by_dn", []):
+            if len(row) == 3:
+                by_dn[(row[0], row[1])] = [tuple(x) for x in row[2]]
+        _AFFILIATE_MAP = amap
+        _AFFILIATE_BY_DN = by_dn
+        _AFFILIATE_VENUES = doc.get("venues", []) or []
+        _AFFILIATE_TS = doc.get("ts", 0.0) or 0.0
+        logger.info(f"[affiliate] restored {len(amap)} events from persisted cache")
+    except Exception as e:
+        logger.warning(f"[affiliate] load failed: {e}")
+
+
 async def refresh_affiliate_events() -> int:
     """Refresh the set of events that belong to OUR affiliate profile (our
     microsite slug). We call the same FourVenues events API used by the scraper,
@@ -6524,6 +6604,8 @@ async def refresh_affiliate_events() -> int:
         )
         _AFFILIATE_TS = time.time()
         logger.info(f"[affiliate] '{AFFILIATE_SLUG}' → {len(amap)} events across {len(_AFFILIATE_VENUES)} venues are mine")
+        # Persist so a restart / transient outage never wipes our coverage.
+        await _persist_affiliate_cache()
         # Self-maintaining coverage: create a scraper for any carried club in a
         # supported city that we don't already scrape (deduped by slug + name).
         await _auto_seed_affiliate_clubs(org_seed)
@@ -7181,6 +7263,14 @@ async def admin_set_fv_token(inp: FourVenuesTokenInput, admin: dict = Depends(re
         valid = r.status_code == 200
     except Exception:
         valid = None
+    # If the new token works, refresh our affiliate coverage right away so newly
+    # added clubs (e.g. AMOK, Enredo) start using our RRPP link within seconds,
+    # instead of waiting for the next 20-min cycle.
+    if valid:
+        try:
+            asyncio.create_task(refresh_affiliate_events())
+        except Exception:
+            pass
     return {"ok": True, "valid": valid}
 
 

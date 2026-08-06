@@ -1,276 +1,286 @@
 #!/usr/bin/env python3
 """
-Test script for affiliate system fix verification
-Tests the fallback matching by (date + exact party name) + club name alias
+Backend test for two bug fixes:
+1. Notification bell (follow) persistence on single event
+2. City-wide change alerts ON by default
 """
 
 import requests
 import json
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://event-scraper-hub-1.preview.emergentagent.com/api"
+BASE_URL = "https://204b173e-f0b3-4059-a373-e97cae5b5cd7.preview.emergentagent.com/api"
 
-# Test credentials from memory/test_credentials.md
+# Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 
 def log(msg):
-    """Print timestamped log message"""
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+    print(f"[TEST] {msg}")
 
-def test_affiliate_system():
-    """Test the affiliate system fix"""
-    
+def test_fix_1_notification_bell_persistence():
+    """
+    FIX #1: Notification bell (follow) on a single event must persist
+    Bug: bell "unselected itself" because is_following returned null
+    Fix: is_following now returns true/false correctly
+    """
     log("=" * 80)
-    log("AFFILIATE SYSTEM FIX VERIFICATION")
+    log("FIX #1: Testing notification bell persistence")
     log("=" * 80)
     
     # Step 1: Login as admin
-    log("\n[STEP 1] Login as admin...")
-    login_resp = requests.post(
-        f"{BASE_URL}/auth/login",
-        json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+    log("Step 1: Login as admin")
+    admin_login_resp = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": ADMIN_EMAIL,
+        "password": ADMIN_PASSWORD
+    })
+    assert admin_login_resp.status_code == 200, f"Admin login failed: {admin_login_resp.status_code} {admin_login_resp.text}"
+    admin_token = admin_login_resp.json()["token"]
+    log(f"✓ Admin logged in successfully")
+    
+    # Step 2: Create an event via POST /api/admin/events
+    log("Step 2: Create a test event")
+    future_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+    event_data = {
+        "name": "Test Event for Bell Persistence",
+        "venue": "Test Venue",
+        "date": future_date,
+        "time": "23:00",
+        "city": "Palma de Mallorca",
+        "genre": "Electrónica",
+        "image_url": "https://example.com/test.jpg",
+        "price_tiers": [{"name": "General", "price": 20.0}],
+        "sale_state": "a_la_venta"
+    }
+    create_event_resp = requests.post(
+        f"{BASE_URL}/admin/events",
+        json=event_data,
+        headers={"Authorization": f"Bearer {admin_token}"}
     )
-    assert login_resp.status_code == 200, f"Login failed: {login_resp.status_code} {login_resp.text}"
-    token = login_resp.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
-    log(f"✅ Admin login successful, token obtained")
+    assert create_event_resp.status_code == 200, f"Create event failed: {create_event_resp.status_code} {create_event_resp.text}"
+    event_id = create_event_resp.json()["id"]
+    log(f"✓ Event created with id: {event_id}")
     
-    # Step 2: Get scraper IDs
-    log("\n[STEP 2] Getting scraper IDs...")
-    scrapers_resp = requests.get(f"{BASE_URL}/admin/scrapers", headers=headers)
-    assert scrapers_resp.status_code == 200, f"Get scrapers failed: {scrapers_resp.status_code}"
-    scrapers = scrapers_resp.json()
-    log(f"✅ Retrieved {len(scrapers)} scrapers")
+    # Step 3: Register a normal user
+    log("Step 3: Register a normal user")
+    timestamp = int(time.time())
+    user_email = f"testuser{timestamp}@test.com"
+    user_password = "testpass123"
+    register_resp = requests.post(f"{BASE_URL}/auth/register", json={
+        "email": user_email,
+        "password": user_password,
+        "username": f"testuser{timestamp}",
+        "name": f"Test User {timestamp}",
+        "birthdate": "1995-01-01",
+        "city": "Palma de Mallorca"
+    })
+    assert register_resp.status_code == 200, f"Register failed: {register_resp.status_code} {register_resp.text}"
+    log(f"✓ User registered: {user_email}")
     
-    # Find target scrapers
-    target_venues = ["Chango Madrid", "Fitz Mallorca", "Fitz Madrid", "Amok Mallorca"]
-    scraper_map = {}
-    for scraper in scrapers:
-        name = scraper.get("name", "")
-        if any(target.lower() in name.lower() for target in target_venues):
-            scraper_map[name] = scraper["id"]
-            log(f"   Found: {name} (id: {scraper['id']})")
+    # Step 4: Login as the normal user
+    log("Step 4: Login as normal user")
+    user_login_resp = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": user_email,
+        "password": user_password
+    })
+    assert user_login_resp.status_code == 200, f"User login failed: {user_login_resp.status_code} {user_login_resp.text}"
+    user_token = user_login_resp.json()["token"]
+    log(f"✓ User logged in successfully")
     
-    # Step 3: Run scrapers for target venues
-    log("\n[STEP 3] Running scrapers for target venues...")
-    for venue_name, scraper_id in scraper_map.items():
-        log(f"   Running scraper for {venue_name}...")
-        run_resp = requests.post(
-            f"{BASE_URL}/admin/scrapers/{scraper_id}/run",
-            headers=headers
+    # Step 5: GET /api/events/{id} -> is_following must be false (NOT null)
+    log("Step 5: GET event - is_following should be false (not null)")
+    get_event_resp = requests.get(
+        f"{BASE_URL}/events/{event_id}",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert get_event_resp.status_code == 200, f"Get event failed: {get_event_resp.status_code} {get_event_resp.text}"
+    event_data = get_event_resp.json()
+    assert "is_following" in event_data, "is_following field missing"
+    assert event_data["is_following"] is False, f"Expected is_following=false, got {event_data['is_following']}"
+    log(f"✓ is_following = {event_data['is_following']} (correct: false, not null)")
+    
+    # Step 6: POST /api/events/{id}/follow -> expect {following:true}
+    log("Step 6: Follow the event")
+    follow_resp = requests.post(
+        f"{BASE_URL}/events/{event_id}/follow",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert follow_resp.status_code == 200, f"Follow failed: {follow_resp.status_code} {follow_resp.text}"
+    follow_data = follow_resp.json()
+    assert follow_data.get("following") is True, f"Expected following=true, got {follow_data}"
+    log(f"✓ Follow successful: {follow_data}")
+    
+    # Step 7: GET /api/events/{id} AGAIN -> is_following MUST be true (CORE FIX)
+    log("Step 7: GET event again - is_following MUST be true (CORE FIX)")
+    get_event_resp2 = requests.get(
+        f"{BASE_URL}/events/{event_id}",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert get_event_resp2.status_code == 200, f"Get event failed: {get_event_resp2.status_code} {get_event_resp2.text}"
+    event_data2 = get_event_resp2.json()
+    assert "is_following" in event_data2, "is_following field missing"
+    assert event_data2["is_following"] is True, f"CORE BUG: Expected is_following=true after follow, got {event_data2['is_following']}"
+    log(f"✓✓✓ CORE FIX VERIFIED: is_following = {event_data2['is_following']} (persists correctly!)")
+    
+    # Step 8: DELETE /api/events/{id}/follow -> then GET -> is_following must be false
+    log("Step 8: Unfollow the event")
+    unfollow_resp = requests.delete(
+        f"{BASE_URL}/events/{event_id}/follow",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert unfollow_resp.status_code == 200, f"Unfollow failed: {unfollow_resp.status_code} {unfollow_resp.text}"
+    log(f"✓ Unfollow successful")
+    
+    log("Step 9: GET event after unfollow - is_following should be false")
+    get_event_resp3 = requests.get(
+        f"{BASE_URL}/events/{event_id}",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert get_event_resp3.status_code == 200, f"Get event failed: {get_event_resp3.status_code}"
+    event_data3 = get_event_resp3.json()
+    assert event_data3["is_following"] is False, f"Expected is_following=false after unfollow, got {event_data3['is_following']}"
+    log(f"✓ is_following = {event_data3['is_following']} (correct after unfollow)")
+    
+    # Step 10: Call GET /api/events/{id} multiple times to confirm stability (idempotent)
+    log("Step 10: Test idempotency - call GET multiple times")
+    for i in range(5):
+        get_event_resp_test = requests.get(
+            f"{BASE_URL}/events/{event_id}",
+            headers={"Authorization": f"Bearer {user_token}"}
         )
-        if run_resp.status_code == 200:
-            result = run_resp.json()
-            log(f"   ✅ {venue_name}: ok={result.get('ok')}, events={result.get('events', 0)}")
-        else:
-            log(f"   ⚠️ {venue_name}: {run_resp.status_code} {run_resp.text[:100]}")
+        assert get_event_resp_test.status_code == 200
+        event_data_test = get_event_resp_test.json()
+        assert event_data_test["is_following"] is False, f"Iteration {i+1}: is_following not stable, got {event_data_test['is_following']}"
+    log(f"✓ is_following value is STABLE across 5 calls (idempotent)")
     
-    # Step 4: Refresh affiliate data
-    log("\n[STEP 4] Refreshing affiliate data...")
-    refresh_resp = requests.post(f"{BASE_URL}/admin/affiliate-refresh", headers=headers)
-    assert refresh_resp.status_code == 200, f"Affiliate refresh failed: {refresh_resp.status_code}"
-    refresh_data = refresh_resp.json()
-    log(f"✅ Affiliate refresh successful: slug={refresh_data.get('slug')}, mine_count={refresh_data.get('mine_count')}")
-    
-    # Step 5: Get affiliate status and verify
-    log("\n[STEP 5] Getting affiliate status...")
-    status_resp = requests.get(f"{BASE_URL}/admin/affiliate-status", headers=headers)
-    assert status_resp.status_code == 200, f"Affiliate status failed: {status_resp.status_code}"
-    status_data = status_resp.json()
-    
-    matched_count = status_data.get("matched_count", 0)
-    venues_data = status_data.get("venues", [])
-    
-    log(f"✅ Affiliate status retrieved:")
-    log(f"   - slug: {status_data.get('slug')}")
-    log(f"   - mine_count: {status_data.get('mine_count')}")
-    log(f"   - matched_count: {matched_count}")
-    log(f"   - venues: {len(venues_data)}")
-    
-    # Verify matched_count > 0
-    assert matched_count > 0, f"❌ FAIL: matched_count should be > 0, got {matched_count}"
-    log(f"✅ PASS: matched_count = {matched_count} (> 0)")
-    
-    # Check CHANGO venues
-    log("\n   Checking CHANGO venues...")
-    chango_venues = [v for v in venues_data if "CHANGO" in v.get("venue", "").upper()]
-    if chango_venues:
-        for cv in chango_venues:
-            venue_name = cv.get("venue")
-            events = cv.get("events", 0)
-            matched = cv.get("matched", 0)
-            log(f"   - {venue_name}: events={events}, matched={matched}")
-            assert matched > 0, f"❌ FAIL: {venue_name} should have matched > 0, got {matched}"
-        log(f"✅ PASS: All CHANGO venues have matched > 0")
-    else:
-        log(f"⚠️ WARNING: No CHANGO venues found in affiliate status")
-    
-    # Step 6: Test Madrid feed with Chango events
-    log("\n[STEP 6] Testing Madrid feed for Chango events...")
-    
-    # Set city to Madrid
-    profile_resp = requests.put(
-        f"{BASE_URL}/auth/profile",
-        headers=headers,
-        json={"city": "Madrid"}
-    )
-    assert profile_resp.status_code == 200, f"Profile update failed: {profile_resp.status_code}"
-    log(f"✅ City set to Madrid")
-    
-    # Get events
-    events_resp = requests.get(
-        f"{BASE_URL}/events?date_filter=all",
-        headers=headers
-    )
-    assert events_resp.status_code == 200, f"Get events failed: {events_resp.status_code}"
-    events = events_resp.json()
-    log(f"✅ Retrieved {len(events)} events for Madrid")
-    
-    # Filter Chango events
-    chango_events = [e for e in events if "chango" in e.get("venue", "").lower()]
-    log(f"   Found {len(chango_events)} Chango events")
-    
-    # Check for "Vacanciones" and "CHANGO" events with is_affiliate=true
-    vacanciones_events = [e for e in chango_events if "vacanciones" in e.get("name", "").lower() and e.get("is_affiliate") is True]
-    chango_name_events = [e for e in chango_events if "chango" in e.get("name", "").lower() and e.get("is_affiliate") is True]
-    
-    log(f"   - Events with 'Vacanciones' and is_affiliate=true: {len(vacanciones_events)}")
-    if vacanciones_events:
-        for ev in vacanciones_events[:3]:  # Show first 3
-            log(f"     • {ev.get('name')} at {ev.get('venue')} - commission_url: {ev.get('commission_url', '')[:80]}...")
-    
-    log(f"   - Events with 'CHANGO' in name and is_affiliate=true: {len(chango_name_events)}")
-    if chango_name_events:
-        for ev in chango_name_events[:3]:  # Show first 3
-            log(f"     • {ev.get('name')} at {ev.get('venue')} - commission_url: {ev.get('commission_url', '')[:80]}...")
-    
-    # Verify at least some affiliate events exist
-    affiliate_chango = [e for e in chango_events if e.get("is_affiliate") is True]
-    if affiliate_chango:
-        log(f"✅ PASS: Found {len(affiliate_chango)} Chango events with is_affiliate=true")
-        
-        # Verify commission_url format
-        for ev in affiliate_chango[:5]:
-            commission_url = ev.get("commission_url", "")
-            if commission_url:
-                assert commission_url.startswith("https://www.fourvenues.com/quienva/events/"), \
-                    f"❌ FAIL: commission_url should start with 'https://www.fourvenues.com/quienva/events/', got {commission_url}"
-        log(f"✅ PASS: Commission URLs correctly formatted")
-    else:
-        log(f"⚠️ WARNING: No Chango events with is_affiliate=true found")
-    
-    # Step 7: Verify ordering regression
-    log("\n[STEP 7] Verifying feed ordering (affiliate first, then price descending)...")
-    
-    # Get all Madrid events
-    all_events = events
-    
-    # Find first non-affiliate event
-    first_non_affiliate_idx = None
-    for i, ev in enumerate(all_events):
-        if ev.get("is_affiliate") is False:
-            first_non_affiliate_idx = i
-            break
-    
-    # Verify all affiliate events come before non-affiliate
-    affiliate_events = [e for e in all_events if e.get("is_affiliate") is True]
-    if affiliate_events:
-        log(f"   Found {len(affiliate_events)} affiliate events")
-        
-        # Check that all affiliate events are at the beginning
-        for i, ev in enumerate(all_events[:len(affiliate_events)]):
-            if ev.get("is_affiliate") is not True:
-                log(f"❌ FAIL: Non-affiliate event found at position {i} before all affiliate events")
-                log(f"   Event: {ev.get('name')} at {ev.get('venue')}")
-                break
-        else:
-            log(f"✅ PASS: All affiliate events appear before non-affiliate events")
-        
-        # Check price ordering within affiliate events
-        affiliate_prices = [e.get("current_price") for e in affiliate_events if e.get("current_price") is not None]
-        if len(affiliate_prices) > 1:
-            is_descending = all(affiliate_prices[i] >= affiliate_prices[i+1] for i in range(len(affiliate_prices)-1))
-            if is_descending:
-                log(f"✅ PASS: Affiliate events sorted by price descending: {affiliate_prices[:10]}")
-            else:
-                log(f"⚠️ WARNING: Affiliate events NOT sorted by price descending: {affiliate_prices[:10]}")
-    else:
-        log(f"⚠️ No affiliate events found in Madrid feed")
-    
-    # Step 8: Test Palma feed
-    log("\n[STEP 8] Testing Palma de Mallorca feed...")
-    
-    # Set city to Palma
-    profile_resp = requests.put(
-        f"{BASE_URL}/auth/profile",
-        headers=headers,
-        json={"city": "Palma de Mallorca"}
-    )
-    assert profile_resp.status_code == 200, f"Profile update failed: {profile_resp.status_code}"
-    log(f"✅ City set to Palma de Mallorca")
-    
-    # Get events
-    events_resp = requests.get(
-        f"{BASE_URL}/events?date_filter=all",
-        headers=headers
-    )
-    assert events_resp.status_code == 200, f"Get events failed: {events_resp.status_code}"
-    palma_events = events_resp.json()
-    log(f"✅ Retrieved {len(palma_events)} events for Palma")
-    
-    # Check Fitz Mallorca events
-    fitz_events = [e for e in palma_events if "fitz" in e.get("venue", "").lower() and "mallorca" in e.get("venue", "").lower()]
-    fitz_affiliate = [e for e in fitz_events if e.get("is_affiliate") is True]
-    log(f"   - Fitz Mallorca events: {len(fitz_events)}, with is_affiliate=true: {len(fitz_affiliate)}")
-    
-    if fitz_affiliate:
-        log(f"✅ PASS: Fitz Mallorca events have is_affiliate=true")
-        for ev in fitz_affiliate[:3]:
-            log(f"     • {ev.get('name')} on {ev.get('date')}")
-    else:
-        log(f"⚠️ WARNING: No Fitz Mallorca events with is_affiliate=true")
-    
-    # Check AMOK event on 2026-09-05
-    amok_events = [e for e in palma_events if "amok" in e.get("venue", "").lower()]
-    amok_sept_5 = [e for e in amok_events if e.get("date") == "2026-09-05" and "tardeo" in e.get("name", "").lower() and "reggaeton" in e.get("name", "").lower()]
-    
-    log(f"   - AMOK events: {len(amok_events)}")
-    log(f"   - AMOK event on 2026-09-05 'El Tardeo de Reggaeton Viejo': {len(amok_sept_5)}")
-    
-    if amok_sept_5:
-        ev = amok_sept_5[0]
-        log(f"     • Found: {ev.get('name')} on {ev.get('date')}")
-        log(f"     • is_affiliate: {ev.get('is_affiliate')}")
-        if ev.get("is_affiliate") is True:
-            log(f"✅ PASS: AMOK 'El Tardeo de Reggaeton Viejo' on 2026-09-05 correctly marked as affiliate")
-        else:
-            log(f"❌ FAIL: AMOK event should have is_affiliate=true, got {ev.get('is_affiliate')}")
-    else:
-        log(f"⚠️ WARNING: AMOK 'El Tardeo de Reggaeton Viejo' on 2026-09-05 not found")
-    
-    # Check for massive false positives (other AMOK events should NOT be marked)
-    other_amok = [e for e in amok_events if e.get("date") != "2026-09-05" and e.get("is_affiliate") is True]
-    if other_amok:
-        log(f"⚠️ WARNING: Found {len(other_amok)} other AMOK events marked as affiliate (potential false positives)")
-        for ev in other_amok[:5]:
-            log(f"     • {ev.get('name')} on {ev.get('date')}")
-    else:
-        log(f"✅ PASS: No massive false positives - other AMOK events not marked")
-    
-    log("\n" + "=" * 80)
-    log("AFFILIATE SYSTEM FIX VERIFICATION COMPLETE")
     log("=" * 80)
+    log("✅ FIX #1 PASSED: Notification bell persistence working correctly!")
+    log("=" * 80)
+    return True
 
-if __name__ == "__main__":
+def test_fix_2_city_alerts_default_on():
+    """
+    FIX #2: City-wide change alerts ON by default
+    Previously: city_change_alerts defaulted to false
+    Fix: Now defaults to true for new users
+    """
+    log("\n" + "=" * 80)
+    log("FIX #2: Testing city-wide change alerts default ON")
+    log("=" * 80)
+    
+    # Step 1: Register a brand-new user
+    log("Step 1: Register a brand-new user")
+    timestamp = int(time.time())
+    user_email = f"newuser{timestamp}@test.com"
+    user_password = "testpass123"
+    register_resp = requests.post(f"{BASE_URL}/auth/register", json={
+        "email": user_email,
+        "password": user_password,
+        "username": f"newuser{timestamp}",
+        "name": f"New User {timestamp}",
+        "birthdate": "1995-01-01",
+        "city": "Palma de Mallorca"
+    })
+    assert register_resp.status_code == 200, f"Register failed: {register_resp.status_code} {register_resp.text}"
+    user_token = register_resp.json()["token"]
+    log(f"✓ New user registered: {user_email}")
+    
+    # Step 2: GET /api/auth/me -> city_change_alerts MUST be true (CORE FIX)
+    log("Step 2: GET /auth/me - city_change_alerts MUST be true (CORE FIX)")
+    me_resp = requests.get(
+        f"{BASE_URL}/auth/me",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert me_resp.status_code == 200, f"Get /auth/me failed: {me_resp.status_code} {me_resp.text}"
+    me_data = me_resp.json()
+    assert "city_change_alerts" in me_data, "city_change_alerts field missing"
+    assert me_data["city_change_alerts"] is True, f"CORE BUG: Expected city_change_alerts=true by default, got {me_data['city_change_alerts']}"
+    log(f"✓✓✓ CORE FIX VERIFIED: city_change_alerts = {me_data['city_change_alerts']} (default is TRUE!)")
+    
+    # Step 3: PUT /api/me/city-alerts {enabled:false} -> {city_change_alerts:false}
+    log("Step 3: Toggle OFF - PUT /me/city-alerts {enabled:false}")
+    toggle_off_resp = requests.put(
+        f"{BASE_URL}/me/city-alerts",
+        json={"enabled": False},
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert toggle_off_resp.status_code == 200, f"Toggle OFF failed: {toggle_off_resp.status_code} {toggle_off_resp.text}"
+    toggle_off_data = toggle_off_resp.json()
+    assert toggle_off_data.get("city_change_alerts") is False, f"Expected city_change_alerts=false, got {toggle_off_data}"
+    log(f"✓ Toggle OFF successful: {toggle_off_data}")
+    
+    # Step 4: GET /api/auth/me -> verify it reflects false
+    log("Step 4: GET /auth/me - verify city_change_alerts is false")
+    me_resp2 = requests.get(
+        f"{BASE_URL}/auth/me",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert me_resp2.status_code == 200
+    me_data2 = me_resp2.json()
+    assert me_data2["city_change_alerts"] is False, f"Expected city_change_alerts=false, got {me_data2['city_change_alerts']}"
+    log(f"✓ city_change_alerts = {me_data2['city_change_alerts']} (persisted correctly)")
+    
+    # Step 5: PUT /api/me/city-alerts {enabled:true} -> {city_change_alerts:true}
+    log("Step 5: Toggle ON - PUT /me/city-alerts {enabled:true}")
+    toggle_on_resp = requests.put(
+        f"{BASE_URL}/me/city-alerts",
+        json={"enabled": True},
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert toggle_on_resp.status_code == 200, f"Toggle ON failed: {toggle_on_resp.status_code} {toggle_on_resp.text}"
+    toggle_on_data = toggle_on_resp.json()
+    assert toggle_on_data.get("city_change_alerts") is True, f"Expected city_change_alerts=true, got {toggle_on_data}"
+    log(f"✓ Toggle ON successful: {toggle_on_data}")
+    
+    # Step 6: GET /api/auth/me -> verify it reflects true
+    log("Step 6: GET /auth/me - verify city_change_alerts is true")
+    me_resp3 = requests.get(
+        f"{BASE_URL}/auth/me",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert me_resp3.status_code == 200
+    me_data3 = me_resp3.json()
+    assert me_data3["city_change_alerts"] is True, f"Expected city_change_alerts=true, got {me_data3['city_change_alerts']}"
+    log(f"✓ city_change_alerts = {me_data3['city_change_alerts']} (toggle works both ways)")
+    
+    log("=" * 80)
+    log("✅ FIX #2 PASSED: City-wide change alerts default ON working correctly!")
+    log("=" * 80)
+    return True
+
+def main():
+    log("Starting backend tests for 2 bug fixes")
+    log(f"Base URL: {BASE_URL}")
+    log(f"Admin: {ADMIN_EMAIL}")
+    
     try:
-        test_affiliate_system()
-    except AssertionError as e:
-        log(f"\n❌ TEST FAILED: {e}")
-        exit(1)
+        # Test FIX #1
+        fix1_passed = test_fix_1_notification_bell_persistence()
+        
+        # Test FIX #2
+        fix2_passed = test_fix_2_city_alerts_default_on()
+        
+        # Summary
+        log("\n" + "=" * 80)
+        log("FINAL SUMMARY")
+        log("=" * 80)
+        log(f"FIX #1 (Notification bell persistence): {'✅ PASS' if fix1_passed else '❌ FAIL'}")
+        log(f"FIX #2 (City alerts default ON): {'✅ PASS' if fix2_passed else '❌ FAIL'}")
+        
+        if fix1_passed and fix2_passed:
+            log("\n🎉 ALL TESTS PASSED! Both fixes working correctly.")
+            return 0
+        else:
+            log("\n❌ SOME TESTS FAILED")
+            return 1
+            
     except Exception as e:
-        log(f"\n❌ UNEXPECTED ERROR: {e}")
+        log(f"\n❌ TEST FAILED WITH EXCEPTION: {e}")
         import traceback
         traceback.print_exc()
-        exit(1)
+        return 1
+
+if __name__ == "__main__":
+    exit(main())

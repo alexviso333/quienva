@@ -4286,3 +4286,79 @@ agent_communication:
         
         Test file: /app/backend_test.py
         Base URL: https://event-scraper-hub-1.preview.emergentagent.com/api
+
+test_focus_2026_08_06_notif_and_cityalerts:
+  goal: "Verificar 2 cambios de backend SIN romper nada. Entorno LOCAL nuevo: la BD arranca vacía y NO hay token de FourVenues (no probar scrapers/afiliado aquí)."
+  auth: "Admin: admin@quienva.app / admin123 (POST /api/auth/login -> token)."
+  steps:
+    - "FIX #1 (botón de notificaciones/campana de una fiesta persiste): Login admin. Crear un evento via POST /api/admin/events (rellenar campos requeridos del modelo EventInput; fecha futura). Registrar/loguear un usuario normal. Como usuario: GET /api/events/{id} -> is_following debe ser false (no null). POST /api/events/{id}/follow -> {following:true}. Volver a GET /api/events/{id} -> is_following DEBE ser true (antes devolvía null y por eso la campana se deseleccionaba sola). DELETE /api/events/{id}/follow -> GET /api/events/{id} -> is_following false. Repetir GET varias veces para confirmar que el valor es estable."
+    - "FIX #2 (alertas de ciudad ON por defecto): Registrar un usuario NUEVO via POST /api/auth/register. GET /api/auth/me -> city_change_alerts DEBE ser true (antes era false por defecto). Comprobar tambien que PUT /api/me/city-alerts {enabled:false} lo pone en false y {enabled:true} en true (el toggle sigue funcionando)."
+  do_not: "No probar afiliado/scrapers/token de FourVenues (no hay datos ni token en local). No probar push, ni login social."
+
+agent_communication:
+    - agent: "main"
+      message: "Cambios a verificar (entorno local, BD vacia, sin token FourVenues): (1) FIX bug boton de notificaciones de una fiesta: GET /api/events/{id} ahora carga event_follows y pasa follows_set a serialize_event, asi is_following devuelve true/false correcto (antes null -> la campana se deseleccionaba sola). (2) city_change_alerts ahora ON por defecto para usuarios nuevos (registro email y google) + migracion unica en startup + /auth/me default True. El toggle PUT /api/me/city-alerts sigue igual. NO tocar/no probar afiliado ni scrapers aqui (sin token/datos)."
+
+#====================================================================================================
+# 2026-08-06 m — Testing Results: Notification bell persistence + City alerts default ON
+#====================================================================================================
+
+backend:
+  - task: "BUG FIX: Notification bell (is_following) persistence on single event"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Fixed critical bug where GET /api/events/{id} returned is_following=null instead of true/false, causing the notification bell to 'unselect itself' in the frontend. Fix: GET /api/events/{id} now loads event_follows and passes follows_set to serialize_event, so is_following returns correct true/false value (never null)."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL NOTIFICATION BELL SCENARIOS (10 steps, 100% pass): ✅ (1) Admin login successful. ✅ (2) Created test event with future date. ✅ (3) Registered normal user. ✅ (4) User login successful. ✅ (5) GET /events/{id} → is_following=false (NOT null, correct initial state). ✅ (6) POST /events/{id}/follow → {following:true}. ✅ (7) CORE FIX VERIFIED: GET /events/{id} after follow → is_following=true (previously returned null causing bell to unselect). ✅ (8) DELETE /events/{id}/follow → unfollow successful. ✅ (9) GET /events/{id} after unfollow → is_following=false. ✅ (10) IDEMPOTENCY VERIFIED: Called GET /events/{id} 5 times, is_following value STABLE (no flapping). Bug fix working perfectly - notification bell now persists correctly."
+
+  - task: "BUG FIX: City-wide change alerts default changed from OFF to ON"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Changed default value for city_change_alerts from false to true for new users (both email and Google registration). Added one-time migration on startup to update existing users. GET /auth/me now defaults to true. PUT /api/me/city-alerts toggle functionality unchanged."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL CITY ALERTS DEFAULT SCENARIOS (6 steps, 100% pass): ✅ (1) Registered brand-new user. ✅ (2) CORE FIX VERIFIED: GET /auth/me → city_change_alerts=true (default is now TRUE, previously was false). ✅ (3) PUT /me/city-alerts {enabled:false} → {city_change_alerts:false}. ✅ (4) GET /auth/me reflects city_change_alerts=false (persisted correctly). ✅ (5) PUT /me/city-alerts {enabled:true} → {city_change_alerts:true}. ✅ (6) GET /auth/me reflects city_change_alerts=true (toggle works both ways). Bug fix working perfectly - new users now have city alerts ON by default, toggle functionality preserved."
+
+agent_communication:
+    - agent: "testing"
+      message: |
+        ✅ BOTH BUG FIXES VERIFIED - ALL TESTS PASSED (2/2 fixes, 100% success)
+        
+        TESTED: Two critical bug fixes in fresh local environment (empty MongoDB, no FourVenues token).
+        
+        FIX #1 - NOTIFICATION BELL PERSISTENCE: ✅ PASS
+        - Bug: is_following returned null causing bell to "unselect itself"
+        - Fix: GET /api/events/{id} now correctly returns is_following as true/false (never null)
+        - Verified: Initial state false → follow → true (PERSISTS!) → unfollow → false
+        - Idempotency: Value stable across 5 consecutive calls (no flapping)
+        - All 10 test steps passed
+        
+        FIX #2 - CITY ALERTS DEFAULT ON: ✅ PASS
+        - Bug: city_change_alerts defaulted to false for new users
+        - Fix: Now defaults to true for new registrations
+        - Verified: New user registration → city_change_alerts=true by default
+        - Toggle functionality preserved: can toggle false → true → false
+        - All 6 test steps passed
+        
+        🎯 CONCLUSION:
+        Both bug fixes working perfectly. No regressions detected. All endpoints returning correct values with proper persistence.
+        
+        Test file: /app/backend_test.py
+        Base URL: https://204b173e-f0b3-4059-a373-e97cae5b5cd7.preview.emergentagent.com/api
+        Admin: admin@quienva.app / admin123
+

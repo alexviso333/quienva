@@ -21,6 +21,10 @@ export default function Momento() {
   const [composed, setComposed] = useState(null); // { blob, url }
   const [uploading, setUploading] = useState(false);
   const [secLeft, setSecLeft] = useState(null);
+  // Which camera fires FIRST (BeReal-style). Default: front ("user"). The other
+  // camera is captured ~2.5s later, with a visible countdown so there's time to pose.
+  const [firstCam, setFirstCam] = useState("user"); // "user" (frontal) | "environment" (trasera)
+  const [countdown, setCountdown] = useState(null);  // big number shown between the two shots
   const fallbackRef = useRef(null);
 
   const { data: moment, isLoading } = useQuery({
@@ -62,10 +66,10 @@ export default function Momento() {
 
   useEffect(() => {
     if (composed) return; // don't reopen camera while previewing result
-    if (moment?.active) startCamera("environment");
+    if (moment?.active) startCamera(firstCam);
     return () => stopStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moment?.active, composed]);
+  }, [moment?.active, composed, firstCam]);
 
   // countdown for on-time bonus
   useEffect(() => {
@@ -91,6 +95,18 @@ export default function Momento() {
   };
 
   const waitFrames = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Visible ~2.5s countdown between the two shots so there's time to pose
+  // (BeReal-style). Shows 3 → 2 → 1 big on screen.
+  const runCountdown = async (totalMs = 2500) => {
+    const steps = 3;
+    const each = Math.round(totalMs / steps);
+    for (let i = steps; i >= 1; i--) {
+      setCountdown(i);
+      await waitFrames(each);
+    }
+    setCountdown(null);
+  };
 
   // Draw a source canvas into dest as "cover" within target rect
   const drawCover = (ctx, src, dx, dy, dw, dh, mirror = false) => {
@@ -119,13 +135,21 @@ export default function Momento() {
     if (busy || !camReady) return;
     setBusy(true);
     try {
-      // 1) rear frame
-      const rear = grabFrame();
-      // 2) switch to front
-      await startCamera("user");
-      await waitFrames(700);
-      const front = grabFrame();
+      // The camera currently showing is `firstCam`. Capture it NOW (user is ready),
+      // then switch to the OTHER camera and give ~2.5s to pose before the 2nd shot.
+      const secondCam = firstCam === "user" ? "environment" : "user";
+      const shot1 = grabFrame();
+      await startCamera(secondCam);
+      // small buffer so the new camera stream is live before the countdown frames
+      await waitFrames(400);
+      await runCountdown(2500);
+      const shot2 = grabFrame();
       stopStream();
+
+      // Map the two shots to front/rear regardless of capture order so the
+      // composition is always: big REAR photo + small FRONT selfie overlay.
+      const front = firstCam === "user" ? shot1 : shot2;
+      const rear = firstCam === "user" ? shot2 : shot1;
 
       // Compose portrait 900x1200
       const W = 900, H = 1200;
@@ -159,7 +183,8 @@ export default function Momento() {
       setComposed({ blob, url: URL.createObjectURL(blob) });
     } catch (e) {
       toast.error("No se pudo capturar. Reintenta.");
-      startCamera("environment");
+      setCountdown(null);
+      startCamera(firstCam);
     } finally {
       setBusy(false);
     }
@@ -317,8 +342,25 @@ export default function Momento() {
             )}
             {busy && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
-                <Loader2 className="w-8 h-8 text-yellow-300 animate-spin mb-2" />
-                <p className="text-white/80 text-sm font-semibold">Capturando las dos cámaras…</p>
+                {countdown !== null ? (
+                  <>
+                    <div
+                      key={countdown}
+                      className="w-28 h-28 rounded-full bg-yellow-300/95 flex items-center justify-center shadow-2xl animate-pulse"
+                      data-testid="momento-countdown"
+                    >
+                      <span className="font-display font-black text-black text-6xl tabular-nums">{countdown}</span>
+                    </div>
+                    <p className="text-white font-bold text-sm mt-4">
+                      ¡Posa! {firstCam === "user" ? "Ahora la cámara trasera" : "Ahora el selfie"}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 className="w-8 h-8 text-yellow-300 animate-spin mb-2" />
+                    <p className="text-white/80 text-sm font-semibold">Capturando las dos cámaras…</p>
+                  </>
+                )}
               </div>
             )}
           </>
@@ -348,6 +390,25 @@ export default function Momento() {
           </div>
         ) : !camError ? (
           <div className="flex flex-col items-center">
+            {/* Choose which camera fires FIRST */}
+            <div className="flex items-center gap-1 p-1 rounded-full bg-white/10 mb-4" data-testid="momento-cam-toggle">
+              <button
+                onClick={() => !busy && setFirstCam("user")}
+                disabled={busy}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${firstCam === "user" ? "bg-yellow-300 text-black" : "text-white/70"}`}
+                data-testid="momento-cam-front"
+              >
+                Frontal primero
+              </button>
+              <button
+                onClick={() => !busy && setFirstCam("environment")}
+                disabled={busy}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${firstCam === "environment" ? "bg-yellow-300 text-black" : "text-white/70"}`}
+                data-testid="momento-cam-back"
+              >
+                Trasera primero
+              </button>
+            </div>
             <button
               onClick={captureBoth}
               disabled={!camReady || busy}
@@ -358,7 +419,7 @@ export default function Momento() {
                 <Camera className="w-7 h-7 text-black" />
               </div>
             </button>
-            <p className="text-white/50 text-xs mt-3">Un toque = foto delante y detrás a la vez</p>
+            <p className="text-white/50 text-xs mt-3">Un toque: primero la {firstCam === "user" ? "frontal" : "trasera"} y, tras 2,5 s para posar, la otra</p>
           </div>
         ) : null}
       </div>
