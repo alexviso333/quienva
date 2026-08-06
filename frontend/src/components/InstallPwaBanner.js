@@ -50,8 +50,11 @@ export default function InstallPwaBanner() {
     };
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
 
-    // iOS never fires beforeinstallprompt, so surface the manual steps there.
-    if (platform === "ios") setVisible(true);
+    // Mobile visitors who haven't installed should ALWAYS see the prompt, even
+    // if the browser never fires beforeinstallprompt (iOS Safari never does, and
+    // on Android the event can be missed). Desktop only shows via the native
+    // event to avoid nagging people who can't really "install" from a laptop.
+    if (platform === "ios" || platform === "android") setVisible(true);
 
     return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
   }, [platform]);
@@ -76,7 +79,10 @@ export default function InstallPwaBanner() {
       }
       setDeferred(null);
       dismiss();
+      return;
     }
+    // Android (or other) without a captured native prompt → show manual steps.
+    setShowIosSteps((s) => !s);
   }, [deferred, platform, dismiss]);
 
   if (!visible) return null;
@@ -101,7 +107,7 @@ export default function InstallPwaBanner() {
               onClick={install}
               className="h-9 px-4 rounded-full bg-qv-primary text-white text-xs font-bold active:scale-95"
             >
-              {platform === "ios" ? "Cómo instalar" : "Instalar app"}
+              {platform === "ios" || (platform === "android" && !deferred) ? "Cómo instalar" : "Instalar app"}
             </button>
             <button
               onClick={dismiss}
@@ -111,7 +117,7 @@ export default function InstallPwaBanner() {
             </button>
           </div>
 
-          {showIosSteps && (
+          {showIosSteps && platform === "ios" && (
             <div className="mt-3 rounded-xl bg-black/30 border border-white/10 p-3 space-y-2">
               <p className="text-white/80 text-xs font-semibold">En iPhone/iPad (Safari):</p>
               <div className="flex items-center gap-2 text-white/70 text-xs">
@@ -127,6 +133,23 @@ export default function InstallPwaBanner() {
                 2. Elige <b className="text-white">Añadir a pantalla de inicio</b>.
               </div>
               <p className="text-white/50 text-[11px]">3. Confirma con <b className="text-white">Añadir</b>. ¡Listo! 🎉</p>
+            </div>
+          )}
+
+          {showIosSteps && platform !== "ios" && (
+            <div className="mt-3 rounded-xl bg-black/30 border border-white/10 p-3 space-y-2">
+              <p className="text-white/80 text-xs font-semibold">En Android (Chrome):</p>
+              <div className="flex items-center gap-2 text-white/70 text-xs">
+                <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center shrink-0 font-bold">⋮</span>
+                1. Abre el menú <b className="text-white">(⋮)</b> arriba a la derecha.
+              </div>
+              <div className="flex items-center gap-2 text-white/70 text-xs">
+                <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                  <Plus className="w-3.5 h-3.5" />
+                </span>
+                2. Elige <b className="text-white">Instalar app</b> o <b className="text-white">Añadir a pantalla de inicio</b>.
+              </div>
+              <p className="text-white/50 text-[11px]">3. Confirma. ¡Listo! 🎉</p>
             </div>
           )}
         </div>
