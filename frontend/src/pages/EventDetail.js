@@ -7,6 +7,8 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
 import { NightRecapCard } from "@/components/NightRecapCard";
+import { useAuth } from "@/context/AuthContext";
+import { useGuestGate } from "@/context/GuestGate";
 import {
   ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram,
 } from "lucide-react";
@@ -38,6 +40,8 @@ function FriendRow({ title, color, friends }) {
 
 export default function EventDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const { requireAuth } = useGuestGate();
   const navigate = useNavigate();
   const [storyBusy, setStoryBusy] = useState(false);
   const location = useLocation();
@@ -135,7 +139,10 @@ export default function EventDetail() {
   const isVoy = event.my_status === "voy";
   const isInteresa = event.my_status === "me_interesa";
   const isEstuve = event.my_status === "estuve";
-  const toggle = (s) => setStatus.mutate(event.my_status === s ? "none" : s);
+  const toggle = (s) => {
+    if (!requireAuth("apuntarte a este plan")) return;
+    setStatus.mutate(event.my_status === s ? "none" : s);
+  };
 
   const mapQuery = encodeURIComponent(`${event.address || event.venue}, ${event.city || "Palma de Mallorca"}`);
   const shareWhatsApp = () => {
@@ -207,7 +214,7 @@ export default function EventDetail() {
           </button>
           <button
             data-testid="detail-follow"
-            onClick={() => setFollow.mutate(!event.is_following)}
+            onClick={() => { if (requireAuth("recibir avisos de este plan")) setFollow.mutate(!event.is_following); }}
             className="absolute top-6 right-28 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
             aria-label="Avisarme de cambios"
           >
@@ -327,7 +334,7 @@ export default function EventDetail() {
             <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/10 p-3">
               <button
                 data-testid="detail-ticket-owned-btn"
-                onClick={() => setTicket.mutate(!event.my_has_ticket)}
+                onClick={() => { if (requireAuth("guardar tu entrada")) setTicket.mutate(!event.my_has_ticket); }}
                 className={`shrink-0 h-10 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-colors ${
                   event.my_has_ticket ? "bg-qv-secondary text-black" : "bg-white/10 text-white/80 border border-white/20"
                 }`}
@@ -358,32 +365,44 @@ export default function EventDetail() {
           )}
 
           {/* Friends */}
-          <div className="flex flex-col gap-4">
-            {isPast ? (
-              <FriendRow title="Coincidiste con" color="#FF0055" friends={event.friends_attended} />
-            ) : (
-              <>
-                <FriendRow title="Van a ir" color="#FF0055" friends={event.friends_going} />
-                <FriendRow title="Les interesa" color="#00F0FF" friends={event.friends_interested} />
-              </>
-            )}
-            {((isPast && (event.friends_attended || []).length === 0) ||
-              (!isPast && (event.friends_going || []).length === 0 && (event.friends_interested || []).length === 0)) && (
-              <p className="text-white/40 text-sm italic" data-testid="detail-nofriends">
-                Todavía ningún amigo se ha apuntado.
-              </p>
-            )}
-          </div>
+          {user ? (
+            <div className="flex flex-col gap-4">
+              {isPast ? (
+                <FriendRow title="Coincidiste con" color="#FF0055" friends={event.friends_attended} />
+              ) : (
+                <>
+                  <FriendRow title="Van a ir" color="#FF0055" friends={event.friends_going} />
+                  <FriendRow title="Les interesa" color="#00F0FF" friends={event.friends_interested} />
+                </>
+              )}
+              {((isPast && (event.friends_attended || []).length === 0) ||
+                (!isPast && (event.friends_going || []).length === 0 && (event.friends_interested || []).length === 0)) && (
+                <p className="text-white/40 text-sm italic" data-testid="detail-nofriends">
+                  Todavía ningún amigo se ha apuntado.
+                </p>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="detail-guest-friends"
+              onClick={() => requireAuth("ver quién va")}
+              className="w-full text-left rounded-2xl border border-qv-primary/40 bg-gradient-to-r from-qv-primary/15 to-qv-secondary/15 p-4 active:scale-[0.99]"
+            >
+              <p className="font-display font-black text-white">¿Quién de tus amigos va? 👀</p>
+              <p className="text-white/60 text-sm mt-1">Regístrate gratis para verlo y apuntarte.</p>
+            </button>
+          )}
 
           {/* Repaso de la noche — shareable recap for past parties */}
-          {isPast && <NightRecapCard event={event} />}
+          {user && isPast && <NightRecapCard event={event} />}
 
           {/* Shared album — elevated so friends' photos don't get stuck in
               everyone's phone. Comes right after the friends block. */}
-          <EventAlbum eventId={event.id} hasInterest={hasInterest} prominent />
+          {user && <EventAlbum eventId={event.id} hasInterest={hasInterest} prominent />}
 
           {/* El Momento — live during the party, and as a memory on past events */}
-          <EventMoment eventId={event.id} hasInterest={hasInterest} past={isPast} />
+          {user && <EventMoment eventId={event.id} hasInterest={hasInterest} past={isPast} />}
 
           {/* Map + directions */}
           <div>

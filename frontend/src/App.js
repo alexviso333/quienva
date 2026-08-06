@@ -3,6 +3,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { GuestGateProvider } from "@/context/GuestGate";
 import PushPermissionGate from "@/components/PushPermissionGate";
 import MomentGate from "@/components/MomentGate";
 import AgeGate from "@/components/AgeGate";
@@ -52,6 +53,14 @@ function ProtectedRoute({ children, adminOnly }) {
   return children;
 }
 
+// Open to everyone. Guests get read-only content; the app pops a registration
+// gate only when they try a social action. Authenticated users see it normally.
+function PublicRoute({ children }) {
+  const { loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  return children;
+}
+
 function AppRouter() {
   const location = useLocation();
   // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
@@ -64,8 +73,8 @@ function AppRouter() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-        <Route path="/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
-        <Route path="/event/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
+        <Route path="/feed" element={<PublicRoute><Feed /></PublicRoute>} />
+        <Route path="/event/:id" element={<PublicRoute><EventDetail /></PublicRoute>} />
         <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/novedades" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
@@ -79,8 +88,8 @@ function AppRouter() {
         <Route path="/fiestas-pasadas" element={<Navigate to="/recuerdos" replace />} />
         <Route path="/recuerdos" element={<ProtectedRoute><Recuerdos /></ProtectedRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-        <Route path="/locales" element={<ProtectedRoute><Locales /></ProtectedRoute>} />
-        <Route path="/mapa" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
+        <Route path="/locales" element={<PublicRoute><Locales /></PublicRoute>} />
+        <Route path="/mapa" element={<PublicRoute><MapPage /></PublicRoute>} />
         <Route path="/ajustes/avisos" element={<ProtectedRoute><NotifPrefs /></ProtectedRoute>} />
         <Route path="/momento" element={<ProtectedRoute><Momento /></ProtectedRoute>} />
         <Route path="/descubrir" element={<ProtectedRoute><Descubrir /></ProtectedRoute>} />
@@ -100,11 +109,13 @@ function App() {
     <div className="App">
       <AuthProvider>
         <BrowserRouter>
-          <AppRouter />
-          <OfflineBanner />
-          <PushPermissionGate />
-          <MomentGate />
-          <AgeGate />
+          <GuestGateProvider>
+            <AppRouter />
+            <OfflineBanner />
+            <PushPermissionGate />
+            <MomentGate />
+            <AgeGate />
+          </GuestGateProvider>
         </BrowserRouter>
         <Toaster position="top-center" theme="dark" richColors />
       </AuthProvider>

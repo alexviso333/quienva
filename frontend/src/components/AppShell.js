@@ -2,22 +2,27 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { Home, Users, MessageCircle, Bell, User } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { useGuestGate } from "@/context/GuestGate";
 
 const items = [
-  { to: "/feed", icon: Home, label: "Planes", testid: "nav-feed" },
-  { to: "/friends", icon: Users, label: "Amigos", testid: "nav-friends" },
-  { to: "/chats", icon: MessageCircle, label: "Chats", testid: "nav-chats" },
-  { to: "/notifications", icon: Bell, label: "Avisos", testid: "nav-notifications" },
-  { to: "/profile", icon: User, label: "Perfil", testid: "nav-profile" },
+  { to: "/feed", icon: Home, label: "Planes", testid: "nav-feed", public: true },
+  { to: "/friends", icon: Users, label: "Amigos", testid: "nav-friends", reason: "ver a tus amigos" },
+  { to: "/chats", icon: MessageCircle, label: "Chats", testid: "nav-chats", reason: "chatear con tu grupo" },
+  { to: "/notifications", icon: Bell, label: "Avisos", testid: "nav-notifications", reason: "recibir avisos" },
+  { to: "/profile", icon: User, label: "Perfil", testid: "nav-profile", reason: "ver tu perfil" },
 ];
 
 export function BottomNav() {
+  const { user } = useAuth();
+  const { requireAuth } = useGuestGate();
   const { data: unread } = useQuery({
     queryKey: ["unread-count"],
     queryFn: async () => (await api.get("/notifications/unread-count")).data.count,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
     staleTime: 15000,
+    enabled: !!user,
   });
   const { data: dmUnread } = useQuery({
     queryKey: ["dm-unread-count"],
@@ -25,7 +30,34 @@ export function BottomNav() {
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
     staleTime: 15000,
+    enabled: !!user,
   });
+
+  const navClass = (isActive) =>
+    `relative flex flex-col items-center gap-1 py-1.5 rounded-2xl transition-colors duration-300 ${
+      isActive ? "text-white" : "text-white/40"
+    }`;
+
+  const renderInner = (Icon, label, testid, badgeCount, isActive) => (
+    <>
+      <div className="relative">
+        <Icon
+          className={`w-6 h-6 transition-transform duration-300 ${isActive ? "scale-110" : ""}`}
+          strokeWidth={isActive ? 2.4 : 2}
+          style={isActive ? { filter: "drop-shadow(0 0 8px rgba(255,0,85,0.7))" } : {}}
+        />
+        {badgeCount > 0 && (
+          <span
+            data-testid={`${testid}-badge`}
+            className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-qv-primary text-white text-[10px] font-bold flex items-center justify-center"
+          >
+            {badgeCount > 9 ? "9+" : badgeCount}
+          </span>
+        )}
+      </div>
+      <span className="text-[10px] font-semibold tracking-wide uppercase">{label}</span>
+    </>
+  );
 
   return (
     <nav
@@ -33,39 +65,25 @@ export function BottomNav() {
       data-testid="bottom-nav"
     >
       <div className="grid grid-cols-5 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-        {items.map(({ to, icon: Icon, label, testid }) => {
+        {items.map(({ to, icon: Icon, label, testid, reason, public: isPublic }) => {
           const badgeCount = to === "/notifications" ? unread : to === "/chats" ? dmUnread : 0;
+          // Guests can only open public tabs; everything else pops the gate.
+          if (!user && !isPublic) {
+            return (
+              <button
+                key={to}
+                type="button"
+                data-testid={testid}
+                onClick={() => requireAuth(reason)}
+                className={navClass(false)}
+              >
+                {renderInner(Icon, label, testid, 0, false)}
+              </button>
+            );
+          }
           return (
-            <NavLink
-              key={to}
-              to={to}
-              data-testid={testid}
-              className={({ isActive }) =>
-                `relative flex flex-col items-center gap-1 py-1.5 rounded-2xl transition-colors duration-300 ${
-                  isActive ? "text-white" : "text-white/40"
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div className="relative">
-                    <Icon
-                      className={`w-6 h-6 transition-transform duration-300 ${isActive ? "scale-110" : ""}`}
-                      strokeWidth={isActive ? 2.4 : 2}
-                      style={isActive ? { filter: "drop-shadow(0 0 8px rgba(255,0,85,0.7))" } : {}}
-                    />
-                    {badgeCount > 0 && (
-                      <span
-                        data-testid={`${testid}-badge`}
-                        className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-qv-primary text-white text-[10px] font-bold flex items-center justify-center"
-                      >
-                        {badgeCount > 9 ? "9+" : badgeCount}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] font-semibold tracking-wide uppercase">{label}</span>
-                </>
-              )}
+            <NavLink key={to} to={to} data-testid={testid} className={({ isActive }) => navClass(isActive)}>
+              {({ isActive }) => renderInner(Icon, label, testid, badgeCount, isActive)}
             </NavLink>
           );
         })}

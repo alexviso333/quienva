@@ -11,6 +11,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import FeedPlans, { FeedPlansControls } from "@/components/FeedPlans";
 import FeedVenuesTonight from "@/components/FeedVenuesTonight";
 import { useAuth } from "@/context/AuthContext";
+import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
 import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass } from "lucide-react";
@@ -18,6 +19,7 @@ import { toast } from "sonner";
 
 export default function Feed() {
   const { user } = useAuth();
+  const { requireAuth } = useGuestGate();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -70,14 +72,14 @@ export default function Feed() {
   const noFriends = Array.isArray(friendsList) && friendsList.length === 0;
 
   useEffect(() => {
-    if (!noFriends) return;
+    if (!user || !noFriends) return;
     try {
       if (!localStorage.getItem("qv_discover_seen")) {
         localStorage.setItem("qv_discover_seen", "1");
         navigate("/descubrir");
       }
     } catch { /* ignore */ }
-  }, [noFriends, navigate]);
+  }, [noFriends, navigate, user]);
 
   const setStatus = useMutation({
     mutationFn: async ({ eventId, status }) => (await api.post(`/events/${eventId}/interest`, { status })).data,
@@ -156,9 +158,33 @@ export default function Feed() {
         </div>
       </header>
 
-      <StoriesBar />
+      {user && <StoriesBar />}
 
       <InstallPwaBanner />
+
+      {!user && (
+        <div className="px-4 pt-1 pb-1">
+          <div
+            data-testid="feed-guest-banner"
+            className="w-full rounded-2xl border border-qv-primary/40 bg-gradient-to-r from-qv-primary/15 to-qv-secondary/15 p-3 flex items-center gap-3 text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-qv-primary/20 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-qv-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-black text-white text-sm leading-tight">Estás mirando sin cuenta 👀</p>
+              <p className="text-white/60 text-xs">Regístrate gratis para ver quién de tus amigos va.</p>
+            </div>
+            <button
+              onClick={() => requireAuth("empezar")}
+              data-testid="feed-guest-register"
+              className="shrink-0 text-xs font-bold text-white bg-qv-primary rounded-full px-4 py-2 active:scale-95"
+            >
+              Entrar
+            </button>
+          </div>
+        </div>
+      )}
 
       {noFriends && (
         <div className="px-4 pt-1 pb-1">
@@ -179,13 +205,13 @@ export default function Feed() {
         </div>
       )}
 
-      <FriendsActivity />
+      {user && <FriendsActivity />}
 
       <div className="px-4 pb-3">
-        <StreakBanner />
+        {user && <StreakBanner />}
       </div>
 
-      <RecapCard />
+      {user && <RecapCard />}
 
       <div className="px-4 pb-3">
         <FeedPlansControls
@@ -254,7 +280,10 @@ export default function Feed() {
             highlightId={highlightId}
             cardRefs={cardRefs}
             pending={false}
-            onSetStatus={(eventId, status) => setStatus.mutate({ eventId, status })}
+            onSetStatus={(eventId, status) => {
+              if (!requireAuth("apuntarte a los planes")) return;
+              setStatus.mutate({ eventId, status });
+            }}
             view={view}
             sale={sale}
           />
@@ -281,13 +310,15 @@ export default function Feed() {
               icon={Flame}
               events={carousels.top_weekend}
             />
-            <EventCarousel
-              testId="carousel-friends-going"
-              title="Lo que va tu grupo"
-              subtitle="Donde están tus amigos"
-              icon={Users}
-              events={carousels.friends_going}
-            />
+            {user && (
+              <EventCarousel
+                testId="carousel-friends-going"
+                title="Lo que va tu grupo"
+                subtitle="Donde están tus amigos"
+                icon={Users}
+                events={carousels.friends_going}
+              />
+            )}
             <EventCarousel
               testId="carousel-discover-new"
               title="Prueba algo nuevo"

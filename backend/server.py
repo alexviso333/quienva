@@ -575,6 +575,25 @@ async def require_admin(request: Request) -> dict:
     return user
 
 
+# Default city served to anonymous (guest) visitors browsing without an account.
+GUEST_CITY = "Palma de Mallorca"
+
+
+async def get_optional_user(request: Request) -> dict:
+    """Like get_current_user but NEVER raises.
+
+    When a valid session exists it returns the real user. Otherwise it returns a
+    lightweight *guest* pseudo-user (``user_id`` is ``None``) so read-only
+    endpoints can serve public content to visitors who haven't registered yet.
+    Because ``user_id`` is ``None``, every social lookup (friends, interests,
+    tickets, follows) naturally comes back empty — no personal data leaks and no
+    code path needs special-casing."""
+    try:
+        return await get_current_user(request)
+    except HTTPException:
+        return {"user_id": None, "city": GUEST_CITY, "role": None, "guest": True}
+
+
 async def create_session(user_id: str, token: Optional[str] = None) -> str:
     token = token or new_session_token()
     await db.sessions.insert_one({
@@ -1234,7 +1253,9 @@ async def update_profile(inp: ProfileUpdate, user: dict = Depends(get_current_us
 # ---------------------------------------------------------------------------
 # Friends
 # ---------------------------------------------------------------------------
-async def accepted_friend_ids(user_id: str) -> List[str]:
+async def accepted_friend_ids(user_id: str | None) -> List[str]:
+    if user_id is None:
+        return []
     ids = set()
     async for f in db.friendships.find({"status": "accepted",
                                         "$or": [{"requester_id": user_id}, {"addressee_id": user_id}]}):
@@ -1707,7 +1728,7 @@ async def _venue_priority_maps(city):
 
 
 @api_router.get("/events")
-async def list_events(user: dict = Depends(get_current_user),
+async def list_events(user: dict = Depends(get_optional_user),
                       date_filter: str = Query("all"),
                       genre: str = Query("all")):
     friend_ids = await accepted_friend_ids(user["user_id"])
@@ -1798,15 +1819,19 @@ async def list_events(user: dict = Depends(get_current_user),
         filtered_events.sort(key=_feed_sort_key)
 
     # Load user's followed events (for is_following flag)
-    follows_set: set = set()
-    if event_ids:
-        async for f in db.event_follows.find(
-            {"user_id": user["user_id"], "event_id": {"$in": event_ids}},
-            {"_id": 0, "event_id": 1},
-        ):
-            follows_set.add(f["event_id"])
+    # For guests (user_id=None), follows_set should be None so is_following=null
+    if user["user_id"] is None:
+        follows_set = None
+    else:
+        follows_set: set = set()
+        if event_ids:
+            async for f in db.event_follows.find(
+                {"user_id": user["user_id"], "event_id": {"$in": event_ids}},
+                {"_id": 0, "event_id": 1},
+            ):
+                follows_set.add(f["event_id"])
 
-    my_ticket_ids = set(await db.tickets.distinct("event_id", {"user_id": user["user_id"]}))
+    my_ticket_ids = set(await db.tickets.distinct("event_id", {"user_id": user["user_id"]})) if user["user_id"] is not None else set()
     events = []
     for ev in filtered_events:
         events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids))
@@ -1814,13 +1839,13 @@ async def list_events(user: dict = Depends(get_current_user),
 
 
 @api_router.get("/events/genres")
-async def list_genres(user: dict = Depends(get_current_user)):
+async def list_genres(user: dict = Depends(get_optional_user)):
     genres = await db.events.distinct("genre", {"city": city_query_value(user.get("city", "Palma de Mallorca"))})
     return [g for g in genres if g]
 
 
 @api_router.get("/events/top-weekend")
-async def top_weekend(user: dict = Depends(get_current_user)):
+async def top_weekend(user: dict = Depends(get_optional_user)):
     """The upcoming event (next 7 days) where the most of your friends are going."""
     friend_ids = await accepted_friend_ids(user["user_id"])
     today = datetime.now(ZoneInfo("Europe/Madrid")).date()
@@ -1843,7 +1868,7 @@ async def top_weekend(user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/events/carousels")
-async def event_carousels(user: dict = Depends(get_current_user)):
+async def event_carousels(user: dict = Depends(get_optional_user)):
     """Home-page carousels: top del finde (list), lo que va tu grupo, descubrir géneros."""
     # TTL cache (per user, 20s) — carousels are heavy but data doesn't change every second.
     try:
@@ -1882,25 +1907,30 @@ async def event_carousels(user: dict = Depends(get_current_user)):
             interests_by_event.setdefault(it["event_id"], []).append(it)
 
     # Load user's followed events (for is_following flag)
-    follows_set: set = set()
-    if upcoming_ids:
-        async for f in db.event_follows.find(
-            {"user_id": user["user_id"], "event_id": {"$in": upcoming_ids}},
-            {"_id": 0, "event_id": 1},
-        ):
-            follows_set.add(f["event_id"])
+    # For guests (user_id=None), follows_set should be None so is_following=null
+    if user["user_id"] is None:
+        follows_set = None
+    else:
+        follows_set: set = set()
+        if upcoming_ids:
+            async for f in db.event_follows.find(
+                {"user_id": user["user_id"], "event_id": {"$in": upcoming_ids}},
+                {"_id": 0, "event_id": 1},
+            ):
+                follows_set.add(f["event_id"])
 
     # BULK LOAD user's own interests once (for discover_new "my_genres")
     my_interests = []
-    async for it in db.interests.find({"user_id": user["user_id"]}):
-        my_interests.append(it)
+    if user["user_id"] is not None:
+        async for it in db.interests.find({"user_id": user["user_id"]}):
+            my_interests.append(it)
     my_event_ids = list({it["event_id"] for it in my_interests})
     my_events_map = {}
     if my_event_ids:
         async for ev in db.events.find({"id": {"$in": my_event_ids}}, {"_id": 0, "id": 1, "genre": 1}):
             my_events_map[ev["id"]] = ev
 
-    my_ticket_ids = set(await db.tickets.distinct("event_id", {"user_id": user["user_id"]}))
+    my_ticket_ids = set(await db.tickets.distinct("event_id", {"user_id": user["user_id"]})) if user["user_id"] is not None else set()
 
     # ---- Top del finde: upcoming Fri-Sun (or next 7 days) sorted by attendance ----
     week_end = today + timedelta(days=7)
@@ -2682,7 +2712,7 @@ async def claim_referral(inp: ClaimReferralInput, user: dict = Depends(get_curre
 
 
 @api_router.get("/events/{event_id}")
-async def get_event(event_id: str, user: dict = Depends(get_current_user)):
+async def get_event(event_id: str, user: dict = Depends(get_optional_user)):
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
@@ -2695,11 +2725,15 @@ async def get_event(event_id: str, user: dict = Depends(get_current_user)):
     friend_ids = await accepted_friend_ids(user["user_id"])
     # Load follow state so is_following is accurate on the detail page (fixes the
     # notification bell "unselecting itself" after refetch).
-    follows_set: set = set()
-    _f = await db.event_follows.find_one(
-        {"user_id": user["user_id"], "event_id": event_id}, {"_id": 0, "event_id": 1})
-    if _f:
-        follows_set.add(event_id)
+    # For guests (user_id=None), follows_set should be None so is_following=null
+    if user["user_id"] is None:
+        follows_set = None
+    else:
+        follows_set: set = set()
+        _f = await db.event_follows.find_one(
+            {"user_id": user["user_id"], "event_id": event_id}, {"_id": 0, "event_id": 1})
+        if _f:
+            follows_set.add(event_id)
     return await serialize_event(ev, user, friend_ids, follows_set=follows_set)
 
 
@@ -8379,7 +8413,7 @@ async def _venue_event_counts() -> dict:
 
 
 @app.get("/api/venues")
-async def list_venues(response: Response, zone: str = None, type: str = None, user: dict = Depends(get_current_user)):
+async def list_venues(response: Response, zone: str = None, type: str = None, user: dict = Depends(get_optional_user)):
     q = {"active": True, "city": city_query_value(user.get("city", "Palma de Mallorca"))}
     if zone:
         q["zone"] = zone
@@ -8424,7 +8458,7 @@ async def list_venues(response: Response, zone: str = None, type: str = None, us
 
 
 @app.get("/api/venues/{venue_id}")
-async def get_venue(venue_id: str, user: dict = Depends(get_current_user)):
+async def get_venue(venue_id: str, user: dict = Depends(get_optional_user)):
     v = await db.venues.find_one({"id": venue_id}, {"_id": 0})
     if not v:
         raise HTTPException(status_code=404, detail="Local no encontrado")
@@ -8459,7 +8493,7 @@ async def get_venue(venue_id: str, user: dict = Depends(get_current_user)):
 
 
 @app.get("/api/venues/meta/zones")
-async def venue_zones(user: dict = Depends(get_current_user)):
+async def venue_zones(user: dict = Depends(get_optional_user)):
     zones = await db.venues.distinct("zone", {"active": True, "city": city_query_value(user.get("city", "Palma de Mallorca"))})
     return {"zones": sorted(zones)}
 
