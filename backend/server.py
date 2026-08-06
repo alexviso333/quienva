@@ -2889,51 +2889,37 @@ def _wrapped_title(top_genre: str, parties: int) -> str:
     return "Modo tranqui 🌙"
 
 
-async def _compute_wrapped(user: dict, month_str: str) -> dict:
-    """Monthly 'Wrapped' aggregation for a user (Spotify-Wrapped style)."""
+async def _wrapped_core(user: dict, start_iso: str, end_excl: str) -> dict:
+    """Shared Wrapped aggregation over [start_iso, end_excl) by event.date."""
     uid = user["user_id"]
-    try:
-        y, m = int(month_str[:4]), int(month_str[5:7])
-        start = date(y, m, 1)
-    except Exception:
-        now = datetime.now(ZoneInfo("Europe/Madrid"))
-        y, m = now.year, now.month
-        start = date(y, m, 1)
-        month_str = f"{y:04d}-{m:02d}"
-    nxt = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
-    start_iso, end_excl = start.isoformat(), nxt.isoformat()
     start_dt, end_dt = f"{start_iso}T00:00:00", f"{end_excl}T00:00:00"
-    label = f"{_MONTHS_ES[m].capitalize()} {y}"
-
-    # My attended/going interests joined with events IN this month.
-    my_interests = []
+    my_ev_ids = []
     async for it in db.interests.find(
-        {"user_id": uid, "status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "event_id": 1, "status": 1}):
-        my_interests.append(it)
-    ev_ids = list({it["event_id"] for it in my_interests})
-    month_events = {}
-    if ev_ids:
+        {"user_id": uid, "status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "event_id": 1}):
+        my_ev_ids.append(it["event_id"])
+    my_ev_ids = list(set(my_ev_ids))
+    events = {}
+    if my_ev_ids:
         async for ev in db.events.find(
-            {"id": {"$in": ev_ids}, "date": {"$gte": start_iso, "$lt": end_excl}}, {"_id": 0}):
-            month_events[ev["id"]] = ev
+            {"id": {"$in": my_ev_ids}, "date": {"$gte": start_iso, "$lt": end_excl}}, {"_id": 0}):
+            events[ev["id"]] = ev
 
-    genre_counts, venue_counts, nights = {}, {}, set()
+    genre_counts, venue_counts, nights, month_tally = {}, {}, set(), {}
     poster = ""
-    for eid in month_events:
-        ev = month_events[eid]
+    for ev in events.values():
         if ev.get("genre"):
             genre_counts[ev["genre"]] = genre_counts.get(ev["genre"], 0) + 1
         if ev.get("venue"):
             venue_counts[ev["venue"]] = venue_counts.get(ev["venue"], 0) + 1
-        if ev.get("date"):
-            nights.add(ev["date"])
+        d = ev.get("date") or ""
+        if d:
+            nights.add(d)
+            month_tally[d[:7]] = month_tally.get(d[:7], 0) + 1
         if not poster and ev.get("image_url"):
             poster = ev["image_url"]
-    parties = len(month_events)
     top_genre = max(genre_counts.items(), key=lambda kv: kv[1])[0] if genre_counts else ""
     top_venue = max(venue_counts.items(), key=lambda kv: kv[1]) if venue_counts else None
 
-    # Photos + moments this month (by upload time).
     photos = await db.album_uploads.count_documents(
         {"user_id": uid, "created_at": {"$gte": start_dt, "$lt": end_dt}})
     moments = await db.captures.count_documents(
@@ -2941,31 +2927,24 @@ async def _compute_wrapped(user: dict, month_str: str) -> dict:
     moments_ontime = await db.captures.count_documents(
         {"user_id": uid, "on_time": True, "created_at": {"$gte": start_dt, "$lt": end_dt}})
 
-    # Friends I coincided with at this month's parties.
     top_friends, friends_coincided = [], 0
-    if month_events:
+    if events:
         friend_ids = await accepted_friend_ids(uid)
         if friend_ids:
             tally = {}
             async for it in db.interests.find(
-                {"event_id": {"$in": list(month_events.keys())},
+                {"event_id": {"$in": list(events.keys())},
                  "user_id": {"$in": friend_ids},
                  "status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "user_id": 1}):
                 tally[it["user_id"]] = tally.get(it["user_id"], 0) + 1
             friends_coincided = len(tally)
-            top_ids = sorted(tally.items(), key=lambda kv: -kv[1])[:3]
-            for fid, cnt in top_ids:
+            for fid, cnt in sorted(tally.items(), key=lambda kv: -kv[1])[:3]:
                 fu = await db.users.find_one({"user_id": fid}, {"_id": 0})
                 if fu:
                     top_friends.append({"name": display_name(fu),
                                         "picture": fu.get("picture", ""), "count": cnt})
-
-    has_data = (parties + photos + moments) > 0
     return {
-        "month": month_str,
-        "month_label": label,
-        "city": user.get("city", ""),
-        "parties": parties,
+        "parties": len(events),
         "nights_out": len(nights),
         "venues": len(venue_counts),
         "top_venue": ({"name": top_venue[0], "count": top_venue[1]} if top_venue else None),
@@ -2977,9 +2956,61 @@ async def _compute_wrapped(user: dict, month_str: str) -> dict:
         "moments_ontime": moments_ontime,
         "friends_coincided": friends_coincided,
         "top_friends": top_friends,
-        "title": _wrapped_title(top_genre, parties),
         "poster": poster,
-        "has_data": has_data,
+        "month_tally": month_tally,
+    }
+
+
+async def _compute_wrapped(user: dict, month_str: str) -> dict:
+    """Monthly 'Wrapped' aggregation for a user (Spotify-Wrapped style)."""
+    try:
+        y, m = int(month_str[:4]), int(month_str[5:7])
+        start = date(y, m, 1)
+    except Exception:
+        now = datetime.now(ZoneInfo("Europe/Madrid"))
+        y, m = now.year, now.month
+        start = date(y, m, 1)
+        month_str = f"{y:04d}-{m:02d}"
+    nxt = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+    core = await _wrapped_core(user, start.isoformat(), nxt.isoformat())
+    core.pop("month_tally", None)
+    label = f"{_MONTHS_ES[m].capitalize()} {y}"
+    return {
+        "month": month_str,
+        "month_label": label,
+        "period_label": label,
+        "is_year": False,
+        "city": user.get("city", ""),
+        "title": _wrapped_title(core["top_genre"], core["parties"]),
+        "has_data": (core["parties"] + core["photos"] + core["moments"]) > 0,
+        **core,
+    }
+
+
+async def _compute_wrapped_year(user: dict, year_str: str) -> dict:
+    """Annual 'Wrapped' aggregation — the whole year (delivered every January)."""
+    try:
+        y = int(str(year_str)[:4])
+    except Exception:
+        y = datetime.now(ZoneInfo("Europe/Madrid")).year
+    core = await _wrapped_core(user, date(y, 1, 1).isoformat(), date(y + 1, 1, 1).isoformat())
+    tally = core.pop("month_tally", {})
+    top_month = None
+    if tally:
+        mk, cnt = max(tally.items(), key=lambda kv: kv[1])
+        top_month = {"name": _MONTHS_ES[int(mk[5:7])].capitalize(), "count": cnt}
+    return {
+        "month": str(y),
+        "month_label": str(y),
+        "period_label": str(y),
+        "is_year": True,
+        "year": str(y),
+        "top_month": top_month,
+        "active_months": len(tally),
+        "city": user.get("city", ""),
+        "title": _wrapped_title(core["top_genre"], core["parties"]),
+        "has_data": (core["parties"] + core["photos"] + core["moments"]) > 0,
+        **core,
     }
 
 
@@ -2991,6 +3022,49 @@ async def my_wrapped(month: str = Query(""), user: dict = Depends(get_current_us
         now = datetime.now(ZoneInfo("Europe/Madrid"))
         month = f"{now.year:04d}-{now.month:02d}"
     return await _compute_wrapped(user, month)
+
+
+@api_router.get("/me/wrapped/year")
+async def my_wrapped_year(year: str = Query(""), user: dict = Depends(get_current_user)):
+    """Annual 'Wrapped' for the current user. Defaults to the current year
+    (Europe/Madrid). Pass ?year=YYYY for a specific year."""
+    if not year:
+        year = str(datetime.now(ZoneInfo("Europe/Madrid")).year)
+    return await _compute_wrapped_year(user, year)
+
+
+async def notify_annual_wrapped():
+    """On Jan 1, notify users who had activity LAST YEAR that their annual Wrapped
+    is ready. Links to /wrapped?year=YYYY (the year that just ended)."""
+    try:
+        now = datetime.now(ZoneInfo("Europe/Madrid"))
+        y = now.year - 1
+        start_iso, end_excl = date(y, 1, 1).isoformat(), date(y + 1, 1, 1).isoformat()
+        start_dt, end_dt = f"{start_iso}T00:00:00", f"{end_excl}T00:00:00"
+        year_ev_ids = [e["id"] async for e in db.events.find(
+            {"date": {"$gte": start_iso, "$lt": end_excl}}, {"_id": 0, "id": 1})]
+        active = set()
+        if year_ev_ids:
+            async for it in db.interests.find(
+                {"event_id": {"$in": year_ev_ids}, "status": {"$in": ["voy", "estuve"]}},
+                {"_id": 0, "user_id": 1}):
+                active.add(it["user_id"])
+        async for a in db.album_uploads.find(
+            {"created_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0, "user_id": 1}):
+            active.add(a["user_id"])
+        async for c in db.captures.find(
+            {"created_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0, "user_id": 1}):
+            active.add(c["user_id"])
+        n = 0
+        for uid in active:
+            await create_notification(
+                uid, "annual_wrapped",
+                f"🎊 Tu Wrapped {y} ya está. ¡Mira tu año de fiesta! 👀",
+                {"type": "annual_wrapped", "year": str(y), "url": f"/wrapped?year={y}"})
+            n += 1
+        logger.info(f"[wrapped] annual notified {n} users for {y}")
+    except Exception as e:
+        logger.warning(f"notify_annual_wrapped failed: {e}")
 
 
 async def notify_monthly_wrapped():
@@ -6291,6 +6365,9 @@ async def on_startup():
         # Monthly Wrapped: 1st of each month at 12:00 (Madrid) notify active users.
         scheduler.add_job(notify_monthly_wrapped, "cron", day=1, hour=12, minute=0,
                           id="monthly_wrapped", replace_existing=True)
+        # Annual Wrapped: every Jan 1 at 12:10 notify users about last year's recap.
+        scheduler.add_job(notify_annual_wrapped, "cron", month=1, day=1, hour=12, minute=10,
+                          id="annual_wrapped", replace_existing=True)
         # Scrapers — refresh all active venues every 30 min. First run 60s after
         # startup so a fresh deploy warms up the events feed quickly.
         scheduler.add_job(run_all_scrapers, "interval", minutes=20,

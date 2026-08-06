@@ -4616,3 +4616,135 @@ agent_communication:
       Test credentials used: admin@quienva.app / admin123 + 2 fresh test users (U1, U2)
       Test scenario: Followed exact steps from review request with seeded data in 2026-08
 
+
+test_focus_2026_08_annual_wrapped:
+  goal: "Nuevo endpoint anual GET /api/me/wrapped/year?year=YYYY (Wrapped anual, entregado cada enero). Agrega TODO el año por event.date. Entorno LOCAL, BD vacia, sin token FourVenues (no probar afiliado)."
+  auth: "Admin: admin@quienva.app / admin123. Usuarios via POST /api/auth/register."
+  notes: "Ano actual del sistema = 2026. Crea eventos con fechas en distintos meses de 2026."
+  steps:
+    - "Seed: Login admin. Crear 3 eventos via POST /api/admin/events: DOS con date en 2026-05 (p.ej. 2026-05-10 y 2026-05-20), venue 'Sala X', genre 'Reggaeton'; UNO con date en 2026-03 (2026-03-15), venue 'Sala Y', genre 'Techno'."
+    - "Usuario U1: registrar/loguear. POST /api/events/{id}/interest {status:'estuve'} en los 3."
+    - "VERIFICAR anual: Como U1: GET /api/me/wrapped/year?year=2026 -> is_year==true, has_data==true, parties==3, venues==2, top_genre=='Reggaeton', top_month=={name:'Mayo', count:2}, active_months==2, month=='2026', month_label=='2026', title string no vacio."
+    - "Default anual: GET /api/me/wrapped/year (sin year) -> month=='2026' (ano actual), is_year==true."
+    - "Ano vacio: GET /api/me/wrapped/year?year=2019 -> has_data==false, parties==0, is_year==true, month=='2019'."
+    - "Regresion mensual: GET /api/me/wrapped?month=2026-05 -> parties==2 (solo los de mayo), is_year==false. Confirmar que el mensual sigue OK tras el refactor."
+  do_not: "No probar afiliado/scrapers/token FourVenues, push. El cron notify_annual_wrapped NO hace falta probarlo."
+
+agent_communication:
+    - agent: "main"
+      message: "Nuevo endpoint anual GET /api/me/wrapped/year?year=YYYY (default ano actual). Refactorice la agregacion a un core compartido _wrapped_core; el mensual /api/me/wrapped debe seguir funcionando igual (regresion incluida). El anual anade top_month{name,count} (mes mas movido) y active_months, y is_year:true. Cron notify_annual_wrapped cada 1 de enero 12:10 avisa del ano anterior. Probar SOLO backend (local, sin token FourVenues)."
+
+
+backend:
+  - task: "GET /api/me/wrapped/year - Annual Wrapped endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint GET /api/me/wrapped/year?year=YYYY (default current year). Refactored aggregation to shared _wrapped_core; monthly /api/me/wrapped continues working (regression included). Annual adds top_month{name,count} (busiest month) and active_months, and is_year:true. Cron notify_annual_wrapped every Jan 1 at 12:10 notifies about previous year."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (40 tests, 100% pass): ✅ STEP 1: Admin login successful. ✅ STEP 2: Created 3 events - Event A (2026-05-10, Sala X, Reggaeton), Event B (2026-05-20, Sala X, Reggaeton), Event C (2026-03-15, Sala Y, Techno). ✅ STEP 3: Registered user U1. ✅ STEP 4: U1 marked 'estuve' on all 3 events. ✅ STEP 5: GET /me/wrapped/year?year=2026 → is_year==true, has_data==true, parties==3, venues==2, top_genre=='Reggaeton', top_month=={name:'Mayo',count:2}, active_months==2, month=='2026', month_label=='2026', title=='Rey/Reina del perreo 👑' (non-empty string). ALL 12 CHECKS PASSED. ✅ STEP 6: GET /me/wrapped/year (no year param) → month=='2026' (current year), is_year==true. ALL 2 CHECKS PASSED. ✅ STEP 7: GET /me/wrapped/year?year=2019 → has_data==false, parties==0, is_year==true, month=='2019'. ALL 4 CHECKS PASSED. ✅ STEP 8: REGRESSION - GET /me/wrapped?month=2026-05 → parties==2 (only May events A+B), is_year==false, venues==1, top_genre=='Reggaeton'. ALL 4 CHECKS PASSED. ✅ STEP 9: REGRESSION - GET /me/wrapped?month=2026-03 → parties==1 (only March event C), is_year==false, top_genre=='Techno'. ALL 3 CHECKS PASSED. Annual wrapped endpoint working perfectly with correct year aggregation, top_month calculation, and active_months count. Monthly wrapped regression confirmed - still working correctly after refactor."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.6"
+  test_sequence: 7
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "testing"
+      message: |
+        BACKEND TESTING COMPLETE - Annual Wrapped Endpoint + Monthly Wrapped Regression
+        
+        🎉 ALL TESTS PASSED - 40/40 (100% success rate)
+        
+        ✅ ANNUAL WRAPPED ENDPOINT FULLY TESTED:
+        
+        STEP 1: Admin Login ✅
+        - Admin login successful with token
+        
+        STEP 2: Create 3 Events ✅
+        - Event A: 2026-05-10, Sala X, Reggaeton
+        - Event B: 2026-05-20, Sala X, Reggaeton
+        - Event C: 2026-03-15, Sala Y, Techno
+        - All events created successfully
+        
+        STEP 3: Register User U1 ✅
+        - User U1 registered successfully with token
+        
+        STEP 4: U1 marks 'estuve' on all 3 events ✅
+        - All 3 interest updates successful
+        
+        STEP 5: VERIFY ANNUAL - GET /api/me/wrapped/year?year=2026 ✅ (12 tests)
+        - is_year: true ✓
+        - has_data: true ✓
+        - parties: 3 ✓
+        - venues: 2 (Sala X and Sala Y) ✓
+        - top_genre: "Reggaeton" ✓
+        - top_month.name: "Mayo" ✓
+        - top_month.count: 2 ✓
+        - active_months: 2 (March and May) ✓
+        - month: "2026" ✓
+        - month_label: "2026" ✓
+        - title: "Rey/Reina del perreo 👑" (non-empty string) ✓
+        - Response includes all required fields: year, period_label, top_venue, genres, nights_out, photos, moments, moments_ontime, friends_coincided, top_friends, poster, city ✓
+        
+        STEP 6: DEFAULT ANNUAL - GET /api/me/wrapped/year (no year param) ✅ (2 tests)
+        - month: "2026" (current year) ✓
+        - is_year: true ✓
+        - Returns same data as explicit year=2026 ✓
+        
+        STEP 7: EMPTY YEAR - GET /api/me/wrapped/year?year=2019 ✅ (4 tests)
+        - has_data: false ✓
+        - parties: 0 ✓
+        - is_year: true ✓
+        - month: "2019" ✓
+        - top_month: null ✓
+        - active_months: 0 ✓
+        - title: "Modo tranqui 🌙" (fallback title for no data) ✓
+        
+        STEP 8: REGRESSION MONTHLY - GET /api/me/wrapped?month=2026-05 ✅ (4 tests)
+        - parties: 2 (only May events A+B) ✓
+        - is_year: false ✓
+        - venues: 1 (only Sala X) ✓
+        - top_genre: "Reggaeton" ✓
+        - month_label: "Mayo 2026" ✓
+        - Monthly wrapped still working correctly after refactor ✓
+        
+        STEP 9: REGRESSION MONTHLY - GET /api/me/wrapped?month=2026-03 ✅ (3 tests)
+        - parties: 1 (only March event C) ✓
+        - is_year: false ✓
+        - top_genre: "Techno" ✓
+        - month_label: "Marzo 2026" ✓
+        - Monthly wrapped filtering by month working correctly ✓
+        
+        🎯 CONCLUSION:
+        The annual Wrapped endpoint is working perfectly with correct year aggregation logic:
+        - Aggregates all events across the entire year (not just one month)
+        - Correctly calculates top_month (busiest month) with name and count
+        - Correctly counts active_months (distinct months with activity)
+        - Returns is_year=true to distinguish from monthly wrapped
+        - Defaults to current year when no year parameter provided
+        - Handles empty years gracefully with has_data=false
+        - Returns appropriate fallback title for empty data
+        
+        Monthly wrapped regression confirmed:
+        - Still works correctly after refactor to shared _wrapped_core
+        - Correctly filters events by specific month
+        - Returns is_year=false to distinguish from annual wrapped
+        - All aggregation logic intact (parties, venues, top_genre)
+        
+        Test file: /app/backend_test_wrapped.py
+        Test credentials used: admin@quienva.app / admin123 + fresh test user U1
