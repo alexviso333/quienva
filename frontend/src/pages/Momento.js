@@ -333,6 +333,7 @@ export default function Momento() {
               playsInline
               autoPlay
               className="w-full h-full object-cover"
+              style={{ transform: firstCam === "user" && !busy ? "scaleX(-1)" : "none" }}
               data-testid="momento-video"
             />
             {!camReady && (
