@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://3f5bdffe-1626-4b84-8aca-a16675ba995d.preview.emergentagent.com/api"
+BASE_URL = "https://event-scraper-hub-1.preview.emergentagent.com/api"
 
 # Test credentials from memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

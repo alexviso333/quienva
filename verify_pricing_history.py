@@ -6,7 +6,7 @@ Additional verification for pricing history details
 import requests
 import json
 
-BASE_URL = "https://events-priority-feed.preview.emergentagent.com/api"
+BASE_URL = "https://event-scraper-hub-1.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

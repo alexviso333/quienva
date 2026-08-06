@@ -1092,7 +1092,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://events-priority-feed.preview.emergentagent.com/api
+      Base URL: https://event-scraper-hub-1.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -1206,7 +1206,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://events-priority-feed.preview.emergentagent.com/api
+      Base URL: https://event-scraper-hub-1.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -3569,7 +3569,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://events-priority-feed.preview.emergentagent.com/api
+        Base URL: https://event-scraper-hub-1.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -3634,7 +3634,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://events-priority-feed.preview.emergentagent.com/api
+      Base URL: https://event-scraper-hub-1.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -3742,7 +3742,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://events-priority-feed.preview.emergentagent.com/api
+      Base URL: https://event-scraper-hub-1.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -3869,7 +3869,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://events-priority-feed.preview.emergentagent.com/api
+      Base URL: https://event-scraper-hub-1.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -4285,4 +4285,4 @@ agent_communication:
         No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
         
         Test file: /app/backend_test.py
-        Base URL: https://3f5bdffe-1626-4b84-8aca-a16675ba995d.preview.emergentagent.com/api
+        Base URL: https://event-scraper-hub-1.preview.emergentagent.com/api
