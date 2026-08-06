@@ -4486,3 +4486,133 @@ agent_communication:
       message: "Nuevo feature backend: aviso de nuevos registros al admin. Al registrarse un usuario (email y google) se llama _notify_admins_new_signup que crea notificacion type='admin_new_signup' a cada admin, salvo que app_settings key 'admin_signup_alerts'.value == False. Endpoints admin: GET/PUT /api/admin/settings/signup-alerts {enabled}. Default ON. Probar SOLO esto en backend (local, sin token FourVenues). Tambien hay cambios frontend (descargar/compartir Momento y album, tarjeta 'Repaso de la noche', toggle en panel admin) que se probaran aparte con permiso del usuario."
     - agent: "testing"
       message: "✅ BACKEND TESTING COMPLETE - Admin signup alerts feature fully tested and working perfectly. All 5 test scenarios passed (default ON, alert on signup, disable/enable toggle, permissions). Created comprehensive test file /app/test_admin_signup_alerts.py with detailed verification of notification creation, counting, and authorization. Feature is production-ready. NO ISSUES FOUND."
+
+test_focus_2026_08_monthly_wrapped:
+  goal: "Nuevo endpoint GET /api/me/wrapped (Wrapped mensual estilo Spotify). Agrega por MES (Europe/Madrid). Default = mes actual. Entorno LOCAL, BD vacia, sin token FourVenues (no probar afiliado)."
+  auth: "Admin: admin@quienva.app / admin123. Usuarios via POST /api/auth/register."
+  notes: "El mes actual del sistema es 2026-08. Crea eventos con date dentro de 2026-08 (YYYY-MM-DD) para que caigan en el mes actual, y sube fotos/momentos (created_at = ahora, tambien 2026-08)."
+  steps:
+    - "Seed: Login admin. Crear 3 eventos via POST /api/admin/events con date en 2026-08, venues DISTINTOS (p.ej. 'Sala A','Sala B','Sala C') y genre: dos con 'Reggaeton' y uno con 'Techno' (asi top_genre debe ser Reggaeton)."
+    - "Usuario U1: registrar/loguear. POST /api/events/{id}/interest {status:'estuve'} en los 3 eventos."
+    - "Fotos/Momentos U1: POST /api/events/{ev1}/album (subir 1 imagen, campo del form segun el endpoint) -> crea album_upload. POST /api/admin/events/{ev1}/moment/trigger (como admin). Como U1: POST /api/events/{ev1}/moment/upload (campo 'file', imagen) -> crea captura."
+    - "Amigo U2: registrar U2. Crear amistad U1<->U2 (POST /api/friends/request desde U1 hacia U2, luego POST /api/friends/respond {accept:true} desde U2). Como U2: POST /api/events/{ev1}/interest {status:'voy'} y {ev2} 'voy'."
+    - "VERIFICAR Wrapped: Como U1: GET /api/me/wrapped (sin month) -> month=='2026-08', has_data==true, parties==3, venues==3, top_venue != null, top_genre=='Reggaeton', photos>=1, moments>=1, moments_ontime>=0, friends_coincided>=1, top_friends incluye a U2 (name), title es un string no vacio."
+    - "Mes vacio: Como U1: GET /api/me/wrapped?month=2020-01 -> has_data==false, parties==0, month=='2020-01', month_label no vacio."
+    - "Mes explicito: GET /api/me/wrapped?month=2026-08 -> mismos numeros que el default."
+  do_not: "No probar afiliado/scrapers/token FourVenues, push. El cron notify_monthly_wrapped (dia 1) NO hace falta probarlo."
+
+agent_communication:
+    - agent: "main"
+      message: "Nuevo: GET /api/me/wrapped?month=YYYY-MM (default mes actual, Europe/Madrid) devuelve resumen mensual: parties, nights_out, venues, top_venue{name,count}, top_genre, genres[], photos, moments, moments_ontime, friends_coincided, top_friends[{name,picture,count}], title, poster, has_data, month, month_label, city. Agrega interests voy/estuve unidas a eventos con date en el mes + album_uploads/captures por created_at en el mes + amigos que coincidieron. Probar SOLO backend (local, sin token FourVenues). Credenciales en memory/test_credentials.md."
+
+backend:
+  - task: "GET /api/me/wrapped - Monthly Wrapped endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint GET /api/me/wrapped?month=YYYY-MM (default mes actual, Europe/Madrid) devuelve resumen mensual: parties, nights_out, venues, top_venue{name,count}, top_genre, genres[], photos, moments, moments_ontime, friends_coincided, top_friends[{name,picture,count}], title, poster, has_data, month, month_label, city. Agrega interests voy/estuve unidas a eventos con date en el mes + album_uploads/captures por created_at en el mes + amigos que coincidieron."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (11 steps, 100% pass): ✅ (1) Admin login successful. ✅ (2) Created 3 events with dates in 2026-08: 2 with genre 'Reggaeton' (Sala A, Sala B) and 1 with 'Techno' (Sala C). ✅ (3) Registered user U1. ✅ (4) U1 marked 'estuve' on all 3 events. ✅ (5) U1 uploaded album photo to ev1. ✅ (6) Admin triggered moment on ev1, U1 uploaded moment capture. ✅ (7) Registered U2, created friendship U1<->U2 (request + accept). ✅ (8) U2 marked 'voy' on ev1 and ev2. ✅ (9) GET /me/wrapped (no month param) → month=='2026-08', has_data==true, parties==3, venues==3, top_venue=={name:'Sala B',count:1}, top_genre=='Reggaeton', photos==1, moments==1, moments_ontime==1, friends_coincided==1, top_friends contains U2 (@u2_20260806150328), title=='Rey/Reina del perreo 👑' (non-empty string). ALL 11 CHECKS PASSED. ✅ (10) GET /me/wrapped?month=2020-01 → has_data==false, parties==0, month=='2020-01', month_label=='Enero 2020' (non-empty). ALL 4 CHECKS PASSED. ✅ (11) GET /me/wrapped?month=2026-08 → same numbers as default (parties==3, venues==3, top_genre=='Reggaeton', photos==1, moments==1, friends_coincided==1). ALL 6 CHECKS PASSED. Wrapped endpoint working perfectly with correct aggregation logic, month filtering, and friend coincidence detection."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.6"
+  test_sequence: 7
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - Monthly Wrapped Endpoint
+      
+      🎉 ALL TESTS PASSED - 11/11 STEPS (100% success rate)
+      
+      ✅ WRAPPED ENDPOINT FULLY TESTED:
+      
+      SEED DATA CREATED:
+      - 3 events with dates in 2026-08 (current month)
+      - Event 1: Fiesta Reggaeton 1 at Sala A (2026-08-15)
+      - Event 2: Fiesta Reggaeton 2 at Sala B (2026-08-20)
+      - Event 3: Fiesta Techno at Sala C (2026-08-25)
+      - User U1: marked 'estuve' on all 3 events
+      - User U2: friend of U1, marked 'voy' on ev1 and ev2
+      - U1 uploaded 1 album photo to ev1
+      - U1 uploaded 1 moment capture to ev1 (on_time=true)
+      
+      VERIFICATION RESULTS:
+      
+      1. GET /api/me/wrapped (default, no month param) ✅
+         - month: "2026-08" ✓
+         - has_data: true ✓
+         - parties: 3 ✓
+         - nights_out: 3 ✓
+         - venues: 3 ✓
+         - top_venue: {name: "Sala B", count: 1} ✓
+         - top_genre: "Reggaeton" ✓ (2 Reggaeton events vs 1 Techno)
+         - genres: [{name: "Reggaeton", count: 2}, {name: "Techno", count: 1}] ✓
+         - photos: 1 ✓
+         - moments: 1 ✓
+         - moments_ontime: 1 ✓
+         - friends_coincided: 1 ✓ (U2 coincided on 2 events)
+         - top_friends: [{name: "@u2_20260806150328", picture: "", count: 2}] ✓
+         - title: "Rey/Reina del perreo 👑" (non-empty string) ✓
+         - month_label: "Agosto 2026" ✓
+         - city: "Palma de Mallorca" ✓
+         - poster: "" (empty, expected) ✓
+      
+      2. GET /api/me/wrapped?month=2020-01 (empty month) ✅
+         - month: "2020-01" ✓
+         - has_data: false ✓
+         - parties: 0 ✓
+         - nights_out: 0 ✓
+         - venues: 0 ✓
+         - top_venue: null ✓
+         - top_genre: "" ✓
+         - genres: [] ✓
+         - photos: 0 ✓
+         - moments: 0 ✓
+         - moments_ontime: 0 ✓
+         - friends_coincided: 0 ✓
+         - top_friends: [] ✓
+         - title: "Modo tranqui 🌙" (non-empty string) ✓
+         - month_label: "Enero 2020" (non-empty) ✓
+      
+      3. GET /api/me/wrapped?month=2026-08 (explicit month) ✅
+         - All values match default (no month param) ✓
+         - parties: 3 ✓
+         - venues: 3 ✓
+         - top_genre: "Reggaeton" ✓
+         - photos: 1 ✓
+         - moments: 1 ✓
+         - friends_coincided: 1 ✓
+      
+      🎯 CONCLUSION:
+      The monthly Wrapped endpoint is working perfectly with correct aggregation logic:
+      - Correctly aggregates events by month (date field in YYYY-MM-DD format)
+      - Correctly aggregates photos/moments by created_at timestamp
+      - Correctly identifies friend coincidences (friends who attended same events)
+      - Correctly calculates top_genre (most frequent genre)
+      - Correctly calculates top_venue (most frequent venue)
+      - Correctly handles empty months (has_data=false, all counts=0)
+      - Correctly defaults to current month (2026-08) when no month param provided
+      - Correctly handles explicit month parameter
+      - All required fields present and correctly typed
+      - Title generation working (genre-based titles)
+      
+      Test file: /app/test_wrapped_endpoint.py
+      Test credentials used: admin@quienva.app / admin123 + 2 fresh test users (U1, U2)
+      Test scenario: Followed exact steps from review request with seeded data in 2026-08
+

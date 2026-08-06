@@ -100,6 +100,7 @@ export default function Notifications() {
     if (n.data?.event_id) return `/event/${n.data.event_id}`;
     if (n.type === "friend_request" || n.type === "friend_accept") return "/friends";
     if (n.type === "story_reaction") return "/profile";
+    if (n.data?.url) return n.data.url;
     return null;
   };
 

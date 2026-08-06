@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { Settings, Trophy, Archive, Share2, Shield, LayoutDashboard } from "lucide-react";
+import { Settings, Trophy, Archive, Share2, Shield, LayoutDashboard, Sparkles, ChevronRight } from "lucide-react";
 import { BadgesPanel } from "@/components/BadgesPanel";
 
 function QuickAction({ icon: Icon, label, onClick, color, testid }) {
@@ -47,6 +47,24 @@ export default function Profile() {
           <p className="text-white/40 text-sm truncate">@{user?.username}</p>
           <p className="text-white/40 text-xs mt-0.5">{user?.city}</p>
         </div>
+      </div>
+
+      {/* Wrapped — monthly recap */}
+      <div className="px-5 mb-5">
+        <button
+          data-testid="wrapped-banner"
+          onClick={() => navigate("/wrapped")}
+          className="w-full rounded-3xl p-4 flex items-center gap-3 bg-gradient-to-r from-qv-primary/25 via-qv-secondary/20 to-yellow-300/15 border border-white/10 active:scale-[0.98] transition-transform text-left"
+        >
+          <div className="w-11 h-11 rounded-2xl bg-black/30 flex items-center justify-center shrink-0">
+            <Sparkles className="w-6 h-6 text-yellow-300" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-display font-black text-white text-lg leading-tight">Tu Wrapped del mes</p>
+            <p className="text-white/60 text-xs">Tu resumen de fiesta, listo para compartir ✨</p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-white/50 shrink-0" />
+        </button>
       </div>
 
       {/* Quick actions */}

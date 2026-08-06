@@ -2861,6 +2861,178 @@ async def my_past_events(user: dict = Depends(get_current_user)):
     return {"items": items}
 
 
+_MONTHS_ES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+              "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def _wrapped_title(top_genre: str, parties: int) -> str:
+    """A fun Spotify-Wrapped-style label based on the user's top genre / activity."""
+    g = unicodedata.normalize("NFKD", (top_genre or "").lower()).encode("ascii", "ignore").decode()
+    table = [
+        (("reggaeton", "regueton", "perreo", "latino", "latin"), "Rey/Reina del perreo 👑"),
+        (("techno", "tekno", "tech house", "tech-house"), "Alma Techno 🖤"),
+        (("house", "deep"), "House Lover 🏠"),
+        (("edm", "electro", "electronica", "rave", "trance"), "Raver de pura cepa ⚡"),
+        (("hip hop", "hip-hop", "rap", "trap", "drill"), "Trapper de noche 🔥"),
+        (("pop", "comercial", "mainstream", "hits", "40"), "Comercial de corazón ✨"),
+        (("remember", "80", "90", "disco", "funk"), "Alma retro 🕺"),
+    ]
+    for keys, label in table:
+        if any(k in g for k in keys):
+            return label
+    if parties >= 8:
+        return "Máquina de la noche 🌙"
+    if parties >= 4:
+        return "Fiestero/a nivel pro 🎉"
+    if parties >= 1:
+        return "De planes ✨"
+    return "Modo tranqui 🌙"
+
+
+async def _compute_wrapped(user: dict, month_str: str) -> dict:
+    """Monthly 'Wrapped' aggregation for a user (Spotify-Wrapped style)."""
+    uid = user["user_id"]
+    try:
+        y, m = int(month_str[:4]), int(month_str[5:7])
+        start = date(y, m, 1)
+    except Exception:
+        now = datetime.now(ZoneInfo("Europe/Madrid"))
+        y, m = now.year, now.month
+        start = date(y, m, 1)
+        month_str = f"{y:04d}-{m:02d}"
+    nxt = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+    start_iso, end_excl = start.isoformat(), nxt.isoformat()
+    start_dt, end_dt = f"{start_iso}T00:00:00", f"{end_excl}T00:00:00"
+    label = f"{_MONTHS_ES[m].capitalize()} {y}"
+
+    # My attended/going interests joined with events IN this month.
+    my_interests = []
+    async for it in db.interests.find(
+        {"user_id": uid, "status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "event_id": 1, "status": 1}):
+        my_interests.append(it)
+    ev_ids = list({it["event_id"] for it in my_interests})
+    month_events = {}
+    if ev_ids:
+        async for ev in db.events.find(
+            {"id": {"$in": ev_ids}, "date": {"$gte": start_iso, "$lt": end_excl}}, {"_id": 0}):
+            month_events[ev["id"]] = ev
+
+    genre_counts, venue_counts, nights = {}, {}, set()
+    poster = ""
+    for eid in month_events:
+        ev = month_events[eid]
+        if ev.get("genre"):
+            genre_counts[ev["genre"]] = genre_counts.get(ev["genre"], 0) + 1
+        if ev.get("venue"):
+            venue_counts[ev["venue"]] = venue_counts.get(ev["venue"], 0) + 1
+        if ev.get("date"):
+            nights.add(ev["date"])
+        if not poster and ev.get("image_url"):
+            poster = ev["image_url"]
+    parties = len(month_events)
+    top_genre = max(genre_counts.items(), key=lambda kv: kv[1])[0] if genre_counts else ""
+    top_venue = max(venue_counts.items(), key=lambda kv: kv[1]) if venue_counts else None
+
+    # Photos + moments this month (by upload time).
+    photos = await db.album_uploads.count_documents(
+        {"user_id": uid, "created_at": {"$gte": start_dt, "$lt": end_dt}})
+    moments = await db.captures.count_documents(
+        {"user_id": uid, "created_at": {"$gte": start_dt, "$lt": end_dt}})
+    moments_ontime = await db.captures.count_documents(
+        {"user_id": uid, "on_time": True, "created_at": {"$gte": start_dt, "$lt": end_dt}})
+
+    # Friends I coincided with at this month's parties.
+    top_friends, friends_coincided = [], 0
+    if month_events:
+        friend_ids = await accepted_friend_ids(uid)
+        if friend_ids:
+            tally = {}
+            async for it in db.interests.find(
+                {"event_id": {"$in": list(month_events.keys())},
+                 "user_id": {"$in": friend_ids},
+                 "status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "user_id": 1}):
+                tally[it["user_id"]] = tally.get(it["user_id"], 0) + 1
+            friends_coincided = len(tally)
+            top_ids = sorted(tally.items(), key=lambda kv: -kv[1])[:3]
+            for fid, cnt in top_ids:
+                fu = await db.users.find_one({"user_id": fid}, {"_id": 0})
+                if fu:
+                    top_friends.append({"name": display_name(fu),
+                                        "picture": fu.get("picture", ""), "count": cnt})
+
+    has_data = (parties + photos + moments) > 0
+    return {
+        "month": month_str,
+        "month_label": label,
+        "city": user.get("city", ""),
+        "parties": parties,
+        "nights_out": len(nights),
+        "venues": len(venue_counts),
+        "top_venue": ({"name": top_venue[0], "count": top_venue[1]} if top_venue else None),
+        "top_genre": top_genre,
+        "genres": [{"name": g, "count": c} for g, c in
+                   sorted(genre_counts.items(), key=lambda kv: -kv[1])[:5]],
+        "photos": photos,
+        "moments": moments,
+        "moments_ontime": moments_ontime,
+        "friends_coincided": friends_coincided,
+        "top_friends": top_friends,
+        "title": _wrapped_title(top_genre, parties),
+        "poster": poster,
+        "has_data": has_data,
+    }
+
+
+@api_router.get("/me/wrapped")
+async def my_wrapped(month: str = Query(""), user: dict = Depends(get_current_user)):
+    """Monthly 'Wrapped' (Spotify-Wrapped style) for the current user. Defaults to
+    the current month (Europe/Madrid). Pass ?month=YYYY-MM for a specific month."""
+    if not month:
+        now = datetime.now(ZoneInfo("Europe/Madrid"))
+        month = f"{now.year:04d}-{now.month:02d}"
+    return await _compute_wrapped(user, month)
+
+
+async def notify_monthly_wrapped():
+    """On the 1st of each month, notify users who had activity LAST month that
+    their monthly Wrapped is ready. Links to /wrapped?month=YYYY-MM (prev month).
+    Only notifies active users so we never spam people who didn't go out."""
+    try:
+        now = datetime.now(ZoneInfo("Europe/Madrid"))
+        last_prev = now.replace(day=1) - timedelta(days=1)
+        y, m = last_prev.year, last_prev.month
+        month_str = f"{y:04d}-{m:02d}"
+        start = date(y, m, 1)
+        nxt = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+        start_iso, end_excl = start.isoformat(), nxt.isoformat()
+        start_dt, end_dt = f"{start_iso}T00:00:00", f"{end_excl}T00:00:00"
+        label = f"{_MONTHS_ES[m].capitalize()} {y}"
+        month_ev_ids = [e["id"] async for e in db.events.find(
+            {"date": {"$gte": start_iso, "$lt": end_excl}}, {"_id": 0, "id": 1})]
+        active = set()
+        if month_ev_ids:
+            async for it in db.interests.find(
+                {"event_id": {"$in": month_ev_ids}, "status": {"$in": ["voy", "estuve"]}},
+                {"_id": 0, "user_id": 1}):
+                active.add(it["user_id"])
+        async for a in db.album_uploads.find(
+            {"created_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0, "user_id": 1}):
+            active.add(a["user_id"])
+        async for c in db.captures.find(
+            {"created_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0, "user_id": 1}):
+            active.add(c["user_id"])
+        n = 0
+        for uid in active:
+            await create_notification(
+                uid, "monthly_wrapped",
+                f"🎉 Tu Wrapped de {label} ya está. Descubre tu mes de fiesta 👀",
+                {"type": "monthly_wrapped", "month": month_str, "url": f"/wrapped?month={month_str}"})
+            n += 1
+        logger.info(f"[wrapped] notified {n} users for {month_str}")
+    except Exception as e:
+        logger.warning(f"notify_monthly_wrapped failed: {e}")
+
+
 @api_router.get("/me/recap")
 async def my_recap(user: dict = Depends(get_current_user)):
     """Weekly recap card: what the user did in the last 7 days. Dopamine + shareable."""
@@ -6116,6 +6288,9 @@ async def on_startup():
         # Process scheduled admin notifications every minute
         scheduler.add_job(process_scheduled_notifications, "interval", minutes=1,
                           id="scheduled_notifications", replace_existing=True)
+        # Monthly Wrapped: 1st of each month at 12:00 (Madrid) notify active users.
+        scheduler.add_job(notify_monthly_wrapped, "cron", day=1, hour=12, minute=0,
+                          id="monthly_wrapped", replace_existing=True)
         # Scrapers — refresh all active venues every 30 min. First run 60s after
         # startup so a fresh deploy warms up the events feed quickly.
         scheduler.add_job(run_all_scrapers, "interval", minutes=20,

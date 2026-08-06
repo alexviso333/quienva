@@ -34,6 +34,7 @@ const MapPage = lazy(() => import("@/pages/MapPage"));
 const NotifPrefs = lazy(() => import("@/pages/NotifPrefs"));
 const Momento = lazy(() => import("@/pages/Momento"));
 const Descubrir = lazy(() => import("@/pages/Descubrir"));
+const Wrapped = lazy(() => import("@/pages/Wrapped"));
 
 function LoadingScreen() {
   return (
@@ -83,6 +84,7 @@ function AppRouter() {
         <Route path="/ajustes/avisos" element={<ProtectedRoute><NotifPrefs /></ProtectedRoute>} />
         <Route path="/momento" element={<ProtectedRoute><Momento /></ProtectedRoute>} />
         <Route path="/descubrir" element={<ProtectedRoute><Descubrir /></ProtectedRoute>} />
+        <Route path="/wrapped" element={<ProtectedRoute><Wrapped /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
         <Route path="/admin/dinero" element={<ProtectedRoute adminOnly><AdminMoney /></ProtectedRoute>} />
         <Route path="/admin/dashboard" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
