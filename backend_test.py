@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # Backend URL from environment
-BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://204b173e-f0b3-4059-a373-e97cae5b5cd7.preview.emergentagent.com")
+BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://mern-deployment-3.preview.emergentagent.com")
 BASE_URL = f"{BACKEND_URL}/api"
 
 def create_test_image():

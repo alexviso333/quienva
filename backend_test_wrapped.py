@@ -12,7 +12,7 @@ from datetime import datetime
 import io
 
 # Backend URL from frontend/.env
-BASE_URL = "https://204b173e-f0b3-4059-a373-e97cae5b5cd7.preview.emergentagent.com/api"
+BASE_URL = "https://mern-deployment-3.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"

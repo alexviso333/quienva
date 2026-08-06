@@ -9,7 +9,7 @@ import time
 from datetime import datetime, date, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://event-scraper-hub-1.preview.emergentagent.com/api"
+BASE_URL = "https://mern-deployment-3.preview.emergentagent.com/api"
 
 # Test credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
