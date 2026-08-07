@@ -3,9 +3,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList, Euro } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
+import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import api, { mediaThumb, API } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
+import { useGuestGate } from "@/context/GuestGate";
 import { toast } from "sonner";
 
 function friendsText(friends, verb) {
@@ -62,6 +64,7 @@ function PriceBadge({ event }) {
 export function EventCard({ event, index = 0, onSetStatus, pending, highlight, cardRef }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { requireAuth } = useGuestGate();
   const qc = useQueryClient();
   const isPast = event.date < todayStr();
   const going = event.friends_going || [];
@@ -208,7 +211,12 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
       <div className="p-3 flex flex-col gap-2.5">
         {/* Social proof — core value */}
         <div className="flex items-center gap-2.5 min-h-[34px]" data-testid={`event-social-${event.id}`}>
-          {previewFriends.length > 0 ? (
+          {!user && !isPast && event.total_going > 0 ? (
+            <BlurredGoingTeaser
+              count={event.total_going}
+              onClick={(e) => { e.stopPropagation(); requireAuth("ver quién va a los planes"); }}
+            />
+          ) : previewFriends.length > 0 ? (
             <>
               <div className="flex -space-x-2.5 shrink-0">
                 {previewFriends.map((f, i) => (

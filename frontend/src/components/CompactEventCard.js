@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList, Euro } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
+import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import api, { mediaThumb } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -167,7 +168,9 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
           <div className="mt-1">
             <CompactPriceBadge event={event} />
           </div>
-          {previewFriends.length > 0 ? (
+          {!user && event.total_going > 0 ? (
+            <BlurredGoingTeaser count={event.total_going} compact />
+          ) : previewFriends.length > 0 ? (
             <div className="flex items-center gap-1.5 mt-1.5">
               <div className="flex -space-x-1.5">
                 {previewFriends.map((f, i) => (

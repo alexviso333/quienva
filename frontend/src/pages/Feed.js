@@ -14,7 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
-import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Feed() {
@@ -27,6 +27,7 @@ export default function Feed() {
   const [view, setView] = useState("dia");
   const [sale, setSale] = useState("all");
   const [highlightId, setHighlightId] = useState(null);
+  const [inviteFrom, setInviteFrom] = useState(null);
   const [compact] = useCompactMode();
   const cardRefs = useRef({});
 
@@ -118,6 +119,32 @@ export default function Feed() {
     },
   });
 
+  // Invite landing (?add=username): a shared link drops guests straight on the
+  // public feed. Guests see a banner and register to accept; logged-in users get
+  // the friend request fired automatically. Either way the ?add param is cleaned
+  // from the URL so it isn't re-applied on refresh.
+  useEffect(() => {
+    const add = searchParams.get("add");
+    if (!add) return;
+    const uname = add.toLowerCase().trim();
+    searchParams.delete("add");
+    setSearchParams(searchParams, { replace: true });
+    if (!uname) return;
+    if (user) {
+      if (uname !== user.username) {
+        api.post("/friends/request-by-username", { username: uname })
+          .then(({ data }) => toast.success(
+            data.status === "accepted" ? `¡Ya sois amigos con @${uname}! 🎉` : `Solicitud de amistad enviada a @${uname}`
+          ))
+          .catch(() => {});
+      }
+    } else {
+      try { localStorage.setItem("qv_pending_add", uname); } catch { /* ignore */ }
+      setInviteFrom(uname);
+    }
+     
+  }, [searchParams, user]);
+
   // Deep-link: scroll to & highlight a shared event
   useEffect(() => {
     const target = searchParams.get("event");
@@ -162,7 +189,33 @@ export default function Feed() {
 
       <InstallPwaBanner />
 
-      {!user && (
+      {!user && inviteFrom && (
+        <div className="px-4 pt-1 pb-1">
+          <div
+            data-testid="feed-invite-banner"
+            className="w-full rounded-2xl border border-qv-secondary/50 bg-gradient-to-r from-qv-secondary/15 to-qv-primary/15 p-3 flex items-center gap-3 text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-qv-secondary/20 flex items-center justify-center shrink-0">
+              <UserPlus className="w-5 h-5 text-qv-secondary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-black text-white text-sm leading-tight">
+                <span className="text-qv-secondary">@{inviteFrom}</span> te ha invitado 🎉
+              </p>
+              <p className="text-white/60 text-xs">Regístrate para aceptar la amistad y ver a dónde va.</p>
+            </div>
+            <button
+              onClick={() => requireAuth(`aceptar la invitación de @${inviteFrom}`)}
+              data-testid="feed-invite-accept"
+              className="shrink-0 text-xs font-bold text-black bg-qv-secondary rounded-full px-4 py-2 active:scale-95"
+            >
+              Aceptar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!user && !inviteFrom && (
         <div className="px-4 pt-1 pb-1">
           <div
             data-testid="feed-guest-banner"
