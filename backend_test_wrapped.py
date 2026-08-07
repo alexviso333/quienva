@@ -12,7 +12,7 @@ from datetime import datetime
 import io
 
 # Backend URL from frontend/.env
-BASE_URL = "https://ionos-deploy-1.preview.emergentagent.com/api"
+BASE_URL = "https://worldwide-social-1.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"

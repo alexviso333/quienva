@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Backend URL from environment
-BASE_URL = "https://ionos-deploy-1.preview.emergentagent.com/api"
+BASE_URL = "https://worldwide-social-1.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"
