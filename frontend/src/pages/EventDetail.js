@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaThumb, API } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
+import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
 import { NightRecapCard } from "@/components/NightRecapCard";
@@ -389,8 +390,14 @@ export default function EventDetail() {
               onClick={() => requireAuth("ver quién va")}
               className="w-full text-left rounded-2xl border border-qv-primary/40 bg-gradient-to-r from-qv-primary/15 to-qv-secondary/15 p-4 active:scale-[0.99]"
             >
-              <p className="font-display font-black text-white">¿Quién de tus amigos va? 👀</p>
-              <p className="text-white/60 text-sm mt-1">Regístrate gratis para verlo y apuntarte.</p>
+              <p className="font-display font-black text-white">¿Quién va? 👀</p>
+              {!isPast && event.total_going > 0 ? (
+                <div className="mt-3">
+                  <BlurredGoingTeaser count={event.total_going} />
+                </div>
+              ) : (
+                <p className="text-white/60 text-sm mt-1">Regístrate gratis para verlo y apuntarte.</p>
+              )}
             </button>
           )}
 

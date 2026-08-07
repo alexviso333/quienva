@@ -1,4 +1,4 @@
-import { Lock, Eye } from "lucide-react";
+import { Lock } from "lucide-react";
 
 // A few soft "head & shoulders" gradients so the cluster reads like real, but
 // unrecognizable, blurred faces. No real user data is used — this is a pure
@@ -52,13 +52,8 @@ export function BlurredGoingTeaser({ count, onClick, compact = false }) {
   }
 
   const n = Math.min(total, 4);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid="guest-going-teaser"
-      className="flex items-center gap-2.5 w-full text-left active:scale-[0.99] transition-transform"
-    >
+  const inner = (
+    <>
       <div className="flex -space-x-2.5 shrink-0">
         {Array.from({ length: n }).map((_, i) => (
           <BlurredFace key={i} i={i} size={30} />
@@ -71,6 +66,27 @@ export function BlurredGoingTeaser({ count, onClick, compact = false }) {
       <span className="shrink-0 w-7 h-7 rounded-full bg-qv-primary/15 border border-qv-primary/40 flex items-center justify-center">
         <Lock className="w-3.5 h-3.5 text-qv-primary" />
       </span>
+    </>
+  );
+
+  // When no onClick is passed the teaser is embedded inside another button
+  // (e.g. the event-detail guest block) → render a plain div to keep valid HTML.
+  if (!onClick) {
+    return (
+      <div className="flex items-center gap-2.5 w-full text-left" data-testid="guest-going-teaser">
+        {inner}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid="guest-going-teaser"
+      className="flex items-center gap-2.5 w-full text-left active:scale-[0.99] transition-transform"
+    >
+      {inner}
     </button>
   );
 }

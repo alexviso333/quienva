@@ -146,6 +146,30 @@ def _event_is_mine(ev: dict) -> bool:
     return _affiliate_match(ev) is not None
 
 
+def _guest_going_boost(ev: dict) -> int:
+    """Subtle, GUEST-ONLY social-proof baseline added to an event's "X van" count.
+
+    Goal (owner request): most parties that visibly show "X van" to logged-out
+    visitors should be the ones we carry via our affiliate link — a nudge so new
+    people buy through our link — but disguised so it never looks like only those
+    have a crowd. Deterministic per event (stable across feed ↔ detail, no
+    flicker). NEVER shown to registered users (they always see the real numbers),
+    so it can't be spotted by regulars. Purely additive display value; it does
+    not affect any real data, points, sorting or notifications."""
+    try:
+        h = int(hashlib.md5(str(ev.get("id", "")).encode()).hexdigest()[:8], 16)
+    except Exception:
+        h = 0
+    if _event_is_mine(ev):
+        # Our carried parties: always a plausible, varied crowd (9–34).
+        return 9 + (h % 26)
+    # A minority (~22%) of the rest get a small crowd (2–6) purely to camouflage
+    # that the busy ones are ours; the majority stay at their real count.
+    if h % 100 < 22:
+        return 2 + (h % 5)
+    return 0
+
+
 _FV_CODE_RE = re.compile(r"/events/([A-Za-z0-9]+)/?$")
 
 
@@ -1674,7 +1698,10 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "friends_going": friends_going,
         "friends_interested": friends_interested,
         "friends_attended": friends_attended,
-        "total_going": sum(1 for it in interests if it["status"] == "voy" and it.get("privacy", "todos") != "nadie"),
+        "total_going": (
+            sum(1 for it in interests if it["status"] == "voy" and it.get("privacy", "todos") != "nadie")
+            + (_guest_going_boost(ev) if (user or {}).get("user_id") is None else 0)
+        ),
         "total_interested": sum(1 for it in interests if it["status"] == "me_interesa" and it.get("privacy", "todos") != "nadie"),
         "total_attended": sum(1 for it in interests if it["status"] == "estuve" and it.get("privacy", "todos") != "nadie"),
         # Tickets
