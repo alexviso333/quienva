@@ -14,7 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
-import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Feed() {
@@ -28,6 +28,7 @@ export default function Feed() {
   const [sale, setSale] = useState("all");
   const [highlightId, setHighlightId] = useState(null);
   const [inviteFrom, setInviteFrom] = useState(null);
+  const [showPrivacyReminder, setShowPrivacyReminder] = useState(false);
   const [guestCity, setGuestCity] = useState(() => {
     try { return localStorage.getItem("qv_guest_city") || "Palma de Mallorca"; } catch { return "Palma de Mallorca"; }
   });
@@ -56,6 +57,20 @@ export default function Feed() {
   const pickCity = (c) => {
     setGuestCity(c);
     try { localStorage.setItem("qv_guest_city", c); } catch { /* ignore */ }
+  };
+
+  // Gentle one-time reminder for users who chose "Nadie" for their attendance
+  // privacy, so they don't forget nobody can see where they're going.
+  useEffect(() => {
+    if (!user || user.attendance_privacy !== "nadie") { setShowPrivacyReminder(false); return; }
+    try {
+      if (localStorage.getItem(`qv_privacy_reminder_${user.user_id}`) !== "1") setShowPrivacyReminder(true);
+    } catch { /* ignore */ }
+  }, [user]);
+
+  const dismissPrivacyReminder = () => {
+    try { if (user) localStorage.setItem(`qv_privacy_reminder_${user.user_id}`, "1"); } catch { /* ignore */ }
+    setShowPrivacyReminder(false);
   };
 
   const { data: topEvent } = useQuery({
@@ -233,6 +248,38 @@ export default function Feed() {
       {user && <StoriesBar />}
 
       <InstallPwaBanner />
+
+      {user && showPrivacyReminder && (
+        <div className="px-4 pt-1 pb-1">
+          <div
+            data-testid="privacy-reminder"
+            className="w-full rounded-2xl border border-white/12 bg-white/5 p-3 flex items-center gap-3"
+          >
+            <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+              <EyeOff className="w-4 h-4 text-white/70" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm font-semibold leading-tight">Estás en modo oculto</p>
+              <p className="text-white/55 text-xs">Nadie ve a qué fiestas vas. Puedes cambiarlo cuando quieras.</p>
+            </div>
+            <button
+              onClick={() => { dismissPrivacyReminder(); navigate("/ajustes"); }}
+              data-testid="privacy-reminder-settings"
+              className="shrink-0 text-xs font-bold text-qv-secondary bg-qv-secondary/15 border border-qv-secondary/40 rounded-full px-3 py-1.5 active:scale-95"
+            >
+              Ajustes
+            </button>
+            <button
+              onClick={dismissPrivacyReminder}
+              data-testid="privacy-reminder-dismiss"
+              aria-label="Descartar"
+              className="shrink-0 text-white/40 active:scale-90"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {!user && inviteFrom && (
         <div className="px-4 pt-1 pb-1">
