@@ -1,19 +1,21 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { Home, Users, MessageCircle, Bell, User } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 
 const items = [
-  { to: "/feed", icon: Home, label: "Planes", testid: "nav-feed", public: true },
-  { to: "/friends", icon: Users, label: "Amigos", testid: "nav-friends", reason: "ver a tus amigos" },
-  { to: "/chats", icon: MessageCircle, label: "Chats", testid: "nav-chats", reason: "chatear con tu grupo" },
-  { to: "/notifications", icon: Bell, label: "Avisos", testid: "nav-notifications", reason: "recibir avisos" },
-  { to: "/profile", icon: User, label: "Perfil", testid: "nav-profile", reason: "ver tu perfil" },
+  { to: "/feed", icon: Home, labelKey: "nav.planes", testid: "nav-feed", public: true },
+  { to: "/friends", icon: Users, labelKey: "nav.amigos", testid: "nav-friends", reasonKey: "nav.reason_friends" },
+  { to: "/chats", icon: MessageCircle, labelKey: "nav.chats", testid: "nav-chats", reasonKey: "nav.reason_chats" },
+  { to: "/notifications", icon: Bell, labelKey: "nav.avisos", testid: "nav-notifications", reasonKey: "nav.reason_notifications" },
+  { to: "/profile", icon: User, labelKey: "nav.perfil", testid: "nav-profile", reasonKey: "nav.reason_profile" },
 ];
 
 export function BottomNav() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { requireAuth } = useGuestGate();
   const { data: unread } = useQuery({
@@ -65,7 +67,9 @@ export function BottomNav() {
       data-testid="bottom-nav"
     >
       <div className="grid grid-cols-5 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-        {items.map(({ to, icon: Icon, label, testid, reason, public: isPublic }) => {
+        {items.map(({ to, icon: Icon, labelKey, testid, reasonKey, public: isPublic }) => {
+          const label = t(labelKey);
+          const reason = reasonKey ? t(reasonKey) : "";
           const badgeCount = to === "/notifications" ? unread : to === "/chats" ? dmUnread : 0;
           // Guests can only open public tabs; everything else pops the gate.
           if (!user && !isPublic) {

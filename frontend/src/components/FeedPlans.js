@@ -2,33 +2,35 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { EventCard } from "@/components/EventCard";
 import { CompactEventCard } from "@/components/CompactEventCard";
 import { CalendarDays, LayoutList, Building2, ChevronLeft, ChevronRight, PartyPopper, SlidersHorizontal, Euro } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
 const SALE_FILTERS = [
-  { key: "all", label: "Todas" },
-  { key: "a_la_venta", label: "🎟️ A la venta" },
-  { key: "pocas_entradas", label: "⚡ Pocas" },
-  { key: "agotado", label: "🔒 Agotadas" },
+  { key: "all", labelKey: "plans.sale_all" },
+  { key: "a_la_venta", labelKey: "plans.sale_a_la_venta" },
+  { key: "pocas_entradas", labelKey: "plans.sale_pocas" },
+  { key: "agotado", labelKey: "plans.sale_agotado" },
 ];
 
 const VIEWS = [
-  { key: "dia", label: "Día", icon: LayoutList },
-  { key: "disco", label: "Discoteca", icon: Building2 },
-  { key: "calendario", label: "Calendario", icon: CalendarDays },
+  { key: "dia", labelKey: "plans.view_dia", icon: LayoutList },
+  { key: "disco", labelKey: "plans.view_disco", icon: Building2 },
+  { key: "calendario", labelKey: "plans.view_calendario", icon: CalendarDays },
 ];
 
-const WD = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const WD_MINI = ["L", "M", "X", "J", "V", "S", "D"];
-const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const getWD = () => i18n.t("plans.weekdays", { returnObjects: true });
+const getWDmini = () => i18n.t("plans.weekdays_mini", { returnObjects: true });
+const getMonths = () => i18n.t("plans.months", { returnObjects: true });
 
 function isoToday() { return new Date().toISOString().slice(0, 10); }
 function isoTomorrow() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); }
 
 function dayLabel(iso) {
-  if (iso === isoToday()) return "Hoy";
-  if (iso === isoTomorrow()) return "Mañana";
+  if (iso === isoToday()) return i18n.t("plans.today");
+  if (iso === isoTomorrow()) return i18n.t("plans.tomorrow");
   const d = new Date(iso + "T00:00:00");
-  const wd = WD[(d.getDay() + 6) % 7];
-  return `${wd} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
+  const wd = getWD()[(d.getDay() + 6) % 7];
+  return `${wd} ${d.getDate()} ${getMonths()[d.getMonth()].slice(0, 3)}`;
 }
 
 export default function FeedPlans({ events, compact, onSetStatus, pending, highlightId, cardRefs, view = "dia", sale = "all" }) {
@@ -184,11 +186,11 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
             <div className="flex items-center justify-between mb-2">
               <button onClick={() => setMonthCursor((c) => { const m = c.m - 1; return m < 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m }; })} className="p-1.5 rounded-lg bg-white/10 active:scale-95"><ChevronLeft className="w-4 h-4 text-white" /></button>
-            <span className="font-display font-bold text-white capitalize">{MONTHS[monthCursor.m]} {monthCursor.y}</span>
+            <span className="font-display font-bold text-white capitalize">{getMonths()[monthCursor.m]} {monthCursor.y}</span>
               <button onClick={() => setMonthCursor((c) => { const m = c.m + 1; return m > 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m }; })} className="p-1.5 rounded-lg bg-white/10 active:scale-95"><ChevronRight className="w-4 h-4 text-white" /></button>
             </div>
             <div className="grid grid-cols-7 gap-1 mb-1">
-              {WD_MINI.map((d) => <div key={d} className="text-center text-[10px] text-white/40 font-bold">{d}</div>)}
+              {getWDmini().map((d, di) => <div key={di} className="text-center text-[10px] text-white/40 font-bold">{d}</div>)}
             </div>
             <div className="grid grid-cols-7 gap-1">
               {calCells.map((c, i) => c === null ? <div key={i} /> : (
@@ -230,6 +232,7 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
 }
 
 export function FeedPlansControls({ view, setView, sale, setSale, genres = [], genre = "all", setGenre }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const activeCount = (sale !== "all" ? 1 : 0) + (genre !== "all" ? 1 : 0);
   return (
@@ -246,7 +249,7 @@ export function FeedPlansControls({ view, setView, sale, setSale, genres = [], g
                 data-testid={`view-${v.key}`}
                 className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-colors ${on ? "bg-qv-primary text-black" : "text-white/70"}`}
               >
-                <Icon className="w-3.5 h-3.5" /> {v.label}
+                <Icon className="w-3.5 h-3.5" /> {t(v.labelKey)}
               </button>
             );
           })}
@@ -258,7 +261,7 @@ export function FeedPlansControls({ view, setView, sale, setSale, genres = [], g
             open || activeCount ? "bg-qv-secondary text-black border-qv-secondary" : "bg-white/[0.04] border-white/10 text-white/70"
           }`}
         >
-          <SlidersHorizontal className="w-4 h-4" /> Filtros
+          <SlidersHorizontal className="w-4 h-4" /> {t("plans.filtros")}
           {activeCount > 0 && (
             <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-black/80 text-white text-[10px] font-black flex items-center justify-center">
               {activeCount}
@@ -288,7 +291,7 @@ export function FeedPlansControls({ view, setView, sale, setSale, genres = [], g
                 onClick={() => setGenre("all")}
                 className={`rounded-full px-4 py-1.5 text-xs font-semibold whitespace-nowrap ${genre === "all" ? "bg-qv-primary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
               >
-                Todo
+                {t("plans.genre_all")}
               </button>
               {genres.map((g) => (
                 <button

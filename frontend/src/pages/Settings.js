@@ -12,8 +12,11 @@ import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } 
 import { StoriesArchive } from "@/components/Stories";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export default function Settings() {
+  const { t } = useTranslation();
   const { user, setUser, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -245,6 +248,10 @@ export default function Settings() {
         )}
 
         <p className="text-xs uppercase tracking-widest text-white/40 font-bold mt-3">Preferencias</p>
+        <div className="flex items-center justify-between h-12 rounded-2xl bg-white/5 border border-white/15 px-4" data-testid="settings-language">
+          <span className="flex items-center gap-2 text-white font-semibold"><Globe2 className="w-4 h-4" /> {t("lang.label")}</span>
+          <LanguageSwitcher />
+        </div>
         <button data-testid="push-toggle-btn" onClick={togglePush} disabled={pushBusy} className={`h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60 ${pushOn ? "bg-qv-primary/15 border border-qv-primary/40 text-qv-primary" : "bg-white/5 border border-white/15 text-white"}`}>
           {pushBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : pushOn ? <><BellRing className="w-4 h-4" /> Notificaciones activadas</> : <><Bell className="w-4 h-4" /> Activar notificaciones</>}
         </button>

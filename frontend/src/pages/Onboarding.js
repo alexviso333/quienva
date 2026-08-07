@@ -6,29 +6,16 @@ import { subscribeToPush } from "@/lib/push";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 const SLIDES = [
-  {
-    icon: PartyPopper,
-    color: "text-qv-primary",
-    title: "Descubre los planes",
-    body: "Las mejores fiestas de Palma, con precio, hora, local y entrada directa. Marca 'Voy' o 'Me interesa' con un toque.",
-  },
-  {
-    icon: Users,
-    color: "text-qv-secondary",
-    title: "Con tus amigos",
-    body: "Ve quién va a cada fiesta, y si sois 3+ del grupo, haceos la foto de grupo. Cuando estéis dentro, salta El Momento: foto sorpresa delante y detrás.",
-  },
-  {
-    icon: Bell,
-    color: "text-yellow-300",
-    title: "No te pierdas nada",
-    body: "Te avisamos cuando un amigo se apunta, cuando salen últimas entradas o cuando salta El Momento. Actívalas para vivirlo al máximo.",
-  },
+  { icon: PartyPopper, color: "text-qv-primary", titleKey: "onboarding.slide1_title", bodyKey: "onboarding.slide1_body" },
+  { icon: Users, color: "text-qv-secondary", titleKey: "onboarding.slide2_title", bodyKey: "onboarding.slide2_body" },
+  { icon: Bell, color: "text-yellow-300", titleKey: "onboarding.slide3_title", bodyKey: "onboarding.slide3_body" },
 ];
 
 export default function Onboarding() {
+  const { t } = useTranslation();
   const nav = useNavigate();
   const { user, refreshUser } = useAuth();
   const [i, setI] = useState(0);
@@ -58,7 +45,7 @@ export default function Onboarding() {
       if (activate) {
         try {
           await subscribeToPush();
-          toast.success("¡Notificaciones activadas! ⚡");
+          toast.success(t("onboarding.toast_notif"));
         } catch (e) { /* browser denied — continue anyway */ }
         if (user) localStorage.setItem(`qv_push_granted_${user.user_id}`, "1");
       }
@@ -80,9 +67,9 @@ export default function Onboarding() {
     <div className="min-h-screen qv-app-bg flex flex-col px-6 py-10" data-testid="onboarding">
       <div className="flex justify-between items-center">
         <span className="text-qv-secondary text-xs font-bold uppercase tracking-widest">
-          <Sparkles className="w-3.5 h-3.5 inline mr-1" /> Bienvenido
+          <Sparkles className="w-3.5 h-3.5 inline mr-1" /> {t("onboarding.welcome")}
         </span>
-        <button onClick={() => finish(false)} className="text-white/50 text-sm">Saltar</button>
+        <button onClick={() => finish(false)} className="text-white/50 text-sm">{t("onboarding.skip")}</button>
       </div>
 
       {privacyStep ? (
@@ -91,18 +78,18 @@ export default function Onboarding() {
             <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
               <ShieldCheck className="w-10 h-10 text-qv-secondary" />
             </div>
-            <h1 className="font-display text-3xl font-bold text-white">Tu privacidad</h1>
+            <h1 className="font-display text-3xl font-bold text-white">{t("onboarding.privacy_title")}</h1>
             <p className="text-white/60 text-sm max-w-xs leading-relaxed">
-              Decide quién ve tu actividad. Podrás cambiarlo cuando quieras en Ajustes.
+              {t("onboarding.privacy_sub")}
             </p>
           </div>
 
           <div>
             <p className="text-sm font-bold text-white mb-2">
-              ¿Quién puede ver a qué fiestas vas? <span className="text-white/50 font-medium">(tu {'"Voy"'})</span>
+              {t("onboarding.q_attendance")} <span className="text-white/50 font-medium">{t("onboarding.q_attendance_hint")}</span>
             </p>
             <div className="grid grid-cols-3 gap-2">
-              {[["todos", "Todos"], ["amigos", "Solo amigos"], ["nadie", "Nadie"]].map(([val, label]) => (
+              {[["todos", t("onboarding.opt_all")], ["amigos", t("onboarding.opt_friends_only")], ["nadie", t("onboarding.opt_none")]].map(([val, label]) => (
                 <button
                   key={val}
                   data-testid={`onb-att-${val}`}
@@ -118,9 +105,9 @@ export default function Onboarding() {
           </div>
 
           <div>
-            <p className="text-sm font-bold text-white mb-2">¿Quién puede ver tu Momento?</p>
+            <p className="text-sm font-bold text-white mb-2">{t("onboarding.q_moment")}</p>
             <div className="grid grid-cols-2 gap-2">
-              {[["amigos", "Solo amigos"], ["publico", "Todos (público)"]].map(([val, label]) => (
+              {[["amigos", t("onboarding.opt_friends_only")], ["publico", t("onboarding.opt_moment_public")]].map(([val, label]) => (
                 <button
                   key={val}
                   data-testid={`onb-mom-${val}`}
@@ -150,8 +137,8 @@ export default function Onboarding() {
                 <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
                   <Icon className={`w-11 h-11 ${SLIDES[i].color}`} />
                 </div>
-                <h1 className="font-display text-3xl font-bold text-white">{SLIDES[i].title}</h1>
-                <p className="text-white/60 text-base max-w-xs leading-relaxed">{SLIDES[i].body}</p>
+                <h1 className="font-display text-3xl font-bold text-white">{t(SLIDES[i].titleKey)}</h1>
+                <p className="text-white/60 text-base max-w-xs leading-relaxed">{t(SLIDES[i].bodyKey)}</p>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -174,7 +161,7 @@ export default function Onboarding() {
         className="h-14 rounded-2xl bg-qv-primary text-white font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
       >
         {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-        {privacyStep ? "Activar notificaciones y empezar" : "Siguiente"}
+        {privacyStep ? t("onboarding.start") : t("onboarding.next")}
         {!privacyStep && <ChevronRight className="w-5 h-5" />}
       </button>
     </div>

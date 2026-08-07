@@ -16,8 +16,10 @@ import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
 import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 export default function Feed() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { requireAuth } = useGuestGate();
   const qc = useQueryClient();
@@ -143,7 +145,7 @@ export default function Feed() {
       if (vars.status === "estuve") toast.success("Guardado en tus recuerdos ✨");
     },
     onError: () => {
-      toast.error("No se pudo actualizar");
+      toast.error(t("feed.toast_error"));
       qc.invalidateQueries({ queryKey: ["events"] });
       qc.invalidateQueries({ queryKey: ["carousels"] });
     },
@@ -207,7 +209,7 @@ export default function Feed() {
               {user ? (user.city || "Palma de Mallorca") : ((cities.find((c) => c.id === guestCity) || {}).label || guestCity)}
             </p>
             <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
-              Los planes<span className="text-qv-primary">.</span>
+              {t("feed.title")}<span className="text-qv-primary">.</span>
             </h1>
           </div>
           <button
@@ -215,7 +217,7 @@ export default function Feed() {
             className="mt-1 flex-shrink-0 flex items-center gap-1.5 text-xs font-bold text-white bg-white/10 border border-white/10 rounded-full px-3 py-2 active:scale-95"
             data-testid="feed-locales-btn"
           >
-            <Building2 className="w-4 h-4 text-qv-secondary" /> Locales
+            <Building2 className="w-4 h-4 text-qv-secondary" /> {t("feed.locales")}
           </button>
         </div>
       </header>
@@ -259,20 +261,20 @@ export default function Feed() {
               <EyeOff className="w-4 h-4 text-white/70" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-semibold leading-tight">Estás en modo oculto</p>
-              <p className="text-white/55 text-xs">Nadie ve a qué fiestas vas. Puedes cambiarlo cuando quieras.</p>
+              <p className="text-white text-sm font-semibold leading-tight">{t("feed.hidden_mode_title")}</p>
+              <p className="text-white/55 text-xs">{t("feed.hidden_mode_body")}</p>
             </div>
             <button
               onClick={() => { dismissPrivacyReminder(); navigate("/ajustes"); }}
               data-testid="privacy-reminder-settings"
               className="shrink-0 text-xs font-bold text-qv-secondary bg-qv-secondary/15 border border-qv-secondary/40 rounded-full px-3 py-1.5 active:scale-95"
             >
-              Ajustes
+              {t("feed.settings")}
             </button>
             <button
               onClick={dismissPrivacyReminder}
               data-testid="privacy-reminder-dismiss"
-              aria-label="Descartar"
+              aria-label={t("feed.dismiss")}
               className="shrink-0 text-white/40 active:scale-90"
             >
               <X className="w-4 h-4" />
@@ -292,16 +294,16 @@ export default function Feed() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-display font-black text-white text-sm leading-tight">
-                <span className="text-qv-secondary">@{inviteFrom}</span> te ha invitado 🎉
+                <span className="text-qv-secondary">@{inviteFrom}</span> {t("feed.invited_suffix")}
               </p>
-              <p className="text-white/60 text-xs">Regístrate para aceptar la amistad y ver a dónde va.</p>
+              <p className="text-white/60 text-xs">{t("feed.invited_sub")}</p>
             </div>
             <button
               onClick={() => requireAuth(`aceptar la invitación de @${inviteFrom}`)}
               data-testid="feed-invite-accept"
               className="shrink-0 text-xs font-bold text-black bg-qv-secondary rounded-full px-4 py-2 active:scale-95"
             >
-              Aceptar
+              {t("feed.accept")}
             </button>
           </div>
         </div>
@@ -317,15 +319,15 @@ export default function Feed() {
               <Sparkles className="w-5 h-5 text-qv-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-display font-black text-white text-sm leading-tight">Estás mirando sin cuenta 👀</p>
-              <p className="text-white/60 text-xs">Regístrate gratis para ver quién de tus amigos va.</p>
+              <p className="font-display font-black text-white text-sm leading-tight">{t("feed.guest_title")}</p>
+              <p className="text-white/60 text-xs">{t("feed.guest_sub")}</p>
             </div>
             <button
               onClick={() => requireAuth("empezar")}
               data-testid="feed-guest-register"
               className="shrink-0 text-xs font-bold text-white bg-qv-primary rounded-full px-4 py-2 active:scale-95"
             >
-              Entrar
+              {t("feed.enter")}
             </button>
           </div>
         </div>
@@ -394,7 +396,7 @@ export default function Feed() {
                     ))}
                   </div>
                   <span className="text-xs text-white/80 font-semibold">
-                    {topEvent.friends_going.length} amigo{topEvent.friends_going.length > 1 ? "s" : ""} {topEvent.friends_going.length > 1 ? "van" : "va"}
+                    {t("feed.friends_going", { count: topEvent.friends_going.length })}
                   </span>
                 </div>
               </div>
@@ -435,8 +437,8 @@ export default function Feed() {
         ) : (
           <div className="text-center py-20 px-6" data-testid="feed-empty">
             <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
-            <p className="text-white/60">No hay planes ahora mismo.</p>
-            <p className="text-white/40 text-sm mt-1">Vuelve pronto o revisa otros géneros.</p>
+            <p className="text-white/60">{t("feed.empty_title")}</p>
+            <p className="text-white/40 text-sm mt-1">{t("feed.empty_body")}</p>
           </div>
         )}
 
@@ -450,24 +452,24 @@ export default function Feed() {
           <div className="-mx-4 pt-2">
             <EventCarousel
               testId="carousel-top-weekend"
-              title="Top del finde"
-              subtitle="Los planes con más movida"
+              title={t("feed.carousel_top_title")}
+              subtitle={t("feed.carousel_top_subtitle")}
               icon={Flame}
               events={carousels.top_weekend}
             />
             {user && (
               <EventCarousel
                 testId="carousel-friends-going"
-                title="Lo que va tu grupo"
-                subtitle="Donde están tus amigos"
+                title={t("feed.carousel_friends_title")}
+                subtitle={t("feed.carousel_friends_subtitle")}
                 icon={Users}
                 events={carousels.friends_going}
               />
             )}
             <EventCarousel
               testId="carousel-discover-new"
-              title="Prueba algo nuevo"
-              subtitle="Géneros que aún no exploras"
+              title={t("feed.carousel_discover_title")}
+              subtitle={t("feed.carousel_discover_subtitle")}
               icon={Sparkles}
               events={carousels.discover_new}
             />
