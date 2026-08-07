@@ -161,10 +161,10 @@ def _guest_going_boost(ev: dict) -> int:
     except Exception:
         h = 0
     if _event_is_mine(ev):
-        # Our carried parties: a natural small crowd with just a SUBTLE edge —
-        # a bit more likely to have people and the odd slightly higher number
-        # (up to 6), but never inflated. ~25% still show 0 so it looks organic.
-        pool = [0, 0, 0, 1, 1, 2, 2, 3, 1, 2, 4, 6]
+        # Our carried parties: barely-there edge. ~58% show a small crowd (vs
+        # ~50% for the rest) and the ceiling is just 4 — practically
+        # indistinguishable, never inflated.
+        pool = [0, 0, 0, 0, 0, 1, 1, 2, 2, 1, 3, 4]
         return pool[h % len(pool)]
     # Everyone else ALSO shows realistic small crowds (~50% have someone), so it
     # never looks like only our parties have people. Values stay low (max 3).
