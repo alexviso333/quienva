@@ -161,14 +161,14 @@ def _guest_going_boost(ev: dict) -> int:
     except Exception:
         h = 0
     if _event_is_mine(ev):
-        # Our carried parties: barely-there edge. ~58% show a small crowd (vs
-        # ~50% for the rest) and the ceiling is just 4 — practically
-        # indistinguishable, never inflated.
-        pool = [0, 0, 0, 0, 0, 1, 1, 2, 2, 1, 3, 4]
+        # Our carried parties should be the ones that CATCH THE EYE — a bit
+        # busier (typically 2–3, up to 5) so they stand out from the rest, but
+        # still realistic, never inflated. ~25% still show 0 so it looks organic.
+        pool = [0, 0, 0, 1, 2, 2, 3, 2, 3, 1, 4, 5]
         return pool[h % len(pool)]
-    # Everyone else ALSO shows realistic small crowds (~50% have someone), so it
-    # never looks like only our parties have people. Values stay low (max 3).
-    pool = [0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 2, 3]
+    # Everyone else: quieter (mostly 0–1, the odd 2–3) so ours draw attention —
+    # but enough of them still show someone that it never looks staged.
+    pool = [0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 3]
     return pool[h % len(pool)]
 
 
@@ -252,6 +252,15 @@ def city_query_value(user_city: str):
     """Mongo filter value for `city` given a user's app-city (region-aware)."""
     members = region_cities(user_city)
     return {"$in": members} if len(members) > 1 else members[0]
+
+
+def _effective_city(user: dict, city_param: Optional[str]) -> str:
+    """City used to filter the feed. A valid ?city= override wins (lets guests —
+    and anyone — peek other supported cities without changing their account);
+    otherwise fall back to the user's / guest's own city."""
+    if city_param and city_param in CITY_IDS:
+        return city_param
+    return user.get("city", GUEST_CITY)
 
 # In-memory TTL cache for expensive user-stats computation
 _STATS_CACHE = {}
@@ -1759,9 +1768,10 @@ async def _venue_priority_maps(city):
 @api_router.get("/events")
 async def list_events(user: dict = Depends(get_optional_user),
                       date_filter: str = Query("all"),
-                      genre: str = Query("all")):
+                      genre: str = Query("all"),
+                      city: str = Query(None)):
     friend_ids = await accepted_friend_ids(user["user_id"])
-    query = {"city": city_query_value(user.get("city", "Palma de Mallorca"))}
+    query = {"city": city_query_value(_effective_city(user, city))}
     sort_dir = -1 if date_filter == "pasados" else 1
 
     # Push the date window straight into the Mongo query so we never load
@@ -1868,20 +1878,20 @@ async def list_events(user: dict = Depends(get_optional_user),
 
 
 @api_router.get("/events/genres")
-async def list_genres(user: dict = Depends(get_optional_user)):
-    genres = await db.events.distinct("genre", {"city": city_query_value(user.get("city", "Palma de Mallorca"))})
+async def list_genres(user: dict = Depends(get_optional_user), city: str = Query(None)):
+    genres = await db.events.distinct("genre", {"city": city_query_value(_effective_city(user, city))})
     return [g for g in genres if g]
 
 
 @api_router.get("/events/top-weekend")
-async def top_weekend(user: dict = Depends(get_optional_user)):
+async def top_weekend(user: dict = Depends(get_optional_user), city: str = Query(None)):
     """The upcoming event (next 7 days) where the most of your friends are going."""
     friend_ids = await accepted_friend_ids(user["user_id"])
     today = datetime.now(ZoneInfo("Europe/Madrid")).date()
     week_end = today + timedelta(days=7)
     best = None
     best_count = 0
-    async for ev in db.events.find({"city": user.get("city", "Palma de Mallorca")}, {"_id": 0}).sort("date", 1):
+    async for ev in db.events.find({"city": city_query_value(_effective_city(user, city))}, {"_id": 0}).sort("date", 1):
         try:
             d = date.fromisoformat(ev["date"])
         except Exception:
@@ -1897,11 +1907,13 @@ async def top_weekend(user: dict = Depends(get_optional_user)):
 
 
 @api_router.get("/events/carousels")
-async def event_carousels(user: dict = Depends(get_optional_user)):
+async def event_carousels(user: dict = Depends(get_optional_user), city: str = Query(None)):
     """Home-page carousels: top del finde (list), lo que va tu grupo, descubrir géneros."""
-    # TTL cache (per user, 20s) — carousels are heavy but data doesn't change every second.
+    eff_city = _effective_city(user, city)
+    # TTL cache (per user+city, 20s) — carousels are heavy but data doesn't change every second.
+    _cache_key = (user["user_id"], eff_city)
     try:
-        entry = _CAROUSELS_CACHE.get(user["user_id"])
+        entry = _CAROUSELS_CACHE.get(_cache_key)
         if entry and (time.time() - entry[0]) < _CAROUSELS_TTL:
             return entry[1]
     except Exception:
@@ -1909,7 +1921,7 @@ async def event_carousels(user: dict = Depends(get_optional_user)):
 
     friend_ids = await accepted_friend_ids(user["user_id"])
     today = datetime.now(ZoneInfo("Europe/Madrid")).date()
-    city = user.get("city", "Palma de Mallorca")
+    city = eff_city
 
     # Preload friend users once for the whole endpoint
     users_map: dict = {}
@@ -2005,7 +2017,7 @@ async def event_carousels(user: dict = Depends(get_optional_user)):
         "discover_new": discover_new,
     }
     try:
-        _CAROUSELS_CACHE[user["user_id"]] = (time.time(), result)
+        _CAROUSELS_CACHE[_cache_key] = (time.time(), result)
         if len(_CAROUSELS_CACHE) > 500:
             items = sorted(_CAROUSELS_CACHE.items(), key=lambda kv: kv[1][0])
             for k, _ in items[:250]:

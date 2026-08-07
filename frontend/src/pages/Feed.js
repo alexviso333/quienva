@@ -14,7 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
-import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, ChevronDown, Users, Sparkles, Building2, Compass, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Feed() {
@@ -28,38 +28,51 @@ export default function Feed() {
   const [sale, setSale] = useState("all");
   const [highlightId, setHighlightId] = useState(null);
   const [inviteFrom, setInviteFrom] = useState(null);
+  const [guestCity, setGuestCity] = useState(() => {
+    try { return localStorage.getItem("qv_guest_city") || "Palma de Mallorca"; } catch { return "Palma de Mallorca"; }
+  });
+  const [cities, setCities] = useState([{ id: "Palma de Mallorca", label: "Palma de Mallorca", emoji: "🏝️" }]);
   const [compact] = useCompactMode();
   const cardRefs = useRef({});
 
   // Curated carousels only decorate the default "Día" view (no genre filter).
   const isDefaultView = view === "dia" && genre === "all";
-  // City is part of every event-related cache key: switching cities in Ajustes
-  // must instantly swap to that city's cache (and refetch) instead of showing
-  // the previous city's parties while a slow background refetch runs.
-  const cityKey = user?.city || "-";
+  // City is part of every event-related cache key: switching cities must instantly
+  // swap to that city's cache (and refetch). Registered users use their account
+  // city; guests can pick any supported city (?city= override) so visitors from
+  // outside Palma still see their own scene.
+  const effectiveCity = user?.city || guestCity;
+  const cityParam = user ? undefined : guestCity;
+  const cityKey = effectiveCity;
+
+  // Load the supported-cities list so guests can switch city from the feed.
+  useEffect(() => {
+    if (user) return;
+    api.get("/cities").then(({ data }) => { if (data?.cities?.length) setCities(data.cities); }).catch(() => {});
+  }, [user]);
 
   const { data: topEvent } = useQuery({
     queryKey: ["top-weekend", cityKey],
-    queryFn: async () => (await api.get("/events/top-weekend")).data,
+    queryFn: async () => (await api.get("/events/top-weekend", { params: { city: cityParam } })).data,
     staleTime: 60_000,
   });
 
   const { data: carousels } = useQuery({
     queryKey: ["carousels", cityKey],
-    queryFn: async () => (await api.get("/events/carousels")).data,
+    queryFn: async () => (await api.get("/events/carousels", { params: { city: cityParam } })).data,
     enabled: isDefaultView,
     staleTime: 60_000,
   });
 
   const { data: genres = [] } = useQuery({
     queryKey: ["genres", cityKey],
-    queryFn: async () => (await api.get("/events/genres")).data,
+    queryFn: async () => (await api.get("/events/genres", { params: { city: cityParam } })).data,
     staleTime: 5 * 60_000,
   });
 
   const { data: events, isLoading } = useQuery({
     queryKey: ["events", cityKey, "all", genre],
-    queryFn: async () => (await api.get("/events", { params: { date_filter: "all", genre } })).data,
+    queryFn: async () => (await api.get("/events", { params: { date_filter: "all", genre, city: cityParam } })).data,
     staleTime: 30_000,
   });
 
@@ -168,9 +181,31 @@ export default function Feed() {
       <header className="px-5 pt-8 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">
-              {user?.city || "Palma de Mallorca"}
-            </p>
+            {user ? (
+              <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">
+                {user.city || "Palma de Mallorca"}
+              </p>
+            ) : (
+              <div className="relative inline-flex items-center">
+                <select
+                  data-testid="feed-guest-city"
+                  value={guestCity}
+                  onChange={(e) => {
+                    const c = e.target.value;
+                    setGuestCity(c);
+                    try { localStorage.setItem("qv_guest_city", c); } catch { /* ignore */ }
+                  }}
+                  className="appearance-none bg-transparent text-xs tracking-[0.2em] uppercase text-qv-secondary font-bold pr-5 outline-none cursor-pointer"
+                >
+                  {cities.map((c) => (
+                    <option key={c.id} value={c.id} className="bg-[#121215] text-white tracking-normal normal-case">
+                      {c.emoji ? `${c.emoji} ` : ""}{c.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-qv-secondary absolute right-0 pointer-events-none" />
+              </div>
+            )}
             <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
               Los planes<span className="text-qv-primary">.</span>
             </h1>
