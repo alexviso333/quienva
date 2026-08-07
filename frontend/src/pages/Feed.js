@@ -14,7 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
-import { Loader2, PartyPopper, Flame, ChevronRight, ChevronDown, Users, Sparkles, Building2, Compass, UserPlus, MapPin, X } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Feed() {
@@ -32,7 +32,6 @@ export default function Feed() {
     try { return localStorage.getItem("qv_guest_city") || "Palma de Mallorca"; } catch { return "Palma de Mallorca"; }
   });
   const [cities, setCities] = useState([{ id: "Palma de Mallorca", label: "Palma de Mallorca", emoji: "🏝️" }]);
-  const [showCitySheet, setShowCitySheet] = useState(false);
   const [compact] = useCompactMode();
   const cardRefs = useRef({});
 
@@ -46,28 +45,17 @@ export default function Feed() {
   const cityParam = user ? undefined : guestCity;
   const cityKey = effectiveCity;
 
-  // Load the supported-cities list so guests can switch city from the feed.
-  // First-time guests also get a friendly (skippable) city chooser so people
-  // outside Palma see their own scene from the start — never a hard blocker.
+  // Load the supported-cities list so guests can switch city from the top bar.
   useEffect(() => {
     if (user) return;
     api.get("/cities").then(({ data }) => {
       if (data?.cities?.length) setCities(data.cities);
-      try { if (!localStorage.getItem("qv_city_prompted")) setShowCitySheet(true); } catch { /* ignore */ }
     }).catch(() => {});
   }, [user]);
 
-  const chooseGuestCity = (c) => {
+  const pickCity = (c) => {
     setGuestCity(c);
-    try {
-      localStorage.setItem("qv_guest_city", c);
-      localStorage.setItem("qv_city_prompted", "1");
-    } catch { /* ignore */ }
-    setShowCitySheet(false);
-  };
-  const skipCitySheet = () => {
-    try { localStorage.setItem("qv_city_prompted", "1"); } catch { /* ignore */ }
-    setShowCitySheet(false);
+    try { localStorage.setItem("qv_guest_city", c); } catch { /* ignore */ }
   };
 
   const { data: topEvent } = useQuery({
@@ -200,41 +188,9 @@ export default function Feed() {
       <header className="px-5 pt-8 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {user ? (
-              <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">
-                {user.city || "Palma de Mallorca"}
-              </p>
-            ) : (
-              <div className="flex flex-col gap-1">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-white/45 font-bold">
-                  Ciudad · toca para cambiar
-                </p>
-                <div className="relative inline-flex items-center gap-1.5 rounded-full bg-qv-secondary/15 border border-qv-secondary/60 pl-2.5 pr-2 py-1.5 shadow-[0_0_16px_rgba(0,240,255,0.3)] w-fit">
-                  <MapPin className="w-4 h-4 text-qv-secondary shrink-0" />
-                  <span className="text-sm font-black text-white truncate max-w-[190px]">
-                    {(cities.find((c) => c.id === guestCity) || {}).label || guestCity}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-qv-secondary shrink-0" />
-                  <select
-                    data-testid="feed-guest-city"
-                    value={guestCity}
-                    onChange={(e) => {
-                      const c = e.target.value;
-                      setGuestCity(c);
-                      try { localStorage.setItem("qv_guest_city", c); } catch { /* ignore */ }
-                    }}
-                    aria-label="Cambiar ciudad"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  >
-                    {cities.map((c) => (
-                      <option key={c.id} value={c.id} className="bg-[#121215] text-white">
-                        {c.emoji ? `${c.emoji} ` : ""}{c.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
+            <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold truncate">
+              {user ? (user.city || "Palma de Mallorca") : ((cities.find((c) => c.id === guestCity) || {}).label || guestCity)}
+            </p>
             <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
               Los planes<span className="text-qv-primary">.</span>
             </h1>
@@ -249,59 +205,26 @@ export default function Feed() {
         </div>
       </header>
 
-      {showCitySheet && !user && !inviteFrom && (
-        <div
-          className="fixed inset-0 z-[95] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm"
-          data-testid="guest-city-sheet"
-          onClick={skipCitySheet}
-        >
-          <div
-            className="w-full max-w-md m-0 sm:m-4 rounded-t-3xl sm:rounded-3xl border border-white/10 bg-[#121215] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] relative overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(0,240,255,0.15),transparent_60%)] pointer-events-none" />
-            <button
-              onClick={skipCitySheet}
-              className="absolute top-4 right-4 text-white/50 active:scale-90"
-              data-testid="city-sheet-close"
-              aria-label="Cerrar"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="relative">
-              <div className="w-12 h-12 rounded-2xl bg-qv-secondary/20 flex items-center justify-center mb-4">
-                <MapPin className="w-6 h-6 text-qv-secondary" />
-              </div>
-              <h2 className="font-display text-2xl font-black tracking-tight text-white">
-                ¿Dónde sales<span className="text-qv-primary">?</span>
-              </h2>
-              <p className="text-white/60 text-sm mt-2 leading-snug">
-                Elige tu ciudad para ver las fiestas de tu zona. Podrás cambiarla cuando quieras.
-              </p>
-              <div className="mt-5 grid grid-cols-1 gap-2">
-                {cities.map((c) => (
-                  <button
-                    key={c.id}
-                    data-testid={`city-opt-${c.id}`}
-                    onClick={() => chooseGuestCity(c.id)}
-                    className={`h-12 rounded-2xl border flex items-center gap-3 px-4 font-bold active:scale-95 transition-transform ${
-                      guestCity === c.id
-                        ? "bg-qv-secondary/15 border-qv-secondary/60 text-white"
-                        : "bg-white/5 border-white/15 text-white/85"
-                    }`}
-                  >
-                    <span className="text-xl">{c.emoji}</span> {c.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={skipCitySheet}
-                data-testid="city-sheet-skip"
-                className="mt-3 w-full h-11 rounded-2xl bg-white/5 border border-white/10 text-white/60 font-semibold active:scale-95"
-              >
-                Ahora no
-              </button>
-            </div>
+      {!user && (
+        <div className="px-4 pt-1 pb-2" data-testid="guest-city-bar">
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar -mx-1 px-1">
+            {cities.map((c) => {
+              const on = guestCity === c.id;
+              return (
+                <button
+                  key={c.id}
+                  data-testid={`city-chip-${c.id}`}
+                  onClick={() => pickCity(c.id)}
+                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold whitespace-nowrap border active:scale-95 transition-colors ${
+                    on
+                      ? "bg-qv-secondary text-black border-qv-secondary shadow-[0_0_14px_rgba(0,240,255,0.35)]"
+                      : "bg-white/5 border-white/12 text-white/70"
+                  }`}
+                >
+                  {c.emoji ? `${c.emoji} ` : ""}{c.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
