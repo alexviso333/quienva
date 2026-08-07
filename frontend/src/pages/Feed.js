@@ -207,21 +207,22 @@ export default function Feed() {
 
       {!user && (
         <div className="px-4 pt-1 pb-2" data-testid="guest-city-bar">
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar -mx-1 px-1">
+          <div className="flex flex-wrap items-center gap-2">
             {cities.map((c) => {
               const on = guestCity === c.id;
+              const short = (c.label || c.id).split(",")[0].split(" de ")[0];
               return (
                 <button
                   key={c.id}
                   data-testid={`city-chip-${c.id}`}
                   onClick={() => pickCity(c.id)}
-                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold whitespace-nowrap border active:scale-95 transition-colors ${
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold whitespace-nowrap border active:scale-95 transition-colors ${
                     on
                       ? "bg-qv-secondary text-black border-qv-secondary shadow-[0_0_14px_rgba(0,240,255,0.35)]"
                       : "bg-white/5 border-white/12 text-white/70"
                   }`}
                 >
-                  {c.emoji ? `${c.emoji} ` : ""}{c.label}
+                  {c.emoji ? `${c.emoji} ` : ""}{short}
                 </button>
               );
             })}
