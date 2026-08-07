@@ -1,0 +1,32 @@
+{
+  "login": {
+    "tagline": "Your city, out tonight",
+    "title_line1": "Who's",
+    "title_line2": "out?",
+    "subtitle_pre": "Discover the weekend plans and see ",
+    "subtitle_bold": "which friends are going",
+    "subtitle_post": " to each spot.",
+    "invited_by_code": "code {{code}}",
+    "invited_text": "invited you. Create your account and we'll add you as friends automatically.",
+    "tab_login": "Log in",
+    "tab_register": "Sign up",
+    "ph_name": "Your name",
+    "ph_username": "Username (e.g. martag)",
+    "label_birthdate": "Date of birth · 18+",
+    "ph_phone": "Phone (optional, to find friends)",
+    "label_city": "Your city",
+    "ph_email": "Email",
+    "ph_password": "Password",
+    "submit_login": "Log in",
+    "submit_register": "Create my account",
+    "or": "or",
+    "google": "Continue with Google",
+    "err_name_user": "Fill in name and username",
+    "err_birthdate": "Add your date of birth",
+    "err_age": "You must be 18+ to use Quienva",
+    "ref_applied": "Code applied! +100 points"
+  },
+  "lang": {
+    "label": "Language"
+  }
+}

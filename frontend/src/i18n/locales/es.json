@@ -1,0 +1,32 @@
+{
+  "login": {
+    "tagline": "Tu ciudad, de fiesta",
+    "title_line1": "¿Quién",
+    "title_line2": "va?",
+    "subtitle_pre": "Descubre los planes del finde y mira ",
+    "subtitle_bold": "qué amigos van",
+    "subtitle_post": " a cada sitio.",
+    "invited_by_code": "código {{code}}",
+    "invited_text": "te ha invitado. Crea tu cuenta y os añadiremos como amigos automáticamente.",
+    "tab_login": "Entrar",
+    "tab_register": "Crear cuenta",
+    "ph_name": "Tu nombre",
+    "ph_username": "Nombre de usuario (ej. martag)",
+    "label_birthdate": "Fecha de nacimiento · +18",
+    "ph_phone": "Teléfono (opcional, para encontrar amigos)",
+    "label_city": "Tu ciudad",
+    "ph_email": "Email",
+    "ph_password": "Contraseña",
+    "submit_login": "Entrar",
+    "submit_register": "Crear mi cuenta",
+    "or": "o",
+    "google": "Continuar con Google",
+    "err_name_user": "Completa nombre y usuario",
+    "err_birthdate": "Añade tu fecha de nacimiento",
+    "err_age": "Debes ser mayor de 18 años para usar ¿Quién va?",
+    "ref_applied": "¡Código aplicado! +100 puntos"
+  },
+  "lang": {
+    "label": "Idioma"
+  }
+}

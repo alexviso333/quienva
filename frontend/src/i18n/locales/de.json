@@ -1,0 +1,32 @@
+{
+  "login": {
+    "tagline": "Deine Stadt, heute Nacht",
+    "title_line1": "Wer",
+    "title_line2": "feiert?",
+    "subtitle_pre": "Entdecke die Wochenendpläne und sieh, ",
+    "subtitle_bold": "welche Freunde hingehen",
+    "subtitle_post": " – an jedem Ort.",
+    "invited_by_code": "Code {{code}}",
+    "invited_text": "hat dich eingeladen. Erstelle dein Konto und wir fügen euch automatisch als Freunde hinzu.",
+    "tab_login": "Anmelden",
+    "tab_register": "Registrieren",
+    "ph_name": "Dein Name",
+    "ph_username": "Benutzername (z. B. martag)",
+    "label_birthdate": "Geburtsdatum · 18+",
+    "ph_phone": "Telefon (optional, um Freunde zu finden)",
+    "label_city": "Deine Stadt",
+    "ph_email": "E-Mail",
+    "ph_password": "Passwort",
+    "submit_login": "Anmelden",
+    "submit_register": "Konto erstellen",
+    "or": "oder",
+    "google": "Mit Google fortfahren",
+    "err_name_user": "Name und Benutzername ausfüllen",
+    "err_birthdate": "Gib dein Geburtsdatum ein",
+    "err_age": "Du musst 18+ sein, um Quienva zu nutzen",
+    "ref_applied": "Code angewendet! +100 Punkte"
+  },
+  "lang": {
+    "label": "Sprache"
+  }
+}
