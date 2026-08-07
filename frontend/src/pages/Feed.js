@@ -14,7 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
-import { Loader2, PartyPopper, Flame, ChevronRight, ChevronDown, Users, Sparkles, Building2, Compass, UserPlus } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, ChevronDown, Users, Sparkles, Building2, Compass, UserPlus, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Feed() {
@@ -186,24 +186,34 @@ export default function Feed() {
                 {user.city || "Palma de Mallorca"}
               </p>
             ) : (
-              <div className="relative inline-flex items-center">
-                <select
-                  data-testid="feed-guest-city"
-                  value={guestCity}
-                  onChange={(e) => {
-                    const c = e.target.value;
-                    setGuestCity(c);
-                    try { localStorage.setItem("qv_guest_city", c); } catch { /* ignore */ }
-                  }}
-                  className="appearance-none bg-transparent text-xs tracking-[0.2em] uppercase text-qv-secondary font-bold pr-5 outline-none cursor-pointer"
-                >
-                  {cities.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-[#121215] text-white tracking-normal normal-case">
-                      {c.emoji ? `${c.emoji} ` : ""}{c.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-qv-secondary absolute right-0 pointer-events-none" />
+              <div className="flex flex-col gap-1">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-white/45 font-bold">
+                  Ciudad · toca para cambiar
+                </p>
+                <div className="relative inline-flex items-center gap-1.5 rounded-full bg-qv-secondary/15 border border-qv-secondary/60 pl-2.5 pr-2 py-1.5 shadow-[0_0_16px_rgba(0,240,255,0.3)] w-fit">
+                  <MapPin className="w-4 h-4 text-qv-secondary shrink-0" />
+                  <span className="text-sm font-black text-white truncate max-w-[190px]">
+                    {(cities.find((c) => c.id === guestCity) || {}).label || guestCity}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-qv-secondary shrink-0" />
+                  <select
+                    data-testid="feed-guest-city"
+                    value={guestCity}
+                    onChange={(e) => {
+                      const c = e.target.value;
+                      setGuestCity(c);
+                      try { localStorage.setItem("qv_guest_city", c); } catch { /* ignore */ }
+                    }}
+                    aria-label="Cambiar ciudad"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  >
+                    {cities.map((c) => (
+                      <option key={c.id} value={c.id} className="bg-[#121215] text-white">
+                        {c.emoji ? `${c.emoji} ` : ""}{c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
             <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
