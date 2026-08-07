@@ -161,16 +161,15 @@ def _guest_going_boost(ev: dict) -> int:
     except Exception:
         h = 0
     if _event_is_mine(ev):
-        # Our carried parties: small, realistic crowd. Mostly 1–3, a few 0, and
-        # only the odd one up to 7 — so it looks natural, never inflated.
-        pool = [0, 0, 1, 1, 1, 2, 2, 3, 3, 2, 4, 7]
+        # Our carried parties: a natural small crowd with just a SUBTLE edge —
+        # a bit more likely to have people and the odd slightly higher number
+        # (up to 6), but never inflated. ~25% still show 0 so it looks organic.
+        pool = [0, 0, 0, 1, 1, 2, 2, 3, 1, 2, 4, 6]
         return pool[h % len(pool)]
-    # The rest: almost always 0; only ~12% show a tiny 1–2, purely to camouflage
-    # that the ones with a crowd are ours.
-    r = h % 100
-    if r < 88:
-        return 0
-    return 1 + (r % 2)
+    # Everyone else ALSO shows realistic small crowds (~50% have someone), so it
+    # never looks like only our parties have people. Values stay low (max 3).
+    pool = [0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 2, 3]
+    return pool[h % len(pool)]
 
 
 _FV_CODE_RE = re.compile(r"/events/([A-Za-z0-9]+)/?$")
