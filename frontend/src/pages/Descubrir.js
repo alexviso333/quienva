@@ -7,13 +7,15 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ArrowLeft, UserPlus, Check, Loader2, Compass, Zap, Users, ImageOff, X, Heart } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
 function timeAgo(iso) {
   try {
     const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-    if (diff < 3600) return `hace ${Math.max(1, Math.floor(diff / 60))} min`;
-    if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
-    return `hace ${Math.floor(diff / 86400)} d`;
+    if (diff < 3600) return i18n.t("notifs.ago_min", { n: Math.max(1, Math.floor(diff / 60)) });
+    if (diff < 86400) return i18n.t("notifs.ago_hour", { n: Math.floor(diff / 3600) });
+    return i18n.t("notifs.ago_day", { n: Math.floor(diff / 86400) });
   } catch {
     return "";
   }
@@ -32,6 +34,7 @@ function MomentImg({ src, className = "" }) {
 }
 
 export default function Descubrir() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [lightbox, setLightbox] = useState(null);
@@ -57,7 +60,7 @@ export default function Descubrir() {
       toast.success(d.status === "accepted" ? "¡Ya sois amigos!" : "Solicitud enviada");
       qc.invalidateQueries({ queryKey: ["friends"] });
     },
-    onError: (e) => toast.error(e.response?.data?.detail || "No se pudo enviar"),
+    onError: (e) => toast.error(e.response?.data?.detail || t("discover.toast_error")),
   });
 
   const likeMoment = useMutation({
@@ -84,7 +87,7 @@ export default function Descubrir() {
           <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold flex items-center gap-1.5">
             <Compass className="w-3.5 h-3.5" /> {city}
           </p>
-          <h1 className="font-display text-3xl font-black tracking-tighter">Descubrir<span className="text-qv-primary">.</span></h1>
+          <h1 className="font-display text-3xl font-black tracking-tighter">{t("discover.title")}<span className="text-qv-primary">.</span></h1>
         </div>
       </header>
 
@@ -95,7 +98,7 @@ export default function Descubrir() {
           {/* People */}
           <section className="px-5" data-testid="discover-people">
             <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5" /> Gente para conocer
+              <Users className="w-3.5 h-3.5" /> {t("discover.people")}
             </p>
             {matchesCount > 0 && (
               <div className="flex gap-1.5 mb-3" data-testid="discover-people-filter">
@@ -103,14 +106,14 @@ export default function Descubrir() {
                   onClick={() => setOnlyMatches(false)}
                   className={`rounded-full px-3 py-1.5 text-xs font-bold ${!onlyMatches ? "bg-qv-primary text-white" : "bg-white/5 border border-white/10 text-white/60"}`}
                 >
-                  Todos
+                  {t("discover.all")}
                 </button>
                 <button
                   data-testid="filter-matches"
                   onClick={() => setOnlyMatches(true)}
                   className={`rounded-full px-3 py-1.5 text-xs font-bold flex items-center gap-1 ${onlyMatches ? "bg-qv-secondary text-black" : "bg-white/5 border border-white/10 text-white/60"}`}
                 >
-                  <Zap className="w-3 h-3" /> Van a tus fiestas ({matchesCount})
+                  <Zap className="w-3 h-3" /> {t("discover.matches", { count: matchesCount })}
                 </button>
               </div>
             )}
@@ -131,12 +134,12 @@ export default function Descubrir() {
                         <p className="font-semibold truncate">{p.name}</p>
                         <p className="text-white/40 text-sm truncate">
                           @{p.username}
-                          {p.mutual_friends > 0 && <span className="text-qv-secondary"> · {p.mutual_friends} en común</span>}
-                          {p.mutual_friends === 0 && p.going_count > 0 && <span className="text-white/50"> · {p.going_count} planes</span>}
+                          {p.mutual_friends > 0 && <span className="text-qv-secondary"> {t("discover.mutual", { count: p.mutual_friends })}</span>}
+                          {p.mutual_friends === 0 && p.going_count > 0 && <span className="text-white/50"> {t("discover.plans", { count: p.going_count })}</span>}
                         </p>
                         {p.shared_events > 0 && (
                           <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-black uppercase tracking-wide text-black bg-qv-secondary rounded-full px-2 py-0.5">
-                            <Zap className="w-2.5 h-2.5" /> Coincidís en {p.shared_events}
+                            <Zap className="w-2.5 h-2.5" /> {t("discover.shared", { count: p.shared_events })}
                           </span>
                         )}
                       </button>
@@ -158,11 +161,11 @@ export default function Descubrir() {
           {/* Public moments */}
           <section className="px-5 mt-7" data-testid="discover-moments">
             <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2 flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-qv-primary" /> El Momento por la ciudad
+              <Zap className="w-3.5 h-3.5 text-qv-primary" /> {t("discover.moment_city")}
             </p>
             {moments.length === 0 ? (
               <p className="text-white/40 text-sm py-3">
-                Todavía nadie comparte su Momento en público. Puedes activarlo tú en Ajustes.
+                {t("discover.empty_moments")}
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2" data-testid="discover-moments-grid">

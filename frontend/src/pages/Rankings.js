@@ -6,16 +6,19 @@ import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { useAuth } from "@/context/AuthContext";
 import { Trophy, Loader2, ArrowLeft, Users, MapPin, Globe2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
 const TABS = [
-  { key: "friends", label: "Amigos", icon: Users },
-  { key: "city", label: "Ciudad", icon: MapPin },
-  { key: "world", label: "Mundial", icon: Globe2 },
+  { key: "friends", labelKey: "rankings.tab_friends", icon: Users },
+  { key: "city", labelKey: "rankings.tab_city", icon: MapPin },
+  { key: "world", labelKey: "rankings.tab_world", icon: Globe2 },
 ];
 
 const MEDAL = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 export default function Rankings() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState("friends");
@@ -40,14 +43,14 @@ export default function Rankings() {
         </button>
         <div>
           <p className="text-xs tracking-[0.25em] uppercase text-yellow-300 font-bold flex items-center gap-1.5">
-            <Trophy className="w-3.5 h-3.5" /> Top
+            <Trophy className="w-3.5 h-3.5" /> {t("rankings.top")}
           </p>
-          <h1 className="font-display text-3xl font-black tracking-tighter">Ranking<span className="text-qv-primary">.</span></h1>
+          <h1 className="font-display text-3xl font-black tracking-tighter">{t("rankings.title")}<span className="text-qv-primary">.</span></h1>
         </div>
       </header>
 
       <div className="flex gap-2 px-5 pb-3" data-testid="ranking-tabs">
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {TABS.map(({ key, labelKey, icon: Icon }) => (
           <button
             key={key}
             data-testid={`ranking-tab-${key}`}
@@ -56,19 +59,19 @@ export default function Rankings() {
               tab === key ? "bg-white text-black" : "bg-white/5 border border-white/10 text-white/70"
             }`}
           >
-            <Icon className="w-3.5 h-3.5" /> {label}
+            <Icon className="w-3.5 h-3.5" /> {t(labelKey)}
           </button>
         ))}
       </div>
 
       {tab === "city" && (
-        <p className="text-white/40 text-xs px-5 mb-2">Ciudad: {user?.city || "Palma de Mallorca"}</p>
+        <p className="text-white/40 text-xs px-5 mb-2">{t("rankings.city_label", { city: user?.city || "Palma de Mallorca" })}</p>
       )}
 
       {isLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="w-7 h-7 text-qv-primary animate-spin" /></div>
       ) : list.length === 0 ? (
-        <p className="text-center text-white/40 py-16 px-6">Aún no hay puntos en este ranking.</p>
+        <p className="text-center text-white/40 py-16 px-6">{t("rankings.empty")}</p>
       ) : (
         <div className="px-4 flex flex-col gap-2" data-testid="ranking-list">
           {list.map((e, i) => {
@@ -87,11 +90,11 @@ export default function Rankings() {
                 </div>
                 <AvatarCircle name={e.name} picture={e.picture} size={42} ring={i < 3} />
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-white truncate">{e.name} {isMe && <span className="text-qv-primary text-xs ml-1">· TÚ</span>}</p>
+                  <p className="font-bold text-white truncate">{e.name} {isMe && <span className="text-qv-primary text-xs ml-1">· {t("rankings.you")}</span>}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-display font-black text-yellow-300 text-lg leading-none">{e.points.toLocaleString("es-ES")}</p>
-                  <p className="text-[10px] text-white/40 uppercase tracking-widest">pts</p>
+                  <p className="font-display font-black text-yellow-300 text-lg leading-none">{e.points.toLocaleString(i18n.language)}</p>
+                  <p className="text-[10px] text-white/40 uppercase tracking-widest">{t("rankings.pts")}</p>
                 </div>
               </button>
             );
@@ -100,7 +103,7 @@ export default function Rankings() {
       )}
 
       {myIndex >= 0 && list.length > 20 && myIndex > 20 && (
-        <p className="text-center text-white/40 text-xs mt-6">Tu posición: #{list[myIndex].rank}</p>
+        <p className="text-center text-white/40 text-xs mt-6">{t("rankings.your_position", { rank: list[myIndex].rank })}</p>
       )}
     </AppShell>
   );

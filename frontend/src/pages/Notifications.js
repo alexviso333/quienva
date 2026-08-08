@@ -34,13 +34,16 @@ const TYPE_META = {
   weekend_recap:     { icon: Sparkles,     tint: "text-fuchsia-300 bg-fuchsia-400/15" },
 };
 
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
+
 function timeAgo(iso) {
   const d = new Date(iso);
   const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return "ahora";
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
-  return `hace ${Math.floor(diff / 86400)} d`;
+  if (diff < 60) return i18n.t("notifs.now");
+  if (diff < 3600) return i18n.t("notifs.ago_min", { n: Math.floor(diff / 60) });
+  if (diff < 86400) return i18n.t("notifs.ago_hour", { n: Math.floor(diff / 3600) });
+  return i18n.t("notifs.ago_day", { n: Math.floor(diff / 86400) });
 }
 
 function dayKey(iso) {
@@ -53,13 +56,14 @@ function dayLabel(k) {
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
   const toKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  if (k === toKey(today)) return "Hoy";
-  if (k === toKey(yesterday)) return "Ayer";
+  if (k === toKey(today)) return i18n.t("notifs.today");
+  if (k === toKey(yesterday)) return i18n.t("notifs.yesterday");
   const d = new Date(k);
-  return d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+  return d.toLocaleDateString(i18n.language, { weekday: "long", day: "numeric", month: "long" });
 }
 
 export default function Notifications() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data: notifs = [], isLoading } = useQuery({
@@ -109,9 +113,9 @@ export default function Notifications() {
       <header className="px-5 pt-8 pb-4 flex items-center justify-between">
         <div>
           <h1 className="font-display text-4xl font-black tracking-tighter">
-            Novedades<span className="text-qv-primary">.</span>
+            {t("notifs.title")}<span className="text-qv-primary">.</span>
           </h1>
-          <p className="text-white/40 text-xs mt-0.5">Todo lo que ha pasado desde tu última visita.</p>
+          <p className="text-white/40 text-xs mt-0.5">{t("notifs.subtitle")}</p>
         </div>
         {notifs.length > 0 && (
           <button
@@ -119,7 +123,7 @@ export default function Notifications() {
             onClick={() => markAll.mutate()}
             className="text-xs text-white/50 flex items-center gap-1.5"
           >
-            <CheckCheck className="w-4 h-4" /> Leídas
+            <CheckCheck className="w-4 h-4" /> {t("notifs.mark_read")}
           </button>
         )}
       </header>
@@ -128,8 +132,8 @@ export default function Notifications() {
         {isLoading ? null : notifs.length === 0 ? (
           <div className="text-center py-24" data-testid="notifs-empty">
             <Bell className="w-12 h-12 text-white/25 mx-auto mb-4" />
-            <p className="text-white/50">Sin novedades por ahora.</p>
-            <p className="text-white/35 text-sm mt-1">Aquí verás cuando salgan entradas nuevas o tus amigos digan &quot;voy&quot;.</p>
+            <p className="text-white/50">{t("notifs.empty_title")}</p>
+            <p className="text-white/35 text-sm mt-1">{t("notifs.empty_sub")}</p>
           </div>
         ) : (
           groups.map(([k, items]) => (

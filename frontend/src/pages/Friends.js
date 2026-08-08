@@ -8,8 +8,10 @@ import { Input } from "@/components/ui/input";
 import { UserPlus, Check, Clock, Search, X, Loader2, Compass } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 export default function Friends() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
@@ -48,39 +50,39 @@ export default function Friends() {
   const sendReq = useMutation({
     mutationFn: async (userId) => (await api.post("/friends/request", { user_id: userId })).data,
     onSuccess: (d) => {
-      toast.success(d.status === "accepted" ? "¡Ya sois amigos!" : "Solicitud enviada");
+      toast.success(d.status === "accepted" ? t("friends.toast_now_friends") : t("friends.toast_request_sent"));
       invalidate();
     },
-    onError: (e) => toast.error(e.response?.data?.detail || "Error"),
+    onError: (e) => toast.error(e.response?.data?.detail || t("friends.toast_error")),
   });
 
   const respond = useMutation({
     mutationFn: async ({ requestId, accept }) =>
       (await api.post("/friends/respond", { request_id: requestId, accept })).data,
     onSuccess: () => {
-      toast.success("Hecho");
+      toast.success(t("friends.toast_done"));
       invalidate();
     },
   });
 
   const relBadge = (rel) => {
     if (!rel || rel.status === "none")
-      return { label: "Añadir", icon: UserPlus, action: "add", cls: "bg-qv-primary text-white" };
-    if (rel.status === "accepted") return { label: "Amigos", icon: Check, action: "none", cls: "bg-white/10 text-white/60" };
+      return { label: t("friends.add"), icon: UserPlus, action: "add", cls: "bg-qv-primary text-white" };
+    if (rel.status === "accepted") return { label: t("friends.friends_label"), icon: Check, action: "none", cls: "bg-white/10 text-white/60" };
     if (rel.status === "pending" && rel.direction === "out")
-      return { label: "Pendiente", icon: Clock, action: "none", cls: "bg-white/10 text-white/60" };
+      return { label: t("friends.pending"), icon: Clock, action: "none", cls: "bg-white/10 text-white/60" };
     if (rel.status === "pending" && rel.direction === "in")
-      return { label: "Aceptar", icon: Check, action: "accept", rel, cls: "bg-qv-secondary text-black" };
-    return { label: "Añadir", icon: UserPlus, action: "add", cls: "bg-qv-primary text-white" };
+      return { label: t("friends.accept"), icon: Check, action: "accept", rel, cls: "bg-qv-secondary text-black" };
+    return { label: t("friends.add"), icon: UserPlus, action: "add", cls: "bg-qv-primary text-white" };
   };
 
   return (
     <AppShell>
       <header className="px-5 pt-8 pb-4">
         <h1 className="font-display text-4xl font-black tracking-tighter">
-          Amigos<span className="text-qv-primary">.</span>
+          {t("friends.title")}<span className="text-qv-primary">.</span>
         </h1>
-        <p className="text-white/50 text-sm mt-1">Cuantos más amigos, más planes verás.</p>
+        <p className="text-white/50 text-sm mt-1">{t("friends.subtitle")}</p>
       </header>
 
       <div className="px-5 pb-1">
@@ -89,7 +91,7 @@ export default function Friends() {
           onClick={() => navigate("/descubrir")}
           className="w-full h-12 rounded-2xl bg-gradient-to-r from-qv-primary/20 to-qv-secondary/20 border border-qv-secondary/40 text-white font-bold flex items-center justify-center gap-2 active:scale-95"
         >
-          <Compass className="w-4 h-4 text-qv-secondary" /> Descubrir gente y momentos
+          <Compass className="w-4 h-4 text-qv-secondary" /> {t("friends.discover_cta")}
         </button>
       </div>
 
@@ -110,11 +112,11 @@ export default function Friends() {
 
       {debounced.length >= 1 && (
         <section className="px-5 mt-4" data-testid="search-results">
-          <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2">Resultados</p>
+          <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2">{t("friends.results")}</p>
           {isFetching ? (
             <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-white/40" /></div>
           ) : results.length === 0 ? (
-            <p className="text-white/40 text-sm py-4">Sin resultados para “{debounced}”.</p>
+            <p className="text-white/40 text-sm py-4">{t("friends.no_results", { q: debounced })}</p>
           ) : (
             <div className="flex flex-col gap-2">
               {results.map((u) => {
@@ -153,7 +155,7 @@ export default function Friends() {
       {requests.length > 0 && (
         <section className="px-5 mt-6" data-testid="incoming-requests">
           <p className="text-xs uppercase tracking-widest text-qv-primary font-bold mb-2">
-            Solicitudes ({requests.length})
+            {t("friends.requests", { count: requests.length })}
           </p>
           <div className="flex flex-col gap-2">
             {requests.map((r) => (
@@ -163,7 +165,7 @@ export default function Friends() {
                   <p className="font-semibold truncate">{r.user.name}</p>
                   {r.user.mutual_count > 0 && (
                     <p className="text-white/40 text-sm truncate">
-                      <span className="text-qv-secondary">{r.user.mutual_count} en común</span>
+                      <span className="text-qv-secondary">{t("friends.mutual", { count: r.user.mutual_count })}</span>
                     </p>
                   )}
                 </div>
@@ -189,11 +191,11 @@ export default function Friends() {
 
       <section className="px-5 mt-6" data-testid="friends-list">
         <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2">
-          Tus amigos ({friends.length})
+          {t("friends.your_friends", { count: friends.length })}
         </p>
         {friends.length === 0 ? (
           <p className="text-white/40 text-sm py-4">
-            Aún no tienes amigos añadidos. Búscalos arriba por su nombre de usuario.
+            {t("friends.empty")}
           </p>
         ) : (
           <div className="flex flex-col gap-2">

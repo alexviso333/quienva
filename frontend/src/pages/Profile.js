@@ -6,6 +6,8 @@ import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Settings, Trophy, Archive, Share2, Shield, LayoutDashboard, Sparkles, ChevronRight } from "lucide-react";
 import { BadgesPanel } from "@/components/BadgesPanel";
+import ReferralRewards from "@/components/ReferralRewards";
+import { useTranslation } from "react-i18next";
 
 function QuickAction({ icon: Icon, label, onClick, color, testid }) {
   return (
@@ -23,6 +25,7 @@ function QuickAction({ icon: Icon, label, onClick, color, testid }) {
 }
 
 export default function Profile() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -38,7 +41,7 @@ export default function Profile() {
     <AppShell>
       <header className="px-5 pt-8 pb-2 flex items-center justify-between">
         <h1 className="font-display text-4xl font-black tracking-tighter">
-          Perfil<span className="text-qv-primary">.</span>
+          {t("profile.title")}<span className="text-qv-primary">.</span>
         </h1>
         <button
           data-testid="settings-btn"
@@ -71,8 +74,8 @@ export default function Profile() {
             <Sparkles className="w-6 h-6 text-yellow-300" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-display font-black text-white text-lg leading-tight">Tu Wrapped de {wrapped?.month_label}</p>
-            <p className="text-white/60 text-xs">Tu resumen de fiesta, listo para compartir ✨</p>
+            <p className="font-display font-black text-white text-lg leading-tight">{t("profile.wrapped_title", { month: wrapped?.month_label })}</p>
+            <p className="text-white/60 text-xs">{t("profile.wrapped_sub")}</p>
           </div>
           <ChevronRight className="w-5 h-5 text-white/50 shrink-0" />
         </button>
@@ -81,10 +84,15 @@ export default function Profile() {
 
       {/* Quick actions */}
       <div className="px-5 grid grid-cols-4 gap-2 mb-5">
-        <QuickAction testid="qa-recuerdos" icon={Archive} label="Recuerdos" color="bg-qv-secondary/20 text-qv-secondary" onClick={() => navigate("/recuerdos")} />
-        <QuickAction testid="qa-ranking" icon={Trophy} label="Ranking" color="bg-yellow-300/20 text-yellow-200" onClick={() => navigate("/top")} />
-        <QuickAction testid="qa-invitar" icon={Share2} label="Invitar" color="bg-qv-primary/20 text-qv-primary" onClick={() => navigate("/ajustes")} />
-        <QuickAction testid="qa-ajustes" icon={Settings} label="Ajustes" color="bg-white/10 text-white/80" onClick={() => navigate("/ajustes")} />
+        <QuickAction testid="qa-recuerdos" icon={Archive} label={t("profile.qa_memories")} color="bg-qv-secondary/20 text-qv-secondary" onClick={() => navigate("/recuerdos")} />
+        <QuickAction testid="qa-ranking" icon={Trophy} label={t("profile.qa_ranking")} color="bg-yellow-300/20 text-yellow-200" onClick={() => navigate("/top")} />
+        <QuickAction testid="qa-invitar" icon={Share2} label={t("profile.qa_invite")} color="bg-qv-primary/20 text-qv-primary" onClick={() => navigate("/ajustes")} />
+        <QuickAction testid="qa-ajustes" icon={Settings} label={t("profile.qa_settings")} color="bg-white/10 text-white/80" onClick={() => navigate("/ajustes")} />
+      </div>
+
+      {/* Ambassador / referral rewards */}
+      <div className="px-5 mb-5">
+        <ReferralRewards />
       </div>
 
       {/* Badges (compact) */}
@@ -95,20 +103,20 @@ export default function Profile() {
       {/* Admin */}
       {user?.role === "admin" && (
         <div className="px-5 flex flex-col gap-3 pb-6">
-          <p className="text-xs uppercase tracking-widest text-white/40 font-bold">Administración</p>
+          <p className="text-xs uppercase tracking-widest text-white/40 font-bold">{t("profile.admin")}</p>
           <button
             data-testid="admin-dashboard-btn"
             onClick={() => navigate("/admin/dashboard")}
             className="h-12 rounded-2xl bg-qv-secondary/15 border border-qv-secondary/40 text-qv-secondary font-semibold flex items-center justify-center gap-2 active:scale-95"
           >
-            <LayoutDashboard className="w-4 h-4" /> Panel de control
+            <LayoutDashboard className="w-4 h-4" /> {t("profile.admin_dashboard")}
           </button>
           <button
             data-testid="admin-panel-btn"
             onClick={() => navigate("/admin")}
             className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95"
           >
-            <Shield className="w-4 h-4" /> Gestionar fiestas
+            <Shield className="w-4 h-4" /> {t("profile.admin_manage")}
           </button>
         </div>
       )}
