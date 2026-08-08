@@ -16,9 +16,11 @@ export default function InviteGroup({ className = "" }) {
   });
 
   const code = referral?.code || "";
-  // Link to the app ROOT so recipients see the preview (guest read-only feed)
-  // FIRST — the registration wall pops in-context when they try to interact.
-  const url = code ? `${window.location.origin}/?ref=${code}` : window.location.origin;
+  // Always use the short, on-brand public domain (quienva.me) — not
+  // window.location.origin — so shared links stay clean even when the sender
+  // is on a Vercel preview host.
+  const PUBLIC_BASE = "https://quienva.me";
+  const url = code ? `${PUBLIC_BASE}/?ref=${code}` : `${PUBLIC_BASE}/`;
   const message = `${t("invite.wa_message")} ${url}`;
 
   const openWhatsApp = () => {

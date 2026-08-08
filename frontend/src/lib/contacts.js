@@ -24,13 +24,17 @@ export async function pickContactPhones() {
   return phones;
 }
 
+// Public canonical domain used for shareable / invite links so the URL is
+// always the short, on-brand one (quienva.me) instead of the underlying
+// Vercel preview host the sender happens to be on.
+const PUBLIC_BASE = "https://quienva.me";
+
 export function inviteUrl(code) {
   // NOTE: We link to the app ROOT (preview, guest-read-only feed) instead of
   // /login so that people opening a shared / referral link first EXPERIENCE
   // the app before hitting the registration wall. The ?ref= code is captured
   // globally and applied on eventual sign-up.
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return code ? `${origin}/?ref=${code}` : `${origin}/`;
+  return code ? `${PUBLIC_BASE}/?ref=${code}` : `${PUBLIC_BASE}/`;
 }
 
 export function inviteText(code) {
