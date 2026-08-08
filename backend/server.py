@@ -776,7 +776,7 @@ async def _upcoming_for_city(city_id: str, limit: int = 60) -> list:
     cur = db.events.find(
         {"city": city_query_value(city_id), "date": {"$gte": today}},
         {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
-         "genre": 1, "address": 1, "currency": 1,
+         "genre": 1, "address": 1, "currency": 1, "last_scraped_at": 1, "created_at": 1,
          "image_url": 1, "price_tiers": 1, "sale_state": 1},
     ).sort("date", 1).limit(limit)
     return [e async for e in cur]
@@ -834,6 +834,7 @@ SEO_T = {
         "ev_title": "{name} \u2014 {venue}, {city} | Entradas y horario | \u00bfQui\u00e9n va?",
         "ev_desc": "{name} en {venue} ({city}), {date}. {price}Mira qui\u00e9n va y consigue tu entrada en \u00bfQui\u00e9n va?",
         "ev_cta": "Ver qui\u00e9n va y entradas",
+        "ev_ended": "Esta fiesta ya ha terminado \u2014 mira los pr\u00f3ximos planes.",
         "ev_when": "Cu\u00e1ndo", "ev_where": "D\u00f3nde", "ev_price": "Precio", "ev_genre": "M\u00fasica",
         "more_in": "M\u00e1s fiestas en {label}",
         "free": "Entrada libre", "from": "desde {p}\u20ac", "soldout": "Agotado",
@@ -852,6 +853,7 @@ SEO_T = {
         "ev_title": "{name} \u2014 {venue}, {city} | Tickets & time | \u00bfQui\u00e9n va?",
         "ev_desc": "{name} at {venue} ({city}), {date}. {price}See who's going and get your ticket on \u00bfQui\u00e9n va?",
         "ev_cta": "See who's going & tickets",
+        "ev_ended": "This party has ended \u2014 check out the upcoming plans.",
         "ev_when": "When", "ev_where": "Where", "ev_price": "Price", "ev_genre": "Music",
         "more_in": "More parties in {label}",
         "free": "Free entry", "from": "from \u20ac{p}", "soldout": "Sold out",
@@ -870,6 +872,7 @@ SEO_T = {
         "ev_title": "{name} \u2014 {venue}, {city} | Tickets & Uhrzeit | \u00bfQui\u00e9n va?",
         "ev_desc": "{name} im {venue} ({city}), {date}. {price}Sieh, wer hingeht, und hol dir dein Ticket auf \u00bfQui\u00e9n va?",
         "ev_cta": "Sehen, wer hingeht & Tickets",
+        "ev_ended": "Diese Party ist vorbei \u2014 sieh dir die kommenden Pl\u00e4ne an.",
         "ev_when": "Wann", "ev_where": "Wo", "ev_price": "Preis", "ev_genre": "Musik",
         "more_in": "Mehr Partys in {label}",
         "free": "Freier Eintritt", "from": "ab {p}\u20ac", "soldout": "Ausverkauft",
@@ -943,7 +946,7 @@ def _event_slug(ev: dict) -> str:
     return _slugify(f"{ev.get('name','')}-{ev.get('venue','')}-{ev.get('city','')}") or "fiesta"
 
 
-def _event_jsonld(ev: dict, url: str, front: str) -> str:
+def _event_jsonld(ev: dict, url: str, front: str, include_offers: bool = True) -> str:
     start = ev.get("date", "")
     if ev.get("time"):
         start = f"{ev.get('date','')}T{ev.get('time')}"
@@ -969,11 +972,20 @@ def _event_jsonld(ev: dict, url: str, front: str) -> str:
     if str(ev.get("image_url", "")).startswith("http"):
         obj["image"] = [ev["image_url"]]
     prices = [t.get("price") for t in (ev.get("price_tiers") or []) if isinstance(t, dict) and t.get("price")]
-    if prices:
+    if prices and include_offers:
         obj["offers"] = {"@type": "Offer", "price": int(min(prices)),
                          "priceCurrency": ev.get("currency", "EUR") or "EUR",
                          "availability": avail, "url": url}
     return json.dumps(obj, ensure_ascii=False)
+
+
+def _ev_lastmod(ev: dict, today: str) -> str:
+    """A valid <lastmod> for the sitemap: the day the event was last refreshed,
+    never a future date (Google ignores future lastmod)."""
+    raw = str(ev.get("last_scraped_at") or ev.get("created_at") or "")[:10]
+    if len(raw) == 10 and raw <= today:
+        return raw
+    return today
 
 
 async def _render_city(slug: str, lang: str, request: Request):
@@ -1066,7 +1078,8 @@ async def _get_event_seo(event_id: str):
     return await db.events.find_one(
         {"id": event_id},
         {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
-         "genre": 1, "address": 1, "currency": 1, "image_url": 1, "price_tiers": 1, "sale_state": 1})
+         "genre": 1, "address": 1, "currency": 1, "last_scraped_at": 1, "created_at": 1,
+         "image_url": 1, "price_tiers": 1, "sale_state": 1})
 
 
 async def _render_event(event_id: str, lang: str, request: Request):
@@ -1082,6 +1095,8 @@ async def _render_event(event_id: str, lang: str, request: Request):
     slug = _event_slug(ev)
     paths = _event_paths(front, event_id, slug)
     canonical = paths[lang]
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    is_past = bool(ev.get("date", "")) and ev.get("date", "") < today
     city = ev.get("city", "")
     when = _seo_date(ev.get("date", ""), lang, ev.get("time", ""))
     pl = _seo_price_line(ev, lang)
@@ -1093,7 +1108,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
     ogimg_tag = f'<meta property="og:image" content="{e(img)}">' if str(img).startswith("http") else ''
     hreflang = _hreflang_links(paths, e)
     langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)
-    jsonld = f'<script type="application/ld+json">{_event_jsonld(ev, canonical, front)}</script>'
+    jsonld = f'<script type="application/ld+json">{_event_jsonld(ev, canonical, front, include_offers=not is_past)}</script>'
 
     # Related upcoming events in the same city (internal linking + freshness).
     city_id = None
@@ -1120,6 +1135,15 @@ async def _render_event(event_id: str, lang: str, request: Request):
 
     genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(ev.get("genre",""))}</div>' if ev.get("genre") else ""
     addr = (", " + e(ev.get("address", ""))) if ev.get("address") else ""
+    # Freshness / churn handling: past parties are noindex,follow (Google drops the
+    # stale page but still follows links to upcoming events), no misleading offers,
+    # and the primary CTA funnels to the city's upcoming parties instead of tickets.
+    robots_meta = '<meta name="robots" content="noindex, follow">' if is_past else ''
+    ended_html = f'<p class="sub" style="color:#f5a524;font-weight:700">{e(T["ev_ended"])}</p>' if is_past else ''
+    if is_past and city_id:
+        primary_cta = f'<a class="cta" href="{e(_city_paths(front, _slugify(city_id))[lang])}">{e(T["more_in"].format(label=city_label))}</a>'
+    else:
+        primary_cta = f'<a class="cta" href="{front}/event/{e(event_id)}">{e(T["ev_cta"])}</a>'
     html_out = f"""<!doctype html>
 <html lang="{T['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1131,19 +1155,21 @@ async def _render_event(event_id: str, lang: str, request: Request):
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
 <meta property="og:url" content="{e(canonical)}">{ogimg_tag}
 <meta name="twitter:card" content="summary_large_image">
+{robots_meta}
 {jsonld}
 <style>{_SEO_CSS}</style></head>
 <body><div class="wrap">
 {hero}
 <h1>{e(ev.get("name","Fiesta"))}</h1>
 <p class="sub">{e(ev.get("venue",""))} \u00b7 {e(city)}</p>
+{ended_html}
 <div class="meta">
 <div><b>{e(T["ev_when"])}</b>{e(when)}</div>
 <div><b>{e(T["ev_where"])}</b>{e(ev.get("venue",""))}{addr}, {e(city)}</div>
 {genre_row}
 <div><b>{e(T["ev_price"])}</b>{e(pl or T["free"])}</div>
 </div>
-<a class="cta" href="{front}/event/{e(event_id)}">{e(T["ev_cta"])}</a>
+{primary_cta}
 {related_html}
 {langsw}
 <footer>{e(T["footer"])}</footer>
@@ -1198,8 +1224,9 @@ async def seo_sitemap(request: Request):
                 continue
             seen.add(eid)
             ep = _event_paths(front, eid, _event_slug(ev))
+            lm = _ev_lastmod(ev, today)
             for lang in SEO_LANGS:
-                parts.append(_url(ep, lang, ev.get("date", today), "daily"))
+                parts.append(_url(ep, lang, lm, "daily"))
 
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
