@@ -4,7 +4,7 @@ import api, { mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon, Send, ImageOff } from "lucide-react";
+import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon, Send, ImageOff, Heart, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
@@ -159,6 +159,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
   const [idx, setIdx] = useState(startIndex);
   const [reactText, setReactText] = useState("");
   const story = group.stories[idx];
+  const isMoment = story.kind === "moment";
 
   const del = useMutation({
     mutationFn: async () => (await api.delete(`/stories/${story.id}`)).data,
@@ -168,6 +169,25 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
       toast.success(t("stories.toast_deleted"));
       onClose();
     },
+  });
+
+  const likeMoment = useMutation({
+    mutationFn: async () => (await api.post(`/captures/${story.id}/like`)).data,
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["stories"] });
+      const prev = qc.getQueryData(["stories"]);
+      qc.setQueryData(["stories"], (list) =>
+        Array.isArray(list)
+          ? list.map((x) =>
+              x.id === story.id
+                ? { ...x, i_liked: !x.i_liked, likes: Math.max(0, (x.likes || 0) + (x.i_liked ? -1 : 1)) }
+                : x
+            )
+          : list
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => { if (ctx?.prev) qc.setQueryData(["stories"], ctx.prev); },
   });
 
   const react = useMutation({
@@ -206,7 +226,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
           <p className="text-white font-semibold text-sm truncate">{group.is_mine ? t("stories.your_story") : group.author.name}</p>
           <p className="text-white/60 text-xs">{timeAgo(story.created_at)}</p>
         </div>
-        {group.is_mine && (
+        {group.is_mine && !isMoment && (
           <button data-testid="story-delete" onClick={() => del.mutate()} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
             <Trash2 className="w-4 h-4 text-white/80" />
           </button>
@@ -221,8 +241,13 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 z-20 p-4 pb-6 bg-gradient-to-t from-black/80 to-transparent">
+        {isMoment && (
+          <span className="inline-flex items-center gap-1 qv-glass text-qv-primary text-xs font-bold px-3 py-1 rounded-full border border-qv-primary/30 mb-2">
+            <Zap className="w-3 h-3" /> El Momento
+          </span>
+        )}
         {story.event_name && (
-          <span className="inline-block qv-glass text-white text-xs font-semibold px-3 py-1 rounded-full border border-white/15 mb-2">
+          <span className="inline-block qv-glass text-white text-xs font-semibold px-3 py-1 rounded-full border border-white/15 mb-2 ml-1">
             🎉 {story.event_name}
           </span>
         )}
@@ -232,7 +257,19 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
           </p>
         )}
 
-        {group.is_mine ? (
+        {isMoment ? (
+          <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <button
+              data-testid={`story-moment-like-${story.id}`}
+              onClick={() => likeMoment.mutate()}
+              disabled={group.is_mine}
+              className={`flex items-center gap-2 h-11 px-5 rounded-full font-bold active:scale-95 transition-transform disabled:opacity-70 ${story.i_liked ? "bg-qv-primary text-white" : "bg-white/10 text-white"}`}
+            >
+              <Heart className="w-5 h-5" fill={story.i_liked ? "currentColor" : "none"} /> {story.likes || 0}
+            </button>
+            {group.is_mine && <span className="text-white/50 text-xs">{t("stories.your_story")}</span>}
+          </div>
+        ) : group.is_mine ? (
           (story.reactions && story.reactions.length > 0) ? (
             <div className="flex flex-wrap gap-2" data-testid="story-received-reactions">
               {story.reactions.map((r, i) => (
@@ -305,23 +342,31 @@ export function StoriesBar() {
           <span className="text-[11px] text-white/60 font-medium">{t("stories.your_story")}</span>
         </button>
 
-        {groups.map((g) => (
+        {groups.map((g) => {
+          const hasMoment = g.stories.some((s) => s.kind === "moment");
+          return (
           <button
             key={g.user_id}
             data-testid={`story-bubble-${g.author.username}`}
             onClick={() => setViewer(g)}
             className="flex flex-col items-center gap-1.5 shrink-0"
           >
-            <div className="w-16 h-16 rounded-full p-[2.5px] bg-gradient-to-tr from-qv-primary to-qv-secondary">
+            <div className="relative w-16 h-16 rounded-full p-[2.5px] bg-gradient-to-tr from-qv-primary to-qv-secondary">
               <div className="w-full h-full rounded-full p-[2px] bg-[#0A0A0C]">
                 <AvatarCircle name={g.author.name} picture={g.author.picture} size={54} ring={false} className="w-full h-full" />
               </div>
+              {hasMoment && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-qv-primary border-2 border-[#0A0A0C] flex items-center justify-center" data-testid={`story-moment-badge-${g.author.username}`}>
+                  <Zap className="w-3 h-3 text-white" fill="currentColor" />
+                </span>
+              )}
             </div>
             <span className="text-[11px] text-white/70 font-medium truncate max-w-[64px]">
               {g.is_mine ? t("stories.you") : g.author.name.split(" ")[0]}
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       <AddStoryDialog open={addOpen} onOpenChange={setAddOpen} />

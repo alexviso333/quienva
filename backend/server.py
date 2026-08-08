@@ -5513,6 +5513,7 @@ async def serialize_story(s: dict, viewer: dict) -> dict:
     out = {
         **{k: v for k, v in s.items() if k != "_id"},
         "is_mine": is_mine,
+        "kind": "story",
         "author": {
             "name": display_name(author) if author else "Usuario",
             "picture": author.get("picture", "") if author else "",
@@ -5542,7 +5543,51 @@ async def list_stories(user: dict = Depends(get_current_user)):
         {"user_id": {"$in": allowed}, "created_at": {"$gte": cutoff}}, {"_id": 0}
     ).sort("created_at", 1):
         out.append(await serialize_story(s, user))
+    # Also surface friends' (and own) 'El Momento' captures from the last 24h as
+    # ephemeral stories, so the top-of-feed bar shows the whole night.
+    out.extend(await _moments_as_stories(allowed, cutoff, user))
+    out.sort(key=lambda x: x.get("created_at") or "")
     return out
+
+
+async def _moments_as_stories(allowed: list, cutoff: str, viewer: dict) -> list:
+    caps = []
+    async for c in db.captures.find(
+        {"user_id": {"$in": allowed}, "created_at": {"$gte": cutoff}}, {"_id": 0}
+    ).sort("created_at", 1):
+        caps.append(c)
+    if not caps:
+        return []
+    cap_ids = [c["id"] for c in caps]
+    like_counts = {}
+    async for row in db.capture_reactions.aggregate([
+        {"$match": {"capture_id": {"$in": cap_ids}}},
+        {"$group": {"_id": "$capture_id", "n": {"$sum": 1}}},
+    ]):
+        like_counts[row["_id"]] = row["n"]
+    my_liked = set()
+    async for r in db.capture_reactions.find(
+        {"capture_id": {"$in": cap_ids}, "user_id": viewer["user_id"]}, {"_id": 0, "capture_id": 1}
+    ):
+        my_liked.add(r["capture_id"])
+    items = []
+    for c in caps:
+        au = await db.users.find_one({"user_id": c["user_id"]}, {"_id": 0})
+        ev = await db.events.find_one({"id": c["event_id"]}, {"_id": 0}) if c.get("event_id") else None
+        items.append({
+            "id": c["id"],
+            "user_id": c["user_id"],
+            "image_url": c.get("image_url", ""),
+            "created_at": c.get("created_at"),
+            "event_id": c.get("event_id"),
+            "event_name": ev["name"] if ev else None,
+            "is_mine": c["user_id"] == viewer["user_id"],
+            "kind": "moment",
+            "likes": like_counts.get(c["id"], 0),
+            "i_liked": c["id"] in my_liked,
+            "author": _msg_author(au),
+        })
+    return items
 
 
 @api_router.get("/stories/archive")
