@@ -839,6 +839,17 @@ SEO_T = {
         "more_in": "M\u00e1s fiestas en {label}",
         "free": "Entrada libre", "from": "desde {p}\u20ac", "soldout": "Agotado",
         "other_langs": "Idiomas:",
+        "tf_tonight_title": "Fiestas esta noche en {label} | \u00bfQui\u00e9n va?",
+        "tf_tonight_desc": "\u00bfQu\u00e9 hacer esta noche en {label}? {n} fiestas y discotecas abiertas hoy con horarios y precios. M\u00edralas en \u00bfQui\u00e9n va?",
+        "tf_tonight_h1": "Fiestas esta noche en {label}",
+        "tf_tonight_sub": "{n} planes para hoy \u00b7 horarios, precios y qu\u00e9 amigos van.",
+        "tf_tonight_empty": "Hoy no hay fiestas listadas en {label}. Mira los planes del finde.",
+        "tf_weekend_title": "Fiestas este fin de semana en {label} | \u00bfQui\u00e9n va?",
+        "tf_weekend_desc": "Planes para este finde en {label}: {n} fiestas y discotecas con horarios y precios. Descubre qui\u00e9n va en \u00bfQui\u00e9n va?",
+        "tf_weekend_h1": "Fiestas este fin de semana en {label}",
+        "tf_weekend_sub": "{n} planes para el finde \u00b7 horarios, precios y qu\u00e9 amigos van.",
+        "tf_weekend_empty": "A\u00fan no hay fiestas del finde en {label}. Mira todos los pr\u00f3ximos planes.",
+        "link_all": "Todos los pr\u00f3ximos", "link_tonight": "Esta noche", "link_weekend": "Este finde",
     },
     "en": {
         "html_lang": "en",
@@ -858,6 +869,17 @@ SEO_T = {
         "more_in": "More parties in {label}",
         "free": "Free entry", "from": "from \u20ac{p}", "soldout": "Sold out",
         "other_langs": "Languages:",
+        "tf_tonight_title": "Parties tonight in {label} | \u00bfQui\u00e9n va?",
+        "tf_tonight_desc": "What to do tonight in {label}? {n} parties and clubs open today with times and prices. See them on \u00bfQui\u00e9n va?",
+        "tf_tonight_h1": "Parties tonight in {label}",
+        "tf_tonight_sub": "{n} plans for tonight \u00b7 times, prices and which friends are going.",
+        "tf_tonight_empty": "No parties listed tonight in {label}. Check this weekend's plans.",
+        "tf_weekend_title": "Parties this weekend in {label} | \u00bfQui\u00e9n va?",
+        "tf_weekend_desc": "Plans for this weekend in {label}: {n} parties and clubs with times and prices. See who's going on \u00bfQui\u00e9n va?",
+        "tf_weekend_h1": "Parties this weekend in {label}",
+        "tf_weekend_sub": "{n} plans for the weekend \u00b7 times, prices and which friends are going.",
+        "tf_weekend_empty": "No weekend parties yet in {label}. See all upcoming plans.",
+        "link_all": "All upcoming", "link_tonight": "Tonight", "link_weekend": "This weekend",
     },
     "de": {
         "html_lang": "de",
@@ -877,6 +899,17 @@ SEO_T = {
         "more_in": "Mehr Partys in {label}",
         "free": "Freier Eintritt", "from": "ab {p}\u20ac", "soldout": "Ausverkauft",
         "other_langs": "Sprachen:",
+        "tf_tonight_title": "Partys heute Abend in {label} | \u00bfQui\u00e9n va?",
+        "tf_tonight_desc": "Was heute Abend in {label} los ist? {n} Partys und Clubs heute ge\u00f6ffnet, mit Uhrzeiten und Preisen. Sieh sie auf \u00bfQui\u00e9n va?",
+        "tf_tonight_h1": "Partys heute Abend in {label}",
+        "tf_tonight_sub": "{n} Pl\u00e4ne f\u00fcr heute \u00b7 Uhrzeiten, Preise und welche Freunde hingehen.",
+        "tf_tonight_empty": "Heute keine Partys in {label} gelistet. Sieh dir die Wochenendpl\u00e4ne an.",
+        "tf_weekend_title": "Partys dieses Wochenende in {label} | \u00bfQui\u00e9n va?",
+        "tf_weekend_desc": "Pl\u00e4ne f\u00fcrs Wochenende in {label}: {n} Partys und Clubs mit Uhrzeiten und Preisen. Sieh, wer hingeht, auf \u00bfQui\u00e9n va?",
+        "tf_weekend_h1": "Partys dieses Wochenende in {label}",
+        "tf_weekend_sub": "{n} Pl\u00e4ne f\u00fcrs Wochenende \u00b7 Uhrzeiten, Preise und welche Freunde hingehen.",
+        "tf_weekend_empty": "Noch keine Wochenend-Partys in {label}. Sieh alle kommenden Pl\u00e4ne.",
+        "link_all": "Alle kommenden", "link_tonight": "Heute Abend", "link_weekend": "Wochenende",
     },
 }
 
@@ -988,7 +1021,46 @@ def _ev_lastmod(ev: dict, today: str) -> str:
     return today
 
 
-async def _render_city(slug: str, lang: str, request: Request):
+_TF_SLUG = {
+    "tonight": {"es": "esta-noche", "en": "tonight", "de": "heute"},
+    "weekend": {"es": "este-finde", "en": "this-weekend", "de": "wochenende"},
+}
+
+
+def _city_tf_paths(front: str, slug: str, timeframe: str) -> dict:
+    base = _city_paths(front, slug)
+    if timeframe == "all":
+        return base
+    return {lang: f"{base[lang]}/{_TF_SLUG[timeframe][lang]}" for lang in SEO_LANGS}
+
+
+def _weekend_range(today):
+    """(start, end) ISO dates for 'this weekend' (Fri-Sun), clamped to today."""
+    wd = today.weekday()  # Mon=0 .. Sun=6
+    friday = today + timedelta(days=4 - wd) if wd <= 3 else today - timedelta(days=wd - 4)
+    sunday = friday + timedelta(days=2)
+    start = max(today, friday)
+    return start.isoformat(), sunday.isoformat()
+
+
+async def _events_for_timeframe(city_id: str, timeframe: str) -> list:
+    if timeframe == "all":
+        return await _upcoming_for_city(city_id)
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    if timeframe == "tonight":
+        start = end = today.isoformat()
+    else:  # weekend
+        start, end = _weekend_range(today)
+    cur = db.events.find(
+        {"city": city_query_value(city_id), "date": {"$gte": start, "$lte": end}},
+        {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
+         "genre": 1, "address": 1, "currency": 1, "last_scraped_at": 1, "created_at": 1,
+         "image_url": 1, "price_tiers": 1, "sale_state": 1},
+    ).sort("date", 1).limit(60)
+    return [ev async for ev in cur]
+
+
+async def _render_city(slug: str, lang: str, request: Request, timeframe: str = "all"):
     import html as _html
     e = _html.escape
     T = SEO_T[lang]
@@ -998,14 +1070,25 @@ async def _render_city(slug: str, lang: str, request: Request):
         return StarletteResponse(
             content=f"<!doctype html><meta http-equiv=refresh content='0;url={front}/feed'>",
             media_type="text/html", status_code=404)
-    events = await _upcoming_for_city(city_id)
+    events = await _events_for_timeframe(city_id, timeframe)
     label = next((c["label"] for c in SUPPORTED_CITIES if c["id"] == city_id), city_id)
     slug_l = slug.lower()
-    paths = _city_paths(front, slug_l)
+    paths = _city_tf_paths(front, slug_l, timeframe)
     canonical = paths[lang]
     n = len(events)
-    title = e(T["city_title"].format(label=label, n=n))
-    desc = e(T["city_desc"].format(label=label, n=n))
+    if timeframe == "all":
+        title = e(T["city_title"].format(label=label, n=n))
+        desc = e(T["city_desc"].format(label=label, n=n))
+        h1 = e(T["city_h1"].format(label=label))
+        sub = e(T["city_sub"].format(n=n))
+        empty = e(T["empty"])
+    else:
+        tk = "tf_tonight" if timeframe == "tonight" else "tf_weekend"
+        title = e(T[f"{tk}_title"].format(label=label, n=n))
+        desc = e(T[f"{tk}_desc"].format(label=label, n=n))
+        h1 = e(T[f"{tk}_h1"].format(label=label))
+        sub = e(T[f"{tk}_sub"].format(n=n))
+        empty = e(T[f"{tk}_empty"].format(label=label))
     og_img = ""
     for ev in events:
         if str(ev.get("image_url", "")).startswith("http"):
@@ -1024,7 +1107,16 @@ async def _render_city(slug: str, lang: str, request: Request):
             f'<span class="m">{line2}</span></div></a></li>')
         jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, ev_url, front)}</script>')
     if not items_html:
-        items_html.append(f'<li class="empty">{e(T["empty"])}</li>')
+        items_html.append(f'<li class="empty">{e(empty)}</li>')
+
+    # Internal nav between timeframes (all / tonight / weekend), same language.
+    nav = []
+    for tf, key in (("all", "link_all"), ("tonight", "link_tonight"), ("weekend", "link_weekend")):
+        u = _city_tf_paths(front, slug_l, tf)[lang]
+        lbl = e(T[key])
+        nav.append(f'<b>{lbl}</b>' if tf == timeframe else f'<a href="{e(u)}">{lbl}</a>')
+    nav_sep = " \u00b7 "
+    nav_html = f'<div class="cities">{nav_sep.join(nav)}</div>'
 
     other_cities = "".join(
         f'<a href="{e(_city_paths(front, _slugify(c["id"]))[lang])}">{e(c["label"])}</a>'
@@ -1047,8 +1139,9 @@ async def _render_city(slug: str, lang: str, request: Request):
 {''.join(jsonld)}
 <style>{_SEO_CSS}</style></head>
 <body><div class="wrap">
-<h1>{e(T["city_h1"].format(label=label))}</h1>
-<p class="sub">{e(T["city_sub"].format(n=n))}</p>
+<h1>{h1}</h1>
+<p class="sub">{sub}</p>
+{nav_html}
 <a class="cta" href="{front}/feed">{e(T["open_app"])}</a>
 <ul>{''.join(items_html)}</ul>
 <div class="cities"><b>{e(T["other_cities"])}</b><br>{other_cities}</div>
@@ -1064,14 +1157,44 @@ async def seo_city_es(slug: str, request: Request):
     return await _render_city(slug, "es", request)
 
 
+@api_router.get("/ciudad/{slug}/esta-noche")
+async def seo_city_es_tonight(slug: str, request: Request):
+    return await _render_city(slug, "es", request, "tonight")
+
+
+@api_router.get("/ciudad/{slug}/este-finde")
+async def seo_city_es_weekend(slug: str, request: Request):
+    return await _render_city(slug, "es", request, "weekend")
+
+
 @api_router.get("/en/city/{slug}")
 async def seo_city_en(slug: str, request: Request):
     return await _render_city(slug, "en", request)
 
 
+@api_router.get("/en/city/{slug}/tonight")
+async def seo_city_en_tonight(slug: str, request: Request):
+    return await _render_city(slug, "en", request, "tonight")
+
+
+@api_router.get("/en/city/{slug}/this-weekend")
+async def seo_city_en_weekend(slug: str, request: Request):
+    return await _render_city(slug, "en", request, "weekend")
+
+
 @api_router.get("/de/city/{slug}")
 async def seo_city_de(slug: str, request: Request):
     return await _render_city(slug, "de", request)
+
+
+@api_router.get("/de/city/{slug}/heute")
+async def seo_city_de_tonight(slug: str, request: Request):
+    return await _render_city(slug, "de", request, "tonight")
+
+
+@api_router.get("/de/city/{slug}/wochenende")
+async def seo_city_de_weekend(slug: str, request: Request):
+    return await _render_city(slug, "de", request, "weekend")
 
 
 async def _get_event_seo(event_id: str):
@@ -1197,7 +1320,11 @@ async def seo_event_de(event_id: str, request: Request, slug: str = ""):
 
 
 @api_router.get("/sitemap.xml")
-async def seo_sitemap(request: Request):
+async def seo_sitemap(request: Request, scope: str = "", city: str = ""):
+    """Sitemap INDEX by default; child sitemaps via ?scope=cities or
+    ?scope=events&city=<slug>. Splitting keeps each file small so Google
+    crawls updates faster as the number of parties grows.
+    (Uses query params so no extra Vercel rewrites are needed.)"""
     front = _frontend_base(request)
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
 
@@ -1207,30 +1334,44 @@ async def seo_sitemap(request: Request):
         return (f"<url><loc>{paths[lang]}</loc><lastmod>{lastmod}</lastmod>"
                 f"<changefreq>{freq}</changefreq>{alts}</url>")
 
-    parts = [f"<url><loc>{front}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>"]
+    def _urlset(parts: list) -> StarletteResponse:
+        xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+               '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+               'xmlns:xhtml="http://www.w3.org/1999/xhtml">' + "".join(parts) + "</urlset>")
+        return StarletteResponse(content=xml, media_type="application/xml",
+                                 headers={"Cache-Control": "public, max-age=3600"})
 
-    # City landing pages, all languages
-    for c in SUPPORTED_CITIES:
-        cp = _city_paths(front, _slugify(c["id"]))
-        for lang in SEO_LANGS:
-            parts.append(_url(cp, lang, today, "daily"))
+    # --- Child sitemap: all city landing pages (all/tonight/weekend) x 3 langs ---
+    if scope == "cities":
+        parts = [f"<url><loc>{front}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>"]
+        for c in SUPPORTED_CITIES:
+            for tf in ("all", "tonight", "weekend"):
+                cp = _city_tf_paths(front, _slugify(c["id"]), tf)
+                for lang in SEO_LANGS:
+                    parts.append(_url(cp, lang, today, "daily"))
+        return _urlset(parts)
 
-    # Upcoming event pages, all languages (long-tail)
-    seen = set()
-    for c in SUPPORTED_CITIES:
-        for ev in await _upcoming_for_city(c["id"], 100):
-            eid = ev.get("id")
-            if not eid or eid in seen:
-                continue
-            seen.add(eid)
-            ep = _event_paths(front, eid, _event_slug(ev))
-            lm = _ev_lastmod(ev, today)
-            for lang in SEO_LANGS:
-                parts.append(_url(ep, lang, lm, "daily"))
+    # --- Child sitemap: upcoming event pages for one city x 3 langs ---
+    if scope == "events":
+        city_id = _CITY_SLUGS.get((city or "").lower())
+        parts = []
+        if city_id:
+            for ev in await _upcoming_for_city(city_id, 500):
+                eid = ev.get("id")
+                if not eid:
+                    continue
+                ep = _event_paths(front, eid, _event_slug(ev))
+                lm = _ev_lastmod(ev, today)
+                for lang in SEO_LANGS:
+                    parts.append(_url(ep, lang, lm, "daily"))
+        return _urlset(parts)
 
+    # --- Default: sitemap INDEX pointing to the child sitemaps ---
+    children = [f"{front}/sitemap.xml?scope=cities"]
+    children += [f"{front}/sitemap.xml?scope=events&city={_slugify(c['id'])}" for c in SUPPORTED_CITIES]
+    body = "".join(f"<sitemap><loc>{u.replace('&', '&amp;')}</loc><lastmod>{today}</lastmod></sitemap>" for u in children)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
-           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
-           'xmlns:xhtml="http://www.w3.org/1999/xhtml">' + "".join(parts) + "</urlset>")
+           '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</sitemapindex>")
     return StarletteResponse(content=xml, media_type="application/xml",
                              headers={"Cache-Control": "public, max-age=3600"})
 

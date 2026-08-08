@@ -1,5 +1,11 @@
 {
   "rewrites": [
+    { "source": "/fiestas/:city/esta-noche", "destination": "https://quienva.onrender.com/api/ciudad/:city/esta-noche" },
+    { "source": "/fiestas/:city/este-finde", "destination": "https://quienva.onrender.com/api/ciudad/:city/este-finde" },
+    { "source": "/en/parties/:city/tonight", "destination": "https://quienva.onrender.com/api/en/city/:city/tonight" },
+    { "source": "/en/parties/:city/this-weekend", "destination": "https://quienva.onrender.com/api/en/city/:city/this-weekend" },
+    { "source": "/de/partys/:city/heute", "destination": "https://quienva.onrender.com/api/de/city/:city/heute" },
+    { "source": "/de/partys/:city/wochenende", "destination": "https://quienva.onrender.com/api/de/city/:city/wochenende" },
     { "source": "/fiestas/:city", "destination": "https://quienva.onrender.com/api/ciudad/:city" },
     { "source": "/en/parties/:city", "destination": "https://quienva.onrender.com/api/en/city/:city" },
     { "source": "/de/partys/:city", "destination": "https://quienva.onrender.com/api/de/city/:city" },
