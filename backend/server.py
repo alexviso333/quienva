@@ -775,20 +775,211 @@ async def _upcoming_for_city(city_id: str, limit: int = 60) -> list:
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
     cur = db.events.find(
         {"city": city_query_value(city_id), "date": {"$gte": today}},
-        {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "city": 1,
+        {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
+         "genre": 1, "address": 1, "currency": 1,
          "image_url": 1, "price_tiers": 1, "sale_state": 1},
     ).sort("date", 1).limit(limit)
     return [e async for e in cur]
 
 
-@api_router.get("/ciudad/{slug}")
-async def seo_city_page(slug: str, request: Request):
-    """Server-rendered, crawlable page: 'Fiestas en {ciudad} hoy y este finde'.
-    Real HTML content (no JS needed) so Google can index it; links push users
-    into the app. Meant to be served on the main domain via a Vercel rewrite
-    (/fiestas/:city -> {backend}/api/ciudad/:city)."""
+# ---------------------------------------------------------------------------
+# Multilingual SEO (ES / EN / DE) — server-rendered, crawlable landing pages.
+# Served on the main domain via Vercel rewrites:
+#   /fiestas/:city        -> /api/ciudad/:city        (es)
+#   /en/parties/:city     -> /api/en/city/:city       (en)
+#   /de/partys/:city      -> /api/de/city/:city        (de)
+#   /fiesta/:id/:slug     -> /api/fiesta/:id           (es)
+#   /en/party/:id/:slug   -> /api/en/party/:id         (en)
+#   /de/party/:id/:slug   -> /api/de/party/:id          (de)
+# These pages are only hit by crawlers / search visitors and are cached, so
+# they do NOT affect the speed of the React app itself.
+# ---------------------------------------------------------------------------
+SEO_LANGS = ("es", "en", "de")
+
+_SEO_CSS = """
+:root{color-scheme:dark}
+body{margin:0;background:#0a0a0c;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:720px;margin:0 auto;padding:24px 18px 60px}
+h1{font-size:26px;margin:12px 0 6px}
+p.sub{color:#a1a1aa;margin:0 0 22px}
+ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+li a{display:flex;gap:12px;align-items:center;background:#141417;border:1px solid #26262b;border-radius:14px;padding:10px 12px;text-decoration:none;color:#fff}
+li img{border-radius:10px;object-fit:cover;flex:0 0 auto}
+.n{display:block;font-weight:700}
+.m{display:block;color:#a1a1aa;font-size:14px}
+.empty{color:#a1a1aa;padding:20px;text-align:center}
+.cta{display:inline-block;margin:22px 0;background:linear-gradient(90deg,#00f0ff,#7c3aed);color:#001014;font-weight:800;padding:12px 20px;border-radius:999px;text-decoration:none}
+.cities{margin-top:34px;border-top:1px solid #26262b;padding-top:18px}
+.cities a{color:#00f0ff;margin-right:14px;text-decoration:none;display:inline-block;margin-bottom:8px}
+.hero{width:100%;max-height:340px;object-fit:cover;border-radius:16px;margin:8px 0 18px}
+.meta{display:flex;flex-direction:column;gap:8px;margin:18px 0}
+.meta > div{background:#141417;border:1px solid #26262b;border-radius:12px;padding:12px 14px}
+.meta b{color:#00f0ff;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:2px}
+.langs{margin-top:26px;font-size:13px;color:#71717a}
+.langs a{color:#a1a1aa;margin-right:12px;text-decoration:none}
+footer{margin-top:30px;color:#71717a;font-size:13px}
+"""
+
+SEO_T = {
+    "es": {
+        "html_lang": "es",
+        "city_title": "Fiestas y discotecas en {label} hoy y este fin de semana | \u00bfQui\u00e9n va?",
+        "city_desc": "Todas las fiestas de {label}: {n} planes con horarios, precios y qu\u00e9 amigos van. Descubre las discotecas de esta semana en \u00bfQui\u00e9n va?",
+        "city_h1": "Fiestas en {label} hoy y este fin de semana",
+        "city_sub": "{n} planes esta semana \u00b7 horarios, precios y qu\u00e9 amigos van. Con \u00bfQui\u00e9n va?",
+        "open_app": "Abrir \u00bfQui\u00e9n va?",
+        "other_cities": "Otras ciudades:",
+        "empty": "Pronto publicaremos las pr\u00f3ximas fiestas de esta ciudad.",
+        "footer": "\u00bfQui\u00e9n va? \u2014 descubre los planes del finde y mira qu\u00e9 amigos van a cada sitio.",
+        "ev_title": "{name} \u2014 {venue}, {city} | Entradas y horario | \u00bfQui\u00e9n va?",
+        "ev_desc": "{name} en {venue} ({city}), {date}. {price}Mira qui\u00e9n va y consigue tu entrada en \u00bfQui\u00e9n va?",
+        "ev_cta": "Ver qui\u00e9n va y entradas",
+        "ev_when": "Cu\u00e1ndo", "ev_where": "D\u00f3nde", "ev_price": "Precio", "ev_genre": "M\u00fasica",
+        "more_in": "M\u00e1s fiestas en {label}",
+        "free": "Entrada libre", "from": "desde {p}\u20ac", "soldout": "Agotado",
+        "other_langs": "Idiomas:",
+    },
+    "en": {
+        "html_lang": "en",
+        "city_title": "Parties & clubs in {label} tonight and this weekend | \u00bfQui\u00e9n va?",
+        "city_desc": "All the parties in {label}: {n} plans with times, prices and which friends are going. Discover this week's clubs on \u00bfQui\u00e9n va?",
+        "city_h1": "Parties in {label} tonight and this weekend",
+        "city_sub": "{n} plans this week \u00b7 times, prices and which friends are going. With \u00bfQui\u00e9n va?",
+        "open_app": "Open \u00bfQui\u00e9n va?",
+        "other_cities": "Other cities:",
+        "empty": "We'll publish the upcoming parties for this city soon.",
+        "footer": "\u00bfQui\u00e9n va? \u2014 discover the weekend plans and see which friends are going where.",
+        "ev_title": "{name} \u2014 {venue}, {city} | Tickets & time | \u00bfQui\u00e9n va?",
+        "ev_desc": "{name} at {venue} ({city}), {date}. {price}See who's going and get your ticket on \u00bfQui\u00e9n va?",
+        "ev_cta": "See who's going & tickets",
+        "ev_when": "When", "ev_where": "Where", "ev_price": "Price", "ev_genre": "Music",
+        "more_in": "More parties in {label}",
+        "free": "Free entry", "from": "from \u20ac{p}", "soldout": "Sold out",
+        "other_langs": "Languages:",
+    },
+    "de": {
+        "html_lang": "de",
+        "city_title": "Partys & Clubs in {label} heute und dieses Wochenende | \u00bfQui\u00e9n va?",
+        "city_desc": "Alle Partys in {label}: {n} Pl\u00e4ne mit Uhrzeiten, Preisen und welche Freunde hingehen. Entdecke die Clubs dieser Woche auf \u00bfQui\u00e9n va?",
+        "city_h1": "Partys in {label} heute und dieses Wochenende",
+        "city_sub": "{n} Pl\u00e4ne diese Woche \u00b7 Uhrzeiten, Preise und welche Freunde hingehen. Mit \u00bfQui\u00e9n va?",
+        "open_app": "\u00bfQui\u00e9n va? \u00f6ffnen",
+        "other_cities": "Weitere St\u00e4dte:",
+        "empty": "Wir ver\u00f6ffentlichen die kommenden Partys dieser Stadt bald.",
+        "footer": "\u00bfQui\u00e9n va? \u2014 entdecke die Wochenendpl\u00e4ne und sieh, welche Freunde wohin gehen.",
+        "ev_title": "{name} \u2014 {venue}, {city} | Tickets & Uhrzeit | \u00bfQui\u00e9n va?",
+        "ev_desc": "{name} im {venue} ({city}), {date}. {price}Sieh, wer hingeht, und hol dir dein Ticket auf \u00bfQui\u00e9n va?",
+        "ev_cta": "Sehen, wer hingeht & Tickets",
+        "ev_when": "Wann", "ev_where": "Wo", "ev_price": "Preis", "ev_genre": "Musik",
+        "more_in": "Mehr Partys in {label}",
+        "free": "Freier Eintritt", "from": "ab {p}\u20ac", "soldout": "Ausverkauft",
+        "other_langs": "Sprachen:",
+    },
+}
+
+_DOW = {
+    "es": ["lunes", "martes", "mi\u00e9rcoles", "jueves", "viernes", "s\u00e1bado", "domingo"],
+    "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "de": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+}
+_MON = {
+    "es": ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"],
+    "en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    "de": ["Jan.", "Feb.", "M\u00e4rz", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."],
+}
+
+
+def _seo_date(date_str: str, lang: str, tm: str = "") -> str:
+    try:
+        d = date.fromisoformat(date_str)
+        dow = _DOW[lang][d.weekday()]
+        mon = _MON[lang][d.month - 1]
+        s = f"{dow} {d.day}. {mon}" if lang == "de" else f"{dow} {d.day} {mon}"
+        if tm:
+            s += f" \u00b7 {tm}"
+        return s
+    except Exception:
+        return date_str or ""
+
+
+def _seo_price_line(ev: dict, lang: str) -> str:
+    T = SEO_T[lang]
+    if ev.get("sale_state") == "agotado":
+        return T["soldout"]
+    prices = [t.get("price") for t in (ev.get("price_tiers") or []) if isinstance(t, dict) and t.get("price")]
+    if prices:
+        return T["from"].format(p=int(min(prices)))
+    return ""
+
+
+def _city_paths(front: str, slug: str) -> dict:
+    return {"es": f"{front}/fiestas/{slug}",
+            "en": f"{front}/en/parties/{slug}",
+            "de": f"{front}/de/partys/{slug}"}
+
+
+def _event_paths(front: str, eid: str, slug: str) -> dict:
+    tail = f"{eid}/{slug}" if slug else eid
+    return {"es": f"{front}/fiesta/{tail}",
+            "en": f"{front}/en/party/{tail}",
+            "de": f"{front}/de/party/{tail}"}
+
+
+def _hreflang_links(paths: dict, e) -> str:
+    out = "".join(f'<link rel="alternate" hreflang="{l}" href="{e(u)}">' for l, u in paths.items())
+    out += f'<link rel="alternate" hreflang="x-default" href="{e(paths["es"])}">'
+    return out
+
+
+def _lang_switch(paths: dict, current: str, label: str, e) -> str:
+    names = {"es": "Espa\u00f1ol", "en": "English", "de": "Deutsch"}
+    links = "".join(
+        (f'<b>{names[l]}</b>' if l == current else f'<a href="{e(u)}">{names[l]}</a>') + " "
+        for l, u in paths.items())
+    return f'<div class="langs">{label} {links}</div>'
+
+
+def _event_slug(ev: dict) -> str:
+    return _slugify(f"{ev.get('name','')}-{ev.get('venue','')}-{ev.get('city','')}") or "fiesta"
+
+
+def _event_jsonld(ev: dict, url: str, front: str) -> str:
+    start = ev.get("date", "")
+    if ev.get("time"):
+        start = f"{ev.get('date','')}T{ev.get('time')}"
+    avail = "https://schema.org/InStock"
+    if ev.get("sale_state") == "agotado":
+        avail = "https://schema.org/SoldOut"
+    elif ev.get("sale_state") == "no_a_la_venta":
+        avail = "https://schema.org/PreOrder"
+    obj = {
+        "@context": "https://schema.org", "@type": "Event",
+        "name": ev.get("name", ""),
+        "startDate": start,
+        "eventStatus": "https://schema.org/EventScheduled",
+        "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+        "location": {"@type": "Place", "name": ev.get("venue", ""),
+                     "address": {"@type": "PostalAddress",
+                                 "streetAddress": ev.get("address", "") or ev.get("venue", ""),
+                                 "addressLocality": ev.get("city", ""),
+                                 "addressCountry": "ES"}},
+        "url": url,
+        "organizer": {"@type": "Organization", "name": "\u00bfQui\u00e9n va?", "url": front},
+    }
+    if str(ev.get("image_url", "")).startswith("http"):
+        obj["image"] = [ev["image_url"]]
+    prices = [t.get("price") for t in (ev.get("price_tiers") or []) if isinstance(t, dict) and t.get("price")]
+    if prices:
+        obj["offers"] = {"@type": "Offer", "price": int(min(prices)),
+                         "priceCurrency": ev.get("currency", "EUR") or "EUR",
+                         "availability": avail, "url": url}
+    return json.dumps(obj, ensure_ascii=False)
+
+
+async def _render_city(slug: str, lang: str, request: Request):
     import html as _html
     e = _html.escape
+    T = SEO_T[lang]
     city_id = _CITY_SLUGS.get(slug.lower())
     front = _frontend_base(request)
     if not city_id:
@@ -797,81 +988,222 @@ async def seo_city_page(slug: str, request: Request):
             media_type="text/html", status_code=404)
     events = await _upcoming_for_city(city_id)
     label = next((c["label"] for c in SUPPORTED_CITIES if c["id"] == city_id), city_id)
-    canonical = f"{front}/fiestas/{slug.lower()}"
+    slug_l = slug.lower()
+    paths = _city_paths(front, slug_l)
+    canonical = paths[lang]
     n = len(events)
-    title = e(f"Fiestas y discotecas en {label} hoy y este fin de semana | \u00bfQui\u00e9n va?")
-    desc = e(f"Todas las fiestas de {label}: {n} planes con horarios, precios y qu\u00e9 amigos van. "
-             f"Descubre las discotecas de esta semana en \u00bfQui\u00e9n va?")
+    title = e(T["city_title"].format(label=label, n=n))
+    desc = e(T["city_desc"].format(label=label, n=n))
     og_img = ""
     for ev in events:
-        if ev.get("image_url", "").startswith("http"):
+        if str(ev.get("image_url", "")).startswith("http"):
             og_img = e(ev["image_url"]); break
 
     items_html = []
-    for ev in events:
-        pl = _price_line(ev)
-        line2 = " \u00b7 ".join([x for x in [e(ev.get("venue", "")), _es_share_date(ev.get("date", "")), e(pl)] if x])
-        app_url = f"{front}/event/{ev.get('id')}"
+    jsonld = []
+    for ev in events[:20]:
+        pl = _seo_price_line(ev, lang)
+        line2 = " \u00b7 ".join([x for x in [e(ev.get("venue", "")), _seo_date(ev.get("date", ""), lang, ev.get("time", "")), e(pl)] if x])
+        ev_url = _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang]
         img = ev.get("image_url", "")
-        img_tag = f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy" width="72" height="72">' if img.startswith("http") else ""
+        img_tag = f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy" width="72" height="72">' if str(img).startswith("http") else ""
         items_html.append(
-            f'<li><a href="{e(app_url)}">{img_tag}<div><span class="n">{e(ev.get("name","Fiesta"))}</span>'
+            f'<li><a href="{e(ev_url)}">{img_tag}<div><span class="n">{e(ev.get("name","Fiesta"))}</span>'
             f'<span class="m">{line2}</span></div></a></li>')
+        jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, ev_url, front)}</script>')
     if not items_html:
-        items_html.append('<li class="empty">Pronto publicaremos las pr\u00f3ximas fiestas de esta ciudad.</li>')
+        items_html.append(f'<li class="empty">{e(T["empty"])}</li>')
 
     other_cities = "".join(
-        f'<a href="{front}/fiestas/{_slugify(c["id"])}">{e(c["label"])}</a>'
+        f'<a href="{e(_city_paths(front, _slugify(c["id"]))[lang])}">{e(c["label"])}</a>'
         for c in SUPPORTED_CITIES if c["id"] != city_id)
+    hreflang = _hreflang_links(paths, e)
+    langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)
+    ogimg_tag = f'<meta property="og:image" content="{og_img}">' if og_img else ''
 
     html_out = f"""<!doctype html>
-<html lang="es"><head>
+<html lang="{T['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <link rel="canonical" href="{e(canonical)}">
+{hreflang}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
-<meta property="og:url" content="{e(canonical)}">
-{f'<meta property="og:image" content="{og_img}">' if og_img else ''}
+<meta property="og:url" content="{e(canonical)}">{ogimg_tag}
 <meta name="twitter:card" content="summary_large_image">
-<style>
-:root{{color-scheme:dark}}
-body{{margin:0;background:#0a0a0c;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}}
-.wrap{{max-width:720px;margin:0 auto;padding:24px 18px 60px}}
-h1{{font-size:26px;margin:12px 0 6px}}
-p.sub{{color:#a1a1aa;margin:0 0 22px}}
-ul{{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}}
-li a{{display:flex;gap:12px;align-items:center;background:#141417;border:1px solid #26262b;border-radius:14px;padding:10px 12px;text-decoration:none;color:#fff}}
-li img{{border-radius:10px;object-fit:cover;flex:0 0 auto}}
-.n{{display:block;font-weight:700}}
-.m{{display:block;color:#a1a1aa;font-size:14px}}
-.empty{{color:#a1a1aa;padding:20px;text-align:center}}
-.cta{{display:inline-block;margin:22px 0;background:linear-gradient(90deg,#00f0ff,#7c3aed);color:#001014;font-weight:800;padding:12px 20px;border-radius:999px;text-decoration:none}}
-.cities{{margin-top:34px;border-top:1px solid #26262b;padding-top:18px}}
-.cities a{{color:#00f0ff;margin-right:14px;text-decoration:none;display:inline-block;margin-bottom:8px}}
-footer{{margin-top:30px;color:#71717a;font-size:13px}}
-</style></head>
+{''.join(jsonld)}
+<style>{_SEO_CSS}</style></head>
 <body><div class="wrap">
-<h1>Fiestas en {e(label)} hoy y este fin de semana</h1>
-<p class="sub">{n} planes esta semana \u00b7 horarios, precios y qu\u00e9 amigos van. Con \u00bfQui\u00e9n va?</p>
-<a class="cta" href="{front}/feed">Abrir \u00bfQui\u00e9n va?</a>
+<h1>{e(T["city_h1"].format(label=label))}</h1>
+<p class="sub">{e(T["city_sub"].format(n=n))}</p>
+<a class="cta" href="{front}/feed">{e(T["open_app"])}</a>
 <ul>{''.join(items_html)}</ul>
-<div class="cities"><b>Otras ciudades:</b><br>{other_cities}</div>
-<footer>\u00bfQui\u00e9n va? \u2014 descubre los planes del finde y mira qu\u00e9 amigos van a cada sitio.</footer>
+<div class="cities"><b>{e(T["other_cities"])}</b><br>{other_cities}</div>
+{langsw}
+<footer>{e(T["footer"])}</footer>
 </div></body></html>"""
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
                              headers={"Cache-Control": "public, max-age=1800"})
 
 
+@api_router.get("/ciudad/{slug}")
+async def seo_city_es(slug: str, request: Request):
+    return await _render_city(slug, "es", request)
+
+
+@api_router.get("/en/city/{slug}")
+async def seo_city_en(slug: str, request: Request):
+    return await _render_city(slug, "en", request)
+
+
+@api_router.get("/de/city/{slug}")
+async def seo_city_de(slug: str, request: Request):
+    return await _render_city(slug, "de", request)
+
+
+async def _get_event_seo(event_id: str):
+    return await db.events.find_one(
+        {"id": event_id},
+        {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
+         "genre": 1, "address": 1, "currency": 1, "image_url": 1, "price_tiers": 1, "sale_state": 1})
+
+
+async def _render_event(event_id: str, lang: str, request: Request):
+    import html as _html
+    e = _html.escape
+    T = SEO_T[lang]
+    front = _frontend_base(request)
+    ev = await _get_event_seo(event_id)
+    if not ev:
+        return StarletteResponse(
+            content=f"<!doctype html><meta http-equiv=refresh content='0;url={front}/feed'>",
+            media_type="text/html", status_code=404)
+    slug = _event_slug(ev)
+    paths = _event_paths(front, event_id, slug)
+    canonical = paths[lang]
+    city = ev.get("city", "")
+    when = _seo_date(ev.get("date", ""), lang, ev.get("time", ""))
+    pl = _seo_price_line(ev, lang)
+    price_pref = (pl + ". ") if pl else ""
+    title = e(T["ev_title"].format(name=ev.get("name", ""), venue=ev.get("venue", ""), city=city))
+    desc = e(T["ev_desc"].format(name=ev.get("name", ""), venue=ev.get("venue", ""), city=city, date=when, price=price_pref))
+    img = ev.get("image_url", "")
+    hero = f'<img class="hero" src="{e(img)}" alt="{e(ev.get("name",""))}" width="720" height="340">' if str(img).startswith("http") else ""
+    ogimg_tag = f'<meta property="og:image" content="{e(img)}">' if str(img).startswith("http") else ''
+    hreflang = _hreflang_links(paths, e)
+    langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)
+    jsonld = f'<script type="application/ld+json">{_event_jsonld(ev, canonical, front)}</script>'
+
+    # Related upcoming events in the same city (internal linking + freshness).
+    city_id = None
+    for c in SUPPORTED_CITIES:
+        if c["id"] == city or city in CITY_REGIONS.get(c["id"], []):
+            city_id = c["id"]; break
+    related_html = ""
+    if city_id:
+        city_label = next((c["label"] for c in SUPPORTED_CITIES if c["id"] == city_id), city_id)
+        rel = await _upcoming_for_city(city_id, 8)
+        lis = []
+        for r in rel:
+            if r.get("id") == event_id:
+                continue
+            ru = _event_paths(front, r.get("id", ""), _event_slug(r))[lang]
+            rmeta = " \u00b7 ".join([x for x in [e(r.get("venue", "")), _seo_date(r.get("date", ""), lang)] if x])
+            lis.append(f'<li><a href="{e(ru)}"><div><span class="n">{e(r.get("name","Fiesta"))}</span>'
+                       f'<span class="m">{rmeta}</span></div></a></li>')
+        if lis:
+            more_url = _city_paths(front, _slugify(city_id))[lang]
+            related_html = (f'<div class="cities"><b>{e(T["more_in"].format(label=city_label))}</b></div>'
+                            f'<ul>{"".join(lis[:6])}</ul>'
+                            f'<a class="cta" href="{e(more_url)}">{e(T["more_in"].format(label=city_label))}</a>')
+
+    genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(ev.get("genre",""))}</div>' if ev.get("genre") else ""
+    addr = (", " + e(ev.get("address", ""))) if ev.get("address") else ""
+    html_out = f"""<!doctype html>
+<html lang="{T['html_lang']}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{e(canonical)}">
+{hreflang}
+<meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
+<meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
+<meta property="og:url" content="{e(canonical)}">{ogimg_tag}
+<meta name="twitter:card" content="summary_large_image">
+{jsonld}
+<style>{_SEO_CSS}</style></head>
+<body><div class="wrap">
+{hero}
+<h1>{e(ev.get("name","Fiesta"))}</h1>
+<p class="sub">{e(ev.get("venue",""))} \u00b7 {e(city)}</p>
+<div class="meta">
+<div><b>{e(T["ev_when"])}</b>{e(when)}</div>
+<div><b>{e(T["ev_where"])}</b>{e(ev.get("venue",""))}{addr}, {e(city)}</div>
+{genre_row}
+<div><b>{e(T["ev_price"])}</b>{e(pl or T["free"])}</div>
+</div>
+<a class="cta" href="{front}/event/{e(event_id)}">{e(T["ev_cta"])}</a>
+{related_html}
+{langsw}
+<footer>{e(T["footer"])}</footer>
+</div></body></html>"""
+    return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
+                             headers={"Cache-Control": "public, max-age=1800"})
+
+
+@api_router.get("/fiesta/{event_id}")
+@api_router.get("/fiesta/{event_id}/{slug}")
+async def seo_event_es(event_id: str, request: Request, slug: str = ""):
+    return await _render_event(event_id, "es", request)
+
+
+@api_router.get("/en/party/{event_id}")
+@api_router.get("/en/party/{event_id}/{slug}")
+async def seo_event_en(event_id: str, request: Request, slug: str = ""):
+    return await _render_event(event_id, "en", request)
+
+
+@api_router.get("/de/party/{event_id}")
+@api_router.get("/de/party/{event_id}/{slug}")
+async def seo_event_de(event_id: str, request: Request, slug: str = ""):
+    return await _render_event(event_id, "de", request)
+
+
 @api_router.get("/sitemap.xml")
 async def seo_sitemap(request: Request):
     front = _frontend_base(request)
-    urls = [f"{front}/", f"{front}/feed"]
-    urls += [f"{front}/fiestas/{_slugify(c['id'])}" for c in SUPPORTED_CITIES]
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
-    body = "".join(f"<url><loc>{u}</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>" for u in urls)
-    xml = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>'
+
+    def _url(paths: dict, lang: str, lastmod: str, freq: str) -> str:
+        alts = "".join(f'<xhtml:link rel="alternate" hreflang="{l}" href="{u}"/>' for l, u in paths.items())
+        alts += f'<xhtml:link rel="alternate" hreflang="x-default" href="{paths["es"]}"/>'
+        return (f"<url><loc>{paths[lang]}</loc><lastmod>{lastmod}</lastmod>"
+                f"<changefreq>{freq}</changefreq>{alts}</url>")
+
+    parts = [f"<url><loc>{front}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>"]
+
+    # City landing pages, all languages
+    for c in SUPPORTED_CITIES:
+        cp = _city_paths(front, _slugify(c["id"]))
+        for lang in SEO_LANGS:
+            parts.append(_url(cp, lang, today, "daily"))
+
+    # Upcoming event pages, all languages (long-tail)
+    seen = set()
+    for c in SUPPORTED_CITIES:
+        for ev in await _upcoming_for_city(c["id"], 100):
+            eid = ev.get("id")
+            if not eid or eid in seen:
+                continue
+            seen.add(eid)
+            ep = _event_paths(front, eid, _event_slug(ev))
+            for lang in SEO_LANGS:
+                parts.append(_url(ep, lang, ev.get("date", today), "daily"))
+
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+           'xmlns:xhtml="http://www.w3.org/1999/xhtml">' + "".join(parts) + "</urlset>")
     return StarletteResponse(content=xml, media_type="application/xml",
                              headers={"Cache-Control": "public, max-age=3600"})
 

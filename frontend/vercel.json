@@ -1,6 +1,14 @@
 {
   "rewrites": [
     { "source": "/fiestas/:city", "destination": "https://quienva.onrender.com/api/ciudad/:city" },
+    { "source": "/en/parties/:city", "destination": "https://quienva.onrender.com/api/en/city/:city" },
+    { "source": "/de/partys/:city", "destination": "https://quienva.onrender.com/api/de/city/:city" },
+    { "source": "/fiesta/:id/:slug", "destination": "https://quienva.onrender.com/api/fiesta/:id/:slug" },
+    { "source": "/fiesta/:id", "destination": "https://quienva.onrender.com/api/fiesta/:id" },
+    { "source": "/en/party/:id/:slug", "destination": "https://quienva.onrender.com/api/en/party/:id/:slug" },
+    { "source": "/en/party/:id", "destination": "https://quienva.onrender.com/api/en/party/:id" },
+    { "source": "/de/party/:id/:slug", "destination": "https://quienva.onrender.com/api/de/party/:id/:slug" },
+    { "source": "/de/party/:id", "destination": "https://quienva.onrender.com/api/de/party/:id" },
     { "source": "/sitemap.xml", "destination": "https://quienva.onrender.com/api/sitemap.xml" },
     { "source": "/robots.txt", "destination": "https://quienva.onrender.com/api/robots.txt" },
     { "source": "/(.*)", "destination": "/index.html" }

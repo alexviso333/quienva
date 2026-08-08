@@ -116,6 +116,21 @@ user_problem_statement: |
   código único y puntos para ambas partes.
 
 backend:
+  - task: "Multilingual SEO landing pages (ES/EN/DE): city + event pages, hreflang, Event JSON-LD, sitemap"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "NEW growth feature. Server-rendered crawlable SEO pages now in 3 languages. Routes: city pages GET /api/ciudad/{slug} (es), /api/en/city/{slug} (en), /api/de/city/{slug} (de); event pages GET /api/fiesta/{id} and /api/fiesta/{id}/{slug} (es), /api/en/party/{id}[/{slug}] (en), /api/de/party/{id}[/{slug}] (de). Each page has localized <title>/<meta description>, <html lang>, self-canonical, hreflang alternates (es/en/de + x-default), OpenGraph, and schema.org Event JSON-LD (city pages embed one JSON-LD per listed event; event pages embed full Event with location/offers/organizer). GET /api/sitemap.xml now lists all cities x 3 langs + all upcoming events x 3 langs with <xhtml:link> hreflang alternates and daily lastmod. GET /api/robots.txt unchanged. Frontend Vercel rewrites added for the new paths. Verified locally via curl: DE/EN/ES titles correct, hreflang correct, Event JSON-LD valid, sitemap includes cities+events in 3 langs. Please retest all these endpoints: 200 status, correct html lang per route, presence of hreflang (es/en/de/x-default), presence of application/ld+json, unknown city slug returns a redirect/404 page, unknown event id returns redirect/404. Backend has 242 seed events in local DB. Use header x-forwarded-host: quienva.me to simulate the public domain."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL MULTILINGUAL SEO ENDPOINTS (11 tests, 100% pass): ✅ (1) CITY PAGES - Tested Ibiza in all 3 languages (ES/EN/DE): All return 200 with correct <html lang> attribute (es/en/de), localized titles containing 'Fiestas'/'Parties'/'Partys', correct canonical URLs (https://quienva.me/fiestas/ibiza, /en/parties/ibiza, /de/partys/ibiza), all 4 hreflang links present (es, en, de, x-default), and at least one Event JSON-LD schema with all required fields (@context, @type=Event, name, startDate, location with Place and address, url). Sample Event JSON-LD verified: ANTS event with offers (price=40, priceCurrency=EUR, availability=InStock). ✅ (2) Invalid city slug (ciudad-inexistente) → 404 with redirect HTML (does NOT 500). ✅ (3) EVENT PAGES - Tested event b521311b-e78d-4e07-bb10-52c5c3417de4 in all 3 languages: All return 200 with correct <html lang>, titles containing 'Entradas'/'Tickets'/'Tickets', all 4 hreflang links present, valid Event JSON-LD with location (@type=Place, address with PostalAddress), and offers present when event has price (verified: price=40, priceCurrency=EUR, availability=InStock). ✅ (4) Event with optional slug parameter (/fiesta/{id}/global-pages) → 200 (slug is ignored as expected). ✅ (5) Invalid event ID (nonexistentid123) → 404 with redirect HTML (does NOT 500). ✅ (6) SITEMAP.XML - Returns 200 with valid XML, contains <urlset> with xmlns:xhtml declared, 565 total URLs (15 city URLs + 549 event URLs). Verified city URL patterns present for all 3 languages (/fiestas/, /en/parties/, /de/partys/). Verified event URL patterns present for all 3 languages (/fiesta/, /en/party/, /de/party/). Each url entry contains <xhtml:link rel='alternate' hreflang=...> alternates (verified sample: 4 alternates with hreflang=es/en/de/x-default). Does NOT 500 with 242 events. ✅ (7) ROBOTS.TXT - Returns 200 with text/plain content-type, contains 'User-agent: *' and 'Sitemap: https://quienva.me/sitemap.xml'. All multilingual SEO endpoints working perfectly with correct localization, hreflang implementation, and schema.org Event JSON-LD structure."
+
   - task: "Multi-city expansion: /api/cities + 4 new cities auto via FourVenues"
     implemented: true
     working: true
@@ -4995,5 +5010,168 @@ return 401 for guests.
         
         Test file: /app/backend_test.py
         Base URL: https://global-pages.preview.emergentagent.com/api
+
+
+#====================================================================================================
+# 2026-08-08 — Multilingual SEO landing pages testing (testing agent)
+#====================================================================================================
+
+agent_communication:
+    - agent: "testing"
+      message: |
+        ✅ MULTILINGUAL SEO ENDPOINTS TESTING COMPLETE - ALL TESTS PASSED (11/11 tests, 100% success)
+        
+        TESTED: Multilingual SEO landing pages (ES/EN/DE) for city pages, event pages, sitemap.xml, and robots.txt
+        
+        TEST ENVIRONMENT:
+        - Base URL: http://localhost:8001/api
+        - Headers: x-forwarded-host: quienva.me, x-forwarded-proto: https
+        - Database: 242 seed events (226 upcoming), 143 in Ibiza
+        - Sample event tested: b521311b-e78d-4e07-bb10-52c5c3417de4 (ANTS at Ushuaïa Ibiza)
+        
+        ================================================================================
+        1) CITY PAGES (4 tests passed)
+        ================================================================================
+        
+        ✅ TEST 1a: GET /api/ciudad/ibiza (Spanish) → 200
+           - <html lang="es"> ✓
+           - Title contains "Fiestas" ✓
+           - Canonical: https://quienva.me/fiestas/ibiza ✓
+           - Hreflang links: es, en, de, x-default (4 links) ✓
+           - Event JSON-LD present with all required fields ✓
+             • @context: https://schema.org
+             • @type: Event
+             • name, startDate, location (Place with address), url
+             • offers: {price: 40, priceCurrency: EUR, availability: InStock}
+        
+        ✅ TEST 1b: GET /api/en/city/ibiza (English) → 200
+           - <html lang="en"> ✓
+           - Title contains "Parties" ✓
+           - Canonical: https://quienva.me/en/parties/ibiza ✓
+           - Hreflang links: es, en, de, x-default (4 links) ✓
+           - Event JSON-LD present ✓
+        
+        ✅ TEST 1c: GET /api/de/city/ibiza (German) → 200
+           - <html lang="de"> ✓
+           - Title contains "Partys" ✓
+           - Canonical: https://quienva.me/de/partys/ibiza ✓
+           - Hreflang links: es, en, de, x-default (4 links) ✓
+           - Event JSON-LD present ✓
+        
+        ✅ TEST 1d: GET /api/ciudad/ciudad-inexistente (Invalid city) → 404
+           - Returns redirect HTML (meta http-equiv refresh to /feed) ✓
+           - Does NOT return 500 error ✓
+        
+        ================================================================================
+        2) EVENT PAGES (5 tests passed)
+        ================================================================================
+        
+        ✅ TEST 2a: GET /api/fiesta/{event_id} (Spanish) → 200
+           - <html lang="es"> ✓
+           - Title contains "Entradas" ✓
+           - Hreflang links: es, en, de, x-default (4 links) ✓
+           - Event JSON-LD valid with all required fields ✓
+             • @context, @type: Event
+             • name: "ANTS"
+             • startDate: "2026-08-08T17:00"
+             • location: {Place with PostalAddress}
+             • offers: {price: 40, priceCurrency: EUR, availability: InStock}
+        
+        ✅ TEST 2b: GET /api/en/party/{event_id} (English) → 200
+           - <html lang="en"> ✓
+           - Title contains "Tickets" ✓
+           - Hreflang links: es, en, de, x-default (4 links) ✓
+           - Event JSON-LD valid ✓
+        
+        ✅ TEST 2c: GET /api/de/party/{event_id} (German) → 200
+           - <html lang="de"> ✓
+           - Title contains "Tickets" ✓
+           - Hreflang links: es, en, de, x-default (4 links) ✓
+           - Event JSON-LD valid ✓
+        
+        ✅ TEST 2d: GET /api/fiesta/{event_id}/global-pages (With optional slug) → 200
+           - Slug parameter is optional and ignored as expected ✓
+        
+        ✅ TEST 2e: GET /api/fiesta/nonexistentid123 (Invalid event) → 404
+           - Returns redirect HTML (meta http-equiv refresh to /feed) ✓
+           - Does NOT return 500 error ✓
+        
+        ================================================================================
+        3) SITEMAP + ROBOTS (2 tests passed)
+        ================================================================================
+        
+        ✅ TEST 3a: GET /api/sitemap.xml → 200
+           - Content-Type: application/xml ✓
+           - Valid XML with <urlset xmlns:xhtml="..."> ✓
+           - Total URLs: 565 (15 city URLs + 549 event URLs) ✓
+           - City URL patterns present for all 3 languages:
+             • /fiestas/ (Spanish) ✓
+             • /en/parties/ (English) ✓
+             • /de/partys/ (German) ✓
+           - Event URL patterns present for all 3 languages:
+             • /fiesta/ (Spanish) ✓
+             • /en/party/ (English) ✓
+             • /de/party/ (German) ✓
+           - Each <url> entry contains <xhtml:link rel="alternate" hreflang="..."> ✓
+           - Sample URL verified with 4 alternates (es, en, de, x-default) ✓
+           - Does NOT crash with 242 events ✓
+        
+        ✅ TEST 3b: GET /api/robots.txt → 200
+           - Content-Type: text/plain ✓
+           - Contains "User-agent: *" ✓
+           - Contains "Sitemap: https://quienva.me/sitemap.xml" ✓
+        
+        ================================================================================
+        DETAILED VERIFICATION
+        ================================================================================
+        
+        Event JSON-LD Structure (verified on ANTS event with 6 price tiers):
+        - @context: https://schema.org
+        - @type: Event
+        - name: "ANTS"
+        - startDate: "2026-08-08T17:00"
+        - url: https://quienva.me/fiesta/{id}/ants-ushuaia-ibiza-ibiza
+        - location:
+          • @type: Place
+          • name: "Ushuaïa Ibiza"
+          • address:
+            - @type: PostalAddress
+            - streetAddress, addressLocality, addressCountry
+        - offers (when event has price):
+          • @type: Offer
+          • price: 40 (minimum price from price_tiers)
+          • priceCurrency: EUR
+          • availability: https://schema.org/InStock
+        
+        Sitemap Structure:
+        - 565 total URLs
+        - 15 city URLs (5 cities × 3 languages)
+        - 549 event URLs (183 events × 3 languages)
+        - Each URL entry has:
+          • <loc> with the URL
+          • <lastmod> with date
+          • <changefreq> daily
+          • <xhtml:link rel="alternate" hreflang="es/en/de/x-default">
+        
+        🎯 CONCLUSION:
+        All multilingual SEO endpoints are working perfectly:
+        1. ✅ City pages render correctly in all 3 languages with proper localization
+        2. ✅ Event pages render correctly in all 3 languages with proper localization
+        3. ✅ All pages have correct <html lang> attributes
+        4. ✅ All pages have correct canonical URLs
+        5. ✅ All pages have 4 hreflang links (es, en, de, x-default)
+        6. ✅ All pages have valid Event JSON-LD with required schema.org fields
+        7. ✅ Event JSON-LD includes offers when event has price
+        8. ✅ Invalid city/event slugs return 404 with redirect HTML (not 500)
+        9. ✅ Sitemap.xml contains all cities and events in all 3 languages
+        10. ✅ Sitemap.xml has proper xhtml:link alternates with hreflang
+        11. ✅ Robots.txt contains User-agent and Sitemap directives
+        
+        NO ISSUES FOUND. All requirements from review request satisfied.
+        
+        Test file: /app/seo_test.py
+        Base URL: http://localhost:8001/api
+        Headers: x-forwarded-host: quienva.me, x-forwarded-proto: https
+
         Admin: admin@quienva.app / admin123
         Total tests: 26 passed, 0 failed
