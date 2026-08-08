@@ -818,6 +818,13 @@ li img{border-radius:10px;object-fit:cover;flex:0 0 auto}
 .langs{margin-top:26px;font-size:13px;color:#71717a}
 .langs a{color:#a1a1aa;margin-right:12px;text-decoration:none}
 footer{margin-top:30px;color:#71717a;font-size:13px}
+.bc{font-size:12px;color:#71717a;margin-bottom:6px}
+.bc a{color:#a1a1aa;text-decoration:none}
+.faq{margin-top:30px;border-top:1px solid #26262b;padding-top:16px}
+.faq h2{font-size:18px;margin:0 0 10px}
+.faq details{background:#141417;border:1px solid #26262b;border-radius:12px;padding:10px 14px;margin-bottom:8px}
+.faq summary{font-weight:700;cursor:pointer}
+.faq p{color:#a1a1aa;margin:8px 0 0}
 """
 
 SEO_T = {
@@ -850,6 +857,17 @@ SEO_T = {
         "tf_weekend_sub": "{n} planes para el finde \u00b7 horarios, precios y qu\u00e9 amigos van.",
         "tf_weekend_empty": "A\u00fan no hay fiestas del finde en {label}. Mira todos los pr\u00f3ximos planes.",
         "link_all": "Todos los pr\u00f3ximos", "link_tonight": "Esta noche", "link_weekend": "Este finde",
+        "bc_home": "Inicio", "faq_title": "Preguntas frecuentes",
+        "faq_c_q1": "\u00bfQu\u00e9 fiestas hay en {label} esta semana?",
+        "faq_c_a1": "Ahora mismo hay {n} fiestas y discotecas en {label} con horarios y precios actualizados. \u00c1brelas en \u00bfQui\u00e9n va?",
+        "faq_c_q2": "\u00bfCu\u00e1nto cuestan las entradas?",
+        "faq_c_a2": "Depende de la sala y la fecha. En cada fiesta ver\u00e1s el precio actual y si est\u00e1 a la venta, quedan pocas o est\u00e1 agotada.",
+        "faq_c_q3": "\u00bfC\u00f3mo s\u00e9 qu\u00e9 amigos van?",
+        "faq_c_a3": "En \u00bfQui\u00e9n va? ves qu\u00e9 amigos van o tienen entrada para cada fiesta y te avisamos de los planes del finde.",
+        "faq_e_q_when": "\u00bfCu\u00e1ndo es {name}?",
+        "faq_e_q_where": "\u00bfD\u00f3nde es {name}?",
+        "faq_e_q_price": "\u00bfCu\u00e1nto cuesta la entrada?",
+        "faq_e_a_price_free": "Consulta el precio actualizado en \u00bfQui\u00e9n va?.",
     },
     "en": {
         "html_lang": "en",
@@ -880,6 +898,17 @@ SEO_T = {
         "tf_weekend_sub": "{n} plans for the weekend \u00b7 times, prices and which friends are going.",
         "tf_weekend_empty": "No weekend parties yet in {label}. See all upcoming plans.",
         "link_all": "All upcoming", "link_tonight": "Tonight", "link_weekend": "This weekend",
+        "bc_home": "Home", "faq_title": "Frequently asked questions",
+        "faq_c_q1": "What parties are on in {label} this week?",
+        "faq_c_a1": "Right now there are {n} parties and clubs in {label} with up-to-date times and prices. Open them on \u00bfQui\u00e9n va?",
+        "faq_c_q2": "How much are the tickets?",
+        "faq_c_a2": "It depends on the venue and date. On each party you'll see the current price and whether it's on sale, few left or sold out.",
+        "faq_c_q3": "How do I know which friends are going?",
+        "faq_c_a3": "On \u00bfQui\u00e9n va? you can see which friends are going or have a ticket for each party, and we alert you about the weekend plans.",
+        "faq_e_q_when": "When is {name}?",
+        "faq_e_q_where": "Where is {name}?",
+        "faq_e_q_price": "How much is the ticket?",
+        "faq_e_a_price_free": "Check the up-to-date price on \u00bfQui\u00e9n va?.",
     },
     "de": {
         "html_lang": "de",
@@ -910,6 +939,17 @@ SEO_T = {
         "tf_weekend_sub": "{n} Pl\u00e4ne f\u00fcrs Wochenende \u00b7 Uhrzeiten, Preise und welche Freunde hingehen.",
         "tf_weekend_empty": "Noch keine Wochenend-Partys in {label}. Sieh alle kommenden Pl\u00e4ne.",
         "link_all": "Alle kommenden", "link_tonight": "Heute Abend", "link_weekend": "Wochenende",
+        "bc_home": "Start", "faq_title": "H\u00e4ufige Fragen",
+        "faq_c_q1": "Welche Partys gibt es diese Woche in {label}?",
+        "faq_c_a1": "Aktuell gibt es {n} Partys und Clubs in {label} mit aktuellen Uhrzeiten und Preisen. \u00d6ffne sie auf \u00bfQui\u00e9n va?",
+        "faq_c_q2": "Wie viel kosten die Tickets?",
+        "faq_c_a2": "Das h\u00e4ngt von Location und Datum ab. Bei jeder Party siehst du den aktuellen Preis und ob im Verkauf, wenige \u00fcbrig oder ausverkauft.",
+        "faq_c_q3": "Woher wei\u00df ich, welche Freunde hingehen?",
+        "faq_c_a3": "Auf \u00bfQui\u00e9n va? siehst du, welche Freunde hingehen oder ein Ticket haben, und wir informieren dich \u00fcber die Wochenendpl\u00e4ne.",
+        "faq_e_q_when": "Wann ist {name}?",
+        "faq_e_q_where": "Wo ist {name}?",
+        "faq_e_q_price": "Wie viel kostet das Ticket?",
+        "faq_e_a_price_free": "Sieh den aktuellen Preis auf \u00bfQui\u00e9n va?.",
     },
 }
 
@@ -1021,6 +1061,35 @@ def _ev_lastmod(ev: dict, today: str) -> str:
     return today
 
 
+def _breadcrumb_jsonld(items: list) -> str:
+    """items: list of (name, url). Emits schema.org BreadcrumbList."""
+    els = [{"@type": "ListItem", "position": i + 1, "name": nm, "item": url}
+           for i, (nm, url) in enumerate(items)]
+    return json.dumps({"@context": "https://schema.org", "@type": "BreadcrumbList",
+                       "itemListElement": els}, ensure_ascii=False)
+
+
+def _breadcrumb_html(items: list, e) -> str:
+    sep = " \u203a "
+    parts = []
+    for i, (nm, url) in enumerate(items):
+        parts.append(f'<span>{e(nm)}</span>' if i == len(items) - 1 else f'<a href="{e(url)}">{e(nm)}</a>')
+    return '<nav class="bc">' + sep.join(parts) + '</nav>'
+
+
+def _faq_jsonld(pairs: list) -> str:
+    """pairs: list of (question, answer). Emits schema.org FAQPage."""
+    els = [{"@type": "Question", "name": q,
+            "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in pairs]
+    return json.dumps({"@context": "https://schema.org", "@type": "FAQPage",
+                       "mainEntity": els}, ensure_ascii=False)
+
+
+def _faq_html(title: str, pairs: list, e) -> str:
+    rows = "".join(f'<details><summary>{e(q)}</summary><p>{e(a)}</p></details>' for q, a in pairs)
+    return f'<div class="faq"><h2>{e(title)}</h2>{rows}</div>'
+
+
 _TF_SLUG = {
     "tonight": {"es": "esta-noche", "en": "tonight", "de": "heute"},
     "weekend": {"es": "este-finde", "en": "this-weekend", "de": "wochenende"},
@@ -1125,6 +1194,20 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)
     ogimg_tag = f'<meta property="og:image" content="{og_img}">' if og_img else ''
 
+    # Breadcrumbs + FAQ (rich results). Static text, no extra DB cost.
+    bc_items = [(T["bc_home"], f"{front}/"), (label, _city_paths(front, slug_l)[lang])]
+    if timeframe != "all":
+        bc_items.append((T["link_tonight"] if timeframe == "tonight" else T["link_weekend"], canonical))
+    bc_html = _breadcrumb_html(bc_items, e)
+    faq_pairs = [
+        (T["faq_c_q1"].format(label=label), T["faq_c_a1"].format(label=label, n=n)),
+        (T["faq_c_q2"], T["faq_c_a2"]),
+        (T["faq_c_q3"], T["faq_c_a3"]),
+    ]
+    faq_html = _faq_html(T["faq_title"], faq_pairs, e)
+    extra_jsonld = (f'<script type="application/ld+json">{_breadcrumb_jsonld(bc_items)}</script>'
+                    f'<script type="application/ld+json">{_faq_jsonld(faq_pairs)}</script>')
+
     html_out = f"""<!doctype html>
 <html lang="{T['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1136,15 +1219,17 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
 <meta property="og:url" content="{e(canonical)}">{ogimg_tag}
 <meta name="twitter:card" content="summary_large_image">
-{''.join(jsonld)}
+{''.join(jsonld)}{extra_jsonld}
 <style>{_SEO_CSS}</style></head>
 <body><div class="wrap">
+{bc_html}
 <h1>{h1}</h1>
 <p class="sub">{sub}</p>
 {nav_html}
 <a class="cta" href="{front}/feed">{e(T["open_app"])}</a>
 <ul>{''.join(items_html)}</ul>
 <div class="cities"><b>{e(T["other_cities"])}</b><br>{other_cities}</div>
+{faq_html}
 {langsw}
 <footer>{e(T["footer"])}</footer>
 </div></body></html>"""
