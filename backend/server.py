@@ -798,34 +798,54 @@ SEO_LANGS = ("es", "en", "de")
 
 _SEO_CSS = """
 :root{color-scheme:dark}
-body{margin:0;background:#0a0a0c;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
-.wrap{max-width:720px;margin:0 auto;padding:24px 18px 60px}
-h1{font-size:26px;margin:12px 0 6px}
-p.sub{color:#a1a1aa;margin:0 0 22px}
-ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
-li a{display:flex;gap:12px;align-items:center;background:#141417;border:1px solid #26262b;border-radius:14px;padding:10px 12px;text-decoration:none;color:#fff}
-li img{border-radius:10px;object-fit:cover;flex:0 0 auto}
-.n{display:block;font-weight:700}
-.m{display:block;color:#a1a1aa;font-size:14px}
-.empty{color:#a1a1aa;padding:20px;text-align:center}
-.cta{display:inline-block;margin:22px 0;background:linear-gradient(90deg,#00f0ff,#7c3aed);color:#001014;font-weight:800;padding:12px 20px;border-radius:999px;text-decoration:none}
-.cities{margin-top:34px;border-top:1px solid #26262b;padding-top:18px}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 50% -100px,#16131f 0%,#0a0a0c 60%);color:#fff;font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:960px;margin:0 auto;padding:22px 16px 64px}
+h1{font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:28px;line-height:1.15;margin:10px 0 6px;letter-spacing:-.01em}
+p.sub{color:#a1a1aa;margin:0 0 20px;font-size:15px}
+.grid{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:14px}
+.card{display:flex;flex-direction:column;background:#141118;border:1px solid #232029;border-radius:18px;overflow:hidden;text-decoration:none;color:#fff;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.card:hover{transform:translateY(-3px);border-color:#00f0ff55;box-shadow:0 10px 30px -12px #00f0ff40}
+.poster{position:relative;width:100%;aspect-ratio:4/5;background:#1c1922;overflow:hidden}
+.poster img{width:100%;height:100%;object-fit:cover;display:block}
+.poster .ph{width:100%;height:100%;background:linear-gradient(135deg,#241f30,#12101a)}
+.poster:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(10,10,12,.85) 100%)}
+.badges{position:absolute;left:8px;bottom:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;z-index:2}
+.sb{font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;backdrop-filter:blur(6px);white-space:nowrap}
+.sb-on{background:rgba(16,185,129,.28);color:#a7f3d0}
+.sb-few{background:rgba(249,115,22,.32);color:#fed7aa}
+.sb-out{background:rgba(255,255,255,.12);color:#c9c9d1}
+.sb-list{background:rgba(139,92,246,.3);color:#ddd6fe}
+.sb-soon{background:rgba(255,255,255,.14);color:#d4d4d8}
+.pp{font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:rgba(190,242,100,.9);color:#0a0a0c}
+.body{padding:10px 12px 13px;display:flex;flex-direction:column;gap:3px}
+.n{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:14px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.m{color:#a1a1aa;font-size:12.5px}
+.empty{grid-column:1/-1;color:#a1a1aa;padding:26px;text-align:center;background:#141118;border:1px solid #232029;border-radius:18px}
+.cta{display:inline-block;margin:20px 0;background:linear-gradient(90deg,#00f0ff,#7c3aed);color:#001014;font-family:'Unbounded',system-ui,sans-serif;font-weight:800;padding:12px 22px;border-radius:999px;text-decoration:none}
+.cities{margin-top:34px;border-top:1px solid #232029;padding-top:18px}
 .cities a{color:#00f0ff;margin-right:14px;text-decoration:none;display:inline-block;margin-bottom:8px}
-.hero{width:100%;max-height:340px;object-fit:cover;border-radius:16px;margin:8px 0 18px}
+.cities b{display:inline-block;margin-bottom:6px}
+.hero{width:100%;max-height:360px;object-fit:cover;border-radius:18px;margin:8px 0 18px;border:1px solid #232029}
 .meta{display:flex;flex-direction:column;gap:8px;margin:18px 0}
-.meta > div{background:#141417;border:1px solid #26262b;border-radius:12px;padding:12px 14px}
+.meta > div{background:#141118;border:1px solid #232029;border-radius:14px;padding:12px 14px}
 .meta b{color:#00f0ff;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:2px}
 .langs{margin-top:26px;font-size:13px;color:#71717a}
 .langs a{color:#a1a1aa;margin-right:12px;text-decoration:none}
 footer{margin-top:30px;color:#71717a;font-size:13px}
 .bc{font-size:12px;color:#71717a;margin-bottom:6px}
 .bc a{color:#a1a1aa;text-decoration:none}
-.faq{margin-top:30px;border-top:1px solid #26262b;padding-top:16px}
-.faq h2{font-size:18px;margin:0 0 10px}
-.faq details{background:#141417;border:1px solid #26262b;border-radius:12px;padding:10px 14px;margin-bottom:8px}
+.faq{margin-top:34px;border-top:1px solid #232029;padding-top:16px}
+.faq h2{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:19px;margin:0 0 12px}
+.faq details{background:#141118;border:1px solid #232029;border-radius:14px;padding:12px 15px;margin-bottom:8px}
 .faq summary{font-weight:700;cursor:pointer}
 .faq p{color:#a1a1aa;margin:8px 0 0}
+@media(max-width:520px){.grid{grid-template-columns:repeat(2,1fr);gap:11px}h1{font-size:24px}}
 """
+
+_SEO_FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
+              '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+              '<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">')
 
 SEO_T = {
     "es": {
@@ -845,6 +865,8 @@ SEO_T = {
         "ev_when": "Cu\u00e1ndo", "ev_where": "D\u00f3nde", "ev_price": "Precio", "ev_genre": "M\u00fasica",
         "more_in": "M\u00e1s fiestas en {label}",
         "free": "Entrada libre", "from": "desde {p}\u20ac", "soldout": "Agotado",
+        "st_on_sale": "A la venta", "st_few": "Pocas entradas", "st_sold_out": "Agotado",
+        "st_list_only": "Solo lista", "st_soon": "Pr\u00f3ximamente", "free_badge": "Gratis",
         "other_langs": "Idiomas:",
         "tf_tonight_title": "Fiestas esta noche en {label} | \u00bfQui\u00e9n va?",
         "tf_tonight_desc": "\u00bfQu\u00e9 hacer esta noche en {label}? {n} fiestas y discotecas abiertas hoy con horarios y precios. M\u00edralas en \u00bfQui\u00e9n va?",
@@ -893,6 +915,8 @@ SEO_T = {
         "ev_when": "When", "ev_where": "Where", "ev_price": "Price", "ev_genre": "Music",
         "more_in": "More parties in {label}",
         "free": "Free entry", "from": "from \u20ac{p}", "soldout": "Sold out",
+        "st_on_sale": "On sale", "st_few": "Few left", "st_sold_out": "Sold out",
+        "st_list_only": "Guest list", "st_soon": "Coming soon", "free_badge": "Free",
         "other_langs": "Languages:",
         "tf_tonight_title": "Parties tonight in {label} | \u00bfQui\u00e9n va?",
         "tf_tonight_desc": "What to do tonight in {label}? {n} parties and clubs open today with times and prices. See them on \u00bfQui\u00e9n va?",
@@ -941,6 +965,8 @@ SEO_T = {
         "ev_when": "Wann", "ev_where": "Wo", "ev_price": "Preis", "ev_genre": "Musik",
         "more_in": "Mehr Partys in {label}",
         "free": "Freier Eintritt", "from": "ab {p}\u20ac", "soldout": "Ausverkauft",
+        "st_on_sale": "Im Verkauf", "st_few": "Wenige \u00fcbrig", "st_sold_out": "Ausverkauft",
+        "st_list_only": "Nur G\u00e4steliste", "st_soon": "Demn\u00e4chst", "free_badge": "Gratis",
         "other_langs": "Sprachen:",
         "tf_tonight_title": "Partys heute Abend in {label} | \u00bfQui\u00e9n va?",
         "tf_tonight_desc": "Was heute Abend in {label} los ist? {n} Partys und Clubs heute ge\u00f6ffnet, mit Uhrzeiten und Preisen. Sieh sie auf \u00bfQui\u00e9n va?",
@@ -1007,6 +1033,42 @@ def _seo_price_line(ev: dict, lang: str) -> str:
     if prices:
         return T["from"].format(p=int(min(prices)))
     return ""
+
+
+def _seo_sale_badge(ev: dict, lang: str):
+    """(label, css_class) for a sale-state pill matching the app. None if hidden."""
+    T = SEO_T[lang]
+    st = ev.get("sale_state") or "no_a_la_venta"
+    mp = {
+        "a_la_venta": (T["st_on_sale"], "sb-on"),
+        "pocas_entradas": (T["st_few"], "sb-few"),
+        "agotado": (T["st_sold_out"], "sb-out"),
+        "solo_lista": (T["st_list_only"], "sb-list"),
+        "no_a_la_venta": (T["st_soon"], "sb-soon"),
+    }
+    return mp.get(st, mp["no_a_la_venta"])
+
+
+def _seo_card(ev, ev_url, lang, e) -> str:
+    """App-style poster card for SEO listings."""
+    pl = _seo_price_line(ev, lang)
+    when = _seo_date(ev.get("date", ""), lang, ev.get("time", ""))
+    venue = e(ev.get("venue", ""))
+    meta = " \u00b7 ".join([x for x in [venue, e(when)] if x])
+    img = ev.get("image_url", "")
+    if str(img).startswith("http"):
+        poster = f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy">'
+    else:
+        poster = '<div class="ph"></div>'
+    blabel, bcls = _seo_sale_badge(ev, lang)
+    badge = f'<span class="sb {bcls}">{e(blabel)}</span>'
+    price = f'<span class="pp">{e(pl)}</span>' if pl else ''
+    return (
+        f'<a class="card" href="{e(ev_url)}">'
+        f'<div class="poster">{poster}<div class="badges">{badge}{price}</div></div>'
+        f'<div class="body"><span class="n">{e(ev.get("name","Fiesta"))}</span>'
+        f'<span class="m">{meta}</span></div></a>')
+
 
 
 def _city_paths(front: str, slug: str) -> dict:
@@ -1186,15 +1248,9 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 
     items_html = []
     jsonld = []
-    for ev in events[:20]:
-        pl = _seo_price_line(ev, lang)
-        line2 = " \u00b7 ".join([x for x in [e(ev.get("venue", "")), _seo_date(ev.get("date", ""), lang, ev.get("time", "")), e(pl)] if x])
+    for ev in events[:24]:
         ev_url = _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang]
-        img = ev.get("image_url", "")
-        img_tag = f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy" width="72" height="72">' if str(img).startswith("http") else ""
-        items_html.append(
-            f'<li><a href="{e(ev_url)}">{img_tag}<div><span class="n">{e(ev.get("name","Fiesta"))}</span>'
-            f'<span class="m">{line2}</span></div></a></li>')
+        items_html.append(f'<li>{_seo_card(ev, ev_url, lang, e)}</li>')
         jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, ev_url, front)}</script>')
     if not items_html:
         items_html.append(f'<li class="empty">{e(empty)}</li>')
@@ -1241,6 +1297,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 <meta property="og:url" content="{e(canonical)}">{ogimg_tag}
 <meta name="twitter:card" content="summary_large_image">
 {''.join(jsonld)}{extra_jsonld}
+{_SEO_FONTS}
 <style>{_SEO_CSS}</style></head>
 <body><div class="wrap">
 {bc_html}
@@ -1248,7 +1305,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 <p class="sub">{sub}</p>
 {nav_html}
 <a class="cta" href="{front}/feed">{e(T["open_app"])}</a>
-<ul>{''.join(items_html)}</ul>
+<ul class="grid">{''.join(items_html)}</ul>
 <div class="cities"><b>{e(T["other_cities"])}</b><br>{other_cities}</div>
 {faq_html}
 {langsw}
@@ -1353,13 +1410,11 @@ async def _render_event(event_id: str, lang: str, request: Request):
             if r.get("id") == event_id:
                 continue
             ru = _event_paths(front, r.get("id", ""), _event_slug(r))[lang]
-            rmeta = " \u00b7 ".join([x for x in [e(r.get("venue", "")), _seo_date(r.get("date", ""), lang)] if x])
-            lis.append(f'<li><a href="{e(ru)}"><div><span class="n">{e(r.get("name","Fiesta"))}</span>'
-                       f'<span class="m">{rmeta}</span></div></a></li>')
+            lis.append(f'<li>{_seo_card(r, ru, lang, e)}</li>')
         if lis:
             more_url = _city_paths(front, _slugify(city_id))[lang]
             related_html = (f'<div class="cities"><b>{e(T["more_in"].format(label=city_label))}</b></div>'
-                            f'<ul>{"".join(lis[:6])}</ul>'
+                            f'<ul class="grid">{"".join(lis[:6])}</ul>'
                             f'<a class="cta" href="{e(more_url)}">{e(T["more_in"].format(label=city_label))}</a>')
 
     genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(ev.get("genre",""))}</div>' if ev.get("genre") else ""
@@ -1416,6 +1471,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
 <meta name="twitter:card" content="summary_large_image">
 {robots_meta}
 {jsonld}{extra_jsonld}
+{_SEO_FONTS}
 <style>{_SEO_CSS}</style></head>
 <body><div class="wrap">
 {bc_html}
