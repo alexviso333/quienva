@@ -868,6 +868,13 @@ SEO_T = {
         "faq_e_q_where": "\u00bfD\u00f3nde es {name}?",
         "faq_e_q_price": "\u00bfCu\u00e1nto cuesta la entrada?",
         "faq_e_a_price_free": "Consulta el precio actualizado en \u00bfQui\u00e9n va?.",
+        "faq_e_a_when": "{name} es el {when} en {venue}, {city}.",
+        "faq_e_a_where": "{name} se celebra en {venue}{addr}, {city}.",
+        "faq_e_a_price": "La entrada para {name} cuesta {price} (precio actualizado en \u00bfQui\u00e9n va?).",
+        "faq_e_q_friends": "\u00bfQu\u00e9 amigos van a {name}?",
+        "faq_e_a_friends": "En \u00bfQui\u00e9n va? ves qu\u00e9 amigos van o tienen entrada para {name} y te avisamos cuando alguien de tu grupo se apunta.",
+        "faq_e_q_tickets": "\u00bfC\u00f3mo consigo la entrada para {name}?",
+        "faq_e_a_tickets": "Abre {name} en \u00bfQui\u00e9n va? y pulsa en conseguir entrada para comprarla al precio actualizado.",
     },
     "en": {
         "html_lang": "en",
@@ -909,6 +916,13 @@ SEO_T = {
         "faq_e_q_where": "Where is {name}?",
         "faq_e_q_price": "How much is the ticket?",
         "faq_e_a_price_free": "Check the up-to-date price on \u00bfQui\u00e9n va?.",
+        "faq_e_a_when": "{name} takes place on {when} at {venue}, {city}.",
+        "faq_e_a_where": "{name} is held at {venue}{addr}, {city}.",
+        "faq_e_a_price": "Tickets for {name} start at {price} (up-to-date price on \u00bfQui\u00e9n va?).",
+        "faq_e_q_friends": "Which friends are going to {name}?",
+        "faq_e_a_friends": "On \u00bfQui\u00e9n va? you can see which friends are going or have a ticket for {name}, and we notify you when someone from your group joins.",
+        "faq_e_q_tickets": "How do I get a ticket for {name}?",
+        "faq_e_a_tickets": "Open {name} on \u00bfQui\u00e9n va? and tap get ticket to buy at the up-to-date price.",
     },
     "de": {
         "html_lang": "de",
@@ -950,6 +964,13 @@ SEO_T = {
         "faq_e_q_where": "Wo ist {name}?",
         "faq_e_q_price": "Wie viel kostet das Ticket?",
         "faq_e_a_price_free": "Sieh den aktuellen Preis auf \u00bfQui\u00e9n va?.",
+        "faq_e_a_when": "{name} findet am {when} im {venue}, {city} statt.",
+        "faq_e_a_where": "{name} findet im {venue}{addr}, {city} statt.",
+        "faq_e_a_price": "Tickets f\u00fcr {name} gibt es ab {price} (aktueller Preis auf \u00bfQui\u00e9n va?).",
+        "faq_e_q_friends": "Welche Freunde gehen zu {name}?",
+        "faq_e_a_friends": "Auf \u00bfQui\u00e9n va? siehst du, welche Freunde zu {name} gehen oder ein Ticket haben, und wir benachrichtigen dich, wenn jemand aus deiner Gruppe dabei ist.",
+        "faq_e_q_tickets": "Wie bekomme ich ein Ticket f\u00fcr {name}?",
+        "faq_e_a_tickets": "\u00d6ffne {name} auf \u00bfQui\u00e9n va? und tippe auf Ticket sichern, um zum aktuellen Preis zu kaufen.",
     },
 }
 
@@ -1343,6 +1364,36 @@ async def _render_event(event_id: str, lang: str, request: Request):
 
     genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(ev.get("genre",""))}</div>' if ev.get("genre") else ""
     addr = (", " + e(ev.get("address", ""))) if ev.get("address") else ""
+
+    # Breadcrumbs + FAQ (rich results). Static/derived text, no extra DB cost.
+    name = ev.get("name", "Fiesta")
+    venue = ev.get("venue", "")
+    addr_plain = (", " + ev.get("address", "")) if ev.get("address") else ""
+    bc_items = [(T["bc_home"], f"{front}/")]
+    if city_id:
+        bc_items.append((city_label, _city_paths(front, _slugify(city_id))[lang]))
+    bc_items.append((name, canonical))
+    bc_html = _breadcrumb_html(bc_items, e)
+    faq_pairs = [
+        (T["faq_e_q_when"].format(name=name),
+         T["faq_e_a_when"].format(name=name, when=when, venue=venue, city=city)),
+        (T["faq_e_q_where"].format(name=name),
+         T["faq_e_a_where"].format(name=name, venue=venue, addr=addr_plain, city=city)),
+    ]
+    if not is_past:
+        # No misleading price/ticket FAQ on past parties.
+        if pl:
+            faq_pairs.append((T["faq_e_q_price"], T["faq_e_a_price"].format(name=name, price=pl)))
+        else:
+            faq_pairs.append((T["faq_e_q_price"], T["faq_e_a_price_free"]))
+        faq_pairs.append((T["faq_e_q_tickets"].format(name=name),
+                          T["faq_e_a_tickets"].format(name=name)))
+    faq_pairs.append((T["faq_e_q_friends"].format(name=name),
+                      T["faq_e_a_friends"].format(name=name)))
+    faq_html = _faq_html(T["faq_title"], faq_pairs, e)
+    extra_jsonld = (f'<script type="application/ld+json">{_breadcrumb_jsonld(bc_items)}</script>'
+                    f'<script type="application/ld+json">{_faq_jsonld(faq_pairs)}</script>')
+
     # Freshness / churn handling: past parties are noindex,follow (Google drops the
     # stale page but still follows links to upcoming events), no misleading offers,
     # and the primary CTA funnels to the city's upcoming parties instead of tickets.
@@ -1364,9 +1415,10 @@ async def _render_event(event_id: str, lang: str, request: Request):
 <meta property="og:url" content="{e(canonical)}">{ogimg_tag}
 <meta name="twitter:card" content="summary_large_image">
 {robots_meta}
-{jsonld}
+{jsonld}{extra_jsonld}
 <style>{_SEO_CSS}</style></head>
 <body><div class="wrap">
+{bc_html}
 {hero}
 <h1>{e(ev.get("name","Fiesta"))}</h1>
 <p class="sub">{e(ev.get("venue",""))} \u00b7 {e(city)}</p>
@@ -1379,6 +1431,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
 </div>
 {primary_cta}
 {related_html}
+{faq_html}
 {langsw}
 <footer>{e(T["footer"])}</footer>
 </div></body></html>"""

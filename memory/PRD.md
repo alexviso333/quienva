@@ -281,3 +281,11 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Aterrizaje de Invitación**: ?add=usuario aterriza en el feed público con banner "@usuario te ha invitado", limpia la URL y dispara el registro al tocar Aceptar; el amigo se añade tras registrarse (AuthContext.processPendingInvite).
 - **Social-proof afiliado (disimulado, SOLO invitados)**: _guest_going_boost(ev) en serialize_event añade un baseline determinista a total_going SOLO cuando user_id is None. Eventos con Mi link (_event_is_mine) → 9–34; ~22% de los demás → 2–6 (camuflaje). Registrados ven siempre datos reales; is_affiliate=null para invitados (no detectable). Objetivo: empujar compras por el enlace de afiliado.
 - Recordatorio prod: el badge "Mi link" depende del guest-token de FourVenues; si caduca (401) desaparece → actualizar token en Panel Admin de producción.
+
+## Update 2026-06 — Breadcrumbs + FAQ en páginas SEO de eventos (completado)
+- Se completó la inyección de **migas de pan (BreadcrumbList)** y **FAQ (FAQPage)** con datos estructurados JSON-LD en `_render_event` (`backend/server.py`), igual que ya estaba en `_render_city`.
+- Breadcrumb: Inicio › [Ciudad] › [Nombre de la fiesta] (con enlace real a la ciudad si aplica).
+- FAQ rico (máx. visibilidad): ¿Cuándo es? / ¿Dónde es? / ¿Cuánto cuesta la entrada? / ¿Cómo consigo la entrada? / ¿Qué amigos van? — respuestas derivadas de los datos reales del evento. Nuevas claves de traducción `faq_e_a_when/where/price`, `faq_e_q/a_friends`, `faq_e_q/a_tickets` en ES/EN/DE.
+- Fiestas **pasadas**: se omiten las preguntas de precio y entrada (no dar info engañosa) → quedan 3 preguntas + `noindex,follow`.
+- Verificado por curl en los 3 idiomas: JSON-LD válido (Event + BreadcrumbList + FAQPage), migas y 5 preguntas en futuras / 3 en pasadas. Backend arranca sin errores. Sin impacto en la velocidad del React (páginas solo para buscadores).
+- PRODUCCIÓN: cambio de código → requiere "Save to GitHub" para desplegar a Render. Tras deploy, reenviar sitemap en Google Search Console y validar con la prueba de resultados enriquecidos de Google.
