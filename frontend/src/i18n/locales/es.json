@@ -98,9 +98,38 @@
     "genre_all": "Todo",
     "today": "Hoy",
     "tomorrow": "Mañana",
-    "weekdays": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
-    "weekdays_mini": ["L", "M", "X", "J", "V", "S", "D"],
-    "months": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    "weekdays": [
+      "Lun",
+      "Mar",
+      "Mié",
+      "Jue",
+      "Vie",
+      "Sáb",
+      "Dom"
+    ],
+    "weekdays_mini": [
+      "L",
+      "M",
+      "X",
+      "J",
+      "V",
+      "S",
+      "D"
+    ],
+    "months": [
+      "enero",
+      "febrero",
+      "marzo",
+      "abril",
+      "mayo",
+      "junio",
+      "julio",
+      "agosto",
+      "septiembre",
+      "octubre",
+      "noviembre",
+      "diciembre"
+    ]
   },
   "invite": {
     "title": "Invita a tu grupo",
@@ -163,7 +192,12 @@
     "no_parties": "Sin fiestas anunciadas",
     "directions": "Cómo llegar",
     "tickets": "Entradas",
-    "type": { "discoteca": "Discoteca", "pub": "Pub", "beach_club": "Beach club", "promotor": "Promotor" }
+    "type": {
+      "discoteca": "Discoteca",
+      "pub": "Pub",
+      "beach_club": "Beach club",
+      "promotor": "Promotor"
+    }
   },
   "referral": {
     "title": "Invita a tu grupo",
@@ -274,7 +308,12 @@
     "view_venue": "Ver ficha",
     "geo_hint": "Activa la ubicación en tu navegador para ver las discotecas por distancia.",
     "attribution": "Mapas © OpenStreetMap · CARTO",
-    "type": { "discoteca": "Discotecas", "pub": "Pubs", "beach_club": "Beach clubs", "promotor": "Promotores" }
+    "type": {
+      "discoteca": "Discotecas",
+      "pub": "Pubs",
+      "beach_club": "Beach clubs",
+      "promotor": "Promotores"
+    }
   },
   "chats": {
     "eyebrow": "Mensajes",
@@ -434,8 +473,29 @@
     "status_estuve": "Estuve",
     "status_fui": "Fui",
     "empty_month": "Sin fiestas en este mes. Marca 'Voy' a un plan para empezar.",
-    "months": ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"],
-    "dow": ["L", "M", "X", "J", "V", "S", "D"]
+    "months": [
+      "Enero",
+      "Febrero",
+      "Marzo",
+      "Abril",
+      "Mayo",
+      "Junio",
+      "Julio",
+      "Agosto",
+      "Septiembre",
+      "Octubre",
+      "Noviembre",
+      "Diciembre"
+    ],
+    "dow": [
+      "L",
+      "M",
+      "X",
+      "J",
+      "V",
+      "S",
+      "D"
+    ]
   },
   "memories": {
     "title": "Calendario"
@@ -445,13 +505,34 @@
     "subtitle": "Elige qué notificaciones quieres recibir",
     "toast_error": "No se pudo guardar",
     "labels": {
-      "new_event": { "t": "Nuevas fiestas en tu ciudad", "d": "Cuando se publica una fiesta nueva" },
-      "tickets_on_sale": { "t": "Entradas a la venta", "d": "Justo cuando salen a la venta" },
-      "tickets_low_stock": { "t": "Pocas entradas", "d": "Cuando quedan pocas" },
-      "tickets_sold_out": { "t": "Agotado", "d": "Cuando se agotan las entradas" },
-      "tickets_price_down": { "t": "Bajada de precio", "d": "Cuando baja el precio" },
-      "tickets_price_up": { "t": "Subida de precio", "d": "Nueva fase / sube el precio" },
-      "friend_going": { "t": "Amigos van a un plan", "d": "Cuando un amigo se apunta" }
+      "new_event": {
+        "t": "Nuevas fiestas en tu ciudad",
+        "d": "Cuando se publica una fiesta nueva"
+      },
+      "tickets_on_sale": {
+        "t": "Entradas a la venta",
+        "d": "Justo cuando salen a la venta"
+      },
+      "tickets_low_stock": {
+        "t": "Pocas entradas",
+        "d": "Cuando quedan pocas"
+      },
+      "tickets_sold_out": {
+        "t": "Agotado",
+        "d": "Cuando se agotan las entradas"
+      },
+      "tickets_price_down": {
+        "t": "Bajada de precio",
+        "d": "Cuando baja el precio"
+      },
+      "tickets_price_up": {
+        "t": "Subida de precio",
+        "d": "Nueva fase / sube el precio"
+      },
+      "friend_going": {
+        "t": "Amigos van a un plan",
+        "d": "Cuando un amigo se apunta"
+      }
     }
   },
   "pastparties": {
@@ -567,5 +648,283 @@
     "or": "o",
     "register": "Crear cuenta con email",
     "have_account": "Ya tengo cuenta"
+  },
+  "offline": {
+    "banner": "Sin conexión — mostrando lo último"
+  },
+  "pwa": {
+    "title": "Instala ¿Quién va? en tu móvil",
+    "body": "Añádela a tu pantalla de inicio y ábrela como una app: más rápida, a pantalla completa y con avisos.",
+    "how_install": "Cómo instalar",
+    "install_app": "Instalar app",
+    "not_now": "Ahora no",
+    "close": "Cerrar",
+    "ios_title": "En iPhone/iPad (Safari):",
+    "ios_step1": "1. Pulsa el botón <strong>Compartir</strong>.",
+    "ios_step2": "2. Elige <strong>Añadir a pantalla de inicio</strong>.",
+    "ios_step3": "3. Confirma con <strong>Añadir</strong>. ¡Listo! 🎉",
+    "android_title": "En Android (Chrome):",
+    "android_step1": "1. Abre el menú <strong>(⋮)</strong> arriba a la derecha.",
+    "android_step2": "2. Elige <strong>Instalar app</strong> o <strong>Añadir a pantalla de inicio</strong>.",
+    "android_step3": "3. Confirma. ¡Listo! 🎉"
+  },
+  "push": {
+    "title": "Activa las notificaciones",
+    "body": "Actívalas para no perderte nada: te avisamos cuando salte <strong>El Momento</strong>, cuando un amigo diga que va a una fiesta o cuando salgan entradas nuevas. Puedes cambiarlo cuando quieras en Ajustes.",
+    "activate": "Sí, activar",
+    "hint": "Pulsa <strong>Sí, activar</strong> y elige <strong>Permitir</strong> o <strong>Bloquear</strong> en tu navegador. Podrás cambiarlo cuando quieras en Ajustes.",
+    "blocked": "Tu navegador tiene las notificaciones bloqueadas. Actívalas en los ajustes del navegador para vivir la experiencia completa.",
+    "continue_anyway": "Continuar de todas formas",
+    "toast_activated": "Notificaciones activadas ⚡",
+    "toast_error": "No se pudieron activar"
+  },
+  "streak": {
+    "days": "días",
+    "weeks": "sem",
+    "cold": "Marca 'Voy' a un plan para empezar tu racha."
+  },
+  "nextbadge": {
+    "about_to_unlock": "A punto de desbloquear",
+    "pts": "{{points}} pts"
+  },
+  "badgehint": {
+    "total_events_one": "Ve a {{count}} fiesta más",
+    "total_events_other": "Ve a {{count}} fiestas más",
+    "day_streak_one": "Sal {{count}} día más seguidos",
+    "day_streak_other": "Sal {{count}} días más seguidos",
+    "week_streak_one": "{{count}} semana más de fiesta",
+    "week_streak_other": "{{count}} semanas más de fiesta",
+    "weekday_count_one": "{{count}} fiesta más entre semana",
+    "weekday_count_other": "{{count}} fiestas más entre semana",
+    "sunday_count_one": "{{count}} domingo más de fiesta",
+    "sunday_count_other": "{{count}} domingos más de fiesta",
+    "friends_count_one": "Añade {{count}} amigo más",
+    "friends_count_other": "Añade {{count}} amigos más",
+    "referrals_count_one": "Invita {{count}} amigo más",
+    "referrals_count_other": "Invita {{count}} amigos más",
+    "tickets_count_one": "Compra {{count}} entrada más",
+    "tickets_count_other": "Compra {{count}} entradas más",
+    "genres_count_one": "Prueba {{count}} género nuevo",
+    "genres_count_other": "Prueba {{count}} géneros nuevos",
+    "venues_count_one": "Ve a {{count}} local nuevo",
+    "venues_count_other": "Ve a {{count}} locales nuevos",
+    "captures_count_one": "Sube {{count}} momento más",
+    "captures_count_other": "Sube {{count}} momentos más",
+    "stories_count_one": "Sube {{count}} historia más",
+    "stories_count_other": "Sube {{count}} historias más",
+    "album_uploads_one": "Sube {{count}} foto más al álbum",
+    "album_uploads_other": "Sube {{count}} fotos más al álbum",
+    "fallback_one": "{{count}} más para desbloquear",
+    "fallback_other": "{{count}} más para desbloquear"
+  },
+  "teaser": {
+    "going_one": "va",
+    "going_other": "van",
+    "see_who": "ver quién",
+    "persons_one": "persona va",
+    "persons_other": "personas van",
+    "register_to_see": "Regístrate para ver quién va"
+  },
+  "venuestonight": {
+    "title": "Otros planes esta noche",
+    "subtitle": "Pubs y sitios de entrada libre abiertos hoy",
+    "locales": "Locales",
+    "free": "Gratis"
+  },
+  "feedextras": {
+    "your_friends": "Tus amigos",
+    "now": "ahora",
+    "going": "va",
+    "has_ticket": "tiene entrada",
+    "suffix": "a <1>{{event}}</1>",
+    "your_week": "Tu semana",
+    "plans": "planes",
+    "photos": "fotos",
+    "friends": "amigos",
+    "group_plans_one": "Tu grupo tiene <1>{{count}}</1> plan apuntado · no te quedes fuera 👀",
+    "group_plans_other": "Tu grupo tiene <1>{{count}}</1> planes apuntados · no te quedes fuera 👀"
+  },
+  "agegate": {
+    "toast_add_birthdate": "Añade tu fecha de nacimiento",
+    "toast_min_age": "Debes ser mayor de 18 años para usar ¿Quién va?",
+    "toast_verified": "¡Verificado! Ya puedes entrar 🎉",
+    "title": "Confirma tu edad",
+    "body": "¿Quién va? es solo para mayores de 18 años. Indícanos tu fecha de nacimiento para continuar.",
+    "label_birthdate": "Fecha de nacimiento",
+    "confirm": "Confirmar y entrar"
+  },
+  "momentgate": {
+    "pill": "Hacer tu Momento",
+    "title": "¡Es EL MOMENTO!",
+    "desc_pre": "Haz tu foto sorpresa (delante y detrás)",
+    "desc_ontime": "ahora para llevarte +30 puntos.",
+    "desc_late": "antes de que acabe la noche.",
+    "friends_captured_one": "{{count}} amigo ya ha subido la suya · verás las suyas cuando subas la tuya",
+    "friends_captured_other": "{{count}} amigos ya han subido la suya · verás las suyas cuando subas la tuya",
+    "go": "Hacer mi Momento",
+    "later": "Ahora no"
+  },
+  "report": {
+    "reason_inappropriate": "Contenido inapropiado",
+    "reason_harassment": "Acoso o abuso",
+    "reason_spam": "Spam",
+    "reason_impersonation": "Suplantación de identidad",
+    "reason_other": "Otro",
+    "toast_thanks": "Gracias, lo revisaremos.",
+    "title": "Reportar",
+    "title_named": "Reportar a {{name}}",
+    "subtitle": "Cuéntanos qué pasa. Los reportes son anónimos.",
+    "note_ph": "Añade detalles (opcional)",
+    "submit": "Enviar reporte",
+    "toast_blocked": "Has bloqueado a {{name}}",
+    "default_user": "este usuario",
+    "more_options": "Más opciones",
+    "report": "Reportar",
+    "block": "Bloquear",
+    "confirm_block_title": "¿Bloquear a {{name}}?",
+    "confirm_block_body": "Dejaréis de ser amigos y no volveréis a ver vuestra actividad, fotos ni mensajes. Podrás desbloquearlo desde Ajustes.",
+    "cancel": "Cancelar",
+    "report_content": "Reportar contenido"
+  },
+  "compact": {
+    "sale_next": "Próx.",
+    "sale_on_sale": "A la venta",
+    "sale_few": "Pocas",
+    "sale_sold_out": "Agotado",
+    "sale_list_only": "Solo lista",
+    "mylink": "Mi link",
+    "mylink_title": "Lleva tu link de afiliado (solo lo ves tú)",
+    "top": "Top",
+    "notify_me": "Avisarme de cambios",
+    "toast_follow_error": "No se pudo actualizar el aviso",
+    "toast_follow_on": "Te avisaremos de cambios 🔔",
+    "toast_follow_off": "Avisos desactivados",
+    "remove_going": "Quitar voy",
+    "mark_going": "Marcar voy",
+    "going": "Voy",
+    "you": "Tú",
+    "going_count_one": "{{count}} va",
+    "going_count_other": "{{count}} van",
+    "interested_count_one": "{{count}} interesado",
+    "interested_count_other": "{{count}} interesados",
+    "be_first": "Sé el primero"
+  },
+  "nightrecap": {
+    "img_label": "★ REPASO DE LA NOCHE",
+    "coincided_one": "Coincidiste con {{count}} amigo",
+    "coincided_other": "Coincidiste con {{count}} amigos",
+    "eyebrow": "Repaso de la noche",
+    "no_friends": "Tu recuerdo de esta noche, listo para compartir.",
+    "share_night": "Compartir la noche",
+    "download": "Descargar",
+    "share_text": "Mi repaso de {{name}} en ¿Quién va? ✨",
+    "toast_saved": "Imagen guardada — compártela donde quieras ✨",
+    "toast_error": "No se pudo generar el repaso"
+  },
+  "badges": {
+    "title": "Insignias",
+    "only_earned": "Solo ganadas",
+    "see_all": "Ver todas",
+    "loading": "Cargando insignias…",
+    "points": "Puntos",
+    "points_total": "Puntos totales",
+    "badges_label": "insignias",
+    "actions_label": "acciones",
+    "points_unit": "puntos",
+    "empty_strip": "Gana tu primera insignia marcando “Voy” 🎉",
+    "stat_days": "días",
+    "stat_weeks_short": "sem",
+    "stat_weeks": "semanas",
+    "stat_parties": "fiestas",
+    "stat_genres": "géneros",
+    "cat_asistencia": "Asistencia",
+    "cat_racha": "Rachas",
+    "cat_temporal": "Días especiales",
+    "cat_social": "Social",
+    "cat_referido": "Invita amigos",
+    "cat_entrada": "Entradas",
+    "cat_exploracion": "Exploración",
+    "cat_captura": "Capturas & Stories",
+    "cat_album": "Álbumes",
+    "cat_otros": "Otros"
+  },
+  "eventmoment": {
+    "title": "El Momento",
+    "prepare": "Durante la fiesta te pediremos una foto sorpresa. Prepárate.",
+    "on_time_badge": "• A tiempo • +30 pts",
+    "on_time_tag": "A TIEMPO",
+    "active_title": "¡El Momento!",
+    "active_sub": "Haz una foto ahora mismo y gánate +30 puntos.",
+    "bonus_over": "Se acabó el tiempo bonus, pero aún puedes subirla.",
+    "take_photo": "Hacer la foto",
+    "download": "Descargar",
+    "share": "Compartir",
+    "share_title": "Mi Momento",
+    "share_text": "Mi Momento en ¿Quién va? ✨",
+    "toast_downloaded": "Descargado ✅"
+  },
+  "album": {
+    "need_interest": "Marca ‘Voy’ o ‘Estuve’ para acceder al álbum.",
+    "toast_saved_one": "Guardado en tu álbum privado 🔒 +5 pts",
+    "toast_saved_other": "{{count}} archivos guardados en tu álbum privado 🔒",
+    "toast_upload_error": "No se pudo subir",
+    "toast_deleted": "Eliminado",
+    "toast_unshared": "Ya no se comparte",
+    "err_too_big": "Cada archivo máx 50MB",
+    "err_too_many": "Máx 30 archivos por vez",
+    "header_title": "El álbum de la fiesta",
+    "header_sub": "Sube tus fotos y compártelas con el grupo — que no se queden en el móvil de uno solo. 📸",
+    "upload": "Subir",
+    "album": "Álbum",
+    "cancel": "Cancelar",
+    "select": "Seleccionar",
+    "tab_mine": "Mías",
+    "tab_shared": "Compartido",
+    "private_note": "Solo tú ves estas fotos hasta que las compartas.",
+    "select_note": "Toca las fotos que quieras compartir a la vez ({{count}} seleccionadas).",
+    "empty_mine": "Aún no tienes fotos de esta fiesta.",
+    "upload_yours": "Sube tus fotos",
+    "empty_shared": "Aún no hay fotos compartidas. Comparte las tuyas o espera a que tus amigos compartan.",
+    "upload_several": "Subir varias",
+    "share_n_one": "Compartir {{count}} foto",
+    "share_n_other": "Compartir {{count}} fotos",
+    "download_full": "Descargar en calidad completa",
+    "share": "Compartir",
+    "toast_downloaded": "Descargado ✅",
+    "edit_who": "Editar con quién",
+    "unshare": "Dejar de compartir",
+    "photo_title": "Foto de la fiesta",
+    "photo_text": "Foto en ¿Quién va? 📸",
+    "with_whom": "¿Con quién la compartes?",
+    "only_chosen_batch": "Solo quien elijas verá estas fotos en el álbum compartido.",
+    "only_chosen_single": "Solo quien elijas verá esta foto en el álbum compartido.",
+    "all_friends": "Todos mis amigos",
+    "groups": "Grupos",
+    "friends": "Amigos",
+    "no_friends": "Aún no tienes amigos. Añade amigos para compartir.",
+    "toast_shared_batch_one": "{{count}} foto compartida ✅",
+    "toast_shared_batch_other": "{{count}} fotos compartidas ✅",
+    "toast_shared_single": "Compartido ✅",
+    "toast_share_error": "No se pudo compartir"
+  },
+  "findfriends": {
+    "toast_match_error": "No se pudieron cruzar los contactos",
+    "toast_now_friends": "¡Ya sois amigos!",
+    "toast_request_sent": "Solicitud enviada",
+    "toast_error": "Error",
+    "toast_no_contact_selected": "No seleccionaste ningún contacto",
+    "toast_unsupported": "Tu móvil no permite leer contactos desde la web. Invita por WhatsApp 👇",
+    "toast_contacts_error": "No se pudo acceder a los contactos",
+    "toast_link_copied": "Enlace de invitación copiado",
+    "title": "Encuentra a tu gente",
+    "subtitle": "Conecta tus contactos para ver quién ya está en ¿Quién va?, o invita a tus amigos. Cuantos más, más planes verás.",
+    "connect_contacts": "Conectar contactos",
+    "link": "Enlace",
+    "ios_note": "Si estás en iPhone, tu navegador no deja leer la agenda: usa “Invitar por WhatsApp”.",
+    "none_here": "Ninguno de tus contactos está aún en ¿Quién va?. ¡Invítalos y sé el primero de tu grupo!",
+    "already_here": "Ya están aquí ({{count}})",
+    "friends": "Amigos",
+    "pending": "Pendiente",
+    "add": "Añadir"
   }
 }

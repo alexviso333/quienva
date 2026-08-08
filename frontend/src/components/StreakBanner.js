@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { Flame, Calendar, ChevronRight, Trophy, Sparkles } from "lucide-react";
 
@@ -19,6 +20,7 @@ const _BADGE_HINT = {
  */
 export function StreakBanner() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { data: streak } = useQuery({
     queryKey: ["streak-full"],
     queryFn: async () => (await api.get("/me/streak-full")).data,
@@ -59,14 +61,14 @@ export function StreakBanner() {
         <div className="relative flex items-center gap-1.5">
           <Flame className={`w-5 h-5 ${dayStreak > 0 ? "text-orange-400" : "text-white/40"}`} />
           <span className="font-display text-xl font-black text-white leading-none">{dayStreak}</span>
-          <span className="text-[10px] uppercase tracking-wide text-white/50 font-bold">días</span>
+          <span className="text-[10px] uppercase tracking-wide text-white/50 font-bold">{t("streak.days")}</span>
         </div>
         <span className="relative w-px h-6 bg-white/10" />
         {/* week streak */}
         <div className="relative flex items-center gap-1.5">
           <Calendar className={`w-5 h-5 ${weekStreak > 0 ? "text-qv-secondary" : "text-white/40"}`} />
           <span className="font-display text-xl font-black text-white leading-none">{weekStreak}</span>
-          <span className="text-[10px] uppercase tracking-wide text-white/50 font-bold">sem</span>
+          <span className="text-[10px] uppercase tracking-wide text-white/50 font-bold">{t("streak.weeks")}</span>
         </div>
         {/* points */}
         <div className="relative ml-auto flex items-center gap-1.5">
@@ -88,7 +90,7 @@ export function StreakBanner() {
       )}
 
       {isCold && !nextBadge && (
-        <p className="relative text-white/50 text-[11px] px-4 pb-2.5 -mt-1 italic">Marca &apos;Voy&apos; a un plan para empezar tu racha.</p>
+        <p className="relative text-white/50 text-[11px] px-4 pb-2.5 -mt-1 italic">{t("streak.cold")}</p>
       )}
     </button>
   );

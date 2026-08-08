@@ -1,4 +1,5 @@
 import { Lock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 // A few soft "head & shoulders" gradients so the cluster reads like real, but
 // unrecognizable, blurred faces. No real user data is used — this is a pure
@@ -32,6 +33,7 @@ function BlurredFace({ size, i }) {
  * variant for tiles (no own click handler — the parent tile navigates).
  */
 export function BlurredGoingTeaser({ count, onClick, compact = false }) {
+  const { t } = useTranslation();
   const total = count || 0;
   if (total <= 0) return null;
 
@@ -45,7 +47,7 @@ export function BlurredGoingTeaser({ count, onClick, compact = false }) {
           ))}
         </div>
         <span className="text-[10px] text-white/80 font-semibold truncate">
-          {total} {total === 1 ? "va" : "van"} · <span className="text-qv-primary">ver quién</span>
+          {total} {t("teaser.going", { count: total })} · <span className="text-qv-primary">{t("teaser.see_who")}</span>
         </span>
       </div>
     );
@@ -60,8 +62,8 @@ export function BlurredGoingTeaser({ count, onClick, compact = false }) {
         ))}
       </div>
       <p className="text-xs leading-tight flex-1 min-w-0">
-        <span className="font-semibold text-white">{total} {total === 1 ? "persona va" : "personas van"}</span>
-        <span className="block text-qv-primary font-semibold">Regístrate para ver quién va</span>
+        <span className="font-semibold text-white">{total} {t("teaser.persons", { count: total })}</span>
+        <span className="block text-qv-primary font-semibold">{t("teaser.register_to_see")}</span>
       </p>
       <span className="shrink-0 w-7 h-7 rounded-full bg-qv-primary/15 border border-qv-primary/40 flex items-center justify-center">
         <Lock className="w-3.5 h-3.5 text-qv-primary" />

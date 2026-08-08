@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { contactsSupported, pickContactPhones, inviteWhatsApp, shareInvite } from "@/lib/contacts";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
  */
 export default function FindFriends() {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const [matches, setMatches] = useState(null); // null = not run yet
   const [scanning, setScanning] = useState(false);
 
@@ -25,30 +27,30 @@ export default function FindFriends() {
   const matchMut = useMutation({
     mutationFn: async (phones) => (await api.post("/me/match-contacts", { phones })).data,
     onSuccess: (data) => setMatches(data),
-    onError: () => toast.error("No se pudieron cruzar los contactos"),
+    onError: () => toast.error(t("findfriends.toast_match_error")),
   });
 
   const sendReq = useMutation({
     mutationFn: async (userId) => (await api.post("/friends/request", { user_id: userId })).data,
     onSuccess: (d, userId) => {
-      toast.success(d.status === "accepted" ? "¡Ya sois amigos!" : "Solicitud enviada");
+      toast.success(d.status === "accepted" ? t("findfriends.toast_now_friends") : t("findfriends.toast_request_sent"));
       setMatches((prev) => (prev || []).map((u) => (u.user_id === userId ? { ...u, relationship: { status: d.status === "accepted" ? "accepted" : "pending", direction: "out" } } : u)));
       qc.invalidateQueries({ queryKey: ["friends"] });
     },
-    onError: (e) => toast.error(e.response?.data?.detail || "Error"),
+    onError: (e) => toast.error(e.response?.data?.detail || t("findfriends.toast_error")),
   });
 
   const connectContacts = async () => {
     setScanning(true);
     try {
       const phones = await pickContactPhones();
-      if (!phones.length) { toast("No seleccionaste ningún contacto"); return; }
+      if (!phones.length) { toast(t("findfriends.toast_no_contact_selected")); return; }
       matchMut.mutate(phones);
     } catch (err) {
       if (err.code === "unsupported") {
-        toast("Tu móvil no permite leer contactos desde la web. Invita por WhatsApp 👇", { icon: "📵" });
+        toast(t("findfriends.toast_unsupported"), { icon: "📵" });
       } else {
-        toast("No se pudo acceder a los contactos");
+        toast(t("findfriends.toast_contacts_error"));
       }
     } finally {
       setScanning(false);
@@ -57,17 +59,17 @@ export default function FindFriends() {
 
   const doShare = async () => {
     const res = await shareInvite(code);
-    if (res === "copied") toast.success("Enlace de invitación copiado");
+    if (res === "copied") toast.success(t("findfriends.toast_link_copied"));
   };
 
   return (
     <section className="px-5 mt-4" data-testid="find-friends">
       <div className="rounded-2xl border border-qv-secondary/30 bg-gradient-to-br from-qv-secondary/10 via-white/[0.03] to-transparent p-4">
         <p className="flex items-center gap-2 font-display font-black text-white text-base">
-          <Sparkles className="w-4 h-4 text-qv-secondary" /> Encuentra a tu gente
+          <Sparkles className="w-4 h-4 text-qv-secondary" /> {t("findfriends.title")}
         </p>
         <p className="text-white/55 text-xs mt-0.5 leading-relaxed">
-          Conecta tus contactos para ver quién ya está en ¿Quién va?, o invita a tus amigos. Cuantos más, más planes verás.
+          {t("findfriends.subtitle")}
         </p>
 
         <div className="grid grid-cols-1 gap-2 mt-3">
@@ -77,7 +79,7 @@ export default function FindFriends() {
             disabled={scanning || matchMut.isPending}
             className="h-12 rounded-2xl bg-qv-secondary text-black font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
           >
-            {scanning || matchMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Contact className="w-4 h-4" />} Conectar contactos
+            {scanning || matchMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Contact className="w-4 h-4" />} {t("findfriends.connect_contacts")}
           </button>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -92,13 +94,13 @@ export default function FindFriends() {
               onClick={doShare}
               className="h-11 rounded-2xl bg-white/5 border border-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95"
             >
-              <Share2 className="w-4 h-4" /> Enlace
+              <Share2 className="w-4 h-4" /> {t("findfriends.link")}
             </button>
           </div>
         </div>
         {!contactsSupported() && (
           <p className="text-white/35 text-[11px] mt-2 leading-tight">
-            Si estás en iPhone, tu navegador no deja leer la agenda: usa “Invitar por WhatsApp”.
+            {t("findfriends.ios_note")}
           </p>
         )}
       </div>
@@ -107,12 +109,12 @@ export default function FindFriends() {
         <div className="mt-3" data-testid="contact-matches">
           {matches.length === 0 ? (
             <p className="text-white/45 text-sm py-2">
-              Ninguno de tus contactos está aún en ¿Quién va?. ¡Invítalos y sé el primero de tu grupo!
+              {t("findfriends.none_here")}
             </p>
           ) : (
             <>
               <p className="text-xs uppercase tracking-widest text-qv-secondary font-bold mb-2">
-                Ya están aquí ({matches.length})
+                {t("findfriends.already_here", { count: matches.length })}
               </p>
               <div className="flex flex-col gap-2">
                 {matches.map((u) => {
@@ -125,16 +127,16 @@ export default function FindFriends() {
                         <p className="text-white/40 text-sm truncate">@{u.username}</p>
                       </div>
                       {status === "accepted" ? (
-                        <span className="h-9 px-3 rounded-full bg-white/10 text-white/60 text-sm font-semibold flex items-center gap-1"><Check className="w-4 h-4" /> Amigos</span>
+                        <span className="h-9 px-3 rounded-full bg-white/10 text-white/60 text-sm font-semibold flex items-center gap-1"><Check className="w-4 h-4" /> {t("findfriends.friends")}</span>
                       ) : status === "pending" ? (
-                        <span className="h-9 px-3 rounded-full bg-white/10 text-white/60 text-sm font-semibold flex items-center">Pendiente</span>
+                        <span className="h-9 px-3 rounded-full bg-white/10 text-white/60 text-sm font-semibold flex items-center">{t("findfriends.pending")}</span>
                       ) : (
                         <button
                           data-testid={`match-add-${u.username}`}
                           onClick={() => sendReq.mutate(u.user_id)}
                           className="h-9 px-4 rounded-full bg-qv-primary text-white text-sm font-semibold flex items-center gap-1.5 active:scale-95"
                         >
-                          <UserPlus className="w-4 h-4" /> Añadir
+                          <UserPlus className="w-4 h-4" /> {t("findfriends.add")}
                         </button>
                       )}
                     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { Download, X, Share, Plus } from "lucide-react";
 
 const DISMISS_KEY = "qv_pwa_dismissed_at_v2";
@@ -31,6 +32,7 @@ function isStandalone() {
  * steps (iOS has no programmatic install).
  */
 export default function InstallPwaBanner() {
+  const { t } = useTranslation();
   const [platform] = useState(detectPlatform);
   const [deferred, setDeferred] = useState(null);
   const [visible, setVisible] = useState(false);
@@ -97,9 +99,9 @@ export default function InstallPwaBanner() {
           <Download className="w-5 h-5 text-qv-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-white font-bold text-sm leading-tight">Instala ¿Quién va? en tu móvil</p>
+          <p className="text-white font-bold text-sm leading-tight">{t("pwa.title")}</p>
           <p className="text-white/60 text-xs mt-0.5 leading-snug">
-            Añádela a tu pantalla de inicio y ábrela como una app: más rápida, a pantalla completa y con avisos.
+            {t("pwa.body")}
           </p>
           <div className="flex items-center gap-2 mt-2.5">
             <button
@@ -107,53 +109,53 @@ export default function InstallPwaBanner() {
               onClick={install}
               className="h-9 px-4 rounded-full bg-qv-primary text-white text-xs font-bold active:scale-95"
             >
-              {platform === "ios" || (platform === "android" && !deferred) ? "Cómo instalar" : "Instalar app"}
+              {platform === "ios" || (platform === "android" && !deferred) ? t("pwa.how_install") : t("pwa.install_app")}
             </button>
             <button
               onClick={dismiss}
               className="h-9 px-3 rounded-full bg-white/5 text-white/60 text-xs font-semibold"
             >
-              Ahora no
+              {t("pwa.not_now")}
             </button>
           </div>
 
           {showIosSteps && platform === "ios" && (
             <div className="mt-3 rounded-xl bg-black/30 border border-white/10 p-3 space-y-2">
-              <p className="text-white/80 text-xs font-semibold">En iPhone/iPad (Safari):</p>
+              <p className="text-white/80 text-xs font-semibold">{t("pwa.ios_title")}</p>
               <div className="flex items-center gap-2 text-white/70 text-xs">
                 <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
                   <Share className="w-3.5 h-3.5" />
                 </span>
-                1. Pulsa el botón <b className="text-white">Compartir</b>.
+                <Trans i18nKey="pwa.ios_step1" components={{ strong: <b className="text-white" /> }} />
               </div>
               <div className="flex items-center gap-2 text-white/70 text-xs">
                 <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
                   <Plus className="w-3.5 h-3.5" />
                 </span>
-                2. Elige <b className="text-white">Añadir a pantalla de inicio</b>.
+                <Trans i18nKey="pwa.ios_step2" components={{ strong: <b className="text-white" /> }} />
               </div>
-              <p className="text-white/50 text-[11px]">3. Confirma con <b className="text-white">Añadir</b>. ¡Listo! 🎉</p>
+              <p className="text-white/50 text-[11px]"><Trans i18nKey="pwa.ios_step3" components={{ strong: <b className="text-white" /> }} /></p>
             </div>
           )}
 
           {showIosSteps && platform !== "ios" && (
             <div className="mt-3 rounded-xl bg-black/30 border border-white/10 p-3 space-y-2">
-              <p className="text-white/80 text-xs font-semibold">En Android (Chrome):</p>
+              <p className="text-white/80 text-xs font-semibold">{t("pwa.android_title")}</p>
               <div className="flex items-center gap-2 text-white/70 text-xs">
                 <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center shrink-0 font-bold">⋮</span>
-                1. Abre el menú <b className="text-white">(⋮)</b> arriba a la derecha.
+                <Trans i18nKey="pwa.android_step1" components={{ strong: <b className="text-white" /> }} />
               </div>
               <div className="flex items-center gap-2 text-white/70 text-xs">
                 <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
                   <Plus className="w-3.5 h-3.5" />
                 </span>
-                2. Elige <b className="text-white">Instalar app</b> o <b className="text-white">Añadir a pantalla de inicio</b>.
+                <Trans i18nKey="pwa.android_step2" components={{ strong: <b className="text-white" /> }} />
               </div>
-              <p className="text-white/50 text-[11px]">3. Confirma. ¡Listo! 🎉</p>
+              <p className="text-white/50 text-[11px]"><Trans i18nKey="pwa.android_step3" components={{ strong: <b className="text-white" /> }} /></p>
             </div>
           )}
         </div>
-        <button onClick={dismiss} className="text-white/40 shrink-0" aria-label="Cerrar">
+        <button onClick={dismiss} className="text-white/40 shrink-0" aria-label={t("pwa.close")}>
           <X className="w-4 h-4" />
         </button>
       </div>

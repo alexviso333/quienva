@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Zap, Camera, Users, X } from "lucide-react";
@@ -16,6 +17,7 @@ export default function MomentGate() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const [dismissed, setDismissed] = useState(false);
 
   const { data: moment } = useQuery({
@@ -65,7 +67,7 @@ export default function MomentGate() {
         data-testid="moment-pill"
         className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-300 text-black font-display font-black text-xs shadow-lg shadow-yellow-300/30 active:scale-95 animate-pulse-slow"
       >
-        <Zap className="w-4 h-4" /> Hacer tu Momento
+        <Zap className="w-4 h-4" /> {t("momentgate.pill")}
       </button>
     );
   }
@@ -87,17 +89,17 @@ export default function MomentGate() {
         <div className="mx-auto w-16 h-16 rounded-full bg-yellow-300/20 flex items-center justify-center mb-4 animate-pulse">
           <Zap className="w-8 h-8 text-yellow-300" />
         </div>
-        <h2 className="font-display text-2xl font-black text-white leading-tight">¡Es EL MOMENTO!</h2>
+        <h2 className="font-display text-2xl font-black text-white leading-tight">{t("momentgate.title")}</h2>
         <p className="text-yellow-200/90 text-sm mt-1 font-semibold truncate">{moment.event_name}</p>
         <p className="text-white/60 text-sm mt-3 leading-relaxed">
-          Haz tu foto sorpresa (delante y detrás){" "}
-          {moment.on_time ? <span className="text-yellow-300 font-bold">ahora para llevarte +30 puntos.</span> : "antes de que acabe la noche."}
+          {t("momentgate.desc_pre")}{" "}
+          {moment.on_time ? <span className="text-yellow-300 font-bold">{t("momentgate.desc_ontime")}</span> : t("momentgate.desc_late")}
         </p>
         {moment.friends_captured > 0 && (
           <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
             <Users className="w-3.5 h-3.5 text-qv-secondary" />
             <span className="text-white/80 text-xs font-semibold">
-              {moment.friends_captured} amig{moment.friends_captured === 1 ? "o" : "os"} ya han subido la suya · verás las suyas cuando subas la tuya
+              {t("momentgate.friends_captured", { count: moment.friends_captured })}
             </span>
           </div>
         )}
@@ -106,14 +108,14 @@ export default function MomentGate() {
           className="mt-5 w-full py-3.5 rounded-2xl bg-gradient-to-r from-yellow-300 to-amber-400 text-black font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98]"
           data-testid="moment-gate-go"
         >
-          <Camera className="w-5 h-5" /> Hacer mi Momento
+          <Camera className="w-5 h-5" /> {t("momentgate.go")}
         </button>
         <button
           onClick={dismiss}
           className="mt-2 w-full py-2.5 rounded-2xl text-white/50 text-xs font-semibold hover:text-white/80"
           data-testid="moment-gate-later"
         >
-          Ahora no
+          {t("momentgate.later")}
         </button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { Beer, Ticket, MapPin, Instagram, ChevronRight, Sparkles } from "lucide-react";
 
@@ -18,17 +19,18 @@ function todayIdx() {
  */
 export default function FeedVenuesTonight() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { data: venues = [] } = useQuery({
     queryKey: ["venues"],
     queryFn: async () => (await api.get("/venues")).data,
     staleTime: 5 * 60_000,
   });
 
-  const t = todayIdx();
+  const todayI = todayIdx();
   const open = venues.filter(
     (v) =>
       Array.isArray(v.open_days) &&
-      v.open_days.includes(t) &&
+      v.open_days.includes(todayI) &&
       // Only the "extra" plans: no FourVenues ticketing OR explicitly free entry.
       (!v.scraper_slug || v.free_entry) &&
       // Beach clubs live in their own category (map / Locales), not here.
@@ -47,11 +49,11 @@ export default function FeedVenuesTonight() {
     <div className="pt-1" data-testid="feed-venues-tonight">
       <div className="px-4 flex items-center gap-2 mb-1.5">
         <div className="flex-1 min-w-0">
-          <h3 className="text-white/70 text-xs font-bold uppercase tracking-widest">Otros planes esta noche</h3>
-          <p className="text-white/35 text-[11px]">Pubs y sitios de entrada libre abiertos hoy</p>
+          <h3 className="text-white/70 text-xs font-bold uppercase tracking-widest">{t("venuestonight.title")}</h3>
+          <p className="text-white/35 text-[11px]">{t("venuestonight.subtitle")}</p>
         </div>
         <button onClick={() => navigate("/locales")} className="text-white/40 text-[11px] font-bold flex items-center gap-0.5 active:scale-95">
-          Locales <ChevronRight className="w-3.5 h-3.5" />
+          {t("venuestonight.locales")} <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
@@ -65,7 +67,7 @@ export default function FeedVenuesTonight() {
           >
             <div className="flex items-center gap-1 mb-0.5">
               {v.type === "pub" ? <Beer className="w-3 h-3 text-white/40" /> : <Ticket className="w-3 h-3 text-white/40" />}
-              {v.free_entry && <span className="text-[8px] font-bold uppercase tracking-wide text-emerald-300/80">Gratis</span>}
+              {v.free_entry && <span className="text-[8px] font-bold uppercase tracking-wide text-emerald-300/80">{t("venuestonight.free")}</span>}
             </div>
             <p className="font-semibold text-white/90 text-xs leading-tight line-clamp-2">{v.name}</p>
             <p className="text-white/35 text-[10px] mt-0.5 flex items-center gap-0.5 truncate">

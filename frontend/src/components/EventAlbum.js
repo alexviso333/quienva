@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import api, { mediaUrl, mediaThumb, downloadMedia, shareMedia } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import {
@@ -18,6 +19,7 @@ import { toast } from "sonner";
  */
 export function EventAlbum({ eventId, hasInterest, prominent = false }) {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const inputRef = useRef(null);
   const [tab, setTab] = useState("mias");
   const [uploading, setUploading] = useState(false);
@@ -45,13 +47,13 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
     },
     onSuccess: (res) => {
       const n = res?.count || 1;
-      toast.success(n > 1 ? `${n} archivos guardados en tu álbum privado 🔒` : "Guardado en tu álbum privado 🔒 +5 pts");
+      toast.success(t("album.toast_saved", { count: n }));
       qc.invalidateQueries({ queryKey: ["album", eventId] });
       qc.invalidateQueries({ queryKey: ["badges", "me"] });
       setUploading(false); setProgress(0);
     },
     onError: (err) => {
-      toast.error(err.response?.data?.detail || "No se pudo subir");
+      toast.error(err.response?.data?.detail || t("album.toast_upload_error"));
       setUploading(false); setProgress(0);
     },
   });
@@ -59,7 +61,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
   const deleteMut = useMutation({
     mutationFn: async (uploadId) => (await api.delete(`/events/${eventId}/album/${uploadId}`)).data,
     onSuccess: () => {
-      toast.success("Eliminado");
+      toast.success(t("album.toast_deleted"));
       qc.invalidateQueries({ queryKey: ["album", eventId] });
       setPreview(null);
     },
@@ -68,7 +70,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
   const unshareMut = useMutation({
     mutationFn: async (uploadId) => (await api.post(`/events/${eventId}/album/${uploadId}/unshare`)).data,
     onSuccess: () => {
-      toast.success("Ya no se comparte");
+      toast.success(t("album.toast_unshared"));
       qc.invalidateQueries({ queryKey: ["album", eventId] });
       setPreview(null);
     },
@@ -78,8 +80,8 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     const tooBig = files.find((f) => f.size > 50 * 1024 * 1024);
-    if (tooBig) { toast.error("Cada archivo máx 50MB"); e.target.value = ""; return; }
-    if (files.length > 30) { toast.error("Máx 30 archivos por vez"); e.target.value = ""; return; }
+    if (tooBig) { toast.error(t("album.err_too_big")); e.target.value = ""; return; }
+    if (files.length > 30) { toast.error(t("album.err_too_many")); e.target.value = ""; return; }
     setUploading(true);
     uploadMut.mutate(files);
     e.target.value = "";
@@ -96,7 +98,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
   const exitSelect = () => { setSelectMode(false); setSelected(new Set()); };
 
   if (isLoading) return null;
-  if (!data) return <div className="text-white/40 text-xs italic">Marca ‘Voy’ o ‘Estuve’ para acceder al álbum.</div>;
+  if (!data) return <div className="text-white/40 text-xs italic">{t("album.need_interest")}</div>;
 
   const mine = data.mine || [];
   const shared = data.shared || [];
@@ -111,9 +113,9 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
             <Images className="w-5 h-5 text-qv-secondary" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-display font-black text-white text-lg leading-tight">El álbum de la fiesta</p>
+            <p className="font-display font-black text-white text-lg leading-tight">{t("album.header_title")}</p>
             <p className="text-white/55 text-xs leading-snug mt-0.5">
-              Sube tus fotos y compártelas con el grupo — que no se queden en el móvil de uno solo. 📸
+              {t("album.header_sub")}
             </p>
           </div>
           {canUpload && (
@@ -123,14 +125,14 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
               disabled={uploading}
               className="shrink-0 h-9 px-3 rounded-full bg-qv-secondary text-black text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-60"
             >
-              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> Subir</>}
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> {t("album.upload")}</>}
             </button>
           )}
         </div>
       )}
       <div className="flex items-center justify-between mb-2">
         <p className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 font-bold">
-          <Images className="w-4 h-4 text-qv-secondary" /> Álbum
+          <Images className="w-4 h-4 text-qv-secondary" /> {t("album.album")}
         </p>
         {tab === "mias" && mine.length > 0 && (
           selectMode ? (
@@ -139,7 +141,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
               onClick={exitSelect}
               className="text-xs font-bold text-white/60"
             >
-              Cancelar
+              {t("album.cancel")}
             </button>
           ) : (
             <button
@@ -147,7 +149,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
               onClick={() => setSelectMode(true)}
               className="text-xs font-bold text-qv-secondary flex items-center gap-1"
             >
-              <CheckCircle2 className="w-3.5 h-3.5" /> Seleccionar
+              <CheckCircle2 className="w-3.5 h-3.5" /> {t("album.select")}
             </button>
           )
         )}
@@ -160,46 +162,46 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
           onClick={() => { setTab("mias"); }}
           className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${tab === "mias" ? "bg-white text-black" : "text-white/60"}`}
         >
-          <Lock className="w-3.5 h-3.5" /> Mías <span className="opacity-60">({mine.length})</span>
+          <Lock className="w-3.5 h-3.5" /> {t("album.tab_mine")} <span className="opacity-60">({mine.length})</span>
         </button>
         <button
           data-testid="album-tab-shared"
           onClick={() => { setTab("compartido"); exitSelect(); }}
           className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${tab === "compartido" ? "bg-white text-black" : "text-white/60"}`}
         >
-          <Users className="w-3.5 h-3.5" /> Compartido <span className="opacity-60">({shared.length})</span>
+          <Users className="w-3.5 h-3.5" /> {t("album.tab_shared")} <span className="opacity-60">({shared.length})</span>
         </button>
       </div>
 
       {tab === "mias" && !selectMode && (
         <p className="text-white/40 text-[11px] mb-2 flex items-center gap-1">
-          <Lock className="w-3 h-3" /> Solo tú ves estas fotos hasta que las compartas.
+          <Lock className="w-3 h-3" /> {t("album.private_note")}
         </p>
       )}
       {selectMode && (
         <p className="text-qv-secondary text-[11px] mb-2 font-semibold">
-          Toca las fotos que quieras compartir a la vez ({selected.size} seleccionadas).
+          {t("album.select_note", { count: selected.size })}
         </p>
       )}
 
       {items.length === 0 && tab === "mias" ? (
         <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-6 text-center">
           <Images className="w-8 h-8 text-white/30 mx-auto mb-2" />
-          <p className="text-white/50 text-sm mb-3">Aún no tienes fotos de esta fiesta.</p>
+          <p className="text-white/50 text-sm mb-3">{t("album.empty_mine")}</p>
           {canUpload && (
             <button
               data-testid="album-empty-upload"
               onClick={() => inputRef.current?.click()}
               className="h-10 px-4 rounded-full bg-qv-primary text-white font-bold text-sm active:scale-95"
             >
-              <Plus className="w-4 h-4 inline mr-1" /> Sube tus fotos
+              <Plus className="w-4 h-4 inline mr-1" /> {t("album.upload_yours")}
             </button>
           )}
         </div>
       ) : items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-6 text-center">
           <Users className="w-8 h-8 text-white/30 mx-auto mb-2" />
-          <p className="text-white/50 text-sm">Aún no hay fotos compartidas. Comparte las tuyas o espera a que tus amigos compartan.</p>
+          <p className="text-white/50 text-sm">{t("album.empty_shared")}</p>
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-1.5" data-testid="album-grid">
@@ -213,7 +215,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
               {uploading ? (
                 <><Loader2 className="w-5 h-5 animate-spin" /><span className="text-[10px] mt-1">{progress}%</span></>
               ) : (
-                <><Plus className="w-6 h-6" /><span className="text-[10px] mt-1">Subir varias</span></>
+                <><Plus className="w-6 h-6" /><span className="text-[10px] mt-1">{t("album.upload_several")}</span></>
               )}
             </button>
           )}
@@ -278,7 +280,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
             onClick={() => setShareBatch(Array.from(selected))}
             className="w-full py-3 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-display font-black text-sm flex items-center justify-center gap-2 active:scale-95 shadow-lg"
           >
-            <Share2 className="w-4 h-4" /> Compartir {selected.size} foto{selected.size > 1 ? "s" : ""}
+            <Share2 className="w-4 h-4" /> {t("album.share_n", { count: selected.size })}
           </button>
         </div>
       )}
@@ -317,7 +319,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
                   data-testid="album-download-btn"
                   onClick={() => downloadMedia(preview.media_url)}
                   className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
-                  title="Descargar en calidad completa"
+                  title={t("album.download_full")}
                 >
                   <Download className="w-4 h-4 text-white/80" />
                 </button>
@@ -326,11 +328,11 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
                     type="button"
                     data-testid="album-share-native-btn"
                     onClick={async () => {
-                      const r = await shareMedia(preview.media_url, { title: "Foto de la fiesta", text: "Foto en ¿Quién va? 📸" });
-                      if (r === "downloaded") toast.success("Descargado ✅");
+                      const r = await shareMedia(preview.media_url, { title: t("album.photo_title"), text: t("album.photo_text") });
+                      if (r === "downloaded") toast.success(t("album.toast_downloaded"));
                     }}
                     className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
-                    title="Compartir"
+                    title={t("album.share")}
                   >
                     <Share2 className="w-4 h-4 text-white/80" />
                   </button>
@@ -353,7 +355,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
                     onClick={() => { setShareFor(preview); }}
                     className="flex-1 py-3 rounded-2xl bg-qv-primary text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95"
                   >
-                    <Share2 className="w-4 h-4" /> {preview.shared ? "Editar con quién" : "Compartir"}
+                    <Share2 className="w-4 h-4" /> {preview.shared ? t("album.edit_who") : t("album.share")}
                   </button>
                   {preview.shared && (
                     <button
@@ -361,7 +363,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
                       disabled={unshareMut.isPending}
                       className="py-3 px-4 rounded-2xl bg-white/10 text-white/80 font-bold text-sm active:scale-95"
                     >
-                      Dejar de compartir
+                      {t("album.unshare")}
                     </button>
                   )}
                 </div>
@@ -393,6 +395,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
 }
 
 function SharePicker({ eventId, upload, uploadIds, onClose, onDone }) {
+  const { t } = useTranslation();
   const isBatch = Array.isArray(uploadIds);
   const [selUsers, setSelUsers] = useState(new Set(upload?.shared_with_users || []));
   const [selGroups, setSelGroups] = useState(new Set(upload?.shared_with_groups || []));
@@ -423,10 +426,10 @@ function SharePicker({ eventId, upload, uploadIds, onClose, onDone }) {
       return (await api.post(`/events/${eventId}/album/${upload.id}/share`, audience)).data;
     },
     onSuccess: () => {
-      toast.success(isBatch ? `${uploadIds.length} fotos compartidas ✅` : "Compartido ✅");
+      toast.success(isBatch ? t("album.toast_shared_batch", { count: uploadIds.length }) : t("album.toast_shared_single"));
       onDone();
     },
-    onError: (e) => toast.error(e.response?.data?.detail || "No se pudo compartir"),
+    onError: (e) => toast.error(e.response?.data?.detail || t("album.toast_share_error")),
   });
 
   const toggle = (set, setter, id) => {
@@ -442,9 +445,9 @@ function SharePicker({ eventId, upload, uploadIds, onClose, onDone }) {
       <DialogContent className="bg-[#0d0d0d] border-white/10 text-white max-w-md rounded-2xl p-0 overflow-hidden max-h-[85vh] flex flex-col">
         <div className="p-4 border-b border-white/10">
           <h3 className="font-display font-black text-lg">
-            {isBatch ? `Compartir ${uploadIds.length} fotos` : "¿Con quién la compartes?"}
+            {isBatch ? t("album.share_n", { count: uploadIds.length }) : t("album.with_whom")}
           </h3>
-          <p className="text-white/50 text-xs mt-0.5">Solo quien elijas verá {isBatch ? "estas fotos" : "esta foto"} en el álbum compartido.</p>
+          <p className="text-white/50 text-xs mt-0.5">{isBatch ? t("album.only_chosen_batch") : t("album.only_chosen_single")}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -454,13 +457,13 @@ function SharePicker({ eventId, upload, uploadIds, onClose, onDone }) {
             className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition-colors ${allFriends ? "bg-qv-primary/15 border-qv-primary/50" : "bg-white/5 border-white/10"}`}
           >
             <div className="w-9 h-9 rounded-full bg-qv-primary/20 flex items-center justify-center"><Globe className="w-4.5 h-4.5 text-qv-primary" /></div>
-            <span className="flex-1 text-left font-semibold text-sm">Todos mis amigos</span>
+            <span className="flex-1 text-left font-semibold text-sm">{t("album.all_friends")}</span>
             {allFriends && <Check className="w-5 h-5 text-qv-primary" />}
           </button>
 
           {groups.length > 0 && (
             <div>
-              <p className="text-white/40 text-[11px] uppercase tracking-widest font-bold mb-2">Grupos</p>
+              <p className="text-white/40 text-[11px] uppercase tracking-widest font-bold mb-2">{t("album.groups")}</p>
               <div className="space-y-1.5">
                 {groups.map((g) => {
                   const on = selGroups.has(g.id);
@@ -482,9 +485,9 @@ function SharePicker({ eventId, upload, uploadIds, onClose, onDone }) {
           )}
 
           <div>
-            <p className="text-white/40 text-[11px] uppercase tracking-widest font-bold mb-2">Amigos</p>
+            <p className="text-white/40 text-[11px] uppercase tracking-widest font-bold mb-2">{t("album.friends")}</p>
             {friends.length === 0 ? (
-              <p className="text-white/40 text-xs">Aún no tienes amigos. Añade amigos para compartir.</p>
+              <p className="text-white/40 text-xs">{t("album.no_friends")}</p>
             ) : (
               <div className="space-y-1.5">
                 {friends.map((f) => {
@@ -509,14 +512,14 @@ function SharePicker({ eventId, upload, uploadIds, onClose, onDone }) {
         </div>
 
         <div className="p-4 border-t border-white/10 flex gap-2">
-          <button onClick={onClose} className="py-3 px-4 rounded-2xl bg-white/10 text-white/80 font-bold text-sm active:scale-95">Cancelar</button>
+          <button onClick={onClose} className="py-3 px-4 rounded-2xl bg-white/10 text-white/80 font-bold text-sm active:scale-95">{t("album.cancel")}</button>
           <button
             data-testid="share-confirm"
             onClick={() => shareMut.mutate()}
             disabled={nothingSelected || shareMut.isPending}
             className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-display font-black text-sm flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
           >
-            {shareMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />} Compartir
+            {shareMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />} {t("album.share")}
           </button>
         </div>
       </DialogContent>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { isPushSupported, subscribeToPush } from "@/lib/push";
 import { Bell, Loader2 } from "lucide-react";
@@ -51,8 +52,8 @@ export default function PushPermissionGate() {
     if (typeof Notification !== "undefined" && Notification.permission === "denied") {
       setFailed(true);
     }
-    const t = setTimeout(() => setShow(true), 400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setShow(true), 400);
+    return () => clearTimeout(timer);
   }, [user, loading]);
 
   const markDone = () => {
@@ -64,11 +65,11 @@ export default function PushPermissionGate() {
     setSubmitting(true);
     try {
       await subscribeToPush();
-      toast.success("Notificaciones activadas ⚡");
+      toast.success(t("push.toast_activated"));
       markDone();
     } catch (e) {
       // Could not enable (denied at OS/browser level). Let them continue.
-      toast.error(e.message || "No se pudieron activar");
+      toast.error(e.message || t("push.toast_error"));
       setFailed(true);
     } finally {
       setSubmitting(false);
@@ -87,12 +88,10 @@ export default function PushPermissionGate() {
           <Bell className="w-8 h-8 text-qv-primary" />
         </div>
         <h2 className="font-display text-xl font-black text-white leading-tight">
-          Activa las notificaciones
+          {t("push.title")}
         </h2>
         <p className="text-white/70 text-sm mt-2 leading-relaxed">
-          Actívalas para no perderte nada: te avisamos cuando salte{" "}
-          <span className="text-qv-secondary font-semibold">El Momento</span>, cuando un amigo diga que
-          va a una fiesta o cuando salgan entradas nuevas. Puedes cambiarlo cuando quieras en Ajustes.
+          <Trans i18nKey="push.body" components={{ strong: <span className="text-qv-secondary font-semibold" /> }} />
         </p>
         <button
           onClick={activate}
@@ -101,20 +100,17 @@ export default function PushPermissionGate() {
           data-testid="push-permission-activate"
         >
           {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-          Sí, activar
+          {t("push.activate")}
         </button>
         {!failed && (
           <p className="mt-3 text-white/45 text-xs leading-relaxed">
-            Pulsa <span className="text-white/70 font-semibold">Sí, activar</span> y elige{" "}
-            <span className="text-white/70 font-semibold">Permitir</span> o{" "}
-            <span className="text-white/70 font-semibold">Bloquear</span> en tu navegador. Podrás cambiarlo cuando quieras en Ajustes.
+            <Trans i18nKey="push.hint" components={{ strong: <span className="text-white/70 font-semibold" /> }} />
           </p>
         )}
         {failed && (
           <>
             <p className="mt-4 text-amber-300/90 text-xs leading-relaxed">
-              Tu navegador tiene las notificaciones bloqueadas. Actívalas en los ajustes del navegador
-              para vivir la experiencia completa.
+              {t("push.blocked")}
             </p>
             <button
               onClick={markDone}
@@ -122,7 +118,7 @@ export default function PushPermissionGate() {
               className="mt-2 w-full py-2.5 rounded-2xl text-white/50 text-xs font-semibold hover:text-white/80"
               data-testid="push-permission-later"
             >
-              Continuar de todas formas
+              {t("push.continue_anyway")}
             </button>
           </>
         )}

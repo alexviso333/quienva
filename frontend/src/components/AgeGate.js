@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
  */
 export default function AgeGate() {
   const { user, refreshUser } = useAuth();
+  const { t } = useTranslation();
   const [birthdate, setBirthdate] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -19,7 +21,7 @@ export default function AgeGate() {
 
   const submit = async () => {
     if (!birthdate) {
-      toast.error("Añade tu fecha de nacimiento");
+      toast.error(t("agegate.toast_add_birthdate"));
       return;
     }
     const b = new Date(birthdate);
@@ -28,14 +30,14 @@ export default function AgeGate() {
     const m = now.getMonth() - b.getMonth();
     if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
     if (isNaN(age) || age < 18) {
-      toast.error("Debes ser mayor de 18 años para usar ¿Quién va?");
+      toast.error(t("agegate.toast_min_age"));
       return;
     }
     setBusy(true);
     try {
       await api.put("/auth/profile", { birthdate });
       await refreshUser();
-      toast.success("¡Verificado! Ya puedes entrar 🎉");
+      toast.success(t("agegate.toast_verified"));
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail));
     } finally {
@@ -49,12 +51,12 @@ export default function AgeGate() {
         <div className="w-16 h-16 rounded-full bg-qv-primary/15 border border-qv-primary/40 flex items-center justify-center mb-5">
           <ShieldCheck className="w-8 h-8 text-qv-primary" />
         </div>
-        <h1 className="font-display text-3xl font-black tracking-tighter text-white">Confirma tu edad</h1>
+        <h1 className="font-display text-3xl font-black tracking-tighter text-white">{t("agegate.title")}</h1>
         <p className="text-white/60 mt-2 leading-relaxed">
-          ¿Quién va? es solo para mayores de 18 años. Indícanos tu fecha de nacimiento para continuar.
+          {t("agegate.body")}
         </p>
         <label className="block text-[11px] uppercase tracking-wider text-white/40 font-bold mt-6 mb-1 ml-1">
-          Fecha de nacimiento
+          {t("agegate.label_birthdate")}
         </label>
         <Input
           data-testid="agegate-birthdate"
@@ -69,7 +71,7 @@ export default function AgeGate() {
           disabled={busy}
           className="w-full h-14 mt-4 rounded-2xl bg-qv-primary text-white font-bold text-base flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
         >
-          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null} Confirmar y entrar
+          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null} {t("agegate.confirm")}
         </button>
       </div>
     </div>

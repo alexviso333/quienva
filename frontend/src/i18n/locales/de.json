@@ -98,9 +98,38 @@
     "genre_all": "Alle",
     "today": "Heute",
     "tomorrow": "Morgen",
-    "weekdays": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
-    "weekdays_mini": ["M", "D", "M", "D", "F", "S", "S"],
-    "months": ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
+    "weekdays": [
+      "Mo",
+      "Di",
+      "Mi",
+      "Do",
+      "Fr",
+      "Sa",
+      "So"
+    ],
+    "weekdays_mini": [
+      "M",
+      "D",
+      "M",
+      "D",
+      "F",
+      "S",
+      "S"
+    ],
+    "months": [
+      "Januar",
+      "Februar",
+      "März",
+      "April",
+      "Mai",
+      "Juni",
+      "Juli",
+      "August",
+      "September",
+      "Oktober",
+      "November",
+      "Dezember"
+    ]
   },
   "invite": {
     "title": "Lade deine Gruppe ein",
@@ -163,7 +192,12 @@
     "no_parties": "Keine Partys angekündigt",
     "directions": "Anfahrt",
     "tickets": "Tickets",
-    "type": { "discoteca": "Club", "pub": "Pub", "beach_club": "Beach club", "promotor": "Veranstalter" }
+    "type": {
+      "discoteca": "Club",
+      "pub": "Pub",
+      "beach_club": "Beach club",
+      "promotor": "Veranstalter"
+    }
   },
   "referral": {
     "title": "Lade deine Gruppe ein",
@@ -274,7 +308,12 @@
     "view_venue": "Location ansehen",
     "geo_hint": "Aktiviere den Standort in deinem Browser, um Clubs nach Entfernung zu sehen.",
     "attribution": "Karten © OpenStreetMap · CARTO",
-    "type": { "discoteca": "Clubs", "pub": "Pubs", "beach_club": "Beach Clubs", "promotor": "Veranstalter" }
+    "type": {
+      "discoteca": "Clubs",
+      "pub": "Pubs",
+      "beach_club": "Beach Clubs",
+      "promotor": "Veranstalter"
+    }
   },
   "chats": {
     "eyebrow": "Nachrichten",
@@ -434,8 +473,29 @@
     "status_estuve": "Ich war da",
     "status_fui": "Ich war dabei",
     "empty_month": "Keine Partys diesen Monat. Markiere 'Ich gehe' bei einem Plan, um zu starten.",
-    "months": ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
-    "dow": ["M", "D", "M", "D", "F", "S", "S"]
+    "months": [
+      "Januar",
+      "Februar",
+      "März",
+      "April",
+      "Mai",
+      "Juni",
+      "Juli",
+      "August",
+      "September",
+      "Oktober",
+      "November",
+      "Dezember"
+    ],
+    "dow": [
+      "M",
+      "D",
+      "M",
+      "D",
+      "F",
+      "S",
+      "S"
+    ]
   },
   "memories": {
     "title": "Kalender"
@@ -445,13 +505,34 @@
     "subtitle": "Wähle, welche Benachrichtigungen du erhalten möchtest",
     "toast_error": "Konnte nicht gespeichert werden",
     "labels": {
-      "new_event": { "t": "Neue Partys in deiner Stadt", "d": "Wenn eine neue Party veröffentlicht wird" },
-      "tickets_on_sale": { "t": "Tickets im Verkauf", "d": "Genau wenn sie in den Verkauf gehen" },
-      "tickets_low_stock": { "t": "Wenige Tickets", "d": "Wenn nur noch wenige übrig sind" },
-      "tickets_sold_out": { "t": "Ausverkauft", "d": "Wenn die Tickets ausverkauft sind" },
-      "tickets_price_down": { "t": "Preissenkung", "d": "Wenn der Preis sinkt" },
-      "tickets_price_up": { "t": "Preiserhöhung", "d": "Neue Phase / Preis steigt" },
-      "friend_going": { "t": "Freunde gehen zu einem Plan", "d": "Wenn ein Freund sich anmeldet" }
+      "new_event": {
+        "t": "Neue Partys in deiner Stadt",
+        "d": "Wenn eine neue Party veröffentlicht wird"
+      },
+      "tickets_on_sale": {
+        "t": "Tickets im Verkauf",
+        "d": "Genau wenn sie in den Verkauf gehen"
+      },
+      "tickets_low_stock": {
+        "t": "Wenige Tickets",
+        "d": "Wenn nur noch wenige übrig sind"
+      },
+      "tickets_sold_out": {
+        "t": "Ausverkauft",
+        "d": "Wenn die Tickets ausverkauft sind"
+      },
+      "tickets_price_down": {
+        "t": "Preissenkung",
+        "d": "Wenn der Preis sinkt"
+      },
+      "tickets_price_up": {
+        "t": "Preiserhöhung",
+        "d": "Neue Phase / Preis steigt"
+      },
+      "friend_going": {
+        "t": "Freunde gehen zu einem Plan",
+        "d": "Wenn ein Freund sich anmeldet"
+      }
     }
   },
   "pastparties": {
@@ -567,5 +648,283 @@
     "or": "oder",
     "register": "Konto mit E-Mail erstellen",
     "have_account": "Ich habe schon ein Konto"
+  },
+  "offline": {
+    "banner": "Offline — zeige das Neueste"
+  },
+  "pwa": {
+    "title": "Installiere ¿Quién va? auf deinem Handy",
+    "body": "Füge sie zum Startbildschirm hinzu und öffne sie wie eine App: schneller, im Vollbild und mit Hinweisen.",
+    "how_install": "So installierst du",
+    "install_app": "App installieren",
+    "not_now": "Jetzt nicht",
+    "close": "Schließen",
+    "ios_title": "Auf iPhone/iPad (Safari):",
+    "ios_step1": "1. Tippe auf die Schaltfläche <strong>Teilen</strong>.",
+    "ios_step2": "2. Wähle <strong>Zum Home-Bildschirm</strong>.",
+    "ios_step3": "3. Bestätige mit <strong>Hinzufügen</strong>. Fertig! 🎉",
+    "android_title": "Auf Android (Chrome):",
+    "android_step1": "1. Öffne das Menü <strong>(⋮)</strong> oben rechts.",
+    "android_step2": "2. Wähle <strong>App installieren</strong> oder <strong>Zum Startbildschirm hinzufügen</strong>.",
+    "android_step3": "3. Bestätige. Fertig! 🎉"
+  },
+  "push": {
+    "title": "Benachrichtigungen aktivieren",
+    "body": "Aktiviere sie, um nichts zu verpassen: Wir informieren dich, wenn <strong>Der Moment</strong> startet, wenn ein Freund zu einer Party geht oder wenn neue Tickets erscheinen. Du kannst es jederzeit in den Einstellungen ändern.",
+    "activate": "Ja, aktivieren",
+    "hint": "Tippe auf <strong>Ja, aktivieren</strong> und wähle <strong>Zulassen</strong> oder <strong>Blockieren</strong> in deinem Browser. Du kannst es jederzeit in den Einstellungen ändern.",
+    "blocked": "Dein Browser blockiert Benachrichtigungen. Aktiviere sie in den Browsereinstellungen für das volle Erlebnis.",
+    "continue_anyway": "Trotzdem fortfahren",
+    "toast_activated": "Benachrichtigungen aktiviert ⚡",
+    "toast_error": "Konnten nicht aktiviert werden"
+  },
+  "streak": {
+    "days": "Tage",
+    "weeks": "Wo",
+    "cold": "Tippe bei einem Plan auf 'Ich gehe', um deine Serie zu starten."
+  },
+  "nextbadge": {
+    "about_to_unlock": "Kurz vor dem Freischalten",
+    "pts": "{{points}} Pkt"
+  },
+  "badgehint": {
+    "total_events_one": "Geh zu {{count}} weiteren Party",
+    "total_events_other": "Geh zu {{count}} weiteren Partys",
+    "day_streak_one": "Geh {{count}} weiteren Tag in Folge aus",
+    "day_streak_other": "Geh {{count}} weitere Tage in Folge aus",
+    "week_streak_one": "{{count}} weitere Woche feiern",
+    "week_streak_other": "{{count}} weitere Wochen feiern",
+    "weekday_count_one": "{{count}} weitere Party unter der Woche",
+    "weekday_count_other": "{{count}} weitere Partys unter der Woche",
+    "sunday_count_one": "{{count}} weiteren Sonntag feiern",
+    "sunday_count_other": "{{count}} weitere Sonntage feiern",
+    "friends_count_one": "Füge {{count}} weiteren Freund hinzu",
+    "friends_count_other": "Füge {{count}} weitere Freunde hinzu",
+    "referrals_count_one": "Lade {{count}} weiteren Freund ein",
+    "referrals_count_other": "Lade {{count}} weitere Freunde ein",
+    "tickets_count_one": "Kaufe {{count}} weiteres Ticket",
+    "tickets_count_other": "Kaufe {{count}} weitere Tickets",
+    "genres_count_one": "Probiere {{count}} neues Genre",
+    "genres_count_other": "Probiere {{count}} neue Genres",
+    "venues_count_one": "Geh zu {{count}} neuen Location",
+    "venues_count_other": "Geh zu {{count}} neuen Locations",
+    "captures_count_one": "Lade {{count}} weiteren Moment hoch",
+    "captures_count_other": "Lade {{count}} weitere Momente hoch",
+    "stories_count_one": "Lade {{count}} weitere Story hoch",
+    "stories_count_other": "Lade {{count}} weitere Storys hoch",
+    "album_uploads_one": "Lade {{count}} weiteres Foto ins Album hoch",
+    "album_uploads_other": "Lade {{count}} weitere Fotos ins Album hoch",
+    "fallback_one": "Noch {{count}} zum Freischalten",
+    "fallback_other": "Noch {{count}} zum Freischalten"
+  },
+  "teaser": {
+    "going_one": "geht",
+    "going_other": "gehen",
+    "see_who": "wer geht",
+    "persons_one": "Person geht",
+    "persons_other": "Personen gehen",
+    "register_to_see": "Registriere dich, um zu sehen, wer geht"
+  },
+  "venuestonight": {
+    "title": "Weitere Pläne heute Nacht",
+    "subtitle": "Pubs und Orte mit freiem Eintritt, heute geöffnet",
+    "locales": "Locations",
+    "free": "Gratis"
+  },
+  "feedextras": {
+    "your_friends": "Deine Freunde",
+    "now": "jetzt",
+    "going": "geht",
+    "has_ticket": "hat ein Ticket",
+    "suffix": "zu <1>{{event}}</1>",
+    "your_week": "Deine Woche",
+    "plans": "Pläne",
+    "photos": "Fotos",
+    "friends": "Freunde",
+    "group_plans_one": "Deine Gruppe hat <1>{{count}}</1> Plan eingetragen · sei dabei 👀",
+    "group_plans_other": "Deine Gruppe hat <1>{{count}}</1> Pläne eingetragen · sei dabei 👀"
+  },
+  "agegate": {
+    "toast_add_birthdate": "Gib dein Geburtsdatum an",
+    "toast_min_age": "Du musst über 18 sein, um ¿Quién va? zu nutzen",
+    "toast_verified": "Verifiziert! Du bist dabei 🎉",
+    "title": "Bestätige dein Alter",
+    "body": "¿Quién va? ist nur für Personen über 18. Gib dein Geburtsdatum an, um fortzufahren.",
+    "label_birthdate": "Geburtsdatum",
+    "confirm": "Bestätigen und rein"
+  },
+  "momentgate": {
+    "pill": "Deinen Moment machen",
+    "title": "Es ist DER MOMENT!",
+    "desc_pre": "Mach dein Überraschungsfoto (vorne und hinten)",
+    "desc_ontime": "jetzt, um +30 Punkte zu bekommen.",
+    "desc_late": "bevor die Nacht endet.",
+    "friends_captured_one": "{{count}} Freund hat seins schon gepostet · du siehst ihres, sobald du deins postest",
+    "friends_captured_other": "{{count}} Freunde haben ihres schon gepostet · du siehst ihres, sobald du deins postest",
+    "go": "Meinen Moment machen",
+    "later": "Jetzt nicht"
+  },
+  "report": {
+    "reason_inappropriate": "Unangemessener Inhalt",
+    "reason_harassment": "Belästigung oder Missbrauch",
+    "reason_spam": "Spam",
+    "reason_impersonation": "Identitätsdiebstahl",
+    "reason_other": "Sonstiges",
+    "toast_thanks": "Danke, wir prüfen das.",
+    "title": "Melden",
+    "title_named": "{{name}} melden",
+    "subtitle": "Sag uns, was los ist. Meldungen sind anonym.",
+    "note_ph": "Details hinzufügen (optional)",
+    "submit": "Meldung senden",
+    "toast_blocked": "Du hast {{name}} blockiert",
+    "default_user": "diesen Nutzer",
+    "more_options": "Weitere Optionen",
+    "report": "Melden",
+    "block": "Blockieren",
+    "confirm_block_title": "{{name}} blockieren?",
+    "confirm_block_body": "Ihr seid dann keine Freunde mehr und seht gegenseitig keine Aktivität, Fotos oder Nachrichten. Du kannst in den Einstellungen wieder entsperren.",
+    "cancel": "Abbrechen",
+    "report_content": "Inhalt melden"
+  },
+  "compact": {
+    "sale_next": "Bald",
+    "sale_on_sale": "Im Verkauf",
+    "sale_few": "Wenige",
+    "sale_sold_out": "Ausverkauft",
+    "sale_list_only": "Nur Liste",
+    "mylink": "Mein Link",
+    "mylink_title": "Enthält deinen Affiliate-Link (nur du siehst ihn)",
+    "top": "Top",
+    "notify_me": "Bei Änderungen benachrichtigen",
+    "toast_follow_error": "Hinweis konnte nicht aktualisiert werden",
+    "toast_follow_on": "Wir informieren dich über Änderungen 🔔",
+    "toast_follow_off": "Hinweise aus",
+    "remove_going": "Teilnahme entfernen",
+    "mark_going": "Teilnahme markieren",
+    "going": "Ich gehe",
+    "you": "Du",
+    "going_count_one": "{{count}} geht",
+    "going_count_other": "{{count}} gehen",
+    "interested_count_one": "{{count}} interessiert",
+    "interested_count_other": "{{count}} interessiert",
+    "be_first": "Sei der Erste"
+  },
+  "nightrecap": {
+    "img_label": "★ RÜCKBLICK DER NACHT",
+    "coincided_one": "Du hast {{count}} Freund getroffen",
+    "coincided_other": "Du hast {{count}} Freunde getroffen",
+    "eyebrow": "Rückblick der Nacht",
+    "no_friends": "Deine Erinnerung an diese Nacht, bereit zum Teilen.",
+    "share_night": "Die Nacht teilen",
+    "download": "Herunterladen",
+    "share_text": "Mein Rückblick auf {{name}} bei ¿Quién va? ✨",
+    "toast_saved": "Bild gespeichert — teile es, wo du willst ✨",
+    "toast_error": "Rückblick konnte nicht erstellt werden"
+  },
+  "badges": {
+    "title": "Abzeichen",
+    "only_earned": "Nur erhaltene",
+    "see_all": "Alle ansehen",
+    "loading": "Abzeichen werden geladen…",
+    "points": "Punkte",
+    "points_total": "Gesamtpunkte",
+    "badges_label": "Abzeichen",
+    "actions_label": "Aktionen",
+    "points_unit": "Punkte",
+    "empty_strip": "Verdiene dein erstes Abzeichen mit „Ich gehe“ 🎉",
+    "stat_days": "Tage",
+    "stat_weeks_short": "Wo",
+    "stat_weeks": "Wochen",
+    "stat_parties": "Partys",
+    "stat_genres": "Genres",
+    "cat_asistencia": "Teilnahme",
+    "cat_racha": "Serien",
+    "cat_temporal": "Besondere Tage",
+    "cat_social": "Sozial",
+    "cat_referido": "Freunde einladen",
+    "cat_entrada": "Tickets",
+    "cat_exploracion": "Entdeckung",
+    "cat_captura": "Aufnahmen & Storys",
+    "cat_album": "Alben",
+    "cat_otros": "Sonstige"
+  },
+  "eventmoment": {
+    "title": "Der Moment",
+    "prepare": "Während der Party bitten wir dich um ein Überraschungsfoto. Mach dich bereit.",
+    "on_time_badge": "• Pünktlich • +30 Pkt",
+    "on_time_tag": "PÜNKTLICH",
+    "active_title": "Der Moment!",
+    "active_sub": "Mach jetzt ein Foto und verdiene +30 Punkte.",
+    "bonus_over": "Die Bonuszeit ist vorbei, aber du kannst es trotzdem hochladen.",
+    "take_photo": "Foto machen",
+    "download": "Herunterladen",
+    "share": "Teilen",
+    "share_title": "Mein Moment",
+    "share_text": "Mein Moment bei ¿Quién va? ✨",
+    "toast_downloaded": "Heruntergeladen ✅"
+  },
+  "album": {
+    "need_interest": "Tippe auf ‚Ich gehe‘ oder ‚Ich war da‘, um aufs Album zuzugreifen.",
+    "toast_saved_one": "In deinem privaten Album gespeichert 🔒 +5 Pkt",
+    "toast_saved_other": "{{count}} Dateien in deinem privaten Album gespeichert 🔒",
+    "toast_upload_error": "Konnte nicht hochgeladen werden",
+    "toast_deleted": "Gelöscht",
+    "toast_unshared": "Nicht mehr geteilt",
+    "err_too_big": "Jede Datei max. 50 MB",
+    "err_too_many": "Max. 30 Dateien auf einmal",
+    "header_title": "Das Party-Album",
+    "header_sub": "Lade deine Fotos hoch und teile sie mit der Gruppe — lass sie nicht auf einem Handy versauern. 📸",
+    "upload": "Hochladen",
+    "album": "Album",
+    "cancel": "Abbrechen",
+    "select": "Auswählen",
+    "tab_mine": "Meine",
+    "tab_shared": "Geteilt",
+    "private_note": "Nur du siehst diese Fotos, bis du sie teilst.",
+    "select_note": "Tippe die Fotos an, die du gleichzeitig teilen willst ({{count}} ausgewählt).",
+    "empty_mine": "Du hast noch keine Fotos von dieser Party.",
+    "upload_yours": "Lade deine Fotos hoch",
+    "empty_shared": "Noch keine geteilten Fotos. Teile deine oder warte, bis deine Freunde teilen.",
+    "upload_several": "Mehrere hochladen",
+    "share_n_one": "{{count}} Foto teilen",
+    "share_n_other": "{{count}} Fotos teilen",
+    "download_full": "In voller Qualität herunterladen",
+    "share": "Teilen",
+    "toast_downloaded": "Heruntergeladen ✅",
+    "edit_who": "Bearbeiten, mit wem",
+    "unshare": "Nicht mehr teilen",
+    "photo_title": "Party-Foto",
+    "photo_text": "Foto bei ¿Quién va? 📸",
+    "with_whom": "Mit wem teilst du es?",
+    "only_chosen_batch": "Nur wen du auswählst, sieht diese Fotos im geteilten Album.",
+    "only_chosen_single": "Nur wen du auswählst, sieht dieses Foto im geteilten Album.",
+    "all_friends": "Alle meine Freunde",
+    "groups": "Gruppen",
+    "friends": "Freunde",
+    "no_friends": "Du hast noch keine Freunde. Füge Freunde hinzu, um zu teilen.",
+    "toast_shared_batch_one": "{{count}} Foto geteilt ✅",
+    "toast_shared_batch_other": "{{count}} Fotos geteilt ✅",
+    "toast_shared_single": "Geteilt ✅",
+    "toast_share_error": "Konnte nicht geteilt werden"
+  },
+  "findfriends": {
+    "toast_match_error": "Kontakte konnten nicht abgeglichen werden",
+    "toast_now_friends": "Ihr seid jetzt Freunde!",
+    "toast_request_sent": "Anfrage gesendet",
+    "toast_error": "Fehler",
+    "toast_no_contact_selected": "Du hast keinen Kontakt ausgewählt",
+    "toast_unsupported": "Dein Handy kann keine Kontakte aus dem Web lesen. Lade per WhatsApp ein 👇",
+    "toast_contacts_error": "Zugriff auf Kontakte nicht möglich",
+    "toast_link_copied": "Einladungslink kopiert",
+    "title": "Finde deine Leute",
+    "subtitle": "Verbinde deine Kontakte, um zu sehen, wer schon bei ¿Quién va? ist, oder lade Freunde ein. Je mehr, desto mehr Pläne siehst du.",
+    "connect_contacts": "Kontakte verbinden",
+    "link": "Link",
+    "ios_note": "Auf dem iPhone kann dein Browser das Adressbuch nicht lesen: nutze „Per WhatsApp einladen“.",
+    "none_here": "Noch keiner deiner Kontakte ist bei ¿Quién va?. Lade sie ein und sei der Erste deiner Gruppe!",
+    "already_here": "Schon hier ({{count}})",
+    "friends": "Freunde",
+    "pending": "Ausstehend",
+    "add": "Hinzufügen"
   }
 }

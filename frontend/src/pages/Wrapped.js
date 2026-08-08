@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import api, { mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import {
@@ -42,6 +43,7 @@ const GRADS = [
 
 export default function Wrapped() {
   const nav = useNavigate();
+  const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
   const isYear = params.has("year");
   const month = params.get("month") || prevMonth(thisMonth());
@@ -114,20 +116,20 @@ export default function Wrapped() {
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#FFD400";
     ctx.font = "800 46px system-ui, sans-serif";
-    ctx.fillText(data.is_year ? "MI WRAPPED ANUAL" : "MI WRAPPED", 80, 200);
+    ctx.fillText(data.is_year ? t("wrapped.img_title_year") : t("wrapped.img_title_month"), 80, 200);
     ctx.fillStyle = "#ffffff";
     ctx.font = "900 92px system-ui, sans-serif";
     ctx.fillText(data.month_label, 80, 300);
 
     const rows = [
-      [`${data.parties}`, `fiesta${data.parties === 1 ? "" : "s"}`],
-      [`${data.nights_out}`, "noches fuera"],
-      (data.is_year && data.top_month) ? [data.top_month.name, "tu mes más movido"] : null,
-      data.top_venue ? [data.top_venue.name, "tu sala top"] : null,
-      data.top_genre ? [data.top_genre, "tu género top"] : null,
-      [`${data.photos}`, "fotos"],
-      [`${data.moments}`, `momentos${data.moments_ontime ? ` (${data.moments_ontime} a tiempo)` : ""}`],
-      (data.friends_coincided ? [`${data.friends_coincided}`, "amig@s con los que coincidiste"] : null),
+      [`${data.parties}`, t("wrapped.img_parties", { count: data.parties })],
+      [`${data.nights_out}`, t("wrapped.img_nights")],
+      (data.is_year && data.top_month) ? [data.top_month.name, t("wrapped.img_top_month")] : null,
+      data.top_venue ? [data.top_venue.name, t("wrapped.img_venue")] : null,
+      data.top_genre ? [data.top_genre, t("wrapped.img_genre")] : null,
+      [`${data.photos}`, t("wrapped.img_photos")],
+      [`${data.moments}`, data.moments_ontime ? t("wrapped.img_moments_ontime", { n: data.moments_ontime }) : t("wrapped.img_moments")],
+      (data.friends_coincided ? [`${data.friends_coincided}`, t("wrapped.img_friends")] : null),
     ].filter(Boolean);
 
     let y = 470;
@@ -159,17 +161,17 @@ export default function Wrapped() {
       const blob = await buildImage();
       const file = new File([blob], `wrapped-${period}.jpg`, { type: "image/jpeg" });
       if (mode === "share" && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "Mi Wrapped", text: `Mi ${data.month_label} en ¿Quién va? ✨` });
+        await navigator.share({ files: [file], title: t("wrapped.share_title"), text: t("wrapped.share_text", { label: data.month_label }) });
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url; a.download = `wrapped-${period}.jpg`;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 4000);
-        if (mode === "share") toast.success("Imagen guardada — compártela donde quieras ✨");
+        if (mode === "share") toast.success(t("wrapped.toast_saved"));
       }
     } catch (e) {
-      if (!(e && e.name === "AbortError")) toast.error("No se pudo generar la imagen");
+      if (!(e && e.name === "AbortError")) toast.error(t("wrapped.toast_error"));
     } finally {
       setBusy(false);
     }
@@ -204,11 +206,11 @@ export default function Wrapped() {
         </button>
       </div>
       <div className="absolute top-4 left-3 z-30 flex items-center gap-1 pt-3">
-        <button onClick={() => changePeriod(-1)} className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center" data-testid="wrapped-prev-period" title={isYear ? "Año anterior" : "Mes anterior"}>
+        <button onClick={() => changePeriod(-1)} className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center" data-testid="wrapped-prev-period" title={isYear ? t("wrapped.prev_year") : t("wrapped.prev_month")}>
           <ChevronLeft className="w-5 h-5" />
         </button>
         {!isCurrent && (
-          <button onClick={() => changePeriod(1)} className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center" data-testid="wrapped-next-period" title={isYear ? "Año siguiente" : "Mes siguiente"}>
+          <button onClick={() => changePeriod(1)} className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center" data-testid="wrapped-next-period" title={isYear ? t("wrapped.next_year") : t("wrapped.next_month")}>
             <ChevronRight className="w-5 h-5" />
           </button>
         )}
@@ -222,14 +224,14 @@ export default function Wrapped() {
             className={`px-3 py-1 rounded-full text-xs font-bold ${!isYear ? "bg-white text-black" : "text-white/70"}`}
             data-testid="wrapped-mode-month"
           >
-            Mes
+            {t("wrapped.mode_month")}
           </button>
           <button
             onClick={() => setParams({ year: thisYear() })}
             className={`px-3 py-1 rounded-full text-xs font-bold ${isYear ? "bg-white text-black" : "text-white/70"}`}
             data-testid="wrapped-mode-year"
           >
-            Año
+            {t("wrapped.mode_year")}
           </button>
         </div>
       )}
@@ -237,8 +239,8 @@ export default function Wrapped() {
       {/* Tap zones */}
       {slides.length > 0 && (
         <>
-          <button className="absolute left-0 top-0 bottom-0 w-1/3 z-20" onClick={() => go(-1)} aria-label="anterior" data-testid="wrapped-tap-prev" />
-          <button className="absolute right-0 top-0 bottom-0 w-1/3 z-20" onClick={() => go(1)} aria-label="siguiente" data-testid="wrapped-tap-next" />
+          <button className="absolute left-0 top-0 bottom-0 w-1/3 z-20" onClick={() => go(-1)} aria-label={t("wrapped.aria_prev")} data-testid="wrapped-tap-prev" />
+          <button className="absolute right-0 top-0 bottom-0 w-1/3 z-20" onClick={() => go(1)} aria-label={t("wrapped.aria_next")} data-testid="wrapped-tap-next" />
         </>
       )}
 
@@ -248,12 +250,12 @@ export default function Wrapped() {
       ) : !data || !data.has_data ? (
         <div className={`h-full flex flex-col items-center justify-center text-center px-8 bg-gradient-to-b ${GRADS[0]}`}>
           <Sparkles className="w-12 h-12 text-yellow-300 mb-4" />
-          <h2 className="font-display text-2xl font-black mb-2">Tu Wrapped {isYear ? "de" : "de"} {data?.month_label || ""}</h2>
-          <p className="text-white/60 text-sm max-w-xs">Todavía no hay actividad {isYear ? "este año" : "este mes"}. ¡Marca fiestas, sube fotos y captura El Momento para llenar tu resumen! 🎉</p>
+          <h2 className="font-display text-2xl font-black mb-2">{t("wrapped.empty_title", { label: data?.month_label || "" })}</h2>
+          <p className="text-white/60 text-sm max-w-xs">{isYear ? t("wrapped.empty_body_year") : t("wrapped.empty_body_month")}</p>
           <button onClick={() => changePeriod(-1)} className="mt-6 px-5 py-2.5 rounded-full bg-white/10 font-bold text-sm flex items-center gap-2">
-            <ChevronLeft className="w-4 h-4" /> Ver el {isYear ? "año" : "mes"} anterior
+            <ChevronLeft className="w-4 h-4" /> {isYear ? t("wrapped.see_prev_year") : t("wrapped.see_prev_month")}
           </button>
-          <button onClick={() => nav("/profile")} className="mt-3 text-white/50 text-sm">Volver</button>
+          <button onClick={() => nav("/profile")} className="mt-3 text-white/50 text-sm">{t("wrapped.back")}</button>
         </div>
       ) : (
         <div className={`h-full w-full flex flex-col items-center justify-center text-center px-8 bg-gradient-to-br ${GRADS[idx % GRADS.length]} transition-colors duration-500`}>
@@ -274,14 +276,15 @@ function Stat({ big, children }) {
 }
 
 function SlideContent({ slide, data, onShare, onDownload, busy }) {
+  const { t } = useTranslation();
   const k = slide.key;
   if (k === "intro") {
     return (
       <div className="animate-fade-in">
         <Sparkles className="w-14 h-14 text-yellow-300 mx-auto mb-5" />
-        <p className="text-yellow-300 font-black uppercase tracking-widest text-sm">{data.is_year ? "Mi Wrapped Anual" : "Mi Wrapped"}</p>
+        <p className="text-yellow-300 font-black uppercase tracking-widest text-sm">{data.is_year ? t("wrapped.annual") : t("wrapped.monthly")}</p>
         <h1 className="font-display font-black text-5xl leading-none mt-2">{data.month_label}</h1>
-        <p className="text-white/60 mt-5 max-w-xs mx-auto">Tu {data.is_year ? "año" : "mes"} de fiesta en ¿Quién va? Desliza para verlo 👉</p>
+        <p className="text-white/60 mt-5 max-w-xs mx-auto">{data.is_year ? t("wrapped.intro_sub_year") : t("wrapped.intro_sub_month")}</p>
       </div>
     );
   }
@@ -289,8 +292,8 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
     return (
       <div className="animate-fade-in">
         <PartyPopper className="w-12 h-12 text-white/80 mx-auto mb-6" />
-        <Stat big={data.parties}>fiesta{data.parties === 1 ? "" : "s"} {data.is_year ? "este año" : "este mes"}</Stat>
-        <p className="text-white/60 mt-4">{data.nights_out} noche{data.nights_out === 1 ? "" : "s"} fuera · {data.venues} sala{data.venues === 1 ? "" : "s"} distintas</p>
+        <Stat big={data.parties}>{data.is_year ? t("wrapped.stat_parties_year", { count: data.parties }) : t("wrapped.stat_parties_month", { count: data.parties })}</Stat>
+        <p className="text-white/60 mt-4">{t("wrapped.nights_out", { count: data.nights_out })} · {t("wrapped.venues", { count: data.venues })}</p>
       </div>
     );
   }
@@ -298,9 +301,9 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
     return (
       <div className="animate-fade-in">
         <CalendarDays className="w-12 h-12 text-white/80 mx-auto mb-6" />
-        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-3">Tu mes más movido</p>
+        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-3">{t("wrapped.top_month_label")}</p>
         <h2 className="font-display font-black text-5xl leading-tight">{data.top_month.name}</h2>
-        <p className="text-white/60 mt-4">{data.top_month.count} fiesta{data.top_month.count === 1 ? "" : "s"} solo ese mes 🔥</p>
+        <p className="text-white/60 mt-4">{t("wrapped.top_month_sub", { count: data.top_month.count })}</p>
       </div>
     );
   }
@@ -308,9 +311,9 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
     return (
       <div className="animate-fade-in">
         <Building2 className="w-12 h-12 text-white/80 mx-auto mb-6" />
-        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-3">Tu sala top</p>
+        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-3">{t("wrapped.venue_label")}</p>
         <h2 className="font-display font-black text-4xl leading-tight">{data.top_venue.name}</h2>
-        <p className="text-white/60 mt-4">Fuiste {data.top_venue.count} {data.top_venue.count === 1 ? "vez" : "veces"} 🔥</p>
+        <p className="text-white/60 mt-4">{t("wrapped.venue_sub", { count: data.top_venue.count })}</p>
       </div>
     );
   }
@@ -318,7 +321,7 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
     return (
       <div className="animate-fade-in">
         <Music2 className="w-12 h-12 text-white/80 mx-auto mb-6" />
-        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-3">Tu género top</p>
+        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-3">{t("wrapped.genre_label")}</p>
         <h2 className="font-display font-black text-5xl leading-tight capitalize">{data.top_genre}</h2>
         <p className="text-yellow-300 font-black text-xl mt-5">{data.title}</p>
       </div>
@@ -329,10 +332,10 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
       <div className="animate-fade-in">
         <Camera className="w-12 h-12 text-white/80 mx-auto mb-6" />
         <div className="flex items-center justify-center gap-8">
-          <div><div className="font-display font-black text-yellow-300 text-6xl leading-none">{data.photos}</div><div className="text-white/70 mt-2">fotos</div></div>
-          <div><div className="font-display font-black text-qv-secondary text-6xl leading-none">{data.moments}</div><div className="text-white/70 mt-2">momentos</div></div>
+          <div><div className="font-display font-black text-yellow-300 text-6xl leading-none">{data.photos}</div><div className="text-white/70 mt-2">{t("wrapped.photos")}</div></div>
+          <div><div className="font-display font-black text-qv-secondary text-6xl leading-none">{data.moments}</div><div className="text-white/70 mt-2">{t("wrapped.moments")}</div></div>
         </div>
-        {data.moments_ontime > 0 && <p className="text-white/60 mt-6">{data.moments_ontime} momento{data.moments_ontime === 1 ? "" : "s"} capturado{data.moments_ontime === 1 ? "" : "s"} a tiempo ⚡</p>}
+        {data.moments_ontime > 0 && <p className="text-white/60 mt-6">{t("wrapped.media_ontime", { count: data.moments_ontime })}</p>}
       </div>
     );
   }
@@ -341,7 +344,7 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
     return (
       <div className="animate-fade-in w-full max-w-sm">
         <Images className="w-12 h-12 text-white/80 mx-auto mb-4" />
-        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-4">Tus fotos y momentos</p>
+        <p className="text-white/60 uppercase tracking-widest text-xs font-bold mb-4">{t("wrapped.gallery_label")}</p>
         <div className="grid grid-cols-3 gap-1.5">
           {g.map((it, i) => (
             <div key={i} className="aspect-square rounded-xl overflow-hidden bg-white/5 relative">
@@ -354,7 +357,7 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
             </div>
           ))}
         </div>
-        <p className="text-white/45 text-xs mt-4">{data.photos} foto{data.photos === 1 ? "" : "s"} · {data.moments} momento{data.moments === 1 ? "" : "s"} este {data.is_year ? "año" : "mes"}</p>
+        <p className="text-white/45 text-xs mt-4">{t("wrapped.photos_count", { count: data.photos })} · {t("wrapped.moments_count", { count: data.moments })} {data.is_year ? t("wrapped.this_year") : t("wrapped.this_month")}</p>
       </div>
     );
   }
@@ -362,14 +365,14 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
     return (
       <div className="animate-fade-in">
         <Users className="w-12 h-12 text-white/80 mx-auto mb-6" />
-        <Stat big={data.friends_coincided}>amig@s con los que coincidiste</Stat>
+        <Stat big={data.friends_coincided}>{t("wrapped.friends_coincided")}</Stat>
         {data.top_friends?.length > 0 && (
           <div className="mt-6 flex flex-col items-center gap-3">
             {data.top_friends.map((f, i) => (
               <div key={i} className="flex items-center gap-3 bg-white/5 rounded-full pr-5 pl-1.5 py-1.5">
                 <AvatarCircle name={f.name} picture={f.picture} size={36} ring />
                 <span className="font-bold">{f.name}</span>
-                <span className="text-white/50 text-sm">· {f.count} noche{f.count === 1 ? "" : "s"}</span>
+                <span className="text-white/50 text-sm">{t("wrapped.friend_nights", { count: f.count })}</span>
               </div>
             ))}
           </div>
@@ -380,19 +383,19 @@ function SlideContent({ slide, data, onShare, onDownload, busy }) {
   // final
   return (
     <div className="animate-fade-in w-full max-w-sm">
-      <p className="text-yellow-300 font-black uppercase tracking-widest text-xs">Mi Wrapped · {data.month_label}</p>
+      <p className="text-yellow-300 font-black uppercase tracking-widest text-xs">{t("wrapped.final_eyebrow", { label: data.month_label })}</p>
       <h2 className="font-display font-black text-3xl mt-2 mb-5">{data.title}</h2>
       <div className="grid grid-cols-2 gap-3 text-left">
-        <MiniStat n={data.parties} label="fiestas" />
-        <MiniStat n={data.nights_out} label="noches fuera" />
-        <MiniStat n={data.photos} label="fotos" />
-        <MiniStat n={data.moments} label="momentos" />
-        {data.top_venue && <MiniStat n={data.top_venue.name} label="sala top" small />}
-        {data.top_genre && <MiniStat n={data.top_genre} label="género top" small />}
+        <MiniStat n={data.parties} label={t("wrapped.mini_parties")} />
+        <MiniStat n={data.nights_out} label={t("wrapped.mini_nights")} />
+        <MiniStat n={data.photos} label={t("wrapped.mini_photos")} />
+        <MiniStat n={data.moments} label={t("wrapped.mini_moments")} />
+        {data.top_venue && <MiniStat n={data.top_venue.name} label={t("wrapped.mini_venue")} small />}
+        {data.top_genre && <MiniStat n={data.top_genre} label={t("wrapped.mini_genre")} small />}
       </div>
       <div className="flex items-center gap-2 mt-7">
         <button data-testid="wrapped-share" onClick={onShare} disabled={busy} className="flex-[2] py-3.5 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-display font-black flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60">
-          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />} Compartir
+          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />} {t("wrapped.share")}
         </button>
         <button data-testid="wrapped-download" onClick={onDownload} disabled={busy} className="py-3.5 px-5 rounded-2xl bg-white/10 font-bold active:scale-95 disabled:opacity-60">
           <Download className="w-5 h-5" />

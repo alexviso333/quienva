@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList, Euro } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
@@ -11,14 +12,15 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
 const SALE_STATE_META = {
-  no_a_la_venta: { label: "Próx.", cls: "bg-white/15 text-white/80", icon: Clock },
-  a_la_venta: { label: "A la venta", cls: "bg-emerald-400/25 text-emerald-200", icon: Ticket },
-  pocas_entradas: { label: "Pocas", cls: "bg-orange-400/30 text-orange-100", icon: Flame },
-  agotado: { label: "Agotado", cls: "bg-white/10 text-white/50", icon: Lock },
-  solo_lista: { label: "Solo lista", cls: "bg-violet-400/25 text-violet-100", icon: ClipboardList },
+  no_a_la_venta: { labelKey: "compact.sale_next", cls: "bg-white/15 text-white/80", icon: Clock },
+  a_la_venta: { labelKey: "compact.sale_on_sale", cls: "bg-emerald-400/25 text-emerald-200", icon: Ticket },
+  pocas_entradas: { labelKey: "compact.sale_few", cls: "bg-orange-400/30 text-orange-100", icon: Flame },
+  agotado: { labelKey: "compact.sale_sold_out", cls: "bg-white/10 text-white/50", icon: Lock },
+  solo_lista: { labelKey: "compact.sale_list_only", cls: "bg-violet-400/25 text-violet-100", icon: ClipboardList },
 };
 
 function CompactPriceBadge({ event }) {
+  const { t } = useTranslation();
   const state = event.sale_state || "no_a_la_venta";
   const meta = SALE_STATE_META[state] || SALE_STATE_META.no_a_la_venta;
   const Icon = meta.icon;
@@ -33,7 +35,7 @@ function CompactPriceBadge({ event }) {
       <Icon className="w-2.5 h-2.5" />
       {price ? `${Math.round(price)}${symbol}` : ""}
       {price && state !== "no_a_la_venta" ? " · " : ""}
-      {meta.label}
+      {t(meta.labelKey)}
     </span>
   );
 }
@@ -44,12 +46,13 @@ function CompactPriceBadge({ event }) {
  */
 export function CompactEventCard({ event, index = 0, width, onVoy }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
   const isVoy = event.my_status === "voy";
   const isInteresa = event.my_status === "me_interesa";
-  const meEntry = user ? { user_id: "me", name: "Tú", picture: user.picture || "" } : null;
+  const meEntry = user ? { user_id: "me", name: t("compact.you"), picture: user.picture || "" } : null;
   const previewGoing = isVoy && meEntry ? [meEntry, ...going] : going;
   const previewInteresa = isInteresa && meEntry ? [meEntry, ...interested] : interested;
   const previewFriends = [...previewGoing, ...previewInteresa].slice(0, 3);
@@ -71,9 +74,9 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
     },
     onError: (e, v, ctx) => {
       if (ctx) setFollowing(ctx.prev);
-      toast.error("No se pudo actualizar el aviso");
+      toast.error(t("compact.toast_follow_error"));
     },
-    onSuccess: (d) => toast.success(d.following ? "Te avisaremos de cambios 🔔" : "Avisos desactivados"),
+    onSuccess: (d) => toast.success(d.following ? t("compact.toast_follow_on") : t("compact.toast_follow_off")),
     onSettled: () => qc.invalidateQueries({ queryKey: ["events"] }),
   });
   const onBell = (e) => {
@@ -111,10 +114,10 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
           {event.is_affiliate && (
             <span
               data-testid={`compact-affiliate-${event.id}`}
-              title="Lleva tu link de afiliado (solo lo ves tú)"
+              title={t("compact.mylink_title")}
               className="bg-gradient-to-r from-lime-300 to-green-500 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(132,204,22,0.6)]"
             >
-              <Euro className="w-2.5 h-2.5" /> Mi link
+              <Euro className="w-2.5 h-2.5" /> {t("compact.mylink")}
             </span>
           )}
           {event.genre && (
@@ -124,7 +127,7 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
           )}
           {event.featured && (
             <span className="bg-gradient-to-r from-yellow-300 to-amber-400 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(253,224,71,0.5)]">
-              <Star className="w-2.5 h-2.5" fill="currentColor" /> Top
+              <Star className="w-2.5 h-2.5" fill="currentColor" /> {t("compact.top")}
             </span>
           )}
         </div>
@@ -140,7 +143,7 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
           data-testid={`compact-follow-${event.id}`}
           onClick={onBell}
           className="absolute top-2 right-2 z-20 h-7 w-7 rounded-full bg-black/50 backdrop-blur-sm border border-white/25 flex items-center justify-center active:scale-90 transition-transform"
-          aria-label="Avisarme de cambios"
+          aria-label={t("compact.notify_me")}
         >
           <Bell className={`w-3.5 h-3.5 ${following ? "text-qv-secondary" : "text-white/80"}`} fill={following ? "currentColor" : "none"} />
         </button>
@@ -154,9 +157,9 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
                 ? "bg-qv-primary text-white border-qv-primary"
                 : "bg-black/50 text-white/90 border-white/25"
             }`}
-            aria-label={isVoy ? "Quitar voy" : "Marcar voy"}
+            aria-label={isVoy ? t("compact.remove_going") : t("compact.mark_going")}
           >
-            {isVoy ? <><Check className="w-2.5 h-2.5" /> Voy</> : "Voy"}
+            {isVoy ? <><Check className="w-2.5 h-2.5" /> {t("compact.going")}</> : t("compact.going")}
           </button>
         )}
 
@@ -179,13 +182,13 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
               </div>
               <span className="text-[10px] text-white/70 font-semibold truncate">
                 {goingCount > 0
-                  ? `${goingCount} va${goingCount > 1 ? "n" : ""}`
-                  : `${interestedCount} interesad${interestedCount > 1 ? "os" : "o"}`}
+                  ? t("compact.going_count", { count: goingCount })
+                  : t("compact.interested_count", { count: interestedCount })}
               </span>
             </div>
           ) : (
             <div className="flex items-center gap-1 mt-1.5 text-[10px] text-white/40">
-              <Users className="w-3 h-3" /> Sé el primero
+              <Users className="w-3 h-3" /> {t("compact.be_first")}
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import api from "@/lib/api";
 import { Lock, Flame, Calendar, Trophy, Star, Sparkles, ChevronRight } from "lucide-react";
@@ -13,16 +14,16 @@ const TIER_STYLES = {
 };
 
 const CATEGORY_LABEL = {
-  asistencia: "Asistencia",
-  racha: "Rachas",
-  temporal: "Días especiales",
-  social: "Social",
-  referido: "Invita amigos",
-  entrada: "Entradas",
-  exploracion: "Exploración",
-  captura: "Capturas & Stories",
-  album: "Álbumes",
-  otros: "Otros",
+  asistencia: "badges.cat_asistencia",
+  racha: "badges.cat_racha",
+  temporal: "badges.cat_temporal",
+  social: "badges.cat_social",
+  referido: "badges.cat_referido",
+  entrada: "badges.cat_entrada",
+  exploracion: "badges.cat_exploracion",
+  captura: "badges.cat_captura",
+  album: "badges.cat_album",
+  otros: "badges.cat_otros",
 };
 
 const CATEGORY_ORDER = [
@@ -89,16 +90,17 @@ function StatCard({ icon: Icon, value, label, color = "text-qv-primary" }) {
 }
 
 function CategorizedGrid({ grouped, showAll, data, total, onSelect, onToggleShowAll }) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="flex items-baseline justify-between px-1 mb-3">
-        <h3 className="font-display text-lg font-bold text-white">Insignias</h3>
+        <h3 className="font-display text-lg font-bold text-white">{t("badges.title")}</h3>
         <button
           data-testid="toggle-show-all"
           onClick={onToggleShowAll}
           className="text-white/50 text-xs font-bold hover:text-white"
         >
-          {data.earned.length} / {total} · {showAll ? "Solo ganadas" : "Ver todas"}
+          {data.earned.length} / {total} · {showAll ? t("badges.only_earned") : t("badges.see_all")}
         </button>
       </div>
       <div className="flex flex-col gap-4">
@@ -110,7 +112,7 @@ function CategorizedGrid({ grouped, showAll, data, total, onSelect, onToggleShow
           return (
             <div key={cat}>
               <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2 flex items-center gap-1.5">
-                <Sparkles className="w-3 h-3 text-qv-secondary" /> {CATEGORY_LABEL[cat]}
+                <Sparkles className="w-3 h-3 text-qv-secondary" /> {t(CATEGORY_LABEL[cat])}
                 <span className="text-white/30 font-normal ml-auto">{g.earned.length}/{g.earned.length + g.locked.length}</span>
               </p>
               <div className="grid grid-cols-4 gap-2">
@@ -138,6 +140,7 @@ function CategorizedGrid({ grouped, showAll, data, total, onSelect, onToggleShow
  * compact=false → full inline categorized grid (used on other users' profiles).
  */
 export function BadgesPanel({ userId, compact = false }) {
+  const { t } = useTranslation();
   const endpoint = userId ? `/users/${userId}/badges` : "/me/badges";
   const { data, isLoading } = useQuery({
     queryKey: ["badges", userId || "me"],
@@ -163,7 +166,7 @@ export function BadgesPanel({ userId, compact = false }) {
   }, [data]);
 
   if (isLoading || !data) {
-    return <div className="text-white/40 text-sm text-center py-6">Cargando insignias…</div>;
+    return <div className="text-white/40 text-sm text-center py-6">{t("badges.loading")}</div>;
   }
 
   const s = data.stats;
@@ -184,7 +187,7 @@ export function BadgesPanel({ userId, compact = false }) {
             <p className="text-white/70 text-sm">{selected.desc}</p>
             <div className="flex items-center gap-2 mt-2 text-xs">
               <span className="capitalize px-2 py-0.5 rounded-full border border-white/15 text-white/70">{selected.tier}</span>
-              <span className="px-2 py-0.5 rounded-full bg-yellow-300/20 text-yellow-200 font-bold">+{selected.points} puntos</span>
+              <span className="px-2 py-0.5 rounded-full bg-yellow-300/20 text-yellow-200 font-bold">+{selected.points} {t("badges.points_unit")}</span>
             </div>
           </>
         )}
@@ -205,7 +208,7 @@ export function BadgesPanel({ userId, compact = false }) {
                 <Trophy className="w-5 h-5 text-yellow-300" />
               </div>
               <div>
-                <p className="text-[9px] uppercase tracking-widest text-yellow-300 font-bold leading-none">Puntos</p>
+                <p className="text-[9px] uppercase tracking-widest text-yellow-300 font-bold leading-none">{t("badges.points")}</p>
                 <p className="font-display text-2xl font-black text-white leading-tight">{pts.total.toLocaleString("es-ES")}</p>
               </div>
             </div>
@@ -219,10 +222,10 @@ export function BadgesPanel({ userId, compact = false }) {
           </div>
 
           <div className="flex flex-wrap gap-1.5 mb-3">
-            <StatChip icon={Flame} value={s.day_streak} label="días" color="text-orange-400" />
-            <StatChip icon={Calendar} value={s.week_streak} label="sem" color="text-qv-secondary" />
-            <StatChip icon={Trophy} value={s.total_events} label="fiestas" color="text-yellow-300" />
-            <StatChip icon={Star} value={s.genres_count} label="géneros" color="text-fuchsia-300" />
+            <StatChip icon={Flame} value={s.day_streak} label={t("badges.stat_days")} color="text-orange-400" />
+            <StatChip icon={Calendar} value={s.week_streak} label={t("badges.stat_weeks_short")} color="text-qv-secondary" />
+            <StatChip icon={Trophy} value={s.total_events} label={t("badges.stat_parties")} color="text-yellow-300" />
+            <StatChip icon={Star} value={s.genres_count} label={t("badges.stat_genres")} color="text-fuchsia-300" />
           </div>
 
           {/* earned strip */}
@@ -230,7 +233,7 @@ export function BadgesPanel({ userId, compact = false }) {
             {earnedStrip.length > 0 ? (
               earnedStrip.map((b) => <MiniBadge key={b.id} badge={b} onClick={() => setSelected(b)} />)
             ) : (
-              <p className="text-white/40 text-xs italic py-3">Gana tu primera insignia marcando “Voy” 🎉</p>
+              <p className="text-white/40 text-xs italic py-3">{t("badges.empty_strip")}</p>
             )}
             <button
               onClick={() => setAllOpen(true)}
@@ -238,7 +241,7 @@ export function BadgesPanel({ userId, compact = false }) {
               data-testid="badges-see-all-tile"
             >
               <Sparkles className="w-4 h-4" />
-              <span className="text-[9px] mt-0.5 font-bold">Ver todas</span>
+              <span className="text-[9px] mt-0.5 font-bold">{t("badges.see_all")}</span>
             </button>
           </div>
         </div>
@@ -274,22 +277,22 @@ export function BadgesPanel({ userId, compact = false }) {
               <Trophy className="w-6 h-6 text-yellow-300" />
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-yellow-300 font-bold">Puntos totales</p>
+              <p className="text-[10px] uppercase tracking-widest text-yellow-300 font-bold">{t("badges.points_total")}</p>
               <p className="font-display text-3xl font-black text-white leading-none">{pts.total.toLocaleString("es-ES")}</p>
             </div>
           </div>
           <div className="text-right text-white/60 text-xs">
-            <p>{pts.badge_points.toLocaleString("es-ES")} insignias</p>
-            <p>{pts.action_points.toLocaleString("es-ES")} acciones</p>
+            <p>{pts.badge_points.toLocaleString("es-ES")} {t("badges.badges_label")}</p>
+            <p>{pts.action_points.toLocaleString("es-ES")} {t("badges.actions_label")}</p>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-4 gap-2">
-        <StatCard icon={Flame} value={s.day_streak} label="días" color="text-orange-400" />
-        <StatCard icon={Calendar} value={s.week_streak} label="semanas" color="text-qv-secondary" />
-        <StatCard icon={Trophy} value={s.total_events} label="fiestas" color="text-yellow-300" />
-        <StatCard icon={Star} value={s.genres_count} label="géneros" color="text-fuchsia-300" />
+        <StatCard icon={Flame} value={s.day_streak} label={t("badges.stat_days")} color="text-orange-400" />
+        <StatCard icon={Calendar} value={s.week_streak} label={t("badges.stat_weeks")} color="text-qv-secondary" />
+        <StatCard icon={Trophy} value={s.total_events} label={t("badges.stat_parties")} color="text-yellow-300" />
+        <StatCard icon={Star} value={s.genres_count} label={t("badges.stat_genres")} color="text-fuchsia-300" />
       </div>
 
       <CategorizedGrid

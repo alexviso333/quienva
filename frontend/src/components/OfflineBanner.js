@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { WifiOff } from "lucide-react";
 
 /**
@@ -7,6 +8,7 @@ import { WifiOff } from "lucide-react";
  * user know what they're looking at is the cached version.
  */
 export default function OfflineBanner() {
+  const { t } = useTranslation();
   const [offline, setOffline] = useState(
     typeof navigator !== "undefined" && navigator.onLine === false
   );
@@ -31,7 +33,7 @@ export default function OfflineBanner() {
       role="status"
     >
       <WifiOff className="w-3.5 h-3.5 shrink-0" />
-      Sin conexión — mostrando lo último
+      {t("offline.banner")}
     </div>
   );
 }

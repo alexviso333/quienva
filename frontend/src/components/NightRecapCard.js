@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { mediaThumb, mediaUrl } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
  * export a 1080x1920 image (Instagram-story size) to share or download.
  */
 export function NightRecapCard({ event }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const friends = event?.friends_attended || [];
   const nFriends = friends.length;
@@ -69,7 +71,7 @@ export function NightRecapCard({ event }) {
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#FFD400";
     ctx.font = "800 42px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-    ctx.fillText("★ REPASO DE LA NOCHE", 80, Math.round(H * 0.70));
+    ctx.fillText(t("nightrecap.img_label"), 80, Math.round(H * 0.70));
     // Title
     ctx.fillStyle = "#ffffff";
     ctx.font = "900 96px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
@@ -85,7 +87,7 @@ export function NightRecapCard({ event }) {
       ctx.font = "800 46px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
       const names = friends.slice(0, 3).map((f) => (f.name || "").split(" ")[0]).filter(Boolean).join(", ");
       const extra = nFriends > 3 ? ` +${nFriends - 3}` : "";
-      const line = `Coincidiste con ${nFriends} amig${nFriends === 1 ? "o" : "os"}`;
+      const line = t("nightrecap.coincided", { count: nFriends });
       ctx.fillText(line, 80, y + 60);
       if (names) {
         ctx.fillStyle = "rgba(255,255,255,0.7)";
@@ -108,17 +110,17 @@ export function NightRecapCard({ event }) {
       if (!blob) throw new Error("no blob");
       const file = new File([blob], `repaso-${event.id}.jpg`, { type: "image/jpeg" });
       if (mode === "share" && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: event.name, text: `Mi repaso de ${event.name} en ¿Quién va? ✨` });
+        await navigator.share({ files: [file], title: event.name, text: t("nightrecap.share_text", { name: event.name }) });
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url; a.download = `repaso-${event.id}.jpg`;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 4000);
-        if (mode === "share") toast.success("Imagen guardada — compártela donde quieras ✨");
+        if (mode === "share") toast.success(t("nightrecap.toast_saved"));
       }
     } catch (e) {
-      if (!(e && e.name === "AbortError")) toast.error("No se pudo generar el repaso");
+      if (!(e && e.name === "AbortError")) toast.error(t("nightrecap.toast_error"));
     } finally {
       setBusy(false);
     }
@@ -138,7 +140,7 @@ export function NightRecapCard({ event }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
         <div className="absolute bottom-3 left-4 right-4">
           <p className="flex items-center gap-1.5 text-yellow-300 font-black text-[11px] uppercase tracking-widest">
-            <Sparkles className="w-3.5 h-3.5" /> Repaso de la noche
+            <Sparkles className="w-3.5 h-3.5" /> {t("nightrecap.eyebrow")}
           </p>
           <p className="font-display font-black text-white text-lg leading-tight line-clamp-2">{event.name}</p>
         </div>
@@ -153,12 +155,12 @@ export function NightRecapCard({ event }) {
               ))}
             </div>
             <span className="text-white/70 text-xs font-semibold">
-              Coincidiste con {nFriends} amig{nFriends === 1 ? "o" : "os"}
+              {t("nightrecap.coincided", { count: nFriends })}
             </span>
           </div>
         ) : (
           <p className="text-white/50 text-xs mb-3 flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5" /> Tu recuerdo de esta noche, listo para compartir.
+            <Users className="w-3.5 h-3.5" /> {t("nightrecap.no_friends")}
           </p>
         )}
 
@@ -169,14 +171,14 @@ export function NightRecapCard({ event }) {
             disabled={busy}
             className="flex-[2] py-3 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-display font-black text-sm flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
           >
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />} Compartir la noche
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />} {t("nightrecap.share_night")}
           </button>
           <button
             data-testid="recap-download-btn"
             onClick={() => shareOrDownload("download")}
             disabled={busy}
             className="py-3 px-4 rounded-2xl bg-white/10 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
-            title="Descargar"
+            title={t("nightrecap.download")}
           >
             <Download className="w-4 h-4" />
           </button>

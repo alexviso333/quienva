@@ -1,23 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { Sparkles, ChevronRight } from "lucide-react";
 
-const STAT_HINT = {
-  total_events: (r) => `Ve a ${r} fiesta${r === 1 ? "" : "s"} más`,
-  day_streak: (r) => `Sal ${r} día${r === 1 ? "" : "s"} más seguidos`,
-  week_streak: (r) => `${r} semana${r === 1 ? "" : "s"} más de fiesta`,
-  weekday_count: (r) => `${r} fiesta${r === 1 ? "" : "s"} más entre semana`,
-  sunday_count: (r) => `${r} domingo${r === 1 ? "" : "s"} más de fiesta`,
-  friends_count: (r) => `Añade ${r} amigo${r === 1 ? "" : "s"} más`,
-  referrals_count: (r) => `Invita ${r} amigo${r === 1 ? "" : "s"} más`,
-  tickets_count: (r) => `Compra ${r} entrada${r === 1 ? "" : "s"} más`,
-  genres_count: (r) => `Prueba ${r} género${r === 1 ? "" : "s"} nuevo${r === 1 ? "" : "s"}`,
-  venues_count: (r) => `Ve a ${r} local${r === 1 ? "" : "es"} nuevo${r === 1 ? "" : "s"}`,
-  captures_count: (r) => `Sube ${r} momento${r === 1 ? "" : "s"} más`,
-  stories_count: (r) => `Sube ${r} historia${r === 1 ? "" : "s"} más`,
-  album_uploads: (r) => `Sube ${r} foto${r === 1 ? "" : "s"} más al álbum`,
-};
+const HINT_KEYS = new Set([
+  "total_events", "day_streak", "week_streak", "weekday_count", "sunday_count",
+  "friends_count", "referrals_count", "tickets_count", "genres_count",
+  "venues_count", "captures_count", "stories_count", "album_uploads",
+]);
 
 /**
  * Small motivational banner on the Feed showing the closest next badge.
@@ -25,6 +16,7 @@ const STAT_HINT = {
  */
 export function NextBadgeBanner() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { data: list = [] } = useQuery({
     queryKey: ["next-badges"],
     queryFn: async () => (await api.get("/me/next-badges?limit=1")).data,
@@ -32,7 +24,9 @@ export function NextBadgeBanner() {
   });
   const b = list[0];
   if (!b) return null;
-  const hint = (STAT_HINT[b.stat_key] || ((r) => `${r} más para desbloquear`))(b.remaining);
+  const hint = HINT_KEYS.has(b.stat_key)
+    ? t(`badgehint.${b.stat_key}`, { count: b.remaining })
+    : t("badgehint.fallback", { count: b.remaining });
   return (
     <button
       data-testid="next-badge-banner"
@@ -44,9 +38,9 @@ export function NextBadgeBanner() {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] uppercase tracking-widest text-qv-secondary font-bold flex items-center gap-1">
-          <Sparkles className="w-3 h-3" /> A punto de desbloquear
+          <Sparkles className="w-3 h-3" /> {t("nextbadge.about_to_unlock")}
         </p>
-        <p className="font-bold text-white truncate">{b.name} <span className="text-yellow-300 text-xs ml-1">+{b.points} pts</span></p>
+        <p className="font-bold text-white truncate">{b.name} <span className="text-yellow-300 text-xs ml-1">+{t("nextbadge.pts", { points: b.points })}</span></p>
         <div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden">
           <div className="h-full bg-gradient-to-r from-qv-primary to-qv-secondary" style={{ width: `${Math.min(100, b.progress)}%` }} />
         </div>

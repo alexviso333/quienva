@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import api, { mediaThumb, mediaUrl, downloadMedia, shareMedia } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { ReportFlag } from "@/components/ReportBlock";
@@ -15,6 +16,7 @@ import { toast } from "sonner";
  */
 export function EventMoment({ eventId, hasInterest, past = false }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [secLeft, setSecLeft] = useState(null);
   const [preview, setPreview] = useState(null);
 
@@ -46,8 +48,8 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
       setSecLeft(sec);
     };
     tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
   }, [status?.prompt?.on_time_deadline, status?.my_capture]);
 
   if (!hasInterest) return null;
@@ -66,8 +68,8 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
             <Zap className="w-5 h-5 text-yellow-300" />
           </div>
           <div>
-            <p className="font-bold text-white">El Momento</p>
-            <p className="text-white/50 text-xs">Durante la fiesta te pediremos una foto sorpresa. Prepárate.</p>
+            <p className="font-bold text-white">{t("eventmoment.title")}</p>
+            <p className="text-white/50 text-xs">{t("eventmoment.prepare")}</p>
           </div>
         </div>
       </div>
@@ -79,9 +81,9 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
     return (
       <div>
         <p className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 font-bold mb-2">
-          <Zap className="w-4 h-4 text-yellow-300" /> El Momento
+          <Zap className="w-4 h-4 text-yellow-300" /> {t("eventmoment.title")}
           {status.my_capture.on_time && (
-            <span className="text-yellow-300 font-bold">• A tiempo • +30 pts</span>
+            <span className="text-yellow-300 font-bold">{t("eventmoment.on_time_badge")}</span>
           )}
         </p>
         <div className="grid grid-cols-3 gap-1.5" data-testid="moment-gallery">
@@ -98,7 +100,7 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
                 <span className="text-white text-[10px] font-bold">{c.author?.name?.split(" ")[0]}</span>
               </div>
               {c.on_time && (
-                <div className="absolute top-1 right-1 bg-yellow-300 text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">A TIEMPO</div>
+                <div className="absolute top-1 right-1 bg-yellow-300 text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">{t("eventmoment.on_time_tag")}</div>
               )}
               {!c.is_mine && (
                 <div
@@ -125,14 +127,14 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
                   <AvatarCircle name={preview.author?.name || ""} picture={preview.author?.picture || ""} size={32} ring={false} />
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm font-semibold truncate">{preview.author?.name}</p>
-                    <p className="text-white/40 text-xs">El Momento</p>
+                    <p className="text-white/40 text-xs">{t("eventmoment.title")}</p>
                   </div>
                   <button
                     type="button"
                     data-testid="moment-download-btn"
                     onClick={() => downloadMedia(preview.image_url, `momento-${preview.id}.jpg`)}
                     className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center active:scale-95"
-                    title="Descargar"
+                    title={t("eventmoment.download")}
                   >
                     <Download className="w-4 h-4 text-white/80" />
                   </button>
@@ -140,11 +142,11 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
                     type="button"
                     data-testid="moment-share-btn"
                     onClick={async () => {
-                      const r = await shareMedia(preview.image_url, { title: "Mi Momento", text: "Mi Momento en ¿Quién va? ✨", filename: `momento-${preview.id}.jpg` });
-                      if (r === "downloaded") toast.success("Descargado ✅");
+                      const r = await shareMedia(preview.image_url, { title: t("eventmoment.share_title"), text: t("eventmoment.share_text"), filename: `momento-${preview.id}.jpg` });
+                      if (r === "downloaded") toast.success(t("eventmoment.toast_downloaded"));
                     }}
                     className="w-10 h-10 rounded-full bg-yellow-300 flex items-center justify-center active:scale-95"
-                    title="Compartir"
+                    title={t("eventmoment.share")}
                   >
                     <Share2 className="w-4 h-4 text-black" />
                   </button>
@@ -166,8 +168,8 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
           <Zap className="w-6 h-6 text-yellow-300" />
         </div>
         <div className="flex-1">
-          <p className="font-display font-black text-white text-lg leading-none">¡El Momento!</p>
-          <p className="text-yellow-200/80 text-xs">Haz una foto ahora mismo y gánate +30 puntos.</p>
+          <p className="font-display font-black text-white text-lg leading-none">{t("eventmoment.active_title")}</p>
+          <p className="text-yellow-200/80 text-xs">{t("eventmoment.active_sub")}</p>
         </div>
       </div>
       {isOnTimeStill ? (
@@ -178,14 +180,14 @@ export function EventMoment({ eventId, hasInterest, past = false }) {
           </span>
         </div>
       ) : (
-        <p className="text-center text-white/60 text-xs mb-3">Se acabó el tiempo bonus, pero aún puedes subirla.</p>
+        <p className="text-center text-white/60 text-xs mb-3">{t("eventmoment.bonus_over")}</p>
       )}
       <button
         data-testid="moment-capture-btn"
         onClick={() => navigate("/momento")}
         className="w-full h-12 rounded-2xl bg-yellow-300 text-black font-bold flex items-center justify-center gap-2 active:scale-95"
       >
-        <Camera className="w-5 h-5" /> Hacer la foto
+        <Camera className="w-5 h-5" /> {t("eventmoment.take_photo")}
       </button>
     </div>
   );
