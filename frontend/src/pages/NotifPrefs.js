@@ -5,16 +5,7 @@ import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { ChevronLeft, Loader2, Bell } from "lucide-react";
 import { toast } from "sonner";
-
-const LABELS = {
-  new_event: { t: "Nuevas fiestas en tu ciudad", d: "Cuando se publica una fiesta nueva" },
-  tickets_on_sale: { t: "Entradas a la venta", d: "Justo cuando salen a la venta" },
-  tickets_low_stock: { t: "Pocas entradas", d: "Cuando quedan pocas" },
-  tickets_sold_out: { t: "Agotado", d: "Cuando se agotan las entradas" },
-  tickets_price_down: { t: "Bajada de precio", d: "Cuando baja el precio" },
-  tickets_price_up: { t: "Subida de precio", d: "Nueva fase / sube el precio" },
-  friend_going: { t: "Amigos van a un plan", d: "Cuando un amigo se apunta" },
-};
+import { useTranslation } from "react-i18next";
 
 function Toggle({ on, onClick }) {
   return (
@@ -29,6 +20,7 @@ function Toggle({ on, onClick }) {
 
 export default function NotifPrefs() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [prefs, setPrefs] = useState(null);
   const [keys, setKeys] = useState([]);
   const { data, isLoading } = useQuery({
@@ -42,7 +34,7 @@ export default function NotifPrefs() {
 
   const save = useMutation({
     mutationFn: async (next) => (await api.put("/me/notif-prefs", { prefs: next })).data,
-    onError: () => toast.error("No se pudo guardar"),
+    onError: () => toast.error(t("notifprefs.toast_error")),
   });
 
   const toggle = (k) => {
@@ -57,9 +49,9 @@ export default function NotifPrefs() {
         <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg bg-white/10 active:scale-95"><ChevronLeft className="w-5 h-5 text-white" /></button>
         <div>
           <h1 className="font-display text-2xl font-black tracking-tight flex items-center gap-2">
-            <Bell className="w-5 h-5 text-qv-primary" /> Avisos
+            <Bell className="w-5 h-5 text-qv-primary" /> {t("notifprefs.title")}
           </h1>
-          <p className="text-white/45 text-xs">Elige qué notificaciones quieres recibir</p>
+          <p className="text-white/45 text-xs">{t("notifprefs.subtitle")}</p>
         </div>
       </header>
 
@@ -70,8 +62,8 @@ export default function NotifPrefs() {
           {keys.map((k) => (
             <div key={k} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5">
               <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-semibold">{LABELS[k]?.t || k}</p>
-                <p className="text-white/40 text-xs">{LABELS[k]?.d || ""}</p>
+                <p className="text-white text-sm font-semibold">{t(`notifprefs.labels.${k}.t`, { defaultValue: k })}</p>
+                <p className="text-white/40 text-xs">{t(`notifprefs.labels.${k}.d`, { defaultValue: "" })}</p>
               </div>
               <Toggle on={!!prefs[k]} onClick={() => toggle(k)} />
             </div>

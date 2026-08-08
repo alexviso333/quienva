@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon, Send, ImageOff } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
 /**
  * Renders an image but degrades gracefully to a branded placeholder when the
@@ -26,9 +28,9 @@ function SafeImg({ src, className = "", alt = "" }) {
 
 function timeAgo(iso) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "ahora";
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
-  return `hace ${Math.floor(diff / 3600)} h`;
+  if (diff < 60) return i18n.t("stories.timeago_now");
+  if (diff < 3600) return i18n.t("stories.timeago_min", { n: Math.floor(diff / 60) });
+  return i18n.t("stories.timeago_hour", { n: Math.floor(diff / 3600) });
 }
 
 function groupByUser(stories) {
@@ -44,6 +46,7 @@ function groupByUser(stories) {
 
 export function AddStoryDialog({ open, onOpenChange, eventId }) {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const fileRef = useRef(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
@@ -60,11 +63,11 @@ export function AddStoryDialog({ open, onOpenChange, eventId }) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (!f.type.startsWith("image/")) {
-      toast.error("El archivo debe ser una imagen");
+      toast.error(t("stories.err_image_type"));
       return;
     }
     if (f.size > 8 * 1024 * 1024) {
-      toast.error("La imagen supera el máximo de 8MB");
+      toast.error(t("stories.err_image_size"));
       return;
     }
     setFile(f);
@@ -81,11 +84,11 @@ export function AddStoryDialog({ open, onOpenChange, eventId }) {
       if (eventId) fd.append("event_id", eventId);
       await api.post("/stories", fd, { headers: { "Content-Type": "multipart/form-data" } });
       qc.invalidateQueries({ queryKey: ["stories"] });
-      toast.success("¡Historia publicada! Desaparecerá en 24h");
+      toast.success(t("stories.toast_published"));
       reset();
       onOpenChange(false);
     } catch {
-      toast.error("No se pudo publicar la historia");
+      toast.error(t("stories.err_publish"));
     } finally {
       setBusy(false);
     }
@@ -95,9 +98,9 @@ export function AddStoryDialog({ open, onOpenChange, eventId }) {
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
       <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl">
         <DialogHeader>
-          <DialogTitle className="font-display">Subir historia</DialogTitle>
+          <DialogTitle className="font-display">{t("stories.add_title")}</DialogTitle>
           <DialogDescription className="text-white/50">
-            Comparte una foto de la noche. Solo la verán tus amigos y desaparece en 24h.
+            {t("stories.add_desc")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -110,14 +113,14 @@ export function AddStoryDialog({ open, onOpenChange, eventId }) {
               <img src={preview} alt="preview" className="w-full h-full object-cover" />
             ) : (
               <div className="text-white/40 flex flex-col items-center gap-2 text-sm">
-                <ImageUp className="w-7 h-7" /> Elige una foto de anoche
+                <ImageUp className="w-7 h-7" /> {t("stories.choose_photo")}
               </div>
             )}
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={pick} data-testid="story-file-input" />
           </div>
           <Input
             data-testid="story-caption"
-            placeholder="Añade un texto (opcional)"
+            placeholder={t("stories.caption_ph")}
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
             className="h-11 bg-white/5 border-white/15 rounded-xl text-white placeholder:text-white/40"
@@ -128,21 +131,22 @@ export function AddStoryDialog({ open, onOpenChange, eventId }) {
             disabled={!file || busy}
             className="h-12 rounded-2xl bg-qv-primary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
           >
-            {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : "Compartir con mis amigos"}
+            {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : t("stories.share_with_friends")}
           </button>
-          <p className="text-white/40 text-xs text-center">Solo la verán tus amigos · desaparece en 24h</p>
+          <p className="text-white/40 text-xs text-center">{t("stories.footer_note")}</p>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-export function AddStoryButton({ eventId, className = "", label = "Subir historia" }) {
+export function AddStoryButton({ eventId, className = "", label }) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
   return (
     <>
       <button data-testid="add-story-detail-btn" onClick={() => setOpen(true)} className={className}>
-        <CameraIcon className="w-4 h-4" /> {label}
+        <CameraIcon className="w-4 h-4" /> {label || t("stories.upload_button")}
       </button>
       <AddStoryDialog open={open} onOpenChange={setOpen} eventId={eventId} />
     </>
@@ -151,6 +155,7 @@ export function AddStoryButton({ eventId, className = "", label = "Subir histori
 
 function StoryViewer({ group, onClose, startIndex = 0 }) {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const [idx, setIdx] = useState(startIndex);
   const [reactText, setReactText] = useState("");
   const story = group.stories[idx];
@@ -160,7 +165,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["stories"] });
       qc.invalidateQueries({ queryKey: ["stories-archive"] });
-      toast.success("Historia eliminada");
+      toast.success(t("stories.toast_deleted"));
       onClose();
     },
   });
@@ -169,9 +174,9 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
     mutationFn: async (content) => (await api.post(`/stories/${story.id}/react`, { content })).data,
     onSuccess: () => {
       setReactText("");
-      toast.success("Enviado 💌");
+      toast.success(t("stories.toast_sent"));
     },
-    onError: () => toast.error("No se pudo enviar"),
+    onError: () => toast.error(t("stories.err_send")),
   });
 
   const nav = (e) => {
@@ -198,7 +203,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
       <div className="absolute top-5 left-3 right-3 flex items-center gap-3 z-20">
         <AvatarCircle name={group.author.name} picture={group.author.picture} size={36} ring={false} />
         <div className="flex-1 min-w-0">
-          <p className="text-white font-semibold text-sm truncate">{group.is_mine ? "Tu historia" : group.author.name}</p>
+          <p className="text-white font-semibold text-sm truncate">{group.is_mine ? t("stories.your_story") : group.author.name}</p>
           <p className="text-white/60 text-xs">{timeAgo(story.created_at)}</p>
         </div>
         {group.is_mine && (
@@ -237,7 +242,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
               ))}
             </div>
           ) : (
-            <p className="text-white/50 text-xs">Aún nadie ha reaccionado</p>
+            <p className="text-white/50 text-xs">{t("stories.no_reactions")}</p>
           )
         ) : (
           <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -256,7 +261,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
               value={reactText}
               onChange={(e) => setReactText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && reactText.trim()) react.mutate(reactText.trim()); }}
-              placeholder="Mensaje…"
+              placeholder={t("stories.react_ph")}
               className="flex-1 min-w-0 h-10 rounded-full bg-white/10 border border-white/20 px-3 text-white text-sm placeholder:text-white/50 outline-none"
             />
             <button
@@ -276,6 +281,7 @@ function StoryViewer({ group, onClose, startIndex = 0 }) {
 export function StoriesBar() {
   const [addOpen, setAddOpen] = useState(false);
   const [viewer, setViewer] = useState(null);
+  const { t } = useTranslation();
 
   const { data: stories = [] } = useQuery({
     queryKey: ["stories"],
@@ -296,7 +302,7 @@ export function StoriesBar() {
           <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/25 flex items-center justify-center bg-white/5">
             <Plus className="w-6 h-6 text-white/70" />
           </div>
-          <span className="text-[11px] text-white/60 font-medium">Tu historia</span>
+          <span className="text-[11px] text-white/60 font-medium">{t("stories.your_story")}</span>
         </button>
 
         {groups.map((g) => (
@@ -312,7 +318,7 @@ export function StoriesBar() {
               </div>
             </div>
             <span className="text-[11px] text-white/70 font-medium truncate max-w-[64px]">
-              {g.is_mine ? "Tú" : g.author.name.split(" ")[0]}
+              {g.is_mine ? t("stories.you") : g.author.name.split(" ")[0]}
             </span>
           </button>
         ))}
@@ -326,6 +332,7 @@ export function StoriesBar() {
 
 export function StoriesArchive({ open, onOpenChange }) {
   const [viewerIdx, setViewerIdx] = useState(null);
+  const { t } = useTranslation();
   const { data: stories = [] } = useQuery({
     queryKey: ["stories-archive"],
     queryFn: async () => (await api.get("/stories/archive")).data,
@@ -341,14 +348,14 @@ export function StoriesArchive({ open, onOpenChange }) {
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-display">Tu archivo de historias</DialogTitle>
+            <DialogTitle className="font-display">{t("stories.archive_title")}</DialogTitle>
             <DialogDescription className="text-white/50">
-              Solo tú ves esto. Revive tus noches pasadas.
+              {t("stories.archive_desc")}
             </DialogDescription>
           </DialogHeader>
           {stories.length === 0 ? (
             <p className="text-white/40 text-sm py-10 text-center" data-testid="archive-empty">
-              Todavía no has subido ninguna historia.
+              {t("stories.archive_empty")}
             </p>
           ) : (
             <div className="grid grid-cols-3 gap-2" data-testid="stories-archive-grid">

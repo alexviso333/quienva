@@ -5,14 +5,16 @@ import api, { mediaUrl, mediaThumb } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { CalendarDays, ArrowLeft, Play, Images, MapPin, ChevronLeft, ChevronRight, Loader2, Zap } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
-const MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-const DOW_ES = ["L", "M", "X", "J", "V", "S", "D"];
+const LOCALE_BY_LANG = { es: "es-ES", en: "en-GB", de: "de-DE" };
+const dateLocale = () => LOCALE_BY_LANG[(i18n.language || "es").slice(0, 2)] || "es-ES";
 
 function formatDay(iso) {
   try {
     const d = new Date(iso + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+    return d.toLocaleDateString(dateLocale(), { weekday: "long", day: "numeric", month: "long" });
   } catch { return iso; }
 }
 
@@ -21,6 +23,9 @@ function formatDay(iso) {
  */
 export default function Memories() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const MONTHS = t("recuerdos.months", { returnObjects: true });
+  const DOW = t("recuerdos.dow", { returnObjects: true });
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
@@ -80,9 +85,9 @@ export default function Memories() {
         </button>
         <div>
           <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold flex items-center gap-1.5">
-            <CalendarDays className="w-3.5 h-3.5" /> Recuerdos
+            <CalendarDays className="w-3.5 h-3.5" /> {t("recuerdos.eyebrow")}
           </p>
-          <h1 className="font-display text-3xl font-black tracking-tighter">Calendario<span className="text-qv-primary">.</span></h1>
+          <h1 className="font-display text-3xl font-black tracking-tighter">{t("memories.title")}<span className="text-qv-primary">.</span></h1>
         </div>
       </header>
 
@@ -96,7 +101,7 @@ export default function Memories() {
           <ChevronLeft className="w-5 h-5 text-white" />
         </button>
         <span className="font-display text-xl font-bold text-white capitalize">
-          {MONTHS_ES[month]} {year}
+          {MONTHS[month]} {year}
         </span>
         <button
           data-testid="memories-next"
@@ -110,7 +115,7 @@ export default function Memories() {
       {/* Calendar grid */}
       <div className="px-5">
         <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-white/40 font-bold uppercase mb-1">
-          {DOW_ES.map((d) => <div key={d}>{d}</div>)}
+          {DOW.map((d, i) => <div key={i}>{d}</div>)}
         </div>
         <div className="grid grid-cols-7 gap-1 mb-6">
           {grid.map((cell, i) => {
@@ -137,7 +142,7 @@ export default function Memories() {
       {isLoading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 text-qv-primary animate-spin" /></div>
       ) : days.length === 0 ? (
-        <p className="text-center text-white/40 py-16 px-6">Sin fiestas en este mes. Marca &apos;Voy&apos; a un plan para empezar.</p>
+        <p className="text-center text-white/40 py-16 px-6">{t("recuerdos.empty_month")}</p>
       ) : (
         <div className="px-4 flex flex-col gap-4 pb-8" data-testid="memories-days">
           {days.map((day) => (

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { startGoogleLogin } from "@/lib/googleAuth";
 import { Sparkles, X } from "lucide-react";
@@ -21,12 +22,13 @@ export function useGuestGate() {
 export function GuestGateProvider({ children }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [reason, setReason] = useState(null);
 
   const requireAuth = useCallback(
     (actionReason) => {
       if (user) return true;
-      setReason(actionReason || "seguir");
+      setReason(actionReason || t("guestgate.default_reason"));
       return false;
     },
     [user]
@@ -56,7 +58,7 @@ export function GuestGateProvider({ children }) {
               onClick={close}
               className="absolute top-4 right-4 text-white/50 active:scale-90"
               data-testid="guest-gate-close"
-              aria-label="Cerrar"
+              aria-label={t("guestgate.close")}
             >
               <X className="w-5 h-5" />
             </button>
@@ -65,10 +67,10 @@ export function GuestGateProvider({ children }) {
                 <Sparkles className="w-6 h-6 text-qv-primary" />
               </div>
               <h2 className="font-display text-2xl font-black tracking-tight text-white">
-                Crea tu cuenta<span className="text-qv-primary">.</span>
+                {t("guestgate.title")}<span className="text-qv-primary">.</span>
               </h2>
               <p className="text-white/60 text-sm mt-2 leading-snug">
-                Regístrate gratis para {reason} y ver <span className="text-white font-semibold">quién de tus amigos</span> va a cada plan.
+                {t("guestgate.body_pre", { reason })}<span className="text-white font-semibold">{t("guestgate.body_bold")}</span>{t("guestgate.body_end")}
               </p>
               <button
                 onClick={() => startGoogleLogin()}
@@ -81,11 +83,11 @@ export function GuestGateProvider({ children }) {
                   <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                   <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
                 </svg>
-                Continuar con Google
+                {t("guestgate.google")}
               </button>
               <div className="flex items-center gap-3 my-3">
                 <div className="flex-1 h-px bg-white/10" />
-                <span className="text-white/35 text-[10px] uppercase tracking-widest">o</span>
+                <span className="text-white/35 text-[10px] uppercase tracking-widest">{t("guestgate.or")}</span>
                 <div className="flex-1 h-px bg-white/10" />
               </div>
               <button
@@ -93,14 +95,14 @@ export function GuestGateProvider({ children }) {
                 data-testid="guest-gate-register"
                 className="w-full h-12 rounded-2xl bg-qv-primary text-white font-bold active:scale-95 transition-transform"
               >
-                Crear cuenta con email
+                {t("guestgate.register")}
               </button>
               <button
                 onClick={() => go("/login")}
                 data-testid="guest-gate-login"
                 className="mt-2 w-full h-11 rounded-2xl bg-white/5 border border-white/15 text-white/80 font-semibold active:scale-95 transition-transform"
               >
-                Ya tengo cuenta
+                {t("guestgate.have_account")}
               </button>
             </div>
           </div>

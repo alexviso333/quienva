@@ -8,9 +8,14 @@ import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X, Image
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
+
+const LOCALE_BY_LANG = { es: "es-ES", en: "en-GB", de: "de-DE" };
+const dateLocale = () => LOCALE_BY_LANG[(i18n.language || "es").slice(0, 2)] || "es-ES";
 
 function msgTime(iso) {
-  try { return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }); }
+  try { return new Date(iso).toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" }); }
   catch { return ""; }
 }
 
@@ -22,6 +27,7 @@ export default function ChatThread({ kind }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const scrollRef = useRef(null);
   const photoInputRef = useRef(null);
   const chatPhotoInputRef = useRef(null);
@@ -65,13 +71,13 @@ export default function ChatThread({ kind }) {
       })).data;
     },
     onSuccess: () => {
-      toast.success("¡Foto de grupo subida! 📸");
+      toast.success(t("chat.toast_photo_uploaded"));
       qc.invalidateQueries({ queryKey: messagesKey });
       qc.invalidateQueries({ queryKey: ["group-photo-op", id] });
       setUploadingPhoto(false);
     },
     onError: (err) => {
-      toast.error(err.response?.data?.detail || "No se pudo subir");
+      toast.error(err.response?.data?.detail || t("chat.toast_upload_error"));
       setUploadingPhoto(false);
     },
   });
@@ -104,7 +110,7 @@ export default function ChatThread({ kind }) {
       qc.invalidateQueries({ queryKey: messagesKey });
       qc.invalidateQueries({ queryKey: kind === "dm" ? ["dm-threads"] : ["groups"] });
     },
-    onError: (err) => toast.error(err.response?.data?.detail || "No se pudo enviar"),
+    onError: (err) => toast.error(err.response?.data?.detail || t("chat.toast_send_error")),
   });
 
   // Attach & send one or more photos inside the chat (DM or group)
@@ -133,16 +139,16 @@ export default function ChatThread({ kind }) {
     },
     onError: (err) => {
       setSendingPhotos(false);
-      toast.error(err.response?.data?.detail || "No se pudo enviar la foto");
+      toast.error(err.response?.data?.detail || t("chat.toast_photo_send_error"));
     },
   });
 
   const onChatPhotoPick = (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    if (files.length > 10) { toast.error("Máx 10 fotos por vez"); e.target.value = ""; return; }
+    if (files.length > 10) { toast.error(t("chat.max_photos")); e.target.value = ""; return; }
     const tooBig = files.find((f) => f.size > 25 * 1024 * 1024);
-    if (tooBig) { toast.error("Cada foto máx 25MB"); e.target.value = ""; return; }
+    if (tooBig) { toast.error(t("chat.max_size")); e.target.value = ""; return; }
     setSendingPhotos(true);
     sendChatPhotos.mutate(files);
     e.target.value = "";
@@ -151,7 +157,7 @@ export default function ChatThread({ kind }) {
   const leaveGroup = useMutation({
     mutationFn: async () => (await api.post(`/groups/${id}/leave`)).data,
     onSuccess: () => {
-      toast.success("Saliste del grupo");
+      toast.success(t("chat.toast_left"));
       qc.invalidateQueries({ queryKey: ["groups"] });
       navigate("/chats");
     },
@@ -173,10 +179,10 @@ export default function ChatThread({ kind }) {
      
   }, [kind, isLoading, messages.length]);
 
-  const title = kind === "dm" ? (friend?.name || "Chat") : (groupInfo?.name || "Grupo");
+  const title = kind === "dm" ? (friend?.name || t("chat.default_dm")) : (groupInfo?.name || t("chat.default_group"));
   const subtitle = kind === "dm"
     ? (friend?.username ? `@${friend.username}` : "")
-    : (groupInfo ? `${groupInfo.member_ids.length} miembros` : "");
+    : (groupInfo ? t("chat.members", { count: groupInfo.member_ids.length }) : "");
 
   return (
     <div className="min-h-screen qv-app-bg flex flex-col">
@@ -227,9 +233,9 @@ export default function ChatThread({ kind }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-display font-black text-white text-sm leading-tight">
-                    Sois {op.count} en {op.event_name} 🎉
+                    {t("chat.group_photo_title", { count: op.count, event: op.event_name })}
                   </p>
-                  <p className="text-white/50 text-xs truncate">Haceos la foto de grupo de esta noche</p>
+                  <p className="text-white/50 text-xs truncate">{t("chat.group_photo_sub")}</p>
                 </div>
                 <div className="flex -space-x-2 shrink-0">
                   {(op.members_going || []).slice(0, 3).map((m, i) => (
@@ -244,14 +250,14 @@ export default function ChatThread({ kind }) {
                 className="w-full h-11 rounded-xl bg-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
               >
                 {uploadingPhoto ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Subiendo…</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> {t("chat.uploading")}</>
                 ) : (
-                  <><Camera className="w-4 h-4" /> {op.i_uploaded ? "Subir otra foto de grupo" : "Hacer la foto de grupo"}</>
+                  <><Camera className="w-4 h-4" /> {op.i_uploaded ? t("chat.upload_another") : t("chat.take_group_photo")}</>
                 )}
               </button>
               {op.photos_count > 0 && (
                 <p className="text-center text-white/40 text-[11px] mt-1.5">
-                  {op.photos_count} foto{op.photos_count > 1 ? "s" : ""} de grupo ya en el chat 👇
+                  {t(op.photos_count === 1 ? "chat.photos_in_chat_one" : "chat.photos_in_chat_other", { count: op.photos_count })}
                 </p>
               )}
             </div>
@@ -272,7 +278,7 @@ export default function ChatThread({ kind }) {
           {isLoading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-qv-primary animate-spin" /></div>
           ) : messages.length === 0 ? (
-            <p className="text-center text-white/40 text-sm py-10">Sé el primero en escribir 👋</p>
+            <p className="text-center text-white/40 text-sm py-10">{t("chat.empty")}</p>
           ) : (
             messages.map((m) => (
               <div key={m.id} className={`flex gap-2 ${m.is_mine ? "flex-row-reverse" : ""}`} data-testid={`msg-${m.id}`}>
@@ -309,7 +315,7 @@ export default function ChatThread({ kind }) {
             onClick={() => chatPhotoInputRef.current?.click()}
             disabled={sendingPhotos}
             className="w-11 h-11 rounded-full bg-white/5 border border-white/15 flex items-center justify-center shrink-0 active:scale-90 disabled:opacity-40"
-            title="Enviar foto(s)"
+            title={t("chat.attach_title")}
           >
             {sendingPhotos ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <ImagePlus className="w-5 h-5 text-white/80" />}
           </button>
@@ -327,7 +333,7 @@ export default function ChatThread({ kind }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && text.trim()) send.mutate(); }}
-            placeholder="Escribe un mensaje…"
+            placeholder={t("chat.input_ph")}
             className="flex-1 h-11 bg-white/5 border-white/15 rounded-full text-white placeholder:text-white/40"
           />
           <button
@@ -349,8 +355,8 @@ export default function ChatThread({ kind }) {
               <div key={m.user_id} className="flex items-center gap-3">
                 <AvatarCircle name={m.name} picture={m.picture} size={34} ring={false} />
                 <span className="flex-1 text-white text-sm">{m.name}</span>
-                {groupInfo?.created_by === m.user_id && <span className="text-[10px] uppercase text-qv-secondary font-bold">creador</span>}
-                {m.user_id === me?.user_id && <span className="text-[10px] uppercase text-white/40 font-bold">tú</span>}
+                {groupInfo?.created_by === m.user_id && <span className="text-[10px] uppercase text-qv-secondary font-bold">{t("chat.creator")}</span>}
+                {m.user_id === me?.user_id && <span className="text-[10px] uppercase text-white/40 font-bold">{t("chat.you")}</span>}
               </div>
             ))}
           </div>
@@ -359,7 +365,7 @@ export default function ChatThread({ kind }) {
             onClick={() => leaveGroup.mutate()}
             className="h-11 rounded-2xl bg-red-500/20 text-red-300 font-bold flex items-center justify-center gap-2"
           >
-            <LogOut className="w-4 h-4" /> Salir del grupo
+            <LogOut className="w-4 h-4" /> {t("chat.leave")}
           </button>
         </DialogContent>
       </Dialog>
@@ -379,7 +385,7 @@ export default function ChatThread({ kind }) {
                 data-testid="chat-photo-download"
                 onClick={() => downloadMedia(lightbox)}
                 className="absolute top-3 left-3 z-10 w-9 h-9 rounded-full bg-black/60 flex items-center justify-center"
-                title="Descargar en calidad completa"
+                title={t("chat.download_title")}
               >
                 <Download className="w-4 h-4 text-white" />
               </button>

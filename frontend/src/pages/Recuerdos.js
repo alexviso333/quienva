@@ -9,32 +9,35 @@ import {
   CalendarDays, ArrowLeft, Play, Images, MapPin, ChevronLeft, ChevronRight,
   Loader2, Zap, List, Calendar, ChevronRight as ChevRight, PartyPopper,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
-const MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-const DOW_ES = ["L", "M", "X", "J", "V", "S", "D"];
+const LOCALE_BY_LANG = { es: "es-ES", en: "en-GB", de: "de-DE" };
+const dateLocale = () => LOCALE_BY_LANG[(i18n.language || "es").slice(0, 2)] || "es-ES";
 
 function formatDay(iso) {
   try {
     const d = new Date(iso + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+    return d.toLocaleDateString(dateLocale(), { weekday: "long", day: "numeric", month: "long" });
   } catch { return iso; }
 }
 function fmtFull(dateStr) {
   try {
     const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return d.toLocaleDateString(dateLocale(), { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   } catch { return dateStr; }
 }
 function monthKey(dateStr) {
   try {
     const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+    return d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
   } catch { return ""; }
 }
 
 // ---------------- LISTA (past parties) ----------------
 function ListaView() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { data, isLoading } = useQuery({
     queryKey: ["past-events"],
     queryFn: async () => (await api.get("/me/past-events")).data,
@@ -54,9 +57,9 @@ function ListaView() {
     return (
       <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.02] p-8 text-center mt-2 mx-4">
         <PartyPopper className="w-10 h-10 text-white/30 mx-auto mb-3" />
-        <p className="text-white/60 text-sm font-semibold mb-1">Todavía no tienes fiestas pasadas</p>
-        <p className="text-white/40 text-xs mb-4">Cuando marques “Voy” o “Estuve” y la fiesta pase, aparecerá aquí con su álbum.</p>
-        <button onClick={() => navigate("/feed")} className="h-10 px-5 rounded-full bg-qv-primary text-white font-bold text-sm active:scale-95">Ver los planes</button>
+        <p className="text-white/60 text-sm font-semibold mb-1">{t("recuerdos.empty_title")}</p>
+        <p className="text-white/40 text-xs mb-4">{t("recuerdos.empty_body")}</p>
+        <button onClick={() => navigate("/feed")} className="h-10 px-5 rounded-full bg-qv-primary text-white font-bold text-sm active:scale-95">{t("recuerdos.see_plans")}</button>
       </div>
     );
   }
@@ -88,7 +91,7 @@ function ListaView() {
                   <p className="text-white/50 text-xs mt-0.5 flex items-center gap-1 capitalize"><Calendar className="w-3 h-3" /> {fmtFull(it.date)}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${it.my_status === "estuve" ? "bg-qv-secondary/20 text-qv-secondary" : "bg-qv-primary/20 text-qv-primary"}`}>
-                      {it.my_status === "estuve" ? "Estuve" : "Fui"}
+                      {it.my_status === "estuve" ? t("recuerdos.status_estuve") : t("recuerdos.status_fui")}
                     </span>
                     {it.my_photos > 0 && (
                       <span className="text-[10px] text-white/60 flex items-center gap-1"><Images className="w-3 h-3" /> {it.my_photos}</span>
@@ -108,6 +111,9 @@ function ListaView() {
 // ---------------- CALENDARIO ----------------
 function CalendarioView() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const MONTHS = t("recuerdos.months", { returnObjects: true });
+  const DOW = t("recuerdos.dow", { returnObjects: true });
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -152,12 +158,12 @@ function CalendarioView() {
     <>
       <div className="flex items-center justify-between px-5 mb-3" data-testid="memories-month-nav">
         <button onClick={goPrev} data-testid="memories-prev" className="w-9 h-9 rounded-full bg-white/5 border border-white/15 flex items-center justify-center active:scale-90"><ChevronLeft className="w-5 h-5 text-white" /></button>
-        <span className="font-display text-xl font-bold text-white capitalize">{MONTHS_ES[month]} {year}</span>
+        <span className="font-display text-xl font-bold text-white capitalize">{MONTHS[month]} {year}</span>
         <button onClick={goNext} data-testid="memories-next" className="w-9 h-9 rounded-full bg-white/5 border border-white/15 flex items-center justify-center active:scale-90"><ChevronRight className="w-5 h-5 text-white" /></button>
       </div>
       <div className="px-5">
         <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-white/40 font-bold uppercase mb-1">
-          {DOW_ES.map((d, i) => <div key={i}>{d}</div>)}
+          {DOW.map((d, i) => <div key={i}>{d}</div>)}
         </div>
         <div className="grid grid-cols-7 gap-1 mb-6">
           {grid.map((cell, i) => {
@@ -174,7 +180,7 @@ function CalendarioView() {
       {isLoading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 text-qv-primary animate-spin" /></div>
       ) : days.length === 0 ? (
-        <p className="text-center text-white/40 py-10 px-6">Sin fiestas en este mes. Marca &apos;Voy&apos; a un plan para empezar.</p>
+        <p className="text-center text-white/40 py-10 px-6">{t("recuerdos.empty_month")}</p>
       ) : (
         <div className="px-4 flex flex-col gap-4 pb-8">
           {days.map((day) => (
@@ -238,6 +244,7 @@ function CalendarioView() {
  */
 export default function Recuerdos() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [view, setView] = useState("lista");
 
   return (
@@ -248,9 +255,9 @@ export default function Recuerdos() {
         </button>
         <div>
           <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold flex items-center gap-1.5">
-            <CalendarDays className="w-3.5 h-3.5" /> Recuerdos
+            <CalendarDays className="w-3.5 h-3.5" /> {t("recuerdos.eyebrow")}
           </p>
-          <h1 className="font-display text-3xl font-black tracking-tighter">Tus noches<span className="text-qv-primary">.</span></h1>
+          <h1 className="font-display text-3xl font-black tracking-tighter">{t("recuerdos.title")}<span className="text-qv-primary">.</span></h1>
         </div>
       </header>
 
@@ -262,14 +269,14 @@ export default function Recuerdos() {
             onClick={() => setView("lista")}
             className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${view === "lista" ? "bg-white text-black" : "text-white/60"}`}
           >
-            <List className="w-3.5 h-3.5" /> Lista
+            <List className="w-3.5 h-3.5" /> {t("recuerdos.tab_list")}
           </button>
           <button
             data-testid="recuerdos-tab-calendario"
             onClick={() => setView("calendario")}
             className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${view === "calendario" ? "bg-white text-black" : "text-white/60"}`}
           >
-            <Calendar className="w-3.5 h-3.5" /> Calendario
+            <Calendar className="w-3.5 h-3.5" /> {t("recuerdos.tab_calendar")}
           </button>
         </div>
       </div>

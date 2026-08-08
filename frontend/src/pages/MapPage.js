@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { Loader2, LocateFixed } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 const TYPE_COLOR = {
   discoteca: "#e879f9",
@@ -16,7 +17,7 @@ const TYPE_COLOR = {
   beach_club: "#22d3ee",
   promotor: "#fbbf24",
 };
-const TYPE_LABEL = { discoteca: "Discotecas", pub: "Pubs", beach_club: "Beach clubs", promotor: "Promotores" };
+const TYPE_KEYS = ["discoteca", "pub", "beach_club", "promotor"];
 
 // Sensible default map centers per city (fallback when we can't geolocate).
 const CITY_CENTER = {
@@ -27,13 +28,7 @@ const CITY_CENTER = {
   Marbella: [36.5099, -4.8858],
 };
 
-const DISTANCE_OPTS = [
-  { km: 0, label: "Todas" },
-  { km: 2, label: "2 km" },
-  { km: 5, label: "5 km" },
-  { km: 10, label: "10 km" },
-  { km: 20, label: "20 km" },
-];
+const DISTANCE_KMS = [0, 2, 5, 10, 20];
 
 // Haversine distance in km between two [lat, lng] points.
 function distanceKm(a, b) {
@@ -88,7 +83,8 @@ function Recenter({ center, zoom }) {
 export default function MapPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const cityLabel = user?.city || "Tu ciudad";
+  const { t } = useTranslation();
+  const cityLabel = user?.city || t("map.your_city");
   const cityCenter = CITY_CENTER[user?.city] || CITY_CENTER["Palma de Mallorca"];
 
   const [myPos, setMyPos] = useState(null);     // [lat, lng] of the viewer
@@ -103,7 +99,7 @@ export default function MapPage() {
 
   const locate = () => {
     if (!("geolocation" in navigator)) {
-      toast.error("Tu dispositivo no permite geolocalización");
+      toast.error(t("map.geo_unsupported"));
       return;
     }
     setGeoState("locating");
@@ -114,7 +110,7 @@ export default function MapPage() {
       },
       () => {
         setGeoState("denied");
-        toast.error("No pudimos obtener tu ubicación. Actívala para filtrar por distancia.");
+        toast.error(t("map.geo_denied"));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
@@ -149,28 +145,28 @@ export default function MapPage() {
       <header className="px-5 pt-8 pb-2">
         <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">{cityLabel}</p>
         <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
-          Mapa<span className="text-qv-primary">.</span>
+          {t("map.title")}<span className="text-qv-primary">.</span>
         </h1>
-        <p className="text-white/50 text-sm mt-1">Discotecas y pubs cerca de ti en el mapa.</p>
+        <p className="text-white/50 text-sm mt-1">{t("map.subtitle")}</p>
       </header>
 
       {/* Distance filter (only meaningful once we have the viewer's position) */}
       <div className="px-4 pb-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {DISTANCE_OPTS.map((opt) => (
+        {DISTANCE_KMS.map((km) => (
           <button
-            key={opt.km}
-            data-testid={`map-radius-${opt.km}`}
+            key={km}
+            data-testid={`map-radius-${km}`}
             onClick={() => {
-              if (!myPos && opt.km > 0) { locate(); }
-              setRadius(opt.km);
+              if (!myPos && km > 0) { locate(); }
+              setRadius(km);
             }}
             className={`shrink-0 px-3 h-8 rounded-full text-xs font-bold border transition-colors ${
-              radius === opt.km
+              radius === km
                 ? "bg-qv-primary text-white border-qv-primary"
                 : "bg-white/5 text-white/70 border-white/15"
             }`}
           >
-            {opt.label}
+            {km === 0 ? t("map.all") : `${km} km`}
           </button>
         ))}
         <button
@@ -179,19 +175,19 @@ export default function MapPage() {
           className="shrink-0 ml-auto px-3 h-8 rounded-full text-xs font-bold border border-qv-secondary/40 bg-qv-secondary/15 text-qv-secondary flex items-center gap-1.5"
         >
           {geoState === "locating" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
-          Mi ubicación
+          {t("map.my_location")}
         </button>
       </div>
 
       {/* Legend */}
       <div className="px-4 py-2 flex flex-wrap gap-3">
-        {Object.entries(TYPE_LABEL).map(([k, label]) => (
+        {TYPE_KEYS.map((k) => (
           <span key={k} className="flex items-center gap-1.5 text-[11px] text-white/60">
-            <span className="w-3 h-3 rounded-full" style={{ background: TYPE_COLOR[k] }} /> {label}
+            <span className="w-3 h-3 rounded-full" style={{ background: TYPE_COLOR[k] }} /> {t(`map.type.${k}`)}
           </span>
         ))}
         {myPos && radius > 0 && (
-          <span className="text-[11px] text-white/50 ml-auto">{pins.length} a menos de {radius} km</span>
+          <span className="text-[11px] text-white/50 ml-auto">{t("map.within_radius", { count: pins.length, km: radius })}</span>
         )}
       </div>
 
@@ -209,7 +205,7 @@ export default function MapPage() {
               {myPos && (
                 <>
                   <Marker position={myPos} icon={meIcon}>
-                    <Popup><div style={{ fontWeight: 800 }}>Estás aquí</div></Popup>
+                    <Popup><div style={{ fontWeight: 800 }}>{t("map.you_here")}</div></Popup>
                   </Marker>
                   {radius > 0 && (
                     <Circle
@@ -228,18 +224,18 @@ export default function MapPage() {
                       <div style={{ color: "#666", fontSize: 12 }}>{v.zone} · {v.type}</div>
                       {v._dist != null && Number.isFinite(v._dist) && (
                         <div style={{ color: "#3884ff", fontSize: 12, fontWeight: 700 }}>
-                          📍 a {v._dist < 1 ? `${Math.round(v._dist * 1000)} m` : `${v._dist.toFixed(1)} km`} de ti
+                          {t("map.dist_from_you", { dist: v._dist < 1 ? `${Math.round(v._dist * 1000)} m` : `${v._dist.toFixed(1)} km` })}
                         </div>
                       )}
-                      {v.free_entry && <div style={{ color: "#059669", fontSize: 11, fontWeight: 700 }}>Entrada libre</div>}
+                      {v.free_entry && <div style={{ color: "#059669", fontSize: 11, fontWeight: 700 }}>{t("map.free_entry")}</div>}
                       <div style={{ fontSize: 12, marginTop: 4 }}>
-                        {v.upcoming_events > 0 ? `🎉 ${v.upcoming_events} fiestas próximas` : "Sin fiestas anunciadas"}
+                        {v.upcoming_events > 0 ? t(v.upcoming_events === 1 ? "map.upcoming_one" : "map.upcoming_other", { count: v.upcoming_events }) : t("map.no_parties")}
                       </div>
                       <button
                         onClick={() => navigate("/locales")}
                         style={{ marginTop: 6, background: "#ff0055", color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
                       >
-                        Ver ficha
+                        {t("map.view_venue")}
                       </button>
                     </div>
                   </Popup>
@@ -250,10 +246,10 @@ export default function MapPage() {
         )}
         {geoState === "denied" && (
           <p className="text-white/40 text-[11px] text-center mt-2">
-            Activa la ubicación en tu navegador para ver las discotecas por distancia.
+            {t("map.geo_hint")}
           </p>
         )}
-        <p className="text-white/30 text-[10px] text-center mt-2 pb-2">Mapas © OpenStreetMap · CARTO</p>
+        <p className="text-white/30 text-[10px] text-center mt-2 pb-2">{t("map.attribution")}</p>
       </div>
     </AppShell>
   );

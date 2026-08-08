@@ -14,8 +14,19 @@ export function timeSuffix(time) {
   return t ? ` · ${t}` : "";
 }
 
-const _WD = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
-const _MO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+import i18n from "@/i18n";
+
+const _WD_BY_LANG = {
+  es: ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"],
+  en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  de: ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"],
+};
+const _MO_BY_LANG = {
+  es: ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"],
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+  de: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"],
+};
+const _lang = () => (i18n.language || "es").slice(0, 2);
 const _pad = (n) => String(n).padStart(2, "0");
 
 // The DATE (YYYY-MM-DD) a party belongs to. Backend already shifts 00:00 →
@@ -41,9 +52,12 @@ export function formatPartyDate(dateStr, time) {
   const t = String(time || "").trim();
   const nd = partyNightDate(dateStr, t);
   let dateLabel = nd;
+  const lang = _lang();
+  const WD = _WD_BY_LANG[lang] || _WD_BY_LANG.es;
+  const MO = _MO_BY_LANG[lang] || _MO_BY_LANG.es;
   try {
     const d = new Date(nd + "T00:00:00");
-    dateLabel = `${_WD[d.getDay()]} ${d.getDate()} ${_MO[d.getMonth()]}`;
+    dateLabel = `${WD[d.getDay()]} ${d.getDate()} ${MO[d.getMonth()]}`;
   } catch {
     /* keep raw */
   }

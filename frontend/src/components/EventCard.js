@@ -9,25 +9,31 @@ import { formatPartyDate } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
-function friendsText(friends, verb) {
-  if (!friends || friends.length === 0) return null;
+// Builds "Marta" / "Marta y 2 más" for a friends list.
+function namesList(t, friends) {
   const first = friends[0].name.split(" ")[0];
-  if (friends.length === 1) return `${first} ${verb}`;
-  const rest = friends.length - 1;
-  return `${first} y ${rest} ${verb}`;
+  if (friends.length === 1) return t("eventcard.names_one", { name: first });
+  return t("eventcard.names_other", { name: first, count: friends.length - 1 });
 }
 
-function friendsTextWithSelf(friends, isMe, verbSingle, verbPlural) {
-  // Total count including current user if applicable
+// Social proof sentence for going / interested, including the current user.
+function socialText(t, friends, isMe, ctx) {
   const count = friends.length + (isMe ? 1 : 0);
   if (count === 0) return null;
-  const verb = count === 1 ? verbSingle : verbPlural;
-  if (isMe && friends.length === 0) return `Tú ${verb}`;
-  if (isMe) return `Tú y ${friends.length} más ${verb}`;
+  if (isMe && friends.length === 0) return t(`eventcard.${ctx}.you`);
+  if (isMe) return t(`eventcard.${ctx}.you_plus`, { count: friends.length });
   const first = friends[0].name.split(" ")[0];
-  if (friends.length === 1) return `${first} ${verb}`;
-  return `${first} y ${friends.length - 1} más ${verb}`;
+  if (friends.length === 1) return t(`eventcard.${ctx}.one`, { name: first });
+  return t(`eventcard.${ctx}.other`, { name: first, count: friends.length - 1 });
+}
+
+// "Marta estuvo" / "Marta y 2 estuvieron" for a past attended list.
+function attendedText(t, attended) {
+  const first = attended[0].name.split(" ")[0];
+  if (attended.length === 1) return t("eventcard.attended_one", { name: first });
+  return t("eventcard.attended_other", { name: first, count: attended.length - 1 });
 }
 
 const todayStr = () => {
@@ -36,14 +42,15 @@ const todayStr = () => {
 };
 
 const SALE_STATE_META = {
-  no_a_la_venta: { label: "Próximamente", cls: "bg-white/10 text-white/70", icon: Clock },
-  a_la_venta:    { label: "A la venta",   cls: "bg-emerald-400/20 text-emerald-300", icon: Ticket },
-  pocas_entradas:{ label: "Pocas entradas", cls: "bg-orange-400/25 text-orange-200", icon: Flame },
-  agotado:       { label: "Agotado",      cls: "bg-white/10 text-white/50", icon: Lock },
-  solo_lista:    { label: "Solo lista",   cls: "bg-violet-400/20 text-violet-200", icon: ClipboardList },
+  no_a_la_venta: { cls: "bg-white/10 text-white/70", icon: Clock },
+  a_la_venta:    { cls: "bg-emerald-400/20 text-emerald-300", icon: Ticket },
+  pocas_entradas:{ cls: "bg-orange-400/25 text-orange-200", icon: Flame },
+  agotado:       { cls: "bg-white/10 text-white/50", icon: Lock },
+  solo_lista:    { cls: "bg-violet-400/20 text-violet-200", icon: ClipboardList },
 };
 
 function PriceBadge({ event }) {
+  const { t } = useTranslation();
   const state = event.sale_state || "no_a_la_venta";
   const meta = SALE_STATE_META[state] || SALE_STATE_META.no_a_la_venta;
   const Icon = meta.icon;
@@ -56,7 +63,7 @@ function PriceBadge({ event }) {
       <Icon className="w-3 h-3" />
       {price ? `${Math.round(price)}${symbol}` : ""}
       {price && state !== "no_a_la_venta" ? " · " : ""}
-      {meta.label}
+      {t(`eventcard.sale.${state}`)}
     </span>
   );
 }
@@ -65,6 +72,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const navigate = useNavigate();
   const { user } = useAuth();
   const { requireAuth } = useGuestGate();
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const isPast = event.date < todayStr();
   const going = event.friends_going || [];
@@ -83,23 +91,23 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
       return (await api.post(`/events/${event.id}/follow`)).data;
     },
     onSuccess: (d) => {
-      toast.success(d.following ? "Te avisaremos cuando salgan 🔔" : "Notificaciones desactivadas");
+      toast.success(d.following ? t("eventcard.follow_on") : t("eventcard.follow_off"));
       qc.invalidateQueries({ queryKey: ["events"] });
       qc.invalidateQueries({ queryKey: ["carousels"] });
       qc.invalidateQueries({ queryKey: ["top-weekend"] });
     },
-    onError: () => toast.error("Error"),
+    onError: () => toast.error(t("eventcard.toast_error")),
   });
 
   // Build preview list including "yo" if I'm going/interested/attended
-  const meEntry = user ? { user_id: "me", name: "Tú", picture: user.picture || "" } : null;
+  const meEntry = user ? { user_id: "me", name: t("eventcard.you"), picture: user.picture || "" } : null;
   const previewGoing = isVoy && meEntry ? [meEntry, ...going] : going;
   const previewInteresa = isInteresa && meEntry ? [meEntry, ...interested] : interested;
   const previewAttended = isEstuve && meEntry ? [meEntry, ...attended] : attended;
   const previewFriends = (isPast ? previewAttended : [...previewGoing, ...previewInteresa]).slice(0, 4);
 
-  const goingText = friendsTextWithSelf(going, isVoy, "vas", "van");
-  const interestedText = friendsTextWithSelf(interested, isInteresa, "tienes interés", "tienen interés");
+  const goingText = socialText(t, going, isVoy, "going");
+  const interestedText = socialText(t, interested, isInteresa, "interested");
 
   const toggle = (status) => onSetStatus(event.id, event.my_status === status ? "none" : status);
 
@@ -140,10 +148,10 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
             {event.is_affiliate && (
               <span
                 data-testid={`event-affiliate-${event.id}`}
-                title="Lleva tu link de afiliado (solo lo ves tú)"
+                title={t("eventcard.badge_mylink_title")}
                 className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-gradient-to-r from-lime-300 to-green-500 text-black flex items-center gap-1 shadow-[0_0_14px_rgba(132,204,22,0.6)]"
               >
-                <Euro className="w-3 h-3" /> Mi link
+                <Euro className="w-3 h-3" /> {t("eventcard.badge_mylink")}
               </span>
             )}
             {event.featured && (
@@ -151,7 +159,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 data-testid={`event-featured-${event.id}`}
                 className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-gradient-to-r from-yellow-300 to-amber-400 text-black flex items-center gap-1 shadow-[0_0_14px_rgba(253,224,71,0.5)]"
               >
-                <Star className="w-3 h-3" fill="currentColor" /> Destacada
+                <Star className="w-3 h-3" fill="currentColor" /> {t("eventcard.badge_featured")}
               </span>
             )}
             {event.genre && (
@@ -171,7 +179,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
               data-testid={`event-follow-btn-${event.id}`}
               onClick={(e) => { e.stopPropagation(); toggleFollow.mutate(); }}
               disabled={toggleFollow.isPending}
-              aria-label={isFollowing ? "Dejar de recibir avisos" : "Avísame cuando salgan entradas"}
+              aria-label={isFollowing ? t("eventcard.aria_follow_on") : t("eventcard.aria_follow_off")}
               className={`w-8 h-8 rounded-full border flex items-center justify-center active:scale-90 transition-transform ${
                 isFollowing
                   ? "bg-qv-secondary text-black border-qv-secondary shadow-[0_0_14px_rgba(0,240,255,0.5)]"
@@ -184,7 +192,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           <button
             data-testid={`event-share-btn-${event.id}`}
             onClick={shareWhatsApp}
-            aria-label="Compartir por WhatsApp"
+            aria-label={t("eventcard.aria_share")}
             className="w-8 h-8 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
           >
             <Send className="w-4 h-4" />
@@ -214,7 +222,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           {!user && !isPast && event.total_going > 0 ? (
             <BlurredGoingTeaser
               count={event.total_going}
-              onClick={(e) => { e.stopPropagation(); requireAuth("ver quién va a los planes"); }}
+              onClick={(e) => { e.stopPropagation(); requireAuth(t("eventcard.reason_going")); }}
             />
           ) : previewFriends.length > 0 ? (
             <>
@@ -232,11 +240,11 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
               <p className="text-xs text-white/85 leading-tight">
                 {isPast ? (
                   isEstuve && attended.length > 0 ? (
-                    <span className="font-semibold text-white">Coincidiste con {friendsText(attended, attended.length === 1 ? "" : "más").trim()}</span>
+                    <span className="font-semibold text-white">{t("eventcard.matched_with", { names: namesList(t, attended) })}</span>
                   ) : isEstuve ? (
-                    <span className="font-semibold text-white">Estuviste aquí</span>
+                    <span className="font-semibold text-white">{t("eventcard.were_here")}</span>
                   ) : (
-                    <span className="font-semibold text-white">{friendsText(attended, attended.length === 1 ? "estuvo" : "estuvieron")}</span>
+                    <span className="font-semibold text-white">{attendedText(t, attended)}</span>
                   )
                 ) : (
                   <>
@@ -256,7 +264,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
             </>
           ) : (
             <p className="text-xs text-white/40 italic" data-testid={`event-nofriends-${event.id}`}>
-              {isPast ? "¿Estuviste aquí? Márcalo abajo" : "Todavía ningún amigo se ha apuntado · sé el primero"}
+              {isPast ? t("eventcard.nofriends_past") : t("eventcard.nofriends_future")}
             </p>
           )}
         </div>
@@ -273,7 +281,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 : "bg-white/5 border border-white/20 text-white/80"
             }`}
           >
-            {isEstuve ? <><CheckCircle2 className="w-4 h-4" /> Estuve aquí</> : "Estuve aquí"}
+            {isEstuve ? <><CheckCircle2 className="w-4 h-4" /> {t("eventcard.btn_was_here")}</> : t("eventcard.btn_was_here")}
           </button>
         ) : (
           <>
@@ -286,7 +294,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                   isVoy ? "bg-qv-primary text-white shadow-[0_0_18px_rgba(255,0,85,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
                 }`}
               >
-                {isVoy && <Check className="w-4 h-4" />} Voy
+                {isVoy && <Check className="w-4 h-4" />} {t("eventcard.btn_going")}
               </button>
               <button
                 data-testid={`event-interesa-btn-${event.id}`}
@@ -296,13 +304,13 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                   isInteresa ? "bg-qv-secondary text-black shadow-[0_0_18px_rgba(0,240,255,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
                 }`}
               >
-                {isInteresa && <Star className="w-4 h-4" />} Me interesa
+                {isInteresa && <Star className="w-4 h-4" />} {t("eventcard.btn_interested")}
               </button>
             </div>
 
             <p className="flex items-center gap-1.5 text-[10.5px] text-white/40 leading-tight pl-0.5">
               <Info className="w-3 h-3 shrink-0" />
-              <span><b className="text-white/60">Voy</b> = confirmado · <b className="text-white/60">Me interesa</b> = te avisamos el día</span>
+              <span><b className="text-white/60">{t("eventcard.voy_word")}</b> {t("eventcard.eq_confirmed")} · <b className="text-white/60">{t("eventcard.interesa_word")}</b> {t("eventcard.eq_notify")}</span>
             </p>
 
             {event.has_commission && event.commission_url ? (
@@ -314,7 +322,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 onClick={() => api.post("/tickets/click", { event_id: event.id }).catch(() => {})}
                 className="h-9 rounded-xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-2 transition-transform duration-300 hover:-translate-y-0.5 active:scale-95"
               >
-                <Ticket className="w-4 h-4" /> Conseguir entrada{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
+                <Ticket className="w-4 h-4" /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
               </a>
             ) : event.more_info_url ? (
               <a
@@ -324,7 +332,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 rel="noopener noreferrer"
                 className="h-9 rounded-xl bg-white/5 border border-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors duration-300 active:scale-95"
               >
-                <ExternalLink className="w-4 h-4" /> Más información
+                <ExternalLink className="w-4 h-4" /> {t("eventcard.btn_more_info")}
               </a>
             ) : null}
           </>

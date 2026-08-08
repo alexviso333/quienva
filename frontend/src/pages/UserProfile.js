@@ -7,6 +7,7 @@ import { BadgesPanel } from "@/components/BadgesPanel";
 import { UserActionsMenu } from "@/components/ReportBlock";
 import { ArrowLeft, Loader2, MessageSquare, UserPlus, Clock, Check, Trophy, Flame, Calendar, Star } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 function StatMini({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
@@ -22,6 +23,7 @@ export default function UserProfile() {
   const { userId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { t } = useTranslation();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["user-badges", userId],
@@ -32,10 +34,10 @@ export default function UserProfile() {
   const addFriend = useMutation({
     mutationFn: async () => (await api.post("/friends/request", { user_id: userId })).data,
     onSuccess: () => {
-      toast.success("Solicitud enviada ✨");
+      toast.success(t("userprofile.toast_request_sent"));
       qc.invalidateQueries({ queryKey: ["user-badges", userId] });
     },
-    onError: (e) => toast.error(formatApiErrorDetail(e.response?.data?.detail) || "No se pudo enviar"),
+    onError: (e) => toast.error(formatApiErrorDetail(e.response?.data?.detail) || t("userprofile.toast_request_error")),
   });
 
   const acceptFriend = useMutation({
@@ -46,11 +48,11 @@ export default function UserProfile() {
       return (await api.post("/friends/respond", { request_id: match.request_id, accept: true })).data;
     },
     onSuccess: () => {
-      toast.success("¡Ahora sois amigos!");
+      toast.success(t("userprofile.toast_now_friends"));
       qc.invalidateQueries({ queryKey: ["user-badges", userId] });
       qc.invalidateQueries({ queryKey: ["friends"] });
     },
-    onError: () => toast.error("Error"),
+    onError: () => toast.error(t("userprofile.toast_error")),
   });
 
   if (isLoading) {
@@ -82,8 +84,8 @@ export default function UserProfile() {
     return (
       <AppShell>
         <div className="px-5 py-20 text-center">
-          <p className="text-white/60">Usuario no encontrado.</p>
-          <button onClick={() => navigate(-1)} className="mt-4 text-qv-secondary text-sm">Volver</button>
+          <p className="text-white/60">{t("userprofile.not_found")}</p>
+          <button onClick={() => navigate(-1)} className="mt-4 text-qv-secondary text-sm">{t("userprofile.back")}</button>
         </div>
       </AppShell>
     );
@@ -98,7 +100,7 @@ export default function UserProfile() {
         <button onClick={() => navigate(-1)} data-testid="userprofile-back">
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
-        <span className="font-display text-lg font-bold flex-1">Perfil</span>
+        <span className="font-display text-lg font-bold flex-1">{t("userprofile.title")}</span>
         {!is_self && <UserActionsMenu userId={userId} userName={user.name} />}
       </div>
 
@@ -119,12 +121,12 @@ export default function UserProfile() {
               disabled={addFriend.isPending}
               className="h-11 px-5 rounded-full bg-qv-primary text-white font-bold flex items-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
             >
-              <UserPlus className="w-4 h-4" /> {addFriend.isPending ? "Enviando…" : "Añadir amigo"}
+              <UserPlus className="w-4 h-4" /> {addFriend.isPending ? t("userprofile.sending") : t("userprofile.add_friend")}
             </button>
           )}
           {friend_status === "pending_out" && (
             <div className="h-11 px-5 rounded-full bg-white/5 border border-white/15 text-white/70 font-semibold flex items-center gap-2">
-              <Clock className="w-4 h-4" /> Solicitud enviada
+              <Clock className="w-4 h-4" /> {t("userprofile.request_sent")}
             </div>
           )}
           {friend_status === "pending_in" && (
@@ -133,7 +135,7 @@ export default function UserProfile() {
               onClick={() => acceptFriend.mutate()}
               className="h-11 px-5 rounded-full bg-qv-secondary text-black font-bold flex items-center gap-2 active:scale-95"
             >
-              <Check className="w-4 h-4" /> Aceptar solicitud
+              <Check className="w-4 h-4" /> {t("userprofile.accept_request")}
             </button>
           )}
           {canDM && !is_self && (
@@ -142,7 +144,7 @@ export default function UserProfile() {
               onClick={() => navigate(`/chats/dm/${userId}`)}
               className="h-11 px-5 rounded-full bg-qv-primary text-white font-bold flex items-center gap-2 active:scale-95 transition-transform"
             >
-              <MessageSquare className="w-4 h-4" /> Enviar mensaje
+              <MessageSquare className="w-4 h-4" /> {t("userprofile.send_message")}
             </button>
           )}
         </div>
@@ -150,10 +152,10 @@ export default function UserProfile() {
 
       {/* Public stats card — always visible */}
       <div className="px-5 mt-6 grid grid-cols-4 gap-2">
-        <StatMini icon={Trophy} value={stats.total_events} label="Fiestas" color="text-yellow-300" />
-        <StatMini icon={Flame} value={stats.day_streak} label="Días" color="text-orange-400" />
-        <StatMini icon={Calendar} value={stats.week_streak} label="Semanas" color="text-qv-secondary" />
-        <StatMini icon={Star} value={stats.genres_count} label="Géneros" color="text-fuchsia-300" />
+        <StatMini icon={Trophy} value={stats.total_events} label={t("userprofile.stat_parties")} color="text-yellow-300" />
+        <StatMini icon={Flame} value={stats.day_streak} label={t("userprofile.stat_days")} color="text-orange-400" />
+        <StatMini icon={Calendar} value={stats.week_streak} label={t("userprofile.stat_weeks")} color="text-qv-secondary" />
+        <StatMini icon={Star} value={stats.genres_count} label={t("userprofile.stat_genres")} color="text-fuchsia-300" />
       </div>
 
       {points && (
@@ -161,7 +163,7 @@ export default function UserProfile() {
           <div className="rounded-2xl border border-yellow-300/30 bg-yellow-300/10 p-3 flex items-center gap-3">
             <Trophy className="w-5 h-5 text-yellow-300" />
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-yellow-300 font-bold">Puntos totales</p>
+              <p className="text-[10px] uppercase tracking-widest text-yellow-300 font-bold">{t("userprofile.total_points")}</p>
               <p className="font-display text-2xl font-black text-white leading-none">{points.total.toLocaleString("es-ES")}</p>
             </div>
           </div>
@@ -175,10 +177,10 @@ export default function UserProfile() {
         ) : (
           <>
             <p className="text-white/40 text-xs uppercase tracking-widest font-bold mb-3">
-              Insignias · {(data.earned || []).length}
+              {t("userprofile.badges_count", { count: (data.earned || []).length })}
             </p>
             {(data.earned || []).length === 0 ? (
-              <p className="text-white/40 text-sm italic text-center py-8">Todavía no ha ganado ninguna insignia.</p>
+              <p className="text-white/40 text-sm italic text-center py-8">{t("userprofile.no_badges")}</p>
             ) : (
               <div className="grid grid-cols-4 gap-2">
                 {data.earned.map((b) => (
@@ -190,7 +192,7 @@ export default function UserProfile() {
               </div>
             )}
             <p className="text-white/40 text-[11px] text-center mt-6 italic">
-              Añádelo/a como amigo para ver toda su actividad e insignias detalladas.
+              {t("userprofile.add_to_see")}
             </p>
           </>
         )}

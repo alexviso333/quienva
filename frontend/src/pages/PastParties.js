@@ -4,11 +4,16 @@ import { motion } from "framer-motion";
 import api, { mediaThumb } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { ArrowLeft, Images, Calendar, Loader2, ChevronRight, PartyPopper } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
+
+const LOCALE_BY_LANG = { es: "es-ES", en: "en-GB", de: "de-DE" };
+const dateLocale = () => LOCALE_BY_LANG[(i18n.language || "es").slice(0, 2)] || "es-ES";
 
 function fmtDate(dateStr) {
   try {
     const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return d.toLocaleDateString(dateLocale(), { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   } catch {
     return dateStr;
   }
@@ -17,7 +22,7 @@ function fmtDate(dateStr) {
 function monthKey(dateStr) {
   try {
     const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+    return d.toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
   } catch {
     return "";
   }
@@ -29,6 +34,7 @@ function monthKey(dateStr) {
  */
 export default function PastParties() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const { data, isLoading } = useQuery({
     queryKey: ["past-events"],
@@ -62,8 +68,8 @@ export default function PastParties() {
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <div>
-            <h1 className="font-display font-black text-2xl text-white leading-none">Fiestas pasadas</h1>
-            <p className="text-white/50 text-xs mt-1">Entra para ver el álbum de cada noche 📸</p>
+            <h1 className="font-display font-black text-2xl text-white leading-none">{t("pastparties.title")}</h1>
+            <p className="text-white/50 text-xs mt-1">{t("pastparties.subtitle")}</p>
           </div>
         </header>
 
@@ -72,15 +78,15 @@ export default function PastParties() {
         ) : items.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.02] p-8 text-center mt-6">
             <PartyPopper className="w-10 h-10 text-white/30 mx-auto mb-3" />
-            <p className="text-white/60 text-sm font-semibold mb-1">Todavía no tienes fiestas pasadas</p>
+            <p className="text-white/60 text-sm font-semibold mb-1">{t("recuerdos.empty_title")}</p>
             <p className="text-white/40 text-xs mb-4">
-              Cuando marques “Voy” o “Estuve” en una fiesta y esta pase, aparecerá aquí con su álbum.
+              {t("pastparties.empty_body")}
             </p>
             <button
               onClick={() => navigate("/feed")}
               className="h-10 px-5 rounded-full bg-qv-primary text-white font-bold text-sm active:scale-95"
             >
-              Ver los planes
+              {t("recuerdos.see_plans")}
             </button>
           </div>
         ) : (
@@ -113,7 +119,7 @@ export default function PastParties() {
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${it.my_status === "estuve" ? "bg-qv-secondary/20 text-qv-secondary" : "bg-qv-primary/20 text-qv-primary"}`}>
-                            {it.my_status === "estuve" ? "Estuve" : "Fui"}
+                            {it.my_status === "estuve" ? t("recuerdos.status_estuve") : t("recuerdos.status_fui")}
                           </span>
                           {it.my_photos > 0 && (
                             <span className="text-[10px] text-white/60 flex items-center gap-1">

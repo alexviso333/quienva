@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Zap, Camera, Loader2, X, RefreshCw, Timer, Users, ImageOff } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 /**
  * Full-screen BeReal-style capture for "El Momento".
@@ -13,6 +14,7 @@ import { toast } from "sonner";
 export default function Momento() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [camReady, setCamReady] = useState(false);
@@ -180,10 +182,10 @@ export default function Momento() {
       }
 
       const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.88));
-      if (!blob) throw new Error("No se pudo crear la imagen");
+      if (!blob) throw new Error("blob");
       setComposed({ blob, url: URL.createObjectURL(blob) });
     } catch (e) {
-      toast.error("No se pudo capturar. Reintenta.");
+      toast.error(t("momento.toast_capture_error"));
       setCountdown(null);
       startCamera(firstCam);
     } finally {
@@ -205,15 +207,15 @@ export default function Momento() {
       const { data } = await api.post(`/events/${eventId}/moment/upload`, form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      if (data.on_time) toast.success("⭐ ¡A tiempo! +30 puntos");
-      else toast.success("Momento subido ✨");
+      if (data.on_time) toast.success(t("momento.toast_ontime"));
+      else toast.success(t("momento.toast_uploaded"));
       qc.invalidateQueries({ queryKey: ["active-moment"] });
       qc.invalidateQueries({ queryKey: ["moment-status", eventId] });
       qc.invalidateQueries({ queryKey: ["moment-gallery", eventId] });
       qc.invalidateQueries({ queryKey: ["badges", "me"] });
       navigate(`/event/${eventId}`);
     } catch (e) {
-      toast.error(e.response?.data?.detail || "No se pudo subir");
+      toast.error(e.response?.data?.detail || t("momento.toast_upload_error"));
       setUploading(false);
     }
   };
@@ -229,12 +231,12 @@ export default function Momento() {
       const { data } = await api.post(`/events/${eventId}/moment/upload`, form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      if (data.on_time) toast.success("⭐ ¡A tiempo! +30 puntos");
-      else toast.success("Momento subido ✨");
+      if (data.on_time) toast.success(t("momento.toast_ontime"));
+      else toast.success(t("momento.toast_uploaded"));
       qc.invalidateQueries({ queryKey: ["active-moment"] });
       navigate(`/event/${eventId}`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "No se pudo subir");
+      toast.error(err.response?.data?.detail || t("momento.toast_upload_error"));
       setUploading(false);
     }
   };
@@ -254,16 +256,16 @@ export default function Momento() {
         <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
           <Zap className="w-8 h-8 text-white/40" />
         </div>
-        <h1 className="font-display text-2xl font-black text-white">No hay ningún Momento activo</h1>
+        <h1 className="font-display text-2xl font-black text-white">{t("momento.none_title")}</h1>
         <p className="text-white/50 text-sm mt-2 max-w-xs">
-          Cuando estés de fiesta te avisaremos con una notificación para hacer tu foto sorpresa. ¡Prepárate!
+          {t("momento.none_body")}
         </p>
         <button
           onClick={() => navigate("/feed")}
           className="mt-6 px-6 py-3 rounded-2xl bg-white/10 text-white font-bold text-sm active:scale-95"
           data-testid="momento-back"
         >
-          Volver
+          {t("momento.back")}
         </button>
       </div>
     );
@@ -282,7 +284,7 @@ export default function Momento() {
         </button>
         <div className="text-center">
           <p className="font-display font-black text-white leading-none flex items-center gap-1.5 justify-center">
-            <Zap className="w-4 h-4 text-yellow-300" /> El Momento
+            <Zap className="w-4 h-4 text-yellow-300" /> {t("momento.title")}
           </p>
           <p className="text-yellow-200/80 text-[11px] mt-0.5 truncate max-w-[200px]">{moment.event_name}</p>
         </div>

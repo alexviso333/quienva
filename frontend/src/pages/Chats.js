@@ -8,21 +8,27 @@ import { Users2, MessageSquare, Plus, Loader2, ChevronRight, X, Check } from "lu
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
+
+const LOCALE_BY_LANG = { es: "es-ES", en: "en-GB", de: "de-DE" };
+const dateLocale = () => LOCALE_BY_LANG[(i18n.language || "es").slice(0, 2)] || "es-ES";
 
 function timeAgo(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return "ahora";
+  if (diff < 60) return i18n.t("stories.timeago_now");
   if (diff < 3600) return `${Math.floor(diff / 60)}min`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
   if (diff < 7 * 86400) return `${Math.floor(diff / 86400)}d`;
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+  return d.toLocaleDateString(dateLocale(), { day: "numeric", month: "short" });
 }
 
 function CreateGroupDialog({ open, onClose }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [selected, setSelected] = useState([]);
   const { data: friends = [] } = useQuery({
@@ -33,13 +39,13 @@ function CreateGroupDialog({ open, onClose }) {
   const createGroup = useMutation({
     mutationFn: async () => (await api.post("/groups", { name: name.trim(), member_ids: selected })).data,
     onSuccess: (data) => {
-      toast.success("Grupo creado");
+      toast.success(t("chats.toast_created"));
       qc.invalidateQueries({ queryKey: ["groups"] });
       onClose();
       setName(""); setSelected([]);
       navigate(`/chats/group/${data.id}`);
     },
-    onError: (err) => toast.error(err.response?.data?.detail || "No se pudo crear"),
+    onError: (err) => toast.error(err.response?.data?.detail || t("chats.toast_create_error")),
   });
 
   const toggle = (uid) => setSelected((s) => s.includes(uid) ? s.filter((x) => x !== uid) : [...s, uid]);
@@ -48,11 +54,11 @@ function CreateGroupDialog({ open, onClose }) {
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-[#121215] border-white/10 text-white max-w-sm rounded-2xl" data-testid="create-group-dialog">
         <DialogHeader>
-          <DialogTitle>Nuevo grupo</DialogTitle>
+          <DialogTitle>{t("chats.new_group")}</DialogTitle>
         </DialogHeader>
         <Input
           data-testid="create-group-name"
-          placeholder="Nombre del grupo"
+          placeholder={t("chats.group_name_ph")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={60}
@@ -60,7 +66,7 @@ function CreateGroupDialog({ open, onClose }) {
         />
         <div className="max-h-64 overflow-y-auto hide-scrollbar">
           {friends.length === 0 ? (
-            <p className="text-white/40 text-sm text-center py-6">Añade amigos primero.</p>
+            <p className="text-white/40 text-sm text-center py-6">{t("chats.add_friends_first")}</p>
           ) : (
             friends.map((f) => {
               const on = selected.includes(f.user_id);
@@ -87,7 +93,7 @@ function CreateGroupDialog({ open, onClose }) {
           disabled={!name.trim() || selected.length === 0 || createGroup.isPending}
           className="h-11 rounded-2xl bg-qv-primary text-white font-bold disabled:opacity-40"
         >
-          {createGroup.isPending ? "Creando…" : `Crear con ${selected.length} amig${selected.length === 1 ? "o" : "os"}`}
+          {createGroup.isPending ? t("chats.creating") : t(selected.length === 1 ? "chats.create_with_one" : "chats.create_with_other", { count: selected.length })}
         </button>
       </DialogContent>
     </Dialog>
@@ -96,6 +102,7 @@ function CreateGroupDialog({ open, onClose }) {
 
 export default function Chats() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [tab, setTab] = useState("friends");
   const [creating, setCreating] = useState(false);
 
@@ -114,8 +121,8 @@ export default function Chats() {
     <AppShell>
       <header className="px-5 pt-8 pb-3 flex items-center justify-between">
         <div>
-          <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">Mensajes</p>
-          <h1 className="font-display text-4xl font-black tracking-tighter">Chats<span className="text-qv-primary">.</span></h1>
+          <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">{t("chats.eyebrow")}</p>
+          <h1 className="font-display text-4xl font-black tracking-tighter">{t("chats.title")}<span className="text-qv-primary">.</span></h1>
         </div>
         <button
           data-testid="create-group-btn"
@@ -134,7 +141,7 @@ export default function Chats() {
             tab === "friends" ? "bg-white text-black" : "bg-white/5 border border-white/10 text-white/70"
           }`}
         >
-          <MessageSquare className="w-3.5 h-3.5" /> Amigos
+          <MessageSquare className="w-3.5 h-3.5" /> {t("chats.tab_friends")}
         </button>
         <button
           data-testid="chats-tab-groups"
@@ -143,7 +150,7 @@ export default function Chats() {
             tab === "groups" ? "bg-white text-black" : "bg-white/5 border border-white/10 text-white/70"
           }`}
         >
-          <Users2 className="w-3.5 h-3.5" /> Grupos
+          <Users2 className="w-3.5 h-3.5" /> {t("chats.tab_groups")}
         </button>
       </div>
 
@@ -151,29 +158,29 @@ export default function Chats() {
         loadingDMs ? (
           <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 text-qv-primary animate-spin" /></div>
         ) : dms.length === 0 ? (
-          <p className="text-center text-white/40 py-16 px-6">Todavía no hay conversaciones. Ve al perfil de un amigo y salúdalo.</p>
+          <p className="text-center text-white/40 py-16 px-6">{t("chats.empty_dms")}</p>
         ) : (
           <div className="flex flex-col" data-testid="dm-list">
-            {dms.map((t) => (
+            {dms.map((thread) => (
               <button
-                key={t.user.user_id}
-                data-testid={`dm-row-${t.user.username}`}
-                onClick={() => navigate(`/chats/dm/${t.user.user_id}`)}
+                key={thread.user.user_id}
+                data-testid={`dm-row-${thread.user.username}`}
+                onClick={() => navigate(`/chats/dm/${thread.user.user_id}`)}
                 className="flex items-center gap-3 px-5 py-3 border-b border-white/5 hover:bg-white/[0.03] active:bg-white/5"
               >
-                <AvatarCircle name={t.user.name} picture={t.user.picture} size={48} ring={t.unread > 0} />
+                <AvatarCircle name={thread.user.name} picture={thread.user.picture} size={48} ring={thread.unread > 0} />
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex justify-between items-baseline gap-2">
-                    <p className="font-bold text-white truncate">{t.user.name}</p>
-                    <span className="text-[10px] text-white/40">{timeAgo(t.last_at)}</span>
+                    <p className="font-bold text-white truncate">{thread.user.name}</p>
+                    <span className="text-[10px] text-white/40">{timeAgo(thread.last_at)}</span>
                   </div>
-                  <p className={`text-sm truncate ${t.unread > 0 ? "text-white" : "text-white/50"}`}>
-                    {t.last_message || "Empieza la conversación"}
+                  <p className={`text-sm truncate ${thread.unread > 0 ? "text-white" : "text-white/50"}`}>
+                    {thread.last_message || t("chats.start_conversation")}
                   </p>
                 </div>
-                {t.unread > 0 && (
+                {thread.unread > 0 && (
                   <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-qv-primary text-white text-[10px] font-bold flex items-center justify-center">
-                    {t.unread > 9 ? "9+" : t.unread}
+                    {thread.unread > 9 ? "9+" : thread.unread}
                   </span>
                 )}
               </button>
@@ -185,13 +192,13 @@ export default function Chats() {
       ) : groups.length === 0 ? (
         <div className="text-center py-16 px-6">
           <Users2 className="w-12 h-12 text-white/30 mx-auto mb-3" />
-          <p className="text-white/60">Aún no tienes grupos.</p>
+          <p className="text-white/60">{t("chats.empty_groups")}</p>
           <button
             data-testid="empty-create-group"
             onClick={() => setCreating(true)}
             className="mt-4 h-11 px-5 rounded-2xl bg-qv-primary text-white font-bold"
           >
-            Crear el primero
+            {t("chats.create_first")}
           </button>
         </div>
       ) : (
@@ -212,7 +219,7 @@ export default function Chats() {
                   <span className="text-[10px] text-white/40">{timeAgo(g.last_at || g.created_at)}</span>
                 </div>
                 <p className={`text-sm truncate ${g.unread > 0 ? "text-white" : "text-white/50"}`}>
-                  {g.last_message || `${g.member_ids.length} miembro${g.member_ids.length === 1 ? "" : "s"}`}
+                  {g.last_message || t(g.member_ids.length === 1 ? "chats.members_one" : "chats.members_other", { count: g.member_ids.length })}
                 </p>
               </div>
               {g.unread > 0 && (
