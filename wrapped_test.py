@@ -12,7 +12,7 @@ import io
 from datetime import datetime
 
 # Backend URL from frontend/.env
-BASE_URL = "https://worldwide-social-1.preview.emergentagent.com/api"
+BASE_URL = "https://party-memories-36.preview.emergentagent.com/api"
 
 def log(msg):
     print(f"[TEST] {msg}")

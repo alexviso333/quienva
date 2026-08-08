@@ -8,7 +8,7 @@ import requests
 import sys
 
 # Base URL from frontend/.env
-BASE_URL = "https://worldwide-social-1.preview.emergentagent.com/api"
+BASE_URL = "https://party-memories-36.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
