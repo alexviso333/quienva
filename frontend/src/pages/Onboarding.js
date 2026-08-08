@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import InviteGroup from "@/components/InviteGroup";
 
 const SLIDES = [
   { icon: PartyPopper, color: "text-qv-primary", titleKey: "onboarding.slide1_title", bodyKey: "onboarding.slide1_body" },
@@ -21,6 +22,7 @@ export default function Onboarding() {
   const [i, setI] = useState(0);
   const [busy, setBusy] = useState(false);
   const [privacyStep, setPrivacyStep] = useState(false);
+  const [inviteStep, setInviteStep] = useState(false);
   const [attendancePriv, setAttendancePriv] = useState("amigos");
   const [momentPriv, setMomentPriv] = useState("amigos");
   const Icon = SLIDES[i].icon;
@@ -60,6 +62,7 @@ export default function Onboarding() {
   const next = () => {
     if (i < SLIDES.length - 1) setI(i + 1);
     else if (!privacyStep) setPrivacyStep(true);
+    else if (!inviteStep) setInviteStep(true);
     else finish(true);
   };
 
@@ -72,7 +75,18 @@ export default function Onboarding() {
         <button onClick={() => finish(false)} className="text-white/50 text-sm">{t("onboarding.skip")}</button>
       </div>
 
-      {privacyStep ? (
+      {inviteStep ? (
+        <div className="flex-1 flex flex-col justify-center gap-7 py-6" data-testid="onboarding-invite">
+          <div className="text-center flex flex-col items-center gap-3">
+            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+              <Users className="w-10 h-10 text-qv-primary" />
+            </div>
+            <h1 className="font-display text-3xl font-bold text-white">{t("invite.title")}</h1>
+            <p className="text-white/60 text-sm max-w-xs leading-relaxed">{t("invite.subtitle")}</p>
+          </div>
+          <InviteGroup />
+        </div>
+      ) : privacyStep ? (
         <div className="flex-1 flex flex-col justify-center gap-7 py-6" data-testid="onboarding-privacy">
           <div className="text-center flex flex-col items-center gap-3">
             <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
@@ -161,8 +175,8 @@ export default function Onboarding() {
         className="h-14 rounded-2xl bg-qv-primary text-white font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
       >
         {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-        {privacyStep ? t("onboarding.start") : t("onboarding.next")}
-        {!privacyStep && <ChevronRight className="w-5 h-5" />}
+        {inviteStep ? t("onboarding.start") : t("onboarding.next")}
+        {!inviteStep && <ChevronRight className="w-5 h-5" />}
       </button>
     </div>
   );

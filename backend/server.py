@@ -434,6 +434,7 @@ class RegisterInput(BaseModel):
     city: str = "Palma de Mallorca"
     birthdate: Optional[str] = None   # YYYY-MM-DD — required, must be 18+
     phone: Optional[str] = None       # optional, stored only as a one-way hash
+    source: Optional[str] = None      # marketing attribution (e.g. "ig", "tt")
 
 
 class LoginInput(BaseModel):
@@ -1141,11 +1142,50 @@ async def register(inp: RegisterInput, response: Response):
     ph = phone_hash(inp.phone) if inp.phone else None
     if ph:
         user["phone_hash"] = ph
+    if inp.source:
+        user["source"] = inp.source.strip().lower()[:40]
     await db.users.insert_one(user)
     await _notify_admins_new_signup(user)
     token = await create_session(user["user_id"])
     set_session_cookie(response, token)
     return {"user": public_user(user), "token": token}
+
+
+class TrackClickInput(BaseModel):
+    source: str
+
+
+@api_router.post("/track/click")
+async def track_click(inp: TrackClickInput):
+    """Log a bio-link click by source (e.g. 'ig', 'tt'). Public, fire-and-forget."""
+    src = (inp.source or "").strip().lower()[:40] or "unknown"
+    try:
+        await db.link_clicks.insert_one({
+            "source": src,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.warning(f"[track] click insert failed: {e}")
+    return {"ok": True}
+
+
+@api_router.get("/track/stats")
+async def track_stats(user: dict = Depends(require_admin)):
+    """Admin: clicks and signups grouped by marketing source (ig / tt / ...)."""
+    clicks = {}
+    async for row in db.link_clicks.aggregate([
+        {"$group": {"_id": "$source", "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}},
+    ]):
+        clicks[row["_id"] or "unknown"] = row["n"]
+    signups = {}
+    async for row in db.users.aggregate([
+        {"$match": {"source": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": "$source", "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}},
+    ]):
+        signups[row["_id"] or "unknown"] = row["n"]
+    return {"clicks": clicks, "signups": signups}
 
 
 @api_router.post("/auth/login")

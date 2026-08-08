@@ -13,6 +13,7 @@ import { Loader2 } from "lucide-react";
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import Feed from "@/pages/Feed";
+import TrackRedirect from "@/pages/TrackRedirect";
 // Lazy: split every other route into its own chunk so the initial bundle stays
 // small (notably faster first load, especially on mobile / Vercel free tier).
 // Pure performance change — no behavior or UI difference.
@@ -71,6 +72,9 @@ function AppRouter() {
     <Suspense fallback={<LoadingScreen />}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/ig" element={<TrackRedirect source="ig" />} />
+        <Route path="/tt" element={<TrackRedirect source="tt" />} />
+        <Route path="/r/:src" element={<TrackRedirect />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
         <Route path="/feed" element={<PublicRoute><Feed /></PublicRoute>} />

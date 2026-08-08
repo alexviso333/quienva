@@ -79,7 +79,9 @@ export default function Login() {
           setLoading(false);
           return;
         }
-        await register(form);
+        const pendingSrc = localStorage.getItem("qv_src");
+        await register(pendingSrc ? { ...form, source: pendingSrc } : form);
+        if (pendingSrc) { try { localStorage.removeItem("qv_src"); } catch (e) { /* ignore */ } }
         // Claim referral if there is a pending code
         const pendingRef = localStorage.getItem("qv_pending_ref");
         if (pendingRef) {

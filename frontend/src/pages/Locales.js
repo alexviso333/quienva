@@ -7,8 +7,10 @@ import { useMyLocation } from "@/hooks/useMyLocation";
 import { haversineKm, formatKm } from "@/lib/format";
 import { AppShell } from "@/components/AppShell";
 import { Loader2, MapPin, Instagram, Ticket, PartyPopper, ChevronDown, ChevronUp, DoorOpen, Map, LocateFixed, Navigation } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
-const DAYS = ["L", "M", "X", "J", "V", "S", "D"];
+const getDays = () => i18n.t("plans.weekdays_mini", { returnObjects: true });
 const TYPE_LABEL = { discoteca: "Discoteca", pub: "Pub", beach_club: "Beach club", promotor: "Promotor" };
 const TYPE_COLOR = {
   discoteca: "bg-fuchsia-500/20 text-fuchsia-200",
@@ -18,6 +20,7 @@ const TYPE_COLOR = {
 };
 
 function VenueCard({ v }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const { data: detail, isLoading } = useQuery({
@@ -41,11 +44,11 @@ function VenueCard({ v }) {
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-bold text-[15px] text-white truncate">{v.name}</p>
             <span className={`text-[9px] px-1.5 py-0.5 rounded-full uppercase font-bold ${TYPE_COLOR[v.type] || "bg-white/10 text-white/60"}`}>
-              {TYPE_LABEL[v.type] || v.type}
+              {t(`locales.type.${v.type}`, { defaultValue: TYPE_LABEL[v.type] || v.type })}
             </span>
             {v.free_entry && (
               <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 uppercase font-bold flex items-center gap-0.5">
-                <DoorOpen className="w-3 h-3" /> Libre
+                <DoorOpen className="w-3 h-3" /> {t("locales.free")}
               </span>
             )}
           </div>
@@ -53,13 +56,13 @@ function VenueCard({ v }) {
             <MapPin className="w-3 h-3" /> {v.zone}
             {v._dist != null && Number.isFinite(v._dist) && (
               <span className="ml-1 inline-flex items-center gap-0.5 text-qv-secondary font-bold">
-                <Navigation className="w-3 h-3" /> a {formatKm(v._dist)} de ti
+                <Navigation className="w-3 h-3" /> {t("locales.dist_from_you", { km: formatKm(v._dist) })}
               </span>
             )}
           </p>
           {/* Open days */}
           <div className="flex items-center gap-1 mt-2">
-            {DAYS.map((d, i) => {
+            {getDays().map((d, i) => {
               const on = (v.open_days || []).includes(i);
               return (
                 <span
@@ -73,7 +76,7 @@ function VenueCard({ v }) {
               );
             })}
             {(!v.open_days || v.open_days.length === 0) && (
-              <span className="text-white/30 text-[10px] ml-1">horario por confirmar</span>
+              <span className="text-white/30 text-[10px] ml-1">{t("locales.schedule_tbc")}</span>
             )}
           </div>
         </div>
@@ -87,12 +90,12 @@ function VenueCard({ v }) {
             className="text-[11px] font-bold text-black bg-qv-primary rounded-lg px-2.5 py-1.5 flex items-center gap-1 active:scale-95"
             data-testid={`venue-events-${v.id}`}
           >
-            <PartyPopper className="w-3.5 h-3.5" /> {v.upcoming_events} fiestas
+            <PartyPopper className="w-3.5 h-3.5" /> {t("locales.parties", { count: v.upcoming_events })}
             {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         )}
         {v.upcoming_events === 0 && (
-          <span className="text-[11px] text-white/35 px-1 py-1.5">Sin fiestas anunciadas</span>
+          <span className="text-[11px] text-white/35 px-1 py-1.5">{t("locales.no_parties")}</span>
         )}
         <a
           href={maps}
@@ -100,7 +103,7 @@ function VenueCard({ v }) {
           rel="noreferrer"
           className="text-[11px] font-bold text-white bg-white/10 rounded-lg px-2.5 py-1.5 flex items-center gap-1 active:scale-95"
         >
-          <MapPin className="w-3.5 h-3.5" /> Cómo llegar
+          <MapPin className="w-3.5 h-3.5" /> {t("locales.directions")}
         </a>
         {v.buy_url && (
           <a
@@ -110,7 +113,7 @@ function VenueCard({ v }) {
             data-testid={`venue-buy-${v.id}`}
             className="text-[11px] font-bold text-black bg-qv-secondary rounded-lg px-2.5 py-1.5 flex items-center gap-1 active:scale-95"
           >
-            <Ticket className="w-3.5 h-3.5" /> Entradas
+            <Ticket className="w-3.5 h-3.5" /> {t("locales.tickets")}
           </a>
         )}
         {v.instagram && (
@@ -140,7 +143,7 @@ function VenueCard({ v }) {
               <div className="flex-1 min-w-0">
                 <p className="text-white text-[13px] font-semibold truncate">{e.name}</p>
                 <p className="text-white/45 text-[11px]">
-                  {new Date(e.date).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" })}
+                  {new Date(e.date).toLocaleDateString(i18n.language, { weekday: "short", day: "numeric", month: "short" })}
                   {e.time ? ` · ${e.time}` : ""}
                 </p>
               </div>
@@ -159,6 +162,7 @@ function VenueCard({ v }) {
 }
 
 export default function Locales() {
+  const { t } = useTranslation();
   const [zone, setZone] = useState("");
   const [sortByDist, setSortByDist] = useState(false);
   const navigate = useNavigate();
@@ -191,18 +195,18 @@ export default function Locales() {
     <AppShell>
       <header className="px-5 pt-8 pb-2 flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">{user?.city || "Tu ciudad"}</p>
+          <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold">{user?.city || t("locales.your_city")}</p>
           <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
-            Locales<span className="text-qv-primary">.</span>
+            {t("locales.title")}<span className="text-qv-primary">.</span>
           </h1>
-          <p className="text-white/50 text-sm mt-1">Discotecas y pubs, con días de apertura y sus fiestas.</p>
+          <p className="text-white/50 text-sm mt-1">{t("locales.subtitle")}</p>
         </div>
         <button
           data-testid="locales-map-btn"
           onClick={() => navigate("/mapa")}
           className="mt-1 shrink-0 flex items-center gap-1.5 text-xs font-bold text-black bg-qv-secondary rounded-full px-3 py-2 active:scale-95"
         >
-          <Map className="w-4 h-4" /> Mapa
+          <Map className="w-4 h-4" /> {t("locales.map")}
         </button>
       </header>
 
@@ -218,7 +222,7 @@ export default function Locales() {
             sortByDist ? "bg-qv-primary text-black border-qv-primary" : "bg-white/5 text-white/70 border-white/15"
           }`}
         >
-          <Navigation className="w-3.5 h-3.5" /> Más cercanas
+          <Navigation className="w-3.5 h-3.5" /> {t("locales.nearest")}
         </button>
         {!pos && (
           <button
@@ -227,7 +231,7 @@ export default function Locales() {
             className="flex items-center gap-1.5 text-xs font-bold rounded-full px-3 py-1.5 border border-qv-secondary/40 bg-qv-secondary/15 text-qv-secondary"
           >
             {geoState === "locating" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
-            Usar mi ubicación
+            {t("locales.use_location")}
           </button>
         )}
       </div>
@@ -238,7 +242,7 @@ export default function Locales() {
           onClick={() => setZone("")}
           className={`whitespace-nowrap text-xs font-bold rounded-full px-3 py-1.5 ${zone === "" ? "bg-qv-primary text-black" : "bg-white/10 text-white/70"}`}
         >
-          Todas
+          {t("locales.all")}
         </button>
         {zones.map((z) => (
           <button
@@ -257,7 +261,7 @@ export default function Locales() {
         <div className="px-4 pb-28 flex flex-col gap-2.5">
           {filtered.map((v) => <VenueCard key={v.id} v={v} />)}
           {filtered.length === 0 && (
-            <p className="text-white/40 text-sm text-center py-10">No hay locales en esta zona.</p>
+            <p className="text-white/40 text-sm text-center py-10">{t("locales.empty")}</p>
           )}
         </div>
       )}

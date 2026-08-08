@@ -14,6 +14,7 @@ import {
   ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 const todayStr = () => {
   const n = new Date();
@@ -40,6 +41,7 @@ function FriendRow({ title, color, friends }) {
 }
 
 export default function EventDetail() {
+  const { t } = useTranslation();
   const { id } = useParams();
   const { user } = useAuth();
   const { requireAuth } = useGuestGate();
@@ -77,12 +79,12 @@ export default function EventDetail() {
       return { prev };
     },
     onSuccess: (_d, status) => {
-      if (status === "voy") toast.success("¡Apuntado! 🎉");
-      if (status === "estuve") toast.success("Guardado en tus recuerdos ✨");
+      if (status === "voy") toast.success(t("event.toast_going"));
+      if (status === "estuve") toast.success(t("event.toast_saved"));
     },
     onError: (_e, _s, ctx) => {
       if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
-      toast.error("No se pudo actualizar");
+      toast.error(t("event.toast_error"));
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["event", id] });
@@ -103,7 +105,7 @@ export default function EventDetail() {
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
-      toast.error("No se pudo guardar");
+      toast.error(t("event.toast_ticket_error"));
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
   });
@@ -123,7 +125,7 @@ export default function EventDetail() {
       toast.success(follow ? "Te avisaremos de cambios 🔔" : "Avisos desactivados"),
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
-      toast.error("No se pudo actualizar el aviso");
+      toast.error(t("event.toast_follow_error"));
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
   });
@@ -217,7 +219,7 @@ export default function EventDetail() {
             data-testid="detail-follow"
             onClick={() => { if (requireAuth("recibir avisos de este plan")) setFollow.mutate(!event.is_following); }}
             className="absolute top-6 right-28 w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center text-white active:scale-90 transition-transform"
-            aria-label="Avisarme de cambios"
+            aria-label={t("event.aria_follow")}
           >
             <Bell className={`w-5 h-5 ${event.is_following ? "text-qv-secondary" : "text-white"}`} fill={event.is_following ? "currentColor" : "none"} />
           </button>
@@ -265,7 +267,7 @@ export default function EventDetail() {
                 isEstuve ? "bg-qv-primary text-white shadow-[0_0_20px_rgba(255,0,85,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
               }`}
             >
-              {isEstuve ? <><CheckCircle2 className="w-5 h-5" /> Estuve aquí</> : "Estuve aquí"}
+              {isEstuve ? <><CheckCircle2 className="w-5 h-5" /> {t("event.was_here")}</> : t("event.was_here")}
             </button>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -276,7 +278,7 @@ export default function EventDetail() {
                   isVoy ? "bg-qv-primary text-white shadow-[0_0_20px_rgba(255,0,85,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
                 }`}
               >
-                {isVoy && <Check className="w-5 h-5" />} Voy
+                {isVoy && <Check className="w-5 h-5" />} {t("event.going")}
               </button>
               <button
                 data-testid="detail-interesa-btn"
@@ -285,7 +287,7 @@ export default function EventDetail() {
                   isInteresa ? "bg-qv-secondary text-black shadow-[0_0_20px_rgba(0,240,255,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
                 }`}
               >
-                {isInteresa && <Star className="w-5 h-5" />} Me interesa
+                {isInteresa && <Star className="w-5 h-5" />} {t("event.interested")}
               </button>
             </div>
           )}
@@ -306,11 +308,11 @@ export default function EventDetail() {
               >
                 <Ticket className="w-5 h-5" />
                 {event.sale_state === "agotado"
-                  ? "Ver disponibilidad"
+                  ? t("event.cta_soldout")
                   : event.sale_state === "solo_lista"
-                  ? "Apuntarme a la lista"
-                  : "Conseguir entrada"}
-                {price ? <span className="opacity-90">· desde {Math.round(price)}€</span> : null}
+                  ? t("event.cta_list")
+                  : t("event.cta_ticket")}
+                {price ? <span className="opacity-90"> {t("event.price_from", { price: Math.round(price) })}</span> : null}
               </a>
               {saleBadge && (
                 <p className={`text-center text-xs font-bold ${event.sale_state === "pocas_entradas" ? "text-yellow-300 animate-pulse" : "text-white/50"}`}>
@@ -326,7 +328,7 @@ export default function EventDetail() {
               rel="noopener noreferrer"
               className="h-12 rounded-2xl bg-white/5 border border-white/20 text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
             >
-              <ExternalLink className="w-5 h-5" /> Más información
+              <ExternalLink className="w-5 h-5" /> {t("event.more_info")}
             </a>
           ) : null)}
 
@@ -340,7 +342,7 @@ export default function EventDetail() {
                   event.my_has_ticket ? "bg-qv-secondary text-black" : "bg-white/10 text-white/80 border border-white/20"
                 }`}
               >
-                {event.my_has_ticket ? <><CheckCircle2 className="w-4 h-4" /> Tengo entrada</> : <>🎟️ Ya tengo entrada</>}
+                {event.my_has_ticket ? <><CheckCircle2 className="w-4 h-4" /> {t("event.have_ticket")}</> : <>{t("event.get_ticket_owned")}</>}
               </button>
               <div className="min-w-0 flex-1">
                 {totalTickets > 0 ? (
@@ -354,12 +356,12 @@ export default function EventDetail() {
                     )}
                     <p className="text-xs text-white/70 leading-tight">
                       {ticketFriends.length > 0
-                        ? `${ticketFriends.length} amigo${ticketFriends.length > 1 ? "s" : ""} ya ${ticketFriends.length > 1 ? "tienen" : "tiene"} entrada`
-                        : `${totalTickets} ${totalTickets > 1 ? "personas tienen" : "persona tiene"} entrada`}
+                        ? t("event.ticket_friends", { count: ticketFriends.length })
+                        : t("event.ticket_total", { count: totalTickets })}
                     </p>
                   </div>
                 ) : (
-                  <p className="text-xs text-white/40 leading-tight">Sé el primero de tu grupo en pillar entrada 🎟️</p>
+                  <p className="text-xs text-white/40 leading-tight">{t("event.ticket_first")}</p>
                 )}
               </div>
             </div>
@@ -369,17 +371,17 @@ export default function EventDetail() {
           {user ? (
             <div className="flex flex-col gap-4">
               {isPast ? (
-                <FriendRow title="Coincidiste con" color="#FF0055" friends={event.friends_attended} />
+                <FriendRow title={t("event.friends_attended")} color="#FF0055" friends={event.friends_attended} />
               ) : (
                 <>
-                  <FriendRow title="Van a ir" color="#FF0055" friends={event.friends_going} />
-                  <FriendRow title="Les interesa" color="#00F0FF" friends={event.friends_interested} />
+                  <FriendRow title={t("event.friends_going")} color="#FF0055" friends={event.friends_going} />
+                  <FriendRow title={t("event.friends_interested")} color="#00F0FF" friends={event.friends_interested} />
                 </>
               )}
               {((isPast && (event.friends_attended || []).length === 0) ||
                 (!isPast && (event.friends_going || []).length === 0 && (event.friends_interested || []).length === 0)) && (
                 <p className="text-white/40 text-sm italic" data-testid="detail-nofriends">
-                  Todavía ningún amigo se ha apuntado.
+                  {t("event.no_friends")}
                 </p>
               )}
             </div>
@@ -390,13 +392,13 @@ export default function EventDetail() {
               onClick={() => requireAuth("ver quién va")}
               className="w-full text-left rounded-2xl border border-qv-primary/40 bg-gradient-to-r from-qv-primary/15 to-qv-secondary/15 p-4 active:scale-[0.99]"
             >
-              <p className="font-display font-black text-white">¿Quién va? 👀</p>
+              <p className="font-display font-black text-white">{t("event.guest_who")}</p>
               {!isPast && event.total_going > 0 ? (
                 <div className="mt-3">
                   <BlurredGoingTeaser count={event.total_going} />
                 </div>
               ) : (
-                <p className="text-white/60 text-sm mt-1">Regístrate gratis para verlo y apuntarte.</p>
+                <p className="text-white/60 text-sm mt-1">{t("event.guest_sub")}</p>
               )}
             </button>
           )}
@@ -413,10 +415,10 @@ export default function EventDetail() {
 
           {/* Map + directions */}
           <div>
-            <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2">Cómo llegar</p>
+            <p className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2">{t("event.how_to_get")}</p>
             <div className="rounded-2xl overflow-hidden border border-white/10 h-48 bg-white/5">
               <iframe
-                title="Mapa"
+                title={t("event.map")}
                 data-testid="detail-map"
                 src={`https://maps.google.com/maps?q=${mapQuery}&z=15&output=embed`}
                 width="100%"
@@ -433,7 +435,7 @@ export default function EventDetail() {
               rel="noopener noreferrer"
               className="mt-3 h-11 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
             >
-              <Navigation className="w-4 h-4 text-qv-secondary" /> Cómo llegar
+              <Navigation className="w-4 h-4 text-qv-secondary" /> {t("event.how_to_get")}
             </a>
           </div>
         </div>
