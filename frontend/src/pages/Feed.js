@@ -14,7 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
-import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -221,6 +221,19 @@ export default function Feed() {
           </button>
         </div>
       </header>
+
+      {user && (
+        <div className="px-5 -mt-1 mb-1">
+          <button
+            onClick={() => navigate("/momentos")}
+            data-testid="feed-momentos-btn"
+            className="flex items-center gap-1.5 text-xs font-bold text-white bg-qv-primary/15 border border-qv-primary/30 rounded-full px-3 py-2 active:scale-95"
+          >
+            <Camera className="w-4 h-4 text-qv-primary" /> Momentos
+          </button>
+        </div>
+      )}
+
 
       {!user && (
         <div className="px-4 pt-1 pb-2" data-testid="guest-city-bar">

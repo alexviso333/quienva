@@ -16,6 +16,8 @@
     { "source": "/de/party/:id/:slug", "destination": "https://quienva.onrender.com/api/de/party/:id/:slug" },
     { "source": "/de/party/:id", "destination": "https://quienva.onrender.com/api/de/party/:id" },
     { "source": "/sitemap.xml", "destination": "https://quienva.onrender.com/api/sitemap.xml" },
+    { "source": "/sitemap-cities.xml", "destination": "https://quienva.onrender.com/api/sitemap-cities.xml" },
+    { "source": "/sitemap-events-:city.xml", "destination": "https://quienva.onrender.com/api/sitemap-events-:city.xml" },
     { "source": "/robots.txt", "destination": "https://quienva.onrender.com/api/robots.txt" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],

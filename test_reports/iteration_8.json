@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 8 covered (1) path-based SEO sitemaps and (2) new /momentos scrollable feed with Amigos/Descubrir toggle. Backend: 11/11 pytest cases pass (sitemap index uses path-based children /sitemap-cities.xml + /sitemap-events-<city>.xml with content-type application/xml and no query-string URLs; sitemap-cities and sitemap-events-{ibiza,madrid} return valid <urlset>; /api/robots.txt returns text/plain with Sitemap: line; SEO regression: /api/ciudad/ibiza returns HTML with class=\"card\", BreadcrumbList + FAQPage JSON-LD; /api/fiesta/<id> HTML page contains FAQPage + BreadcrumbList; /api/moments/feed?scope=amigos returns only lucia/marc captures with author/image_url/likes/i_liked/event_name; scope=discover returns only sara/tourist and excludes admin; pagination limit=2 returns has_more=true and skip works with no overlap; POST /api/captures/{id}/like toggles i_liked/likes in the feed). Frontend (mobile 390x844, admin@quienva.app/admin123): dismissed onboarding+PushPermissionGate, clicked data-testid=feed-momentos-btn on /feed, navigated to /momentos, verified momentos-toggle-amigos + momentos-toggle-discover, saw 4 amigos cards with moment-like-<id> buttons; like counter went 0->1 optimistically, and Descubrir switch loaded 4 public cards.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_sitemap_moments.py",
+    "/app/test_reports/pytest/iteration8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is ~9.5k lines; sitemap + moments endpoints landed in a single monolith. Consider extracting seo/sitemap.py and social/moments.py routers before this grows further.",
+    "moments_feed does N+1 lookups (per-capture users + events find_one). For a paginated 20-item feed this is fine, but consider $lookup or a batched find({user_id: {$in: [...]}}, {...}) for authors/events to reduce round-trips.",
+    "moments_feed silently coerces unknown scope to 'discover' (line 4116). Consider returning 400 for invalid scope to help clients catch typos.",
+    "PushPermissionGate covers the entire feed with z-[100] and blocks pointer events until dismissed — testing agents (and probably real users on desktop browsers with denied notification perms) always hit this. Consider auto-dismissing when Notification.permission==='denied' instead of showing the modal."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (all momentos flows pass)"},
+  "test_credentials": "admin@quienva.app / admin123 (per /app/memory/test_credentials.md); seeded users lucia/marc/sara/tourist @ test123.",
+  "seed_data_creation": "None. Used existing seed_moments_test.py data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Admin login now redirects to /onboarding on fresh session even though birthdate is set — clicking 'Skip' in the onboarding overlay routes to /feed. After that the PushPermissionGate blocks pointer events until 'Continue anyway' is clicked (button is inside a fixed z-[100] overlay). Then the /momentos entry point is data-testid=feed-momentos-btn in the Feed header. moment-like-<id> is a button whose text content IS the like count (e.g., '0'/'1'), useful for optimistic-update assertions.",
+  "rca of the issue": "N/A — no bugs found in this iteration."
+}

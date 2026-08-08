@@ -1515,59 +1515,83 @@ async def seo_event_de(event_id: str, request: Request, slug: str = ""):
 
 @api_router.get("/sitemap.xml")
 async def seo_sitemap(request: Request, scope: str = "", city: str = ""):
-    """Sitemap INDEX by default; child sitemaps via ?scope=cities or
-    ?scope=events&city=<slug>. Splitting keeps each file small so Google
-    crawls updates faster as the number of parties grows.
-    (Uses query params so no extra Vercel rewrites are needed.)"""
+    """Sitemap INDEX by default; child sitemaps via clean paths
+    (/sitemap-cities.xml, /sitemap-events-<city>.xml). Path-based children
+    (not query strings) so Vercel rewrites always proxy them to XML instead
+    of falling through to the React SPA (which returned HTML to Google).
+    Legacy ?scope= query params still work for backward compatibility."""
     front = _frontend_base(request)
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
-
-    def _url(paths: dict, lang: str, lastmod: str, freq: str) -> str:
-        alts = "".join(f'<xhtml:link rel="alternate" hreflang="{l}" href="{u}"/>' for l, u in paths.items())
-        alts += f'<xhtml:link rel="alternate" hreflang="x-default" href="{paths["es"]}"/>'
-        return (f"<url><loc>{paths[lang]}</loc><lastmod>{lastmod}</lastmod>"
-                f"<changefreq>{freq}</changefreq>{alts}</url>")
-
-    def _urlset(parts: list) -> StarletteResponse:
-        xml = ('<?xml version="1.0" encoding="UTF-8"?>'
-               '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
-               'xmlns:xhtml="http://www.w3.org/1999/xhtml">' + "".join(parts) + "</urlset>")
-        return StarletteResponse(content=xml, media_type="application/xml",
-                                 headers={"Cache-Control": "public, max-age=3600"})
-
-    # --- Child sitemap: all city landing pages (all/tonight/weekend) x 3 langs ---
     if scope == "cities":
-        parts = [f"<url><loc>{front}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>"]
-        for c in SUPPORTED_CITIES:
-            for tf in ("all", "tonight", "weekend"):
-                cp = _city_tf_paths(front, _slugify(c["id"]), tf)
-                for lang in SEO_LANGS:
-                    parts.append(_url(cp, lang, today, "daily"))
-        return _urlset(parts)
-
-    # --- Child sitemap: upcoming event pages for one city x 3 langs ---
+        return _sitemap_response(await _sitemap_cities_xml(front, today))
     if scope == "events":
-        city_id = _CITY_SLUGS.get((city or "").lower())
-        parts = []
-        if city_id:
-            for ev in await _upcoming_for_city(city_id, 500):
-                eid = ev.get("id")
-                if not eid:
-                    continue
-                ep = _event_paths(front, eid, _event_slug(ev))
-                lm = _ev_lastmod(ev, today)
-                for lang in SEO_LANGS:
-                    parts.append(_url(ep, lang, lm, "daily"))
-        return _urlset(parts)
+        return _sitemap_response(await _sitemap_events_xml(front, today, city))
+    return _sitemap_response(_sitemap_index_xml(front, today))
 
-    # --- Default: sitemap INDEX pointing to the child sitemaps ---
-    children = [f"{front}/sitemap.xml?scope=cities"]
-    children += [f"{front}/sitemap.xml?scope=events&city={_slugify(c['id'])}" for c in SUPPORTED_CITIES]
-    body = "".join(f"<sitemap><loc>{u.replace('&', '&amp;')}</loc><lastmod>{today}</lastmod></sitemap>" for u in children)
-    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
-           '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</sitemapindex>")
+
+@api_router.get("/sitemap-cities.xml")
+async def seo_sitemap_cities(request: Request):
+    front = _frontend_base(request)
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    return _sitemap_response(await _sitemap_cities_xml(front, today))
+
+
+@api_router.get("/sitemap-events-{city}.xml")
+async def seo_sitemap_events(city: str, request: Request):
+    front = _frontend_base(request)
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    return _sitemap_response(await _sitemap_events_xml(front, today, city))
+
+
+def _sitemap_response(xml: str) -> StarletteResponse:
     return StarletteResponse(content=xml, media_type="application/xml",
                              headers={"Cache-Control": "public, max-age=3600"})
+
+
+def _sitemap_url(paths: dict, lang: str, lastmod: str, freq: str) -> str:
+    alts = "".join(f'<xhtml:link rel="alternate" hreflang="{l}" href="{u}"/>' for l, u in paths.items())
+    alts += f'<xhtml:link rel="alternate" hreflang="x-default" href="{paths["es"]}"/>'
+    return (f"<url><loc>{paths[lang]}</loc><lastmod>{lastmod}</lastmod>"
+            f"<changefreq>{freq}</changefreq>{alts}</url>")
+
+
+def _sitemap_urlset(parts: list) -> str:
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+            'xmlns:xhtml="http://www.w3.org/1999/xhtml">' + "".join(parts) + "</urlset>")
+
+
+async def _sitemap_cities_xml(front: str, today: str) -> str:
+    parts = [f"<url><loc>{front}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>"]
+    for c in SUPPORTED_CITIES:
+        for tf in ("all", "tonight", "weekend"):
+            cp = _city_tf_paths(front, _slugify(c["id"]), tf)
+            for lang in SEO_LANGS:
+                parts.append(_sitemap_url(cp, lang, today, "daily"))
+    return _sitemap_urlset(parts)
+
+
+async def _sitemap_events_xml(front: str, today: str, city: str) -> str:
+    city_id = _CITY_SLUGS.get((city or "").lower())
+    parts = []
+    if city_id:
+        for ev in await _upcoming_for_city(city_id, 500):
+            eid = ev.get("id")
+            if not eid:
+                continue
+            ep = _event_paths(front, eid, _event_slug(ev))
+            lm = _ev_lastmod(ev, today)
+            for lang in SEO_LANGS:
+                parts.append(_sitemap_url(ep, lang, lm, "daily"))
+    return _sitemap_urlset(parts)
+
+
+def _sitemap_index_xml(front: str, today: str) -> str:
+    children = [f"{front}/sitemap-cities.xml"]
+    children += [f"{front}/sitemap-events-{_slugify(c['id'])}.xml" for c in SUPPORTED_CITIES]
+    body = "".join(f"<sitemap><loc>{u}</loc><lastmod>{today}</lastmod></sitemap>" for u in children)
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</sitemapindex>")
 
 
 @api_router.get("/robots.txt")
@@ -4075,6 +4099,64 @@ async def discover(user: dict = Depends(get_current_user)):
             m["likes"] = like_counts.get(m["id"], 0)
             m["i_liked"] = m["id"] in my_liked
     return {"people": people, "moments": moments, "city": my_city}
+
+
+@api_router.get("/moments/feed")
+async def moments_feed(scope: str = "discover", skip: int = 0, limit: int = 8,
+                       user: dict = Depends(get_current_user)):
+    """Vertical, scrollable feed of 'El Momento' captures.
+    scope='amigos' -> captures from accepted friends; scope='discover' -> public
+    captures (moment_privacy='publico'). Paginated via skip/limit + has_more."""
+    uid = user["user_id"]
+    blocked = set(await blocked_relation_ids(uid))
+    if scope == "amigos":
+        fids = await accepted_friend_ids(uid)
+        author_ids = [i for i in fids if i not in blocked]
+    else:
+        scope = "discover"
+        pub = await db.users.distinct("user_id", {"moment_privacy": "publico"})
+        author_ids = [i for i in pub if i not in blocked and i != uid]
+    if not author_ids:
+        return {"moments": [], "has_more": False, "scope": scope}
+    limit = max(1, min(int(limit or 8), 20))
+    skip = max(0, int(skip or 0))
+    rows = []
+    async for c in db.captures.find(
+        {"user_id": {"$in": author_ids}}, {"_id": 0}
+    ).sort("created_at", -1).skip(skip).limit(limit + 1):
+        rows.append(c)
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    moments = []
+    for c in rows:
+        au = await db.users.find_one({"user_id": c["user_id"]}, {"_id": 0})
+        ev = await db.events.find_one({"id": c["event_id"]}, {"_id": 0}) if c.get("event_id") else None
+        moments.append({
+            "id": c["id"],
+            "image_url": c.get("image_url", ""),
+            "created_at": c.get("created_at"),
+            "author": _msg_author(au),
+            "author_id": c["user_id"],
+            "event_id": c.get("event_id"),
+            "event_name": ev["name"] if ev else None,
+        })
+    if moments:
+        cap_ids = [m["id"] for m in moments]
+        like_counts = {}
+        async for row in db.capture_reactions.aggregate([
+            {"$match": {"capture_id": {"$in": cap_ids}}},
+            {"$group": {"_id": "$capture_id", "n": {"$sum": 1}}},
+        ]):
+            like_counts[row["_id"]] = row["n"]
+        my_liked = set()
+        async for r in db.capture_reactions.find(
+            {"capture_id": {"$in": cap_ids}, "user_id": uid}, {"_id": 0, "capture_id": 1}
+        ):
+            my_liked.add(r["capture_id"])
+        for m in moments:
+            m["likes"] = like_counts.get(m["id"], 0)
+            m["i_liked"] = m["id"] in my_liked
+    return {"moments": moments, "has_more": has_more, "scope": scope}
 
 
 # ---------------------------------------------------------------------------
