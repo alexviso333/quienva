@@ -14,6 +14,7 @@ import { toast } from "sonner";
  * pick "Activar" or "Ahora no".
  */
 export default function PushPermissionGate() {
+  const { t } = useTranslation();
   const { user, loading } = useAuth();
   const [show, setShow] = useState(false);
   const [submitting, setSubmitting] = useState(false);
