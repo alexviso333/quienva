@@ -25,8 +25,12 @@ export async function pickContactPhones() {
 }
 
 export function inviteUrl(code) {
+  // NOTE: We link to the app ROOT (preview, guest-read-only feed) instead of
+  // /login so that people opening a shared / referral link first EXPERIENCE
+  // the app before hitting the registration wall. The ?ref= code is captured
+  // globally and applied on eventual sign-up.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return code ? `${origin}/login?ref=${code}` : `${origin}/login`;
+  return code ? `${origin}/?ref=${code}` : `${origin}/`;
 }
 
 export function inviteText(code) {

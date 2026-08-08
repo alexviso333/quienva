@@ -47,6 +47,22 @@ export default function Login() {
       setInvitedBy(t("login.invited_by_code", { code: ref.trim() }));
       setMode("register");
     }
+    // If the visitor was captured earlier (arrived on the preview via a
+    // referral link and now navigated here), still show the banner + put them
+    // in register mode so the invite context is not lost.
+    if (!add && !ref) {
+      try {
+        const pendingAdd = localStorage.getItem("qv_pending_add");
+        const pendingRef = localStorage.getItem("qv_pending_ref");
+        if (pendingAdd) {
+          setInvitedBy(pendingAdd);
+          setMode("register");
+        } else if (pendingRef) {
+          setInvitedBy(t("login.invited_by_code", { code: pendingRef }));
+          setMode("register");
+        }
+      } catch (e) { /* ignore */ }
+    }
   }, []);
 
   const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });

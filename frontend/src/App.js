@@ -1,5 +1,5 @@
 import "@/App.css";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -65,6 +65,18 @@ function PublicRoute({ children }) {
 
 function AppRouter() {
   const location = useLocation();
+  // Capture referral / invite params on ANY route the visitor lands on. This
+  // lets us send shared links to the app ROOT (preview) instead of /login —
+  // the code is persisted and applied when the guest eventually signs up.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      const ref = params.get("ref");
+      if (ref) localStorage.setItem("qv_pending_ref", ref.trim());
+      const add = params.get("add");
+      if (add) localStorage.setItem("qv_pending_add", add.toLowerCase().trim());
+    } catch (e) { /* ignore */ }
+  }, [location.search]);
   // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
   if (location.hash?.includes("session_id=")) {
     return <AuthCallback />;

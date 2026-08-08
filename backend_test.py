@@ -8,7 +8,7 @@ import requests
 import os
 
 # Backend URL from environment
-BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://global-pages.preview.emergentagent.com")
+BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://explore-quienva.preview.emergentagent.com")
 BASE_URL = f"{BACKEND_URL}/api"
 
 def test_guest_public_browsing():

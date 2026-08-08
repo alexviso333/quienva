@@ -175,7 +175,9 @@ export default function Settings() {
 
   const shareInvite = async () => {
     const code = referral?.code || "";
-    const url = `${window.location.origin}/login?ref=${code}`;
+    // Link to the app ROOT so the recipient sees the preview (guest read-only
+    // feed) FIRST — the registration wall pops in-context on interaction.
+    const url = `${window.location.origin}/?ref=${code}`;
     const text = `Únete a mí en ¿Quién va? y ambos ganamos +100 puntos. Mi código: ${code} · ${url}`;
     try {
       if (navigator.share) await navigator.share({ title: "¿Quién va?", text, url });

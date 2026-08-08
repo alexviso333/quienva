@@ -16,7 +16,9 @@ export default function InviteGroup({ className = "" }) {
   });
 
   const code = referral?.code || "";
-  const url = code ? `${window.location.origin}/login?ref=${code}` : window.location.origin;
+  // Link to the app ROOT so recipients see the preview (guest read-only feed)
+  // FIRST — the registration wall pops in-context when they try to interact.
+  const url = code ? `${window.location.origin}/?ref=${code}` : window.location.origin;
   const message = `${t("invite.wa_message")} ${url}`;
 
   const openWhatsApp = () => {
