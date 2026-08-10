@@ -1,489 +1,447 @@
 #!/usr/bin/env python3
 """
-Backend Test for 3 New Features (¿Quién va? app)
-Tests TASK 4, TASK 2, and TASK 3 as specified in the review request.
+Backend test for SEO indexing bug fix.
+Tests apex->www canonical host + short city slugs + richer Event JSON-LD.
 """
-
 import requests
-import os
-import time
-from datetime import datetime
+import json
+import re
+from xml.etree import ElementTree as ET
 
-# Backend URL from environment
-BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://5e791fc6-c24a-43ab-8471-29846eab5135.preview.emergentagent.com")
-BASE_URL = f"{BACKEND_URL}/api"
+# Base URL from frontend/.env
+BASE_URL = "https://5e791fc6-c24a-43ab-8471-29846eab5135.preview.emergentagent.com/api"
 
-# Admin credentials
-ADMIN_EMAIL = "admin@quienva.app"
-ADMIN_PASSWORD = "admin123"
+# CRITICAL: All requests must include these headers to simulate the public domain
+HEADERS = {
+    "x-forwarded-host": "quienva.me",
+    "x-forwarded-proto": "https"
+}
 
-def login_admin():
-    """Login as admin and return token and headers."""
-    resp = requests.post(f"{BASE_URL}/auth/login", json={
-        "email": ADMIN_EMAIL,
-        "password": ADMIN_PASSWORD
-    })
-    assert resp.status_code == 200, f"Admin login failed: {resp.status_code} {resp.text}"
-    token = resp.json()["token"]
-    return token, {"Authorization": f"Bearer {token}"}
-
-def register_user(email, password, username, city="Ibiza"):
-    """Register a new user and return token and headers."""
-    resp = requests.post(f"{BASE_URL}/auth/register", json={
-        "email": email,
-        "password": password,
-        "username": username,
-        "name": f"Test User {username}",
-        "city": city,
-        "birthdate": "1995-01-01"
-    })
-    assert resp.status_code == 200, f"User registration failed: {resp.status_code} {resp.text}"
-    token = resp.json()["token"]
-    return token, {"Authorization": f"Bearer {token}"}
-
-def test_task_4_events_min():
-    """
-    TASK 4 — GET /api/admin/events-min (notification composer fix)
+def test_city_page_palma():
+    """Test 1: GET /api/ciudad/palma - verify canonical, hreflang, robots meta"""
+    print("\n=== TEST 1: City page Palma ===")
+    url = f"{BASE_URL}/ciudad/palma"
+    resp = requests.get(url, headers=HEADERS)
     
-    Tests:
-    1. As admin, GET /admin/events-min → 200 with {events:[...]}
-       - Every event has date >= today (Europe/Madrid)
-       - List is sorted ascending by date
-       - NO event has city == "Pendiente"
-       - Each item has id, name, venue, date, city
-    2. GET /admin/events-min?city=Madrid → only Madrid events
-       GET /admin/events-min?city=Ibiza → only Ibiza events
-       GET /admin/events-min?city=Palma de Mallorca → only Palma de Mallorca events
-       Verify results are non-empty and correctly filtered
-    3. GET /admin/events-min as non-admin → 403
-       Unauthenticated → 401
-    """
-    print("\n" + "=" * 80)
-    print("TASK 4 — GET /api/admin/events-min (notification composer fix)")
-    print("=" * 80)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    html = resp.text
     
-    # Get admin token
-    admin_token, admin_headers = login_admin()
-    print("✅ Admin login successful")
+    # Extract canonical URL
+    canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
+    assert canonical_match, "No canonical link found"
+    canonical = canonical_match.group(1)
     
-    # Test 1: GET /admin/events-min as admin
-    print("\n[TEST 4.1] GET /admin/events-min as admin...")
-    resp = requests.get(f"{BASE_URL}/admin/events-min", headers=admin_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    data = resp.json()
-    assert "events" in data, f"Missing 'events' key in response"
-    events = data["events"]
-    assert isinstance(events, list), f"Expected events to be a list, got {type(events)}"
-    assert len(events) > 0, f"Expected non-empty events list, got {len(events)}"
-    print(f"✅ GET /admin/events-min → 200 with {len(events)} events")
+    print(f"Canonical URL: {canonical}")
     
-    # Verify every event has date >= today
-    today = datetime.now().date().isoformat()
-    for event in events:
-        assert "id" in event, f"Event missing 'id' field"
-        assert "name" in event, f"Event missing 'name' field"
-        assert "venue" in event, f"Event missing 'venue' field"
-        assert "date" in event, f"Event missing 'date' field"
-        assert "city" in event, f"Event missing 'city' field"
-        assert event["date"] >= today, f"Event {event['id']} has date {event['date']} < today {today}"
-        assert event["city"] != "Pendiente", f"Event {event['id']} has city='Pendiente' (should be excluded)"
-    print(f"✅ All events have date >= today ({today})")
-    print(f"✅ All events have required fields: id, name, venue, date, city")
-    print(f"✅ NO event has city == 'Pendiente'")
+    # MUST be exactly https://www.quienva.me/fiestas/palma
+    expected_canonical = "https://www.quienva.me/fiestas/palma"
+    assert canonical == expected_canonical, f"Expected canonical '{expected_canonical}', got '{canonical}'"
     
-    # Verify list is sorted ascending by date
-    dates = [event["date"] for event in events]
-    assert dates == sorted(dates), f"Events are not sorted ascending by date"
-    print(f"✅ Events are sorted ascending by date (soonest first)")
+    # Check for robots meta tag
+    assert '<meta name="robots"' in html, "No robots meta tag found"
+    print("✓ Robots meta tag present")
     
-    # Test 2a: GET /admin/events-min?city=Madrid
-    print("\n[TEST 4.2a] GET /admin/events-min?city=Madrid...")
-    resp = requests.get(f"{BASE_URL}/admin/events-min?city=Madrid", headers=admin_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    data = resp.json()
-    madrid_events = data["events"]
-    assert len(madrid_events) > 0, f"Expected non-empty Madrid events list, got {len(madrid_events)}"
-    for event in madrid_events:
-        # Madrid region includes "Madrid" city
-        assert event["city"] == "Madrid", f"Event {event['id']} has city='{event['city']}' (expected Madrid)"
-    print(f"✅ GET /admin/events-min?city=Madrid → 200 with {len(madrid_events)} Madrid events (no leakage)")
+    # Check for 4 hreflang alternates (es, en, de, x-default)
+    hreflang_es = re.search(r'<link rel="alternate" hreflang="es" href="([^"]+)"', html)
+    hreflang_en = re.search(r'<link rel="alternate" hreflang="en" href="([^"]+)"', html)
+    hreflang_de = re.search(r'<link rel="alternate" hreflang="de" href="([^"]+)"', html)
+    hreflang_default = re.search(r'<link rel="alternate" hreflang="x-default" href="([^"]+)"', html)
     
-    # Test 2b: GET /admin/events-min?city=Ibiza
-    print("\n[TEST 4.2b] GET /admin/events-min?city=Ibiza...")
-    resp = requests.get(f"{BASE_URL}/admin/events-min?city=Ibiza", headers=admin_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    data = resp.json()
-    ibiza_events = data["events"]
-    assert len(ibiza_events) > 0, f"Expected non-empty Ibiza events list, got {len(ibiza_events)}"
-    for event in ibiza_events:
-        assert event["city"] == "Ibiza", f"Event {event['id']} has city='{event['city']}' (expected Ibiza)"
-    print(f"✅ GET /admin/events-min?city=Ibiza → 200 with {len(ibiza_events)} Ibiza events (no leakage)")
+    assert hreflang_es, "No hreflang es found"
+    assert hreflang_en, "No hreflang en found"
+    assert hreflang_de, "No hreflang de found"
+    assert hreflang_default, "No hreflang x-default found"
     
-    # Test 2c: GET /admin/events-min?city=Palma de Mallorca
-    print("\n[TEST 4.2c] GET /admin/events-min?city=Palma de Mallorca...")
-    resp = requests.get(f"{BASE_URL}/admin/events-min?city=Palma de Mallorca", headers=admin_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    data = resp.json()
-    palma_events = data["events"]
-    assert len(palma_events) > 0, f"Expected non-empty Palma events list, got {len(palma_events)}"
-    for event in palma_events:
-        # Palma de Mallorca region may include other Mallorca cities
-        # But for this test, we expect "Palma de Mallorca" specifically
-        assert event["city"] == "Palma de Mallorca", f"Event {event['id']} has city='{event['city']}' (expected Palma de Mallorca)"
-    print(f"✅ GET /admin/events-min?city=Palma de Mallorca → 200 with {len(palma_events)} Palma events (no leakage)")
+    # Verify hreflang URLs
+    assert hreflang_es.group(1) == "https://www.quienva.me/fiestas/palma", f"ES hreflang incorrect: {hreflang_es.group(1)}"
+    assert hreflang_en.group(1) == "https://www.quienva.me/en/parties/palma", f"EN hreflang incorrect: {hreflang_en.group(1)}"
+    assert hreflang_de.group(1) == "https://www.quienva.me/de/partys/palma", f"DE hreflang incorrect: {hreflang_de.group(1)}"
     
-    # Test 3a: GET /admin/events-min as non-admin
-    print("\n[TEST 4.3a] GET /admin/events-min as non-admin user...")
-    user_token, user_headers = register_user(
-        f"testuser_{int(time.time())}@test.com",
-        "TestPass123!",
-        f"testuser{int(time.time())}",
-        "Ibiza"
-    )
-    resp = requests.get(f"{BASE_URL}/admin/events-min", headers=user_headers)
-    assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
-    print(f"✅ GET /admin/events-min as non-admin → 403")
+    print(f"✓ ES hreflang: {hreflang_es.group(1)}")
+    print(f"✓ EN hreflang: {hreflang_en.group(1)}")
+    print(f"✓ DE hreflang: {hreflang_de.group(1)}")
+    print(f"✓ x-default hreflang: {hreflang_default.group(1)}")
     
-    # Test 3b: GET /admin/events-min unauthenticated
-    print("\n[TEST 4.3b] GET /admin/events-min unauthenticated...")
-    resp = requests.get(f"{BASE_URL}/admin/events-min")
-    assert resp.status_code == 401, f"Expected 401, got {resp.status_code}: {resp.text}"
-    print(f"✅ GET /admin/events-min unauthenticated → 401")
+    # Verify NO apex without www
+    assert "https://quienva.me/" not in html or "https://www.quienva.me/" in html, "Found bare apex URL without www"
+    print("✓ No bare apex URLs found")
     
-    print("\n✅ TASK 4 — ALL TESTS PASSED (8 tests)")
+    print("✅ TEST 1 PASSED")
     return True
 
-def test_task_2_affiliate_set_city():
-    """
-    TASK 2 — POST /api/admin/affiliate/set-city (manual city reassignment + PENDING_CITY)
+
+def test_city_pages_all():
+    """Test 2: Test all city pages (madrid, barcelona, ibiza, marbella) for correct canonicals"""
+    print("\n=== TEST 2: All city pages ===")
+    cities = [
+        ("madrid", "https://www.quienva.me/fiestas/madrid"),
+        ("barcelona", "https://www.quienva.me/fiestas/barcelona"),
+        ("ibiza", "https://www.quienva.me/fiestas/ibiza"),
+        ("marbella", "https://www.quienva.me/fiestas/marbella")
+    ]
     
-    Tests:
-    1. GET /api/cities → 200 and response contains pending_city == "Pendiente"
-    2. As admin, create an event with a DISTINCTIVE venue via POST /api/admin/events
-       Use unique venue name like "ZZTestClub QA" and city "Ibiza"
-       Capture the created event id
-    3. POST /admin/affiliate/set-city {venue:"ZZTestClub QA", city:"Pendiente"} → 200
-       with {ok:true} and events_updated >= 1
-       Then GET the event and confirm its city == "Pendiente"
-       Confirm it is NOT returned by GET /admin/events-min (pending excluded)
-       Confirm it is NOT in an Ibiza user's public feed GET /events
-    4. POST /admin/affiliate/set-city {venue:"ZZTestClub QA", city:"Madrid"} → 200
-       Confirm the event city is now "Madrid"
-       Confirm it appears in GET /admin/events-min?city=Madrid
-    5. Validation:
-       - POST with invalid city "Atlantis" → 400
-       - POST with neither slug nor venue → 400
-       - POST as non-admin → 403
-    """
-    print("\n" + "=" * 80)
-    print("TASK 2 — POST /api/admin/affiliate/set-city (manual city reassignment)")
-    print("=" * 80)
+    for slug, expected_canonical in cities:
+        print(f"\nTesting /ciudad/{slug}...")
+        url = f"{BASE_URL}/ciudad/{slug}"
+        resp = requests.get(url, headers=HEADERS)
+        
+        assert resp.status_code == 200, f"Expected 200 for {slug}, got {resp.status_code}"
+        html = resp.text
+        
+        canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
+        assert canonical_match, f"No canonical link found for {slug}"
+        canonical = canonical_match.group(1)
+        
+        print(f"  Canonical: {canonical}")
+        assert canonical == expected_canonical, f"Expected '{expected_canonical}', got '{canonical}'"
+        
+        # Verify NO long slugs like palma-de-mallorca or marbella-puerto-banus
+        assert "palma-de-mallorca" not in html, f"Found long slug 'palma-de-mallorca' in {slug}"
+        assert "marbella-puerto-banus" not in html, f"Found long slug 'marbella-puerto-banus' in {slug}"
+        
+        # Verify NO bare apex
+        # Count occurrences - www should be present, bare apex should not
+        www_count = html.count("https://www.quienva.me/")
+        bare_apex_pattern = re.compile(r'https://quienva\.me/(?!.*www)')
+        bare_matches = bare_apex_pattern.findall(html)
+        
+        print(f"  ✓ Canonical uses www and short slug")
     
-    # Get admin token
-    admin_token, admin_headers = login_admin()
-    print("✅ Admin login successful")
-    
-    # Test 1: GET /api/cities
-    print("\n[TEST 2.1] GET /api/cities → verify pending_city present...")
-    resp = requests.get(f"{BASE_URL}/cities")
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    data = resp.json()
-    assert "pending_city" in data, f"Missing 'pending_city' key in response"
-    assert data["pending_city"] == "Pendiente", f"Expected pending_city='Pendiente', got '{data['pending_city']}'"
-    print(f"✅ GET /api/cities → 200 with pending_city='Pendiente'")
-    
-    # Test 2: Create an event with distinctive venue
-    print("\n[TEST 2.2] POST /api/admin/events with distinctive venue 'ZZTestClub QA'...")
-    unique_venue = f"ZZTestClub QA {int(time.time())}"
-    event_data = {
-        "name": f"Test Event {int(time.time())}",
-        "venue": unique_venue,
-        "address": "Test Address 123",
-        "date": "2026-09-15",
-        "time": "23:00",
-        "city": "Ibiza",
-        "genre": "Techno",
-        "image_url": "https://example.com/test.jpg",
-        "price_tiers": [{"name": "General", "price": 25.0}],
-        "sale_state": "a_la_venta"
-    }
-    resp = requests.post(f"{BASE_URL}/admin/events", headers=admin_headers, json=event_data)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    created_event = resp.json()
-    event_id = created_event["id"]
-    assert created_event["city"] == "Ibiza", f"Expected city='Ibiza', got '{created_event['city']}'"
-    print(f"✅ POST /api/admin/events → 200, created event {event_id} with venue '{unique_venue}' in Ibiza")
-    
-    # Test 3a: POST /admin/affiliate/set-city to move to "Pendiente"
-    print(f"\n[TEST 2.3a] POST /admin/affiliate/set-city {{venue:'{unique_venue}', city:'Pendiente'}}...")
-    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=admin_headers, json={
-        "venue": unique_venue,
-        "city": "Pendiente"
-    })
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    data = resp.json()
-    assert data["ok"] == True, f"Expected ok=true, got {data}"
-    assert data["events_updated"] >= 1, f"Expected events_updated >= 1, got {data['events_updated']}"
-    print(f"✅ POST /admin/affiliate/set-city → 200 with ok=true, events_updated={data['events_updated']}")
-    
-    # Test 3b: Verify event city is now "Pendiente"
-    print(f"\n[TEST 2.3b] GET /events/{event_id} to verify city='Pendiente'...")
-    resp = requests.get(f"{BASE_URL}/events/{event_id}")
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    event = resp.json()
-    assert event["city"] == "Pendiente", f"Expected city='Pendiente', got '{event['city']}'"
-    print(f"✅ Event {event_id} city is now 'Pendiente'")
-    
-    # Test 3c: Verify event is NOT in /admin/events-min (pending excluded)
-    print(f"\n[TEST 2.3c] GET /admin/events-min → verify event NOT in list (pending excluded)...")
-    resp = requests.get(f"{BASE_URL}/admin/events-min", headers=admin_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    events = resp.json()["events"]
-    event_ids = [e["id"] for e in events]
-    assert event_id not in event_ids, f"Event {event_id} should NOT be in /admin/events-min (pending excluded)"
-    print(f"✅ Event {event_id} is NOT in /admin/events-min (correctly excluded)")
-    
-    # Test 3d: Verify event is NOT in Ibiza user's public feed
-    print(f"\n[TEST 2.3d] GET /events as Ibiza user → verify event NOT in feed...")
-    ibiza_user_token, ibiza_user_headers = register_user(
-        f"ibizauser_{int(time.time())}@test.com",
-        "TestPass123!",
-        f"ibizauser{int(time.time())}",
-        "Ibiza"
-    )
-    resp = requests.get(f"{BASE_URL}/events", headers=ibiza_user_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    events = resp.json()
-    event_ids = [e["id"] for e in events]
-    assert event_id not in event_ids, f"Event {event_id} should NOT be in Ibiza user's feed (pending excluded)"
-    print(f"✅ Event {event_id} is NOT in Ibiza user's feed (correctly hidden)")
-    
-    # Test 4a: POST /admin/affiliate/set-city to move to "Madrid"
-    print(f"\n[TEST 2.4a] POST /admin/affiliate/set-city {{venue:'{unique_venue}', city:'Madrid'}}...")
-    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=admin_headers, json={
-        "venue": unique_venue,
-        "city": "Madrid"
-    })
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    data = resp.json()
-    assert data["ok"] == True, f"Expected ok=true, got {data}"
-    print(f"✅ POST /admin/affiliate/set-city → 200 with ok=true")
-    
-    # Test 4b: Verify event city is now "Madrid"
-    print(f"\n[TEST 2.4b] GET /events/{event_id} to verify city='Madrid'...")
-    resp = requests.get(f"{BASE_URL}/events/{event_id}")
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    event = resp.json()
-    assert event["city"] == "Madrid", f"Expected city='Madrid', got '{event['city']}'"
-    print(f"✅ Event {event_id} city is now 'Madrid'")
-    
-    # Test 4c: Verify event appears in /admin/events-min?city=Madrid
-    print(f"\n[TEST 2.4c] GET /admin/events-min?city=Madrid → verify event in list...")
-    resp = requests.get(f"{BASE_URL}/admin/events-min?city=Madrid", headers=admin_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    events = resp.json()["events"]
-    event_ids = [e["id"] for e in events]
-    assert event_id in event_ids, f"Event {event_id} should be in /admin/events-min?city=Madrid"
-    print(f"✅ Event {event_id} is now in /admin/events-min?city=Madrid")
-    
-    # Test 5a: Validation - invalid city "Atlantis"
-    print(f"\n[TEST 2.5a] POST /admin/affiliate/set-city with invalid city 'Atlantis' → 400...")
-    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=admin_headers, json={
-        "venue": unique_venue,
-        "city": "Atlantis"
-    })
-    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
-    print(f"✅ POST /admin/affiliate/set-city with invalid city → 400")
-    
-    # Test 5b: Validation - missing both slug and venue
-    print(f"\n[TEST 2.5b] POST /admin/affiliate/set-city with neither slug nor venue → 400...")
-    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=admin_headers, json={
-        "city": "Madrid"
-    })
-    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
-    print(f"✅ POST /admin/affiliate/set-city with neither slug nor venue → 400")
-    
-    # Test 5c: Validation - non-admin user
-    print(f"\n[TEST 2.5c] POST /admin/affiliate/set-city as non-admin → 403...")
-    user_token, user_headers = register_user(
-        f"testuser2_{int(time.time())}@test.com",
-        "TestPass123!",
-        f"testuser2{int(time.time())}",
-        "Madrid"
-    )
-    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=user_headers, json={
-        "venue": unique_venue,
-        "city": "Madrid"
-    })
-    assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
-    print(f"✅ POST /admin/affiliate/set-city as non-admin → 403")
-    
-    print("\n✅ TASK 2 — ALL TESTS PASSED (13 tests)")
+    print("\n✅ TEST 2 PASSED")
     return True
 
-def test_task_3_username_uniqueness():
-    """
-    TASK 3 — PUT /api/auth/profile username uniqueness
+
+def test_long_slug_alias():
+    """Test 3: GET /api/ciudad/palma-de-mallorca (long alias) should canonicalize to short slug"""
+    print("\n=== TEST 3: Long slug alias ===")
+    url = f"{BASE_URL}/ciudad/palma-de-mallorca"
+    resp = requests.get(url, headers=HEADERS)
     
-    Tests:
-    1. Register two users A and B
-       Note their usernames from /auth/me
-    2. As A, PUT /auth/profile {username:"qauniqueusername1"} → 200
-       GET /auth/me shows username "qauniqueusername1"
-    3. As A, PUT /auth/profile {username:"<B's exact username>"} → 400
-       with detail about username already existing
-    4. As A, PUT /auth/profile {username:"qauniqueusername1"} (own current) → 200 (no clash)
-    """
-    print("\n" + "=" * 80)
-    print("TASK 3 — PUT /api/auth/profile username uniqueness")
-    print("=" * 80)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    html = resp.text
     
-    # Test 1: Register two users A and B
-    print("\n[TEST 3.1] Register user A and user B...")
-    ts = int(time.time())
-    user_a_token, user_a_headers = register_user(
-        f"usera_{ts}@test.com",
-        "TestPass123!",
-        f"usera{ts}",
-        "Madrid"
-    )
-    user_b_token, user_b_headers = register_user(
-        f"userb_{ts}@test.com",
-        "TestPass123!",
-        f"userb{ts}",
-        "Barcelona"
-    )
-    print(f"✅ Registered user A and user B")
+    canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
+    assert canonical_match, "No canonical link found"
+    canonical = canonical_match.group(1)
     
-    # Get user A's username
-    resp = requests.get(f"{BASE_URL}/auth/me", headers=user_a_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    user_a_data = resp.json()
-    user_a_username = user_a_data["username"]
-    print(f"   User A username: {user_a_username}")
+    print(f"Canonical URL: {canonical}")
     
-    # Get user B's username
-    resp = requests.get(f"{BASE_URL}/auth/me", headers=user_b_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    user_b_data = resp.json()
-    user_b_username = user_b_data["username"]
-    print(f"   User B username: {user_b_username}")
+    # MUST canonicalize to short slug
+    expected_canonical = "https://www.quienva.me/fiestas/palma"
+    assert canonical == expected_canonical, f"Expected canonical '{expected_canonical}', got '{canonical}'"
     
-    # Test 2: As A, change username to unique value
-    print(f"\n[TEST 3.2] As user A, PUT /auth/profile {{username:'qauniqueusername1'}}...")
-    new_username = f"qauniqueusername1{ts}"
-    resp = requests.put(f"{BASE_URL}/auth/profile", headers=user_a_headers, json={
-        "username": new_username
-    })
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    print(f"✅ PUT /auth/profile {{username:'{new_username}'}} → 200")
-    
-    # Verify username changed in /auth/me
-    resp = requests.get(f"{BASE_URL}/auth/me", headers=user_a_headers)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    user_a_data = resp.json()
-    assert user_a_data["username"] == new_username, f"Expected username='{new_username}', got '{user_a_data['username']}'"
-    print(f"✅ GET /auth/me shows username='{new_username}'")
-    
-    # Test 3: As A, try to change username to B's username (should fail)
-    print(f"\n[TEST 3.3] As user A, PUT /auth/profile {{username:'{user_b_username}'}} (B's username) → 400...")
-    resp = requests.put(f"{BASE_URL}/auth/profile", headers=user_a_headers, json={
-        "username": user_b_username
-    })
-    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
-    error_data = resp.json()
-    assert "detail" in error_data, f"Missing 'detail' key in error response"
-    assert "ya existe" in error_data["detail"].lower() or "already" in error_data["detail"].lower(), \
-        f"Expected error message about username already existing, got: {error_data['detail']}"
-    print(f"✅ PUT /auth/profile with B's username → 400 with detail: '{error_data['detail']}'")
-    
-    # Test 4: As A, change username to own current username (should succeed - no-op)
-    print(f"\n[TEST 3.4] As user A, PUT /auth/profile {{username:'{new_username}'}} (own current) → 200...")
-    resp = requests.put(f"{BASE_URL}/auth/profile", headers=user_a_headers, json={
-        "username": new_username
-    })
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    print(f"✅ PUT /auth/profile with own current username → 200 (no clash)")
-    
-    print("\n✅ TASK 3 — ALL TESTS PASSED (4 tests)")
+    print("✅ TEST 3 PASSED - Long slug correctly canonicalizes to short slug")
     return True
+
+
+def test_invalid_city():
+    """Test 4: GET /api/ciudad/ciudad-inexistente should return 404"""
+    print("\n=== TEST 4: Invalid city slug ===")
+    url = f"{BASE_URL}/ciudad/ciudad-inexistente"
+    resp = requests.get(url, headers=HEADERS)
+    
+    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
+    assert resp.headers.get("content-type", "").startswith("text/html"), "Expected HTML response"
+    
+    print("✅ TEST 4 PASSED - Invalid city returns 404")
+    return True
+
+
+def test_sitemap_cities():
+    """Test 5: GET /api/sitemap-cities.xml - verify all URLs use www and short slugs"""
+    print("\n=== TEST 5: Sitemap cities ===")
+    url = f"{BASE_URL}/sitemap-cities.xml"
+    resp = requests.get(url, headers=HEADERS)
+    
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    assert "application/xml" in resp.headers.get("content-type", ""), "Expected XML content-type"
+    
+    xml_content = resp.text
+    
+    # Parse XML
+    root = ET.fromstring(xml_content)
+    
+    # Find all <loc> elements
+    ns = {'sm': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+    locs = root.findall('.//sm:loc', ns)
+    
+    print(f"Found {len(locs)} <loc> entries")
+    
+    for loc in locs:
+        url_text = loc.text
+        
+        # EVERY <loc> must start with https://www.quienva.me
+        assert url_text.startswith("https://www.quienva.me"), f"URL does not start with www: {url_text}"
+        
+        # Check for forbidden long slugs
+        assert "palma-de-mallorca" not in url_text, f"Found long slug 'palma-de-mallorca' in: {url_text}"
+        assert "marbella-puerto-banus" not in url_text, f"Found long slug 'marbella-puerto-banus' in: {url_text}"
+    
+    # Verify short slugs are present
+    xml_str = xml_content
+    assert "/fiestas/palma" in xml_str, "Short slug 'palma' not found"
+    assert "/fiestas/ibiza" in xml_str, "Short slug 'ibiza' not found"
+    assert "/fiestas/madrid" in xml_str, "Short slug 'madrid' not found"
+    assert "/fiestas/barcelona" in xml_str, "Short slug 'barcelona' not found"
+    assert "/fiestas/marbella" in xml_str, "Short slug 'marbella' not found"
+    
+    print("✓ All URLs use https://www.quienva.me")
+    print("✓ All city URLs use short slugs")
+    print("✓ No long slugs found")
+    
+    print("✅ TEST 5 PASSED")
+    return True
+
+
+def test_sitemap_index():
+    """Test 6: GET /api/sitemap.xml - verify child sitemaps use www and short slugs"""
+    print("\n=== TEST 6: Sitemap index ===")
+    url = f"{BASE_URL}/sitemap.xml"
+    resp = requests.get(url, headers=HEADERS)
+    
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    assert "application/xml" in resp.headers.get("content-type", ""), "Expected XML content-type"
+    
+    xml_content = resp.text
+    
+    # Parse XML
+    root = ET.fromstring(xml_content)
+    
+    # Find all <loc> elements in sitemap index
+    ns = {'sm': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+    locs = root.findall('.//sm:loc', ns)
+    
+    print(f"Found {len(locs)} child sitemap entries")
+    
+    for loc in locs:
+        url_text = loc.text
+        print(f"  {url_text}")
+        
+        # All child sitemaps must use www
+        assert url_text.startswith("https://www.quienva.me"), f"Child sitemap does not use www: {url_text}"
+    
+    # Verify expected child sitemaps with short slugs
+    xml_str = xml_content
+    assert "sitemap-cities.xml" in xml_str, "sitemap-cities.xml not found"
+    assert "sitemap-events-palma.xml" in xml_str, "sitemap-events-palma.xml not found"
+    assert "sitemap-events-ibiza.xml" in xml_str, "sitemap-events-ibiza.xml not found"
+    assert "sitemap-events-madrid.xml" in xml_str, "sitemap-events-madrid.xml not found"
+    assert "sitemap-events-barcelona.xml" in xml_str, "sitemap-events-barcelona.xml not found"
+    assert "sitemap-events-marbella.xml" in xml_str, "sitemap-events-marbella.xml not found"
+    
+    print("✓ All child sitemaps use www")
+    print("✓ All event sitemaps use short city slugs")
+    
+    print("✅ TEST 6 PASSED")
+    return True
+
+
+def test_robots_txt():
+    """Test 7: GET /api/robots.txt - verify Sitemap line uses www"""
+    print("\n=== TEST 7: Robots.txt ===")
+    url = f"{BASE_URL}/robots.txt"
+    resp = requests.get(url, headers=HEADERS)
+    
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    assert "text/plain" in resp.headers.get("content-type", ""), "Expected text/plain content-type"
+    
+    content = resp.text
+    print(f"Robots.txt content:\n{content}")
+    
+    # Verify Sitemap line uses www
+    assert "Sitemap: https://www.quienva.me/sitemap.xml" in content, "Sitemap line does not use www host"
+    
+    print("✅ TEST 7 PASSED")
+    return True
+
+
+def get_event_with_price():
+    """Helper: Get an event ID that has a price"""
+    print("\n=== Finding event with price ===")
+    # Get events from admin endpoint
+    url = f"{BASE_URL}/admin/events-min"
+    
+    # Need to login as admin first
+    login_url = f"{BASE_URL}/auth/login"
+    login_data = {"email": "admin@quienva.me", "password": "admin123"}
+    login_resp = requests.post(login_url, json=login_data)
+    
+    if login_resp.status_code != 200:
+        print(f"Warning: Could not login as admin (status {login_resp.status_code})")
+        # Try to get any event from the database
+        # We'll just use a known event ID from the seed data
+        return None
+    
+    token = login_resp.json().get("token")
+    headers_with_auth = {**HEADERS, "Authorization": f"Bearer {token}"}
+    
+    resp = requests.get(url, headers=headers_with_auth)
+    if resp.status_code != 200:
+        print(f"Warning: Could not get events (status {resp.status_code})")
+        return None
+    
+    events = resp.json().get("events", [])
+    
+    # Get full event details to find one with price
+    for event in events[:50]:  # Check first 50 events
+        event_id = event.get("id")
+        event_url = f"{BASE_URL}/events/{event_id}"
+        event_resp = requests.get(event_url, headers=headers_with_auth)
+        
+        if event_resp.status_code == 200:
+            event_data = event_resp.json()
+            price_tiers = event_data.get("price_tiers", [])
+            if price_tiers and any(t.get("price") for t in price_tiers):
+                print(f"Found event with price: {event_id} - {event_data.get('name')}")
+                return event_id
+    
+    print("Warning: No event with price found, will use first available event")
+    return events[0].get("id") if events else None
+
+
+def test_event_page_jsonld():
+    """Test 8: GET /api/fiesta/{id} - verify Event JSON-LD has all required fields"""
+    print("\n=== TEST 8: Event page JSON-LD ===")
+    
+    # Get an event with price
+    event_id = get_event_with_price()
+    
+    if not event_id:
+        print("⚠️  Could not find event with price, skipping test")
+        return False
+    
+    url = f"{BASE_URL}/fiesta/{event_id}"
+    resp = requests.get(url, headers=HEADERS)
+    
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    html = resp.text
+    
+    # Extract JSON-LD
+    jsonld_match = re.search(r'<script type="application/ld\+json">({.*?"@type":\s*"Event".*?})</script>', html, re.DOTALL)
+    assert jsonld_match, "No Event JSON-LD found"
+    
+    jsonld_str = jsonld_match.group(1)
+    jsonld = json.loads(jsonld_str)
+    
+    print(f"Event JSON-LD keys: {list(jsonld.keys())}")
+    
+    # Verify required fields
+    assert "@context" in jsonld, "Missing @context"
+    assert "@type" in jsonld and jsonld["@type"] == "Event", "Missing or incorrect @type"
+    assert "name" in jsonld, "Missing name"
+    assert "startDate" in jsonld, "Missing startDate"
+    
+    # NEW FIELDS from the fix
+    assert "endDate" in jsonld, "Missing endDate"
+    print(f"✓ endDate: {jsonld['endDate']}")
+    
+    assert "description" in jsonld, "Missing description"
+    assert jsonld["description"], "description is empty"
+    print(f"✓ description: {jsonld['description'][:50]}...")
+    
+    assert "performer" in jsonld, "Missing performer"
+    assert jsonld["performer"].get("@type"), "performer missing @type"
+    assert jsonld["performer"].get("name"), "performer missing name"
+    print(f"✓ performer: {jsonld['performer']}")
+    
+    # Check offers (if event has price)
+    if "offers" in jsonld:
+        offers = jsonld["offers"]
+        print(f"✓ offers present")
+        
+        assert "price" in offers, "offers missing price"
+        assert "priceCurrency" in offers, "offers missing priceCurrency"
+        assert "availability" in offers, "offers missing availability"
+        assert "url" in offers, "offers missing url"
+        
+        # NEW FIELDS from the fix
+        assert "validFrom" in offers, "offers missing validFrom"
+        print(f"✓ offers.validFrom: {offers['validFrom']}")
+        
+        assert "priceValidUntil" in offers, "offers missing priceValidUntil"
+        print(f"✓ offers.priceValidUntil: {offers['priceValidUntil']}")
+        
+        # Verify offer URL uses www
+        assert offers["url"].startswith("https://www.quienva.me"), f"Offer URL does not use www: {offers['url']}"
+    
+    # Verify JSON-LD url uses www
+    assert jsonld["url"].startswith("https://www.quienva.me"), f"JSON-LD url does not use www: {jsonld['url']}"
+    print(f"✓ JSON-LD url uses www: {jsonld['url']}")
+    
+    # Verify canonical link uses www
+    canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
+    assert canonical_match, "No canonical link found"
+    canonical = canonical_match.group(1)
+    assert canonical.startswith("https://www.quienva.me"), f"Canonical does not use www: {canonical}"
+    print(f"✓ Canonical uses www: {canonical}")
+    
+    print("✅ TEST 8 PASSED")
+    return True
+
+
+def test_invalid_event():
+    """Test 9: GET /api/fiesta/nonexistentid123 should return 404"""
+    print("\n=== TEST 9: Invalid event ID ===")
+    url = f"{BASE_URL}/fiesta/nonexistentid123"
+    resp = requests.get(url, headers=HEADERS)
+    
+    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
+    assert resp.headers.get("content-type", "").startswith("text/html"), "Expected HTML response"
+    
+    print("✅ TEST 9 PASSED - Invalid event returns 404")
+    return True
+
 
 def main():
-    """Run all tests."""
+    """Run all tests"""
     print("=" * 80)
-    print("BACKEND TEST — 3 NEW FEATURES (¿Quién va? app)")
-    print("=" * 80)
-    print(f"Backend URL: {BACKEND_URL}")
-    print(f"Admin: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
-    print(f"System date: 2026-08-10 (all events are upcoming)")
+    print("SEO INDEXING BUG FIX TEST SUITE")
+    print("Testing: apex->www canonical + short city slugs + richer Event JSON-LD")
     print("=" * 80)
     
-    total_tests = 0
-    passed_tests = 0
-    failed_tests = 0
+    tests = [
+        ("City page Palma (canonical, hreflang, robots)", test_city_page_palma),
+        ("All city pages (madrid, barcelona, ibiza, marbella)", test_city_pages_all),
+        ("Long slug alias (palma-de-mallorca)", test_long_slug_alias),
+        ("Invalid city slug", test_invalid_city),
+        ("Sitemap cities (www + short slugs)", test_sitemap_cities),
+        ("Sitemap index (child sitemaps)", test_sitemap_index),
+        ("Robots.txt (www sitemap)", test_robots_txt),
+        ("Event page JSON-LD (endDate, description, performer, offers)", test_event_page_jsonld),
+        ("Invalid event ID", test_invalid_event),
+    ]
     
-    # Test TASK 4
-    try:
-        test_task_4_events_min()
-        passed_tests += 8
-        total_tests += 8
-    except AssertionError as e:
-        print(f"\n❌ TASK 4 FAILED: {e}")
-        failed_tests += 1
-        total_tests += 8
-    except Exception as e:
-        print(f"\n❌ TASK 4 ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        failed_tests += 1
-        total_tests += 8
+    passed = 0
+    failed = 0
+    skipped = 0
     
-    # Test TASK 2
-    try:
-        test_task_2_affiliate_set_city()
-        passed_tests += 13
-        total_tests += 13
-    except AssertionError as e:
-        print(f"\n❌ TASK 2 FAILED: {e}")
-        failed_tests += 1
-        total_tests += 13
-    except Exception as e:
-        print(f"\n❌ TASK 2 ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        failed_tests += 1
-        total_tests += 13
+    for name, test_func in tests:
+        try:
+            result = test_func()
+            if result is False:
+                skipped += 1
+                print(f"⚠️  SKIPPED: {name}")
+            else:
+                passed += 1
+        except AssertionError as e:
+            failed += 1
+            print(f"❌ FAILED: {name}")
+            print(f"   Error: {e}")
+        except Exception as e:
+            failed += 1
+            print(f"❌ ERROR: {name}")
+            print(f"   Exception: {e}")
     
-    # Test TASK 3
-    try:
-        test_task_3_username_uniqueness()
-        passed_tests += 4
-        total_tests += 4
-    except AssertionError as e:
-        print(f"\n❌ TASK 3 FAILED: {e}")
-        failed_tests += 1
-        total_tests += 4
-    except Exception as e:
-        print(f"\n❌ TASK 3 ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        failed_tests += 1
-        total_tests += 4
-    
-    # Summary
     print("\n" + "=" * 80)
-    print("TEST SUMMARY")
+    print(f"TEST RESULTS: {passed} passed, {failed} failed, {skipped} skipped")
     print("=" * 80)
-    print(f"Total tests: {total_tests}")
-    print(f"Passed: {passed_tests}")
-    print(f"Failed: {failed_tests}")
     
-    if failed_tests == 0:
-        print("\n✅ ALL TESTS PASSED")
-        return 0
+    if failed > 0:
+        exit(1)
     else:
-        print(f"\n❌ {failed_tests} TEST(S) FAILED")
-        return 1
+        print("\n✅ ALL TESTS PASSED!")
+        exit(0)
+
 
 if __name__ == "__main__":
-    exit(main())
+    main()

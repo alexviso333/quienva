@@ -756,7 +756,24 @@ def _slugify(s: str) -> str:
 # slug -> canonical app-city id (built from SUPPORTED_CITIES)
 _CITY_SLUGS = {_slugify(c["id"]): c["id"] for c in SUPPORTED_CITIES}
 _CITY_SLUGS.update({"palma": "Palma de Mallorca", "mallorca": "Palma de Mallorca",
-                    "puerto-banus": "Marbella", "eivissa": "Ibiza"})
+                    "puerto-banus": "Marbella", "eivissa": "Ibiza",
+                    "marbella": "Marbella"})
+
+# Canonical SHORT SEO slug per city. Used in sitemap, <link rel=canonical>,
+# hreflang and internal links so there is ONE canonical URL per city (the app
+# and older links use these short slugs). Long forms (palma-de-mallorca,
+# marbella-puerto-banus, eivissa…) still resolve but canonicalize to these.
+CITY_SEO_SLUG = {
+    "Palma de Mallorca": "palma",
+    "Ibiza": "ibiza",
+    "Madrid": "madrid",
+    "Barcelona": "barcelona",
+    "Marbella": "marbella",
+}
+
+
+def _city_slug(city_id: str) -> str:
+    return CITY_SEO_SLUG.get(city_id) or _slugify(city_id)
 
 
 def _price_line(ev: dict) -> str:
@@ -769,11 +786,28 @@ def _price_line(ev: dict) -> str:
     return ""
 
 
+def _canonicalize_base(base: str) -> str:
+    """Force the canonical www host. In production the apex `quienva.me` issues a
+    308 redirect to `www.quienva.me`, so any canonical / sitemap / hreflang / og
+    URL built on the apex would be a REDIRECT — which is exactly why Google
+    reported 'Error de redirección' and refused to index the city pages. We
+    normalise the bare apex to www so every emitted URL resolves 200 directly."""
+    try:
+        base = re.sub(r"^(https?://)quienva\.me\b", r"\1www.quienva.me", base)
+    except Exception:
+        pass
+    return base
+
+
 def _frontend_base(request: Request) -> str:
+    override = (os.environ.get("SEO_CANONICAL_BASE") or "").strip().rstrip("/")
+    if override:
+        return _canonicalize_base(override)
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
     base = f"{proto}://{host}"
-    return (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/") or base
+    base = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/") or base
+    return _canonicalize_base(base)
 
 
 async def _upcoming_for_city(city_id: str, limit: int = 60) -> list:
@@ -1107,7 +1141,43 @@ def _event_slug(ev: dict) -> str:
     return _slugify(f"{ev.get('name','')}-{ev.get('venue','')}-{ev.get('city','')}") or "fiesta"
 
 
-def _event_jsonld(ev: dict, url: str, front: str, include_offers: bool = True) -> str:
+def _seo_end_datetime(start: str) -> str:
+    """Estimate an Event endDate: club nights run into the early morning, so we
+    add ~6h to the start (or end 06:00 the next day when only a date is known).
+    Google recommends endDate; supplying a sensible one clears the warning."""
+    try:
+        if "T" in start:
+            dt = datetime.fromisoformat(start)
+            return (dt + timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+        d = date.fromisoformat(start[:10])
+        return f"{(d + timedelta(days=1)).isoformat()}T06:00"
+    except Exception:
+        return start
+
+
+def _event_description(ev: dict, lang: str = "es") -> str:
+    name = ev.get("name", "") or "Fiesta"
+    venue = ev.get("venue", "")
+    city = ev.get("city", "")
+    when = _seo_date(ev.get("date", ""), lang, ev.get("time", "")) if "_seo_date" in globals() else ev.get("date", "")
+    pl = _price_line(ev)
+    where = " · ".join([x for x in [venue, city] if x])
+    if lang == "en":
+        base = f"{name}" + (f" at {where}" if where else "") + f". {when}."
+        base += f" From {pl.replace('desde ', '')}." if pl and pl != "Agotado" else (" Sold out." if pl == "Agotado" else "")
+        base += " Line-up, tickets and who's going on ¿Quién va?"
+    elif lang == "de":
+        base = f"{name}" + (f" im {where}" if where else "") + f". {when}."
+        base += f" Ab {pl.replace('desde ', '')}." if pl and pl != "Agotado" else (" Ausverkauft." if pl == "Agotado" else "")
+        base += " Tickets, Zeiten und wer hingeht auf ¿Quién va?"
+    else:
+        base = f"{name}" + (f" en {where}" if where else "") + f". {when}."
+        base += f" Entradas {pl}." if pl and pl != "Agotado" else (" Agotado." if pl == "Agotado" else "")
+        base += " Horarios, entradas y quién va en ¿Quién va?"
+    return base[:300]
+
+
+def _event_jsonld(ev: dict, url: str, front: str, include_offers: bool = True, lang: str = "es") -> str:
     start = ev.get("date", "")
     if ev.get("time"):
         start = f"{ev.get('date','')}T{ev.get('time')}"
@@ -1120,6 +1190,8 @@ def _event_jsonld(ev: dict, url: str, front: str, include_offers: bool = True) -
         "@context": "https://schema.org", "@type": "Event",
         "name": ev.get("name", ""),
         "startDate": start,
+        "endDate": _seo_end_datetime(start),
+        "description": _event_description(ev, lang),
         "eventStatus": "https://schema.org/EventScheduled",
         "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
         "location": {"@type": "Place", "name": ev.get("venue", ""),
@@ -1129,14 +1201,26 @@ def _event_jsonld(ev: dict, url: str, front: str, include_offers: bool = True) -
                                  "addressCountry": "ES"}},
         "url": url,
         "organizer": {"@type": "Organization", "name": "\u00bfQui\u00e9n va?", "url": front},
+        # Club nights are headlined by the party/artist name; expose it as the
+        # performer so Google can render richer event results.
+        "performer": {"@type": "PerformingGroup", "name": ev.get("name", "") or ev.get("venue", "")},
     }
     if str(ev.get("image_url", "")).startswith("http"):
         obj["image"] = [ev["image_url"]]
     prices = [t.get("price") for t in (ev.get("price_tiers") or []) if isinstance(t, dict) and t.get("price")]
     if prices and include_offers:
-        obj["offers"] = {"@type": "Offer", "price": int(min(prices)),
-                         "priceCurrency": ev.get("currency", "EUR") or "EUR",
-                         "availability": avail, "url": url}
+        valid_from = str(ev.get("created_at") or ev.get("last_scraped_at") or "")[:10]
+        event_day = str(ev.get("date") or "")[:10]
+        if not valid_from or (event_day and valid_from > event_day):
+            valid_from = event_day
+        offer = {"@type": "Offer", "price": int(min(prices)),
+                 "priceCurrency": ev.get("currency", "EUR") or "EUR",
+                 "availability": avail, "url": url}
+        if valid_from:
+            offer["validFrom"] = valid_from
+        if event_day:
+            offer["priceValidUntil"] = event_day
+        obj["offers"] = offer
     return json.dumps(obj, ensure_ascii=False)
 
 
@@ -1229,7 +1313,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
             media_type="text/html", status_code=404)
     events = await _events_for_timeframe(city_id, timeframe)
     label = next((c["label"] for c in SUPPORTED_CITIES if c["id"] == city_id), city_id)
-    slug_l = slug.lower()
+    slug_l = _city_slug(city_id)
     paths = _city_tf_paths(front, slug_l, timeframe)
     canonical = paths[lang]
     n = len(events)
@@ -1256,7 +1340,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     for ev in events[:24]:
         ev_url = _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang]
         items_html.append(f'<li>{_seo_card(ev, ev_url, lang, e)}</li>')
-        jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, ev_url, front)}</script>')
+        jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, ev_url, front, lang=lang)}</script>')
     if not items_html:
         items_html.append(f'<li class="empty">{e(empty)}</li>')
 
@@ -1270,7 +1354,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     nav_html = f'<div class="cities">{nav_sep.join(nav)}</div>'
 
     other_cities = "".join(
-        f'<a href="{e(_city_paths(front, _slugify(c["id"]))[lang])}">{e(c["label"])}</a>'
+        f'<a href="{e(_city_paths(front, _city_slug(c["id"]))[lang])}">{e(c["label"])}</a>'
         for c in SUPPORTED_CITIES if c["id"] != city_id)
     hreflang = _hreflang_links(paths, e)
     langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)
@@ -1293,11 +1377,13 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     html_out = f"""<!doctype html>
 <html lang="{T['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <link rel="canonical" href="{e(canonical)}">
 {hreflang}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
+<meta property="og:locale" content="{ {'es':'es_ES','en':'en_US','de':'de_DE'}[lang] }">
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
 <meta property="og:url" content="{e(canonical)}">{ogimg_tag}
 <meta name="twitter:card" content="summary_large_image">
@@ -1399,7 +1485,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
     ogimg_tag = f'<meta property="og:image" content="{e(img)}">' if str(img).startswith("http") else ''
     hreflang = _hreflang_links(paths, e)
     langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)
-    jsonld = f'<script type="application/ld+json">{_event_jsonld(ev, canonical, front, include_offers=not is_past)}</script>'
+    jsonld = f'<script type="application/ld+json">{_event_jsonld(ev, canonical, front, include_offers=not is_past, lang=lang)}</script>'
 
     # Related upcoming events in the same city (internal linking + freshness).
     city_id = None
@@ -1570,7 +1656,7 @@ async def _sitemap_cities_xml(front: str, today: str) -> str:
     parts = [f"<url><loc>{front}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>"]
     for c in SUPPORTED_CITIES:
         for tf in ("all", "tonight", "weekend"):
-            cp = _city_tf_paths(front, _slugify(c["id"]), tf)
+            cp = _city_tf_paths(front, _city_slug(c["id"]), tf)
             for lang in SEO_LANGS:
                 parts.append(_sitemap_url(cp, lang, today, "daily"))
     return _sitemap_urlset(parts)
@@ -1593,7 +1679,7 @@ async def _sitemap_events_xml(front: str, today: str, city: str) -> str:
 
 def _sitemap_index_xml(front: str, today: str) -> str:
     children = [f"{front}/sitemap-cities.xml"]
-    children += [f"{front}/sitemap-events-{_slugify(c['id'])}.xml" for c in SUPPORTED_CITIES]
+    children += [f"{front}/sitemap-events-{_city_slug(c['id'])}.xml" for c in SUPPORTED_CITIES]
     body = "".join(f"<sitemap><loc>{u}</loc><lastmod>{today}</lastmod></sitemap>" for u in children)
     return ('<?xml version="1.0" encoding="UTF-8"?>'
             '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</sitemapindex>")
