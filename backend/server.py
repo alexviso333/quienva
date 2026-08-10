@@ -1090,6 +1090,8 @@ SEO_T = {
         "ev_title": "{name} \u2014 {venue}, {city} | Entradas y horario | \u00bfQui\u00e9n va?",
         "ev_desc": "{name} en {venue} ({city}), {date}. {price}Mira qui\u00e9n va y consigue tu entrada en \u00bfQui\u00e9n va?",
         "ev_cta": "Ver qui\u00e9n va y entradas",
+        "ev_buy": "Comprar entradas",
+        "ev_seeapp": "Ver qui\u00e9n va en la app",
         "ev_ended": "Esta fiesta ya ha terminado \u2014 mira los pr\u00f3ximos planes.",
         "ev_when": "Cu\u00e1ndo", "ev_where": "D\u00f3nde", "ev_price": "Precio", "ev_genre": "M\u00fasica",
         "more_in": "M\u00e1s fiestas en {label}",
@@ -1140,6 +1142,8 @@ SEO_T = {
         "ev_title": "{name} \u2014 {venue}, {city} | Tickets & time | \u00bfQui\u00e9n va?",
         "ev_desc": "{name} at {venue} ({city}), {date}. {price}See who's going and get your ticket on \u00bfQui\u00e9n va?",
         "ev_cta": "See who's going & tickets",
+        "ev_buy": "Buy tickets",
+        "ev_seeapp": "See who's going in the app",
         "ev_ended": "This party has ended \u2014 check out the upcoming plans.",
         "ev_when": "When", "ev_where": "Where", "ev_price": "Price", "ev_genre": "Music",
         "more_in": "More parties in {label}",
@@ -1190,6 +1194,8 @@ SEO_T = {
         "ev_title": "{name} \u2014 {venue}, {city} | Tickets & Uhrzeit | \u00bfQui\u00e9n va?",
         "ev_desc": "{name} im {venue} ({city}), {date}. {price}Sieh, wer hingeht, und hol dir dein Ticket auf \u00bfQui\u00e9n va?",
         "ev_cta": "Sehen, wer hingeht & Tickets",
+        "ev_buy": "Tickets kaufen",
+        "ev_seeapp": "Wer hingeht \u2013 in der App",
         "ev_ended": "Diese Party ist vorbei \u2014 sieh dir die kommenden Pl\u00e4ne an.",
         "ev_when": "Wann", "ev_where": "Wo", "ev_price": "Preis", "ev_genre": "Musik",
         "more_in": "Mehr Partys in {label}",
@@ -1667,7 +1673,7 @@ async def _get_event_seo(event_id: str):
         {"id": event_id},
         {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
          "genre": 1, "address": 1, "currency": 1, "last_scraped_at": 1, "created_at": 1,
-         "image_url": 1, "price_tiers": 1, "sale_state": 1})
+         "image_url": 1, "price_tiers": 1, "sale_state": 1, "commission_url": 1})
 
 
 async def _render_event(event_id: str, lang: str, request: Request):
@@ -1768,11 +1774,25 @@ async def _render_event(event_id: str, lang: str, request: Request):
         ctarow_html = f'<div class="ctarow">{primary_cta}</div>'
         sticky_html = ''
     else:
-        primary_cta = f'<a class="cta" href="{front}/event/{e(event_id)}">{e(T["ev_cta"])}</a>'
-        ctarow_html = f'<div class="ctarow">{primary_cta}{ghost_open}</div>'
+        # Same logic as the app: OUR affiliate link for the clubs we carry,
+        # the original ticket link for the rest. Direct "Buy tickets" button +
+        # a secondary "see who's going" that opens the app.
+        buy_url = _commission_url_for(ev)
+        can_buy = bool(buy_url) and ev.get("sale_state") != "agotado"
+        app_url = f'{front}/event/{e(event_id)}'
+        if can_buy:
+            buy_btn = (f'<a class="cta" href="{e(buy_url)}" target="_blank" '
+                       f'rel="nofollow sponsored noopener">{e(T["ev_buy"])}</a>')
+            app_btn = f'<a class="cta ghost" href="{app_url}">{e(T["ev_seeapp"])}</a>'
+            ctarow_html = f'<div class="ctarow">{buy_btn}{app_btn}</div>'
+            sticky_btn = buy_btn
+        else:
+            primary_cta = f'<a class="cta" href="{app_url}">{e(T["ev_cta"])}</a>'
+            ctarow_html = f'<div class="ctarow">{primary_cta}{ghost_open}</div>'
+            sticky_btn = f'<a class="cta" href="{app_url}">{e(T["ev_cta"])}</a>'
         sticky_html = (f'<div class="stickycta"><div class="pr"><small>{e(T["ev_price"])}</small>'
                        f'<b>{e(pl or T["free"])}</b></div>'
-                       f'<a class="cta" href="{front}/event/{e(event_id)}">{e(T["ev_cta"])}</a></div>')
+                       f'{sticky_btn}</div>')
     ogloc = {'es': 'es_ES', 'en': 'en_US', 'de': 'de_DE'}[lang]
     html_out = f"""<!doctype html>
 <html lang="{T['html_lang']}"><head>
