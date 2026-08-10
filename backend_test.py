@@ -1,310 +1,480 @@
 #!/usr/bin/env python3
 """
-Backend test for SEO routes HEAD request bug fix
-Testing sitemap/robots/SEO routes to ensure they accept both GET and HEAD requests
+Backend API Testing for QuienVa SSR/SEO Endpoints
+Testing new homepage, venue pages, and sitemap features
 """
+
 import requests
+import json
 import sys
-import os
-from typing import Dict, Tuple
+from typing import Dict, Any
+import xml.etree.ElementTree as ET
 
 # Base URL from frontend/.env
-BASE_URL = "https://nightlife-guide-3.preview.emergentagent.com"
-API_BASE = f"{BASE_URL}/api"
+BASE_URL = "https://a6147ac0-835e-4963-82a8-8f4815309c5b.preview.emergentagent.com/api"
 
-# Required headers for all requests
-HEADERS = {
-    "x-forwarded-host": "quienva.me",
-    "x-forwarded-proto": "https"
-}
-
-# Admin credentials
-ADMIN_EMAIL = "admin@quienva.app"
-ADMIN_PASSWORD = "admin123"
-
-# Test results storage
+# Test counters
+tests_passed = 0
+tests_failed = 0
 test_results = []
 
 def log_test(test_name: str, passed: bool, details: str = ""):
     """Log test result"""
-    status = "✅ PASS" if passed else "❌ FAIL"
+    global tests_passed, tests_failed
+    if passed:
+        tests_passed += 1
+        status = "✅ PASS"
+    else:
+        tests_failed += 1
+        status = "❌ FAIL"
+    
     result = f"{status}: {test_name}"
     if details:
-        result += f" - {details}"
+        result += f"\n    {details}"
+    test_results.append(result)
     print(result)
-    test_results.append({
-        "name": test_name,
-        "passed": passed,
-        "details": details
-    })
 
-def test_endpoint(path: str, method: str, expected_status: int, expected_content_type: str) -> Tuple[bool, str]:
-    """
-    Test an endpoint with specified method
-    Returns (passed, details)
-    """
-    url = f"{API_BASE}{path}"
-    try:
-        if method == "GET":
-            response = requests.get(url, headers=HEADERS, timeout=10)
-        elif method == "HEAD":
-            response = requests.head(url, headers=HEADERS, timeout=10)
-        else:
-            return False, f"Invalid method: {method}"
-        
-        status_ok = response.status_code == expected_status
-        content_type = response.headers.get("Content-Type", "")
-        content_type_ok = expected_content_type.lower() in content_type.lower()
-        
-        if status_ok and content_type_ok:
-            return True, f"{method} {path} → {response.status_code} {content_type}"
-        else:
-            details = f"{method} {path} → {response.status_code} {content_type} (expected {expected_status} {expected_content_type})"
-            return False, details
-            
-    except Exception as e:
-        return False, f"{method} {path} → ERROR: {str(e)}"
-
-def get_admin_token() -> str:
-    """Login as admin and get token"""
-    try:
-        response = requests.post(
-            f"{API_BASE}/auth/login",
-            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-            headers=HEADERS,
-            timeout=10
-        )
-        if response.status_code == 200:
-            return response.json().get("token", "")
-        return ""
-    except Exception:
-        return ""
-
-def get_valid_event_id(token: str) -> str:
-    """Get a valid upcoming event ID"""
-    try:
-        # Try to get events-min (admin endpoint)
-        response = requests.get(
-            f"{API_BASE}/admin/events-min",
-            headers={**HEADERS, "Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        if response.status_code == 200:
-            events = response.json().get("events", [])
-            if events:
-                return events[0]["id"]
-        
-        # Fallback: try to get from sitemap
-        response = requests.get(
-            f"{API_BASE}/sitemap-events-ibiza.xml",
-            headers=HEADERS,
-            timeout=10
-        )
-        if response.status_code == 200:
-            # Extract first event ID from sitemap
-            import re
-            match = re.search(r'/fiesta/([a-f0-9-]+)', response.text)
-            if match:
-                return match.group(1)
-        
-        return ""
-    except Exception:
-        return ""
-
-def test_content_sanity(path: str, checks: list) -> Tuple[bool, str]:
-    """Test GET response content"""
-    url = f"{API_BASE}{path}"
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=10)
-        if response.status_code != 200:
-            return False, f"GET {path} returned {response.status_code}"
-        
-        content = response.text
-        failed_checks = []
-        
-        for check in checks:
-            if check["type"] == "contains":
-                if check["value"] not in content:
-                    failed_checks.append(f"Missing: {check['value']}")
-            elif check["type"] == "not_contains":
-                if check["value"] in content:
-                    failed_checks.append(f"Should not contain: {check['value']}")
-            elif check["type"] == "starts_with":
-                if not content.startswith(check["value"]):
-                    failed_checks.append(f"Should start with: {check['value']}")
-        
-        if failed_checks:
-            return False, "; ".join(failed_checks)
-        return True, f"Content checks passed for {path}"
-        
-    except Exception as e:
-        return False, f"ERROR: {str(e)}"
-
-def main():
-    print("=" * 80)
-    print("SEO ROUTES HEAD REQUEST BUG FIX TEST")
-    print("=" * 80)
-    print(f"Base URL: {BASE_URL}")
-    print(f"Headers: {HEADERS}")
-    print()
+def test_homepage_endpoints():
+    """Test 1: Homepage SSR endpoints (GET and HEAD)"""
+    print("\n" + "="*80)
+    print("TEST 1: HOMEPAGE ENDPOINTS (GET and HEAD)")
+    print("="*80)
     
-    # Test 1: /api/sitemap.xml
-    print("TEST 1: /api/sitemap.xml")
-    passed, details = test_endpoint("/sitemap.xml", "GET", 200, "application/xml")
-    log_test("GET /api/sitemap.xml → 200 application/xml", passed, details)
-    
-    passed, details = test_endpoint("/sitemap.xml", "HEAD", 200, "application/xml")
-    log_test("HEAD /api/sitemap.xml → 200 application/xml (NOT 405, NOT application/json)", passed, details)
-    print()
-    
-    # Test 2: /api/sitemap-cities.xml
-    print("TEST 2: /api/sitemap-cities.xml")
-    passed, details = test_endpoint("/sitemap-cities.xml", "GET", 200, "application/xml")
-    log_test("GET /api/sitemap-cities.xml → 200 application/xml", passed, details)
-    
-    passed, details = test_endpoint("/sitemap-cities.xml", "HEAD", 200, "application/xml")
-    log_test("HEAD /api/sitemap-cities.xml → 200 application/xml", passed, details)
-    print()
-    
-    # Test 3: /api/sitemap-events-ibiza.xml
-    print("TEST 3: /api/sitemap-events-ibiza.xml")
-    passed, details = test_endpoint("/sitemap-events-ibiza.xml", "GET", 200, "application/xml")
-    log_test("GET /api/sitemap-events-ibiza.xml → 200 application/xml", passed, details)
-    
-    passed, details = test_endpoint("/sitemap-events-ibiza.xml", "HEAD", 200, "application/xml")
-    log_test("HEAD /api/sitemap-events-ibiza.xml → 200 application/xml", passed, details)
-    print()
-    
-    # Test 4: /api/robots.txt
-    print("TEST 4: /api/robots.txt")
-    passed, details = test_endpoint("/robots.txt", "GET", 200, "text/plain")
-    log_test("GET /api/robots.txt → 200 text/plain", passed, details)
-    
-    passed, details = test_endpoint("/robots.txt", "HEAD", 200, "text/plain")
-    log_test("HEAD /api/robots.txt → 200 text/plain", passed, details)
-    print()
-    
-    # Test 5: /api/ciudad/madrid
-    print("TEST 5: /api/ciudad/madrid")
-    passed, details = test_endpoint("/ciudad/madrid", "GET", 200, "text/html")
-    log_test("GET /api/ciudad/madrid → 200 text/html", passed, details)
-    
-    passed, details = test_endpoint("/ciudad/madrid", "HEAD", 200, "text/html")
-    log_test("HEAD /api/ciudad/madrid → 200 text/html", passed, details)
-    print()
-    
-    # Test 6: /api/fiesta/{valid_id}
-    print("TEST 6: /api/fiesta/{valid_id}")
-    print("Getting admin token...")
-    token = get_admin_token()
-    if token:
-        print("✓ Admin login successful")
-        event_id = get_valid_event_id(token)
-        if event_id:
-            print(f"✓ Found valid event ID: {event_id}")
-            
-            passed, details = test_endpoint(f"/fiesta/{event_id}", "GET", 200, "text/html")
-            log_test(f"GET /api/fiesta/{event_id} → 200 text/html", passed, details)
-            
-            passed, details = test_endpoint(f"/fiesta/{event_id}", "HEAD", 200, "text/html")
-            log_test(f"HEAD /api/fiesta/{event_id} → 200 text/html", passed, details)
-        else:
-            log_test("Get valid event ID", False, "Could not retrieve event ID")
-    else:
-        log_test("Admin login", False, "Could not login as admin")
-    print()
-    
-    # Test 7: Content sanity - GET /api/sitemap.xml
-    print("TEST 7: Content sanity - GET /api/sitemap.xml")
-    passed, details = test_content_sanity("/sitemap.xml", [
-        {"type": "starts_with", "value": "<?xml"},
-        {"type": "contains", "value": "<sitemapindex"},
-        {"type": "contains", "value": "https://www.quienva.me/sitemap-cities.xml"},
-        {"type": "not_contains", "value": "application/json"},
-        {"type": "not_contains", "value": "405"}
-    ])
-    log_test("GET /api/sitemap.xml content: starts with <?xml, contains <sitemapindex>, uses www host", passed, details)
-    print()
-    
-    # Test 8: Content sanity - GET /api/sitemap-cities.xml
-    print("TEST 8: Content sanity - GET /api/sitemap-cities.xml")
-    passed, details = test_content_sanity("/sitemap-cities.xml", [
-        {"type": "contains", "value": "<url>"},
-        {"type": "contains", "value": "https://www.quienva.me"},
-        {"type": "contains", "value": "/fiestas/palma"},
-        {"type": "contains", "value": "/fiestas/ibiza"},
-        {"type": "contains", "value": "/fiestas/madrid"},
-        {"type": "contains", "value": "/fiestas/barcelona"},
-        {"type": "contains", "value": "/fiestas/marbella"},
-        {"type": "not_contains", "value": "palma-de-mallorca"},
-        {"type": "not_contains", "value": "application/json"},
-        {"type": "not_contains", "value": "405"}
-    ])
-    log_test("GET /api/sitemap-cities.xml content: contains <url>, uses www host, uses SHORT city slugs", passed, details)
-    print()
-    
-    # Summary
-    print("=" * 80)
-    print("TEST SUMMARY")
-    print("=" * 80)
-    total = len(test_results)
-    passed = sum(1 for r in test_results if r["passed"])
-    failed = total - passed
-    
-    print(f"Total tests: {total}")
-    print(f"Passed: {passed}")
-    print(f"Failed: {failed}")
-    print()
-    
-    if failed > 0:
-        print("FAILED TESTS:")
-        for result in test_results:
-            if not result["passed"]:
-                print(f"  ❌ {result['name']}")
-                if result["details"]:
-                    print(f"     {result['details']}")
-        print()
-    
-    # Create results table
-    print("RESULTS TABLE:")
-    print("-" * 80)
-    print(f"{'Endpoint':<40} {'Method':<8} {'Status':<10} {'Content-Type':<20}")
-    print("-" * 80)
-    
-    endpoints = [
-        ("/api/sitemap.xml", "GET", "200", "application/xml"),
-        ("/api/sitemap.xml", "HEAD", "200", "application/xml"),
-        ("/api/sitemap-cities.xml", "GET", "200", "application/xml"),
-        ("/api/sitemap-cities.xml", "HEAD", "200", "application/xml"),
-        ("/api/sitemap-events-ibiza.xml", "GET", "200", "application/xml"),
-        ("/api/sitemap-events-ibiza.xml", "HEAD", "200", "application/xml"),
-        ("/api/robots.txt", "GET", "200", "text/plain"),
-        ("/api/robots.txt", "HEAD", "200", "text/plain"),
-        ("/api/ciudad/madrid", "GET", "200", "text/html"),
-        ("/api/ciudad/madrid", "HEAD", "200", "text/html"),
-        ("/api/fiesta/{id}", "GET", "200", "text/html"),
-        ("/api/fiesta/{id}", "HEAD", "200", "text/html"),
+    languages = [
+        ("es", "/home", "Fiestas"),
+        ("en", "/en/home", "Parties"),
+        ("de", "/de/home", "Partys")
     ]
     
-    for endpoint, method, status, content_type in endpoints:
-        # Find matching test result
-        test_name = f"{method} {endpoint}"
-        result = next((r for r in test_results if test_name in r["name"]), None)
-        if result:
-            status_icon = "✅" if result["passed"] else "❌"
-            print(f"{endpoint:<40} {method:<8} {status:<10} {content_type:<20} {status_icon}")
+    for lang, path, expected_word in languages:
+        # Test GET request
+        url = f"{BASE_URL}{path}"
+        try:
+            response = requests.get(url, timeout=10)
+            
+            # Check status code
+            if response.status_code != 200:
+                log_test(f"GET {path} status code", False, f"Expected 200, got {response.status_code}")
+                continue
+            
+            # Check content type
+            content_type = response.headers.get('Content-Type', '')
+            if 'text/html' not in content_type:
+                log_test(f"GET {path} content-type", False, f"Expected text/html, got {content_type}")
+                continue
+            
+            html = response.text
+            
+            # Check for required elements
+            checks = {
+                "<title>": "<title> tag present",
+                '<link rel="canonical"': "canonical link present",
+                'hreflang="es"': "hreflang es present",
+                'hreflang="en"': "hreflang en present",
+                'hreflang="de"': "hreflang de present",
+                'hreflang="x-default"': "hreflang x-default present",
+                '"@type": "Organization"': "Organization JSON-LD present",
+                '"@type": "WebSite"': "WebSite JSON-LD present",
+                '"@type": "ItemList"': "ItemList JSON-LD present",
+                '"@type": "FAQPage"': "FAQPage JSON-LD present",
+                'qv_token': "localStorage qv_token redirect script present",
+                expected_word: f"Language-specific word '{expected_word}' present"
+            }
+            
+            all_passed = True
+            missing = []
+            for check_str, check_desc in checks.items():
+                if check_str not in html:
+                    all_passed = False
+                    missing.append(check_desc)
+            
+            if all_passed:
+                log_test(f"GET {path} ({lang}) content validation", True, "All required elements present")
+            else:
+                log_test(f"GET {path} ({lang}) content validation", False, f"Missing: {', '.join(missing)}")
+        
+        except Exception as e:
+            log_test(f"GET {path} ({lang})", False, f"Exception: {str(e)}")
+        
+        # Test HEAD request
+        try:
+            response = requests.head(url, timeout=10)
+            
+            if response.status_code == 200:
+                content_type = response.headers.get('Content-Type', '')
+                if 'text/html' in content_type:
+                    log_test(f"HEAD {path} ({lang})", True, f"200 with Content-Type: {content_type}")
+                else:
+                    log_test(f"HEAD {path} ({lang})", False, f"Wrong Content-Type: {content_type}")
+            else:
+                log_test(f"HEAD {path} ({lang})", False, f"Status {response.status_code}")
+        
+        except Exception as e:
+            log_test(f"HEAD {path} ({lang})", False, f"Exception: {str(e)}")
+
+def test_venue_pages():
+    """Test 2: Venue pages (GET and HEAD)"""
+    print("\n" + "="*80)
+    print("TEST 2: VENUE PAGES (GET and HEAD)")
+    print("="*80)
+    
+    # Test valid venue slug
+    venue_slug = "olivia-valere"
+    languages = [
+        ("es", f"/discoteca/{venue_slug}", "Olivia Valere"),
+        ("en", f"/en/club/{venue_slug}", "Olivia Valere"),
+        ("de", f"/de/club/{venue_slug}", "Olivia Valere")
+    ]
+    
+    for lang, path, venue_name in languages:
+        url = f"{BASE_URL}{path}"
+        
+        # Test GET request
+        try:
+            response = requests.get(url, timeout=10)
+            
+            if response.status_code != 200:
+                log_test(f"GET {path} status", False, f"Expected 200, got {response.status_code}")
+                continue
+            
+            content_type = response.headers.get('Content-Type', '')
+            if 'text/html' not in content_type:
+                log_test(f"GET {path} content-type", False, f"Expected text/html, got {content_type}")
+                continue
+            
+            html = response.text
+            
+            # Check for required elements
+            checks = {
+                '"@type": "NightClub"': "NightClub JSON-LD present",
+                '"@type": "BreadcrumbList"': "BreadcrumbList JSON-LD present",
+                '<link rel="canonical"': "canonical link present",
+                'hreflang="es"': "hreflang es present",
+                'hreflang="en"': "hreflang en present",
+                'hreflang="de"': "hreflang de present",
+                'hreflang="x-default"': "hreflang x-default present"
+            }
+            
+            all_passed = True
+            missing = []
+            for check_str, check_desc in checks.items():
+                if check_str not in html:
+                    all_passed = False
+                    missing.append(check_desc)
+            
+            # Check for event cards (should have event names)
+            has_events = 'class="event-card"' in html or 'evento' in html.lower() or 'event' in html.lower()
+            
+            if all_passed:
+                event_info = "with event cards" if has_events else "without event cards"
+                log_test(f"GET {path} ({lang}) content validation", True, f"All required elements present {event_info}")
+            else:
+                log_test(f"GET {path} ({lang}) content validation", False, f"Missing: {', '.join(missing)}")
+        
+        except Exception as e:
+            log_test(f"GET {path} ({lang})", False, f"Exception: {str(e)}")
+        
+        # Test HEAD request
+        try:
+            response = requests.head(url, timeout=10)
+            
+            if response.status_code == 200:
+                content_type = response.headers.get('Content-Type', '')
+                if 'text/html' in content_type:
+                    log_test(f"HEAD {path} ({lang})", True, f"200 with Content-Type: {content_type}")
+                else:
+                    log_test(f"HEAD {path} ({lang})", False, f"Wrong Content-Type: {content_type}")
+            else:
+                log_test(f"HEAD {path} ({lang})", False, f"Status {response.status_code}")
+        
+        except Exception as e:
+            log_test(f"HEAD {path} ({lang})", False, f"Exception: {str(e)}")
+    
+    # Test invalid venue slug (should return 404)
+    print("\n--- Testing invalid venue slug ---")
+    invalid_path = "/discoteca/does-not-exist-xyz"
+    url = f"{BASE_URL}{invalid_path}"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 404:
+            log_test(f"GET {invalid_path} (invalid slug)", True, "Returns 404 as expected")
         else:
-            print(f"{endpoint:<40} {method:<8} {status:<10} {content_type:<20} ⚠️")
+            log_test(f"GET {invalid_path} (invalid slug)", False, f"Expected 404, got {response.status_code}")
     
-    print("-" * 80)
-    print()
+    except Exception as e:
+        log_test(f"GET {invalid_path} (invalid slug)", False, f"Exception: {str(e)}")
+
+def test_sitemap_venues():
+    """Test 3: Sitemap venues XML"""
+    print("\n" + "="*80)
+    print("TEST 3: SITEMAP VENUES XML")
+    print("="*80)
     
-    if failed == 0:
-        print("🎉 ALL TESTS PASSED! Bug fix verified successfully.")
-        return 0
-    else:
-        print("⚠️  SOME TESTS FAILED. Bug fix needs attention.")
-        return 1
+    path = "/sitemap-venues.xml"
+    url = f"{BASE_URL}{path}"
+    
+    # Test GET request
+    try:
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            log_test(f"GET {path} status", False, f"Expected 200, got {response.status_code}")
+            return
+        
+        content_type = response.headers.get('Content-Type', '')
+        if 'application/xml' not in content_type:
+            log_test(f"GET {path} content-type", False, f"Expected application/xml, got {content_type}")
+            return
+        
+        log_test(f"GET {path} status and content-type", True, "200 with application/xml")
+        
+        # Parse XML
+        try:
+            root = ET.fromstring(response.content)
+            
+            # Check for urlset
+            if 'urlset' not in root.tag:
+                log_test(f"GET {path} XML structure", False, "Root element is not <urlset>")
+                return
+            
+            log_test(f"GET {path} XML structure", True, "Valid <urlset> root element")
+            
+            # Check for venue URLs
+            xml_text = response.text
+            
+            if 'discoteca/olivia-valere' in xml_text or 'olivia-valere' in xml_text:
+                log_test(f"GET {path} contains olivia-valere", True, "Venue slug found in sitemap")
+            else:
+                log_test(f"GET {path} contains olivia-valere", False, "Venue slug NOT found in sitemap")
+            
+            # Check for duplicates (count <loc> tags)
+            loc_tags = root.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')
+            loc_urls = [loc.text for loc in loc_tags]
+            
+            # Check for duplicate venue slugs
+            venue_slugs = []
+            for url_text in loc_urls:
+                if '/discoteca/' in url_text or '/club/' in url_text:
+                    slug = url_text.split('/')[-1]
+                    venue_slugs.append(slug)
+            
+            duplicates = [slug for slug in set(venue_slugs) if venue_slugs.count(slug) > 3]  # More than 3 (es/en/de)
+            
+            if not duplicates:
+                log_test(f"GET {path} no duplicate slugs", True, f"Found {len(set(venue_slugs))} unique venue slugs")
+            else:
+                log_test(f"GET {path} no duplicate slugs", False, f"Duplicate slugs found: {duplicates}")
+        
+        except ET.ParseError as e:
+            log_test(f"GET {path} XML parsing", False, f"XML parse error: {str(e)}")
+    
+    except Exception as e:
+        log_test(f"GET {path}", False, f"Exception: {str(e)}")
+    
+    # Test HEAD request
+    try:
+        response = requests.head(url, timeout=10)
+        
+        if response.status_code == 200:
+            content_type = response.headers.get('Content-Type', '')
+            if 'application/xml' in content_type:
+                log_test(f"HEAD {path}", True, f"200 with Content-Type: {content_type}")
+            else:
+                log_test(f"HEAD {path}", False, f"Wrong Content-Type: {content_type}")
+        else:
+            log_test(f"HEAD {path}", False, f"Status {response.status_code}")
+    
+    except Exception as e:
+        log_test(f"HEAD {path}", False, f"Exception: {str(e)}")
+
+def test_sitemap_index():
+    """Test 4: Sitemap index includes venues"""
+    print("\n" + "="*80)
+    print("TEST 4: SITEMAP INDEX INCLUDES VENUES")
+    print("="*80)
+    
+    path = "/sitemap.xml"
+    url = f"{BASE_URL}{path}"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            log_test(f"GET {path} status", False, f"Expected 200, got {response.status_code}")
+            return
+        
+        xml_text = response.text
+        
+        if 'sitemap-venues.xml' in xml_text:
+            log_test(f"GET {path} includes sitemap-venues.xml", True, "Child sitemap found in index")
+        else:
+            log_test(f"GET {path} includes sitemap-venues.xml", False, "Child sitemap NOT found in index")
+    
+    except Exception as e:
+        log_test(f"GET {path}", False, f"Exception: {str(e)}")
+
+def test_sitemap_events_images():
+    """Test 5: Event sitemap includes image tags"""
+    print("\n" + "="*80)
+    print("TEST 5: EVENT SITEMAP INCLUDES IMAGE TAGS")
+    print("="*80)
+    
+    path = "/sitemap-events-marbella.xml"
+    url = f"{BASE_URL}{path}"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            log_test(f"GET {path} status", False, f"Expected 200, got {response.status_code}")
+            return
+        
+        xml_text = response.text
+        
+        # Check for image namespace
+        if 'xmlns:image=' in xml_text:
+            log_test(f"GET {path} has image namespace", True, "xmlns:image declared")
+        else:
+            log_test(f"GET {path} has image namespace", False, "xmlns:image NOT declared")
+        
+        # Check for image:loc tags
+        if '<image:loc>' in xml_text or '<image:image>' in xml_text:
+            log_test(f"GET {path} contains image tags", True, "Image sitemap tags found")
+        else:
+            log_test(f"GET {path} contains image tags", False, "Image sitemap tags NOT found")
+    
+    except Exception as e:
+        log_test(f"GET {path}", False, f"Exception: {str(e)}")
+
+def test_regression_city_page():
+    """Test 6: Regression - City page still works"""
+    print("\n" + "="*80)
+    print("TEST 6: REGRESSION - CITY PAGE")
+    print("="*80)
+    
+    path = "/ciudad/marbella"
+    url = f"{BASE_URL}{path}"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            content_type = response.headers.get('Content-Type', '')
+            if 'text/html' in content_type:
+                log_test(f"GET {path}", True, "200 with text/html")
+            else:
+                log_test(f"GET {path}", False, f"Wrong Content-Type: {content_type}")
+        else:
+            log_test(f"GET {path}", False, f"Expected 200, got {response.status_code}")
+    
+    except Exception as e:
+        log_test(f"GET {path}", False, f"Exception: {str(e)}")
+
+def test_regression_event_page():
+    """Test 7: Regression - Event page with FourVenues link and breadcrumb"""
+    print("\n" + "="*80)
+    print("TEST 7: REGRESSION - EVENT PAGE WITH FOURVENUES LINK AND BREADCRUMB")
+    print("="*80)
+    
+    # Try to find an event ID first
+    path = "/fiesta/t1"
+    url = f"{BASE_URL}{path}"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            # Try to get any event from the events list
+            print("    Event t1 not found, trying to get any event...")
+            events_response = requests.get(f"{BASE_URL}/sitemap-events-marbella.xml", timeout=10)
+            if events_response.status_code == 200:
+                # Parse XML to get first event ID
+                try:
+                    root = ET.fromstring(events_response.content)
+                    loc_tags = root.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')
+                    if loc_tags:
+                        first_event_url = loc_tags[0].text
+                        # Extract event ID from URL
+                        if '/fiesta/' in first_event_url:
+                            event_id = first_event_url.split('/fiesta/')[-1].split('/')[0]
+                            path = f"/fiesta/{event_id}"
+                            url = f"{BASE_URL}{path}"
+                            response = requests.get(url, timeout=10)
+                except:
+                    pass
+        
+        if response.status_code != 200:
+            log_test(f"GET {path} status", False, f"Expected 200, got {response.status_code}")
+            return
+        
+        html = response.text
+        
+        # Check for FourVenues link
+        has_fourvenues = 'fourvenues.com' in html
+        has_comprar = 'Comprar entradas' in html or 'Buy tickets' in html or 'Tickets kaufen' in html
+        has_nofollow = 'rel=' in html and ('nofollow' in html or 'sponsored' in html)
+        
+        if has_fourvenues and has_comprar:
+            if has_nofollow:
+                log_test(f"GET {path} FourVenues link", True, "External link with 'Comprar entradas' and rel='nofollow sponsored'")
+            else:
+                log_test(f"GET {path} FourVenues link", True, "External link with 'Comprar entradas' (rel attribute may be present)")
+        else:
+            details = []
+            if not has_fourvenues:
+                details.append("fourvenues.com link not found")
+            if not has_comprar:
+                details.append("'Comprar entradas' text not found")
+            log_test(f"GET {path} FourVenues link", False, "; ".join(details))
+        
+        # Check for breadcrumb with venue link
+        has_breadcrumb = 'class="bc"' in html or '<nav' in html
+        has_venue_link = '/discoteca/' in html or 'olivia-valere' in html
+        
+        if has_breadcrumb and has_venue_link:
+            log_test(f"GET {path} breadcrumb", True, "Breadcrumb with venue link found")
+        else:
+            details = []
+            if not has_breadcrumb:
+                details.append("breadcrumb nav not found")
+            if not has_venue_link:
+                details.append("venue link not found")
+            log_test(f"GET {path} breadcrumb", False, "; ".join(details))
+    
+    except Exception as e:
+        log_test(f"GET {path}", False, f"Exception: {str(e)}")
+
+def main():
+    """Run all tests"""
+    print("="*80)
+    print("QUIENVA SSR/SEO BACKEND TESTING")
+    print("Testing new homepage, venue pages, and sitemap features")
+    print(f"Base URL: {BASE_URL}")
+    print("="*80)
+    
+    # Run all test suites
+    test_homepage_endpoints()
+    test_venue_pages()
+    test_sitemap_venues()
+    test_sitemap_index()
+    test_sitemap_events_images()
+    test_regression_city_page()
+    test_regression_event_page()
+    
+    # Print summary
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    print(f"Total tests: {tests_passed + tests_failed}")
+    print(f"✅ Passed: {tests_passed}")
+    print(f"❌ Failed: {tests_failed}")
+    print(f"Success rate: {tests_passed / (tests_passed + tests_failed) * 100:.1f}%")
+    print("="*80)
+    
+    # Exit with appropriate code
+    sys.exit(0 if tests_failed == 0 else 1)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

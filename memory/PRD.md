@@ -315,3 +315,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Home canonical fix**: `frontend/public/index.html` canonical/og:url/og:image/twitter:image ahora usan `https://www.quienva.me/...` (coherente con el resto del SSR, que canoniza a www). Requiere redeploy en Vercel.
 - **Botón directo FourVenues en páginas SEO de evento** (`backend/server.py` `_render_event`): eventos futuros con link muestran "Comprar entradas" → `_commission_url_for(ev)` (afiliado para clubs propios, link normal para el resto), con `target=_blank rel="nofollow sponsored noopener"`, + botón secundario "Ver quién va en la app" → `/event/:id`. Si `sale_state=agotado` o sin link, vuelve al CTA de app. Añadidas labels `ev_buy`/`ev_seeapp` (es/en/de) y `commission_url` a la proyección `_get_event_seo`. Requiere redeploy en Render.
 - Nota entorno: repo importado sin `.env` locales (viven en Render/Vercel). Creado `backend/.env` local (gitignored) solo para pruebas.
+
+## SEO max pass (continuation #2) — tested 24/24 OK
+- **Homepage SSR hub** `/ /en /de` (Vercel→/api/home): H1, city grid + live counts + tonight/weekend links, benefits, FAQ, Organization+WebSite+ItemList+FAQPage JSON-LD, hreflang, canonical. Inline script redirects logged-in users (qv_token) to /feed; cached at CDN.
+- **Venue (club) pages** `/discoteca/:slug`, `/en/club/:slug`, `/de/club/:slug`: NightClub+ItemList+Breadcrumb+FAQ JSON-LD, upcoming events, city link. Captures brand searches ("Olivia Valere fiestas").
+- **Image sitemap** (<image:loc> on event URLs) → Google Images traffic. **sitemap-venues.xml** added + listed in index.
+- **Organization sameAs** Instagram/TikTok. **Event breadcrumb** now links Home>City>Venue>Event.
+- Requires **Save to GitHub** → Vercel + Render redeploy. backend/.env & frontend/.env are local-only (gitignored), production env untouched.
