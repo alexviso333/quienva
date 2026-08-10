@@ -1,338 +1,489 @@
 #!/usr/bin/env python3
 """
-Guest / Public Browsing Mode Test
-Tests the new guest mode where anonymous users can browse events and venues without authentication.
+Backend Test for 3 New Features (¿Quién va? app)
+Tests TASK 4, TASK 2, and TASK 3 as specified in the review request.
 """
 
 import requests
 import os
+import time
+from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://multilang-feed-core.preview.emergentagent.com")
+BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://5e791fc6-c24a-43ab-8471-29846eab5135.preview.emergentagent.com")
 BASE_URL = f"{BACKEND_URL}/api"
 
-def test_guest_public_browsing():
-    """
-    Test guest/public browsing mode on the backend.
-    
-    PART A - GUEST (no Authorization header, no cookies):
-    1. GET /api/events → 200, verify social fields empty (friends_going=[], friends_interested=[], my_status=null, my_has_ticket=false, is_following=null)
-    2. GET /api/events/genres → 200
-    3. GET /api/events/top-weekend → 200
-    4. GET /api/events/carousels → 200
-    5. GET /api/events/{id} → 200 with social fields empty, also test 404 for non-existent
-    6. GET /api/venues → 200, GET /api/venues/meta/zones → 200, GET /api/venues/{id} → 200
-    
-    PART B - GUEST must be blocked (401):
-    - GET /api/auth/me
-    - GET /api/friends
-    - GET /api/notifications/unread-count
-    - POST /api/events/{id}/interest
-    - POST /api/events/{id}/ticket
-    - POST /api/events/{id}/follow
-    
-    PART C - AUTHENTICATED regression (login as admin):
-    - All endpoints should still work with Bearer token
-    """
-    
-    print("=" * 80)
-    print("GUEST / PUBLIC BROWSING MODE TEST")
-    print("=" * 80)
-    
-    # ========================================================================
-    # PART A - GUEST ACCESS (NO AUTHORIZATION)
-    # ========================================================================
-    
-    print("\n" + "=" * 80)
-    print("PART A - GUEST ACCESS (NO AUTHORIZATION HEADER)")
-    print("=" * 80)
-    
-    # Test 1: GET /api/events as guest
-    print("\n[TEST A1] GET /api/events as guest...")
-    events_resp = requests.get(f"{BASE_URL}/events")
-    assert events_resp.status_code == 200, f"Expected 200, got {events_resp.status_code}: {events_resp.text}"
-    events_data = events_resp.json()
-    assert isinstance(events_data, list), f"Expected list, got {type(events_data)}"
-    assert len(events_data) > 0, "Expected non-empty events list (should have ~250 seeded events)"
-    
-    print(f"✅ GET /api/events → 200 with {len(events_data)} events")
-    
-    # Verify social fields are empty for guest
-    sample_event = events_data[0]
-    print(f"\n   Verifying social fields for sample event (id={sample_event.get('id')}):")
-    
-    assert sample_event.get("friends_going") == [], f"Expected friends_going=[], got {sample_event.get('friends_going')}"
-    print(f"   ✅ friends_going == []")
-    
-    assert sample_event.get("friends_interested") == [], f"Expected friends_interested=[], got {sample_event.get('friends_interested')}"
-    print(f"   ✅ friends_interested == []")
-    
-    assert sample_event.get("my_status") is None, f"Expected my_status=null, got {sample_event.get('my_status')}"
-    print(f"   ✅ my_status == null")
-    
-    assert sample_event.get("my_has_ticket") == False, f"Expected my_has_ticket=false, got {sample_event.get('my_has_ticket')}"
-    print(f"   ✅ my_has_ticket == false")
-    
-    assert sample_event.get("is_following") is None, f"Expected is_following=null, got {sample_event.get('is_following')}"
-    print(f"   ✅ is_following == null")
-    
-    # Store a valid event ID for later tests
-    valid_event_id = sample_event.get("id")
-    
-    # Test 2: GET /api/events/genres as guest
-    print("\n[TEST A2] GET /api/events/genres as guest...")
-    genres_resp = requests.get(f"{BASE_URL}/events/genres")
-    assert genres_resp.status_code == 200, f"Expected 200, got {genres_resp.status_code}: {genres_resp.text}"
-    genres_data = genres_resp.json()
-    assert isinstance(genres_data, list), f"Expected list, got {type(genres_data)}"
-    print(f"✅ GET /api/events/genres → 200 with {len(genres_data)} genres")
-    
-    # Test 3: GET /api/events/top-weekend as guest
-    print("\n[TEST A3] GET /api/events/top-weekend as guest...")
-    top_weekend_resp = requests.get(f"{BASE_URL}/events/top-weekend")
-    assert top_weekend_resp.status_code == 200, f"Expected 200, got {top_weekend_resp.status_code}: {top_weekend_resp.text}"
-    top_weekend_data = top_weekend_resp.json()
-    # Can be an object or null
-    if top_weekend_data is not None:
-        assert isinstance(top_weekend_data, dict), f"Expected dict or null, got {type(top_weekend_data)}"
-        # If object, friends_going should be []
-        assert top_weekend_data.get("friends_going") == [], f"Expected friends_going=[] for guest, got {top_weekend_data.get('friends_going')}"
-        print(f"✅ GET /api/events/top-weekend → 200 with event object (friends_going=[])")
-    else:
-        print(f"✅ GET /api/events/top-weekend → 200 with null (no top weekend event)")
-    
-    # Test 4: GET /api/events/carousels as guest
-    print("\n[TEST A4] GET /api/events/carousels as guest...")
-    carousels_resp = requests.get(f"{BASE_URL}/events/carousels")
-    assert carousels_resp.status_code == 200, f"Expected 200, got {carousels_resp.status_code}: {carousels_resp.text}"
-    carousels_data = carousels_resp.json()
-    assert isinstance(carousels_data, dict), f"Expected dict, got {type(carousels_data)}"
-    
-    # Verify required keys
-    assert "top_weekend" in carousels_data, "Missing 'top_weekend' key"
-    assert "friends_going" in carousels_data, "Missing 'friends_going' key"
-    assert "discover_new" in carousels_data, "Missing 'discover_new' key"
-    
-    # friends_going should be empty for guest
-    assert carousels_data.get("friends_going") == [], f"Expected friends_going=[] for guest, got {carousels_data.get('friends_going')}"
-    print(f"✅ GET /api/events/carousels → 200 with keys: top_weekend, friends_going (=[]), discover_new")
-    
-    # Test 5a: GET /api/events/{id} with valid ID as guest
-    print(f"\n[TEST A5a] GET /api/events/{valid_event_id} as guest...")
-    event_detail_resp = requests.get(f"{BASE_URL}/events/{valid_event_id}")
-    assert event_detail_resp.status_code == 200, f"Expected 200, got {event_detail_resp.status_code}: {event_detail_resp.text}"
-    event_detail_data = event_detail_resp.json()
-    
-    # Verify social fields are empty
-    assert event_detail_data.get("friends_going") == [], f"Expected friends_going=[], got {event_detail_data.get('friends_going')}"
-    assert event_detail_data.get("my_status") is None, f"Expected my_status=null, got {event_detail_data.get('my_status')}"
-    print(f"✅ GET /api/events/{valid_event_id} → 200 with friends_going=[], my_status=null")
-    
-    # Test 5b: GET /api/events/{id} with non-existent ID as guest
-    print(f"\n[TEST A5b] GET /api/events/nonexistent-id as guest...")
-    event_404_resp = requests.get(f"{BASE_URL}/events/nonexistent-id-12345")
-    assert event_404_resp.status_code == 404, f"Expected 404, got {event_404_resp.status_code}: {event_404_resp.text}"
-    print(f"✅ GET /api/events/nonexistent-id → 404")
-    
-    # Test 6a: GET /api/venues as guest
-    print("\n[TEST A6a] GET /api/venues as guest...")
-    venues_resp = requests.get(f"{BASE_URL}/venues")
-    assert venues_resp.status_code == 200, f"Expected 200, got {venues_resp.status_code}: {venues_resp.text}"
-    venues_data = venues_resp.json()
-    assert isinstance(venues_data, list), f"Expected list, got {type(venues_data)}"
-    print(f"✅ GET /api/venues → 200 with {len(venues_data)} venues")
-    
-    # Store a valid venue ID for later test
-    valid_venue_id = None
-    if len(venues_data) > 0:
-        valid_venue_id = venues_data[0].get("id")
-    
-    # Test 6b: GET /api/venues/meta/zones as guest
-    print("\n[TEST A6b] GET /api/venues/meta/zones as guest...")
-    zones_resp = requests.get(f"{BASE_URL}/venues/meta/zones")
-    assert zones_resp.status_code == 200, f"Expected 200, got {zones_resp.status_code}: {zones_resp.text}"
-    zones_data = zones_resp.json()
-    assert isinstance(zones_data, dict), f"Expected dict, got {type(zones_data)}"
-    assert "zones" in zones_data, "Missing 'zones' key"
-    assert isinstance(zones_data["zones"], list), f"Expected zones to be list, got {type(zones_data['zones'])}"
-    print(f"✅ GET /api/venues/meta/zones → 200 with {{zones:[...]}} ({len(zones_data['zones'])} zones)")
-    
-    # Test 6c: GET /api/venues/{id} with valid ID as guest
-    if valid_venue_id:
-        print(f"\n[TEST A6c] GET /api/venues/{valid_venue_id} as guest...")
-        venue_detail_resp = requests.get(f"{BASE_URL}/venues/{valid_venue_id}")
-        assert venue_detail_resp.status_code == 200, f"Expected 200, got {venue_detail_resp.status_code}: {venue_detail_resp.text}"
-        print(f"✅ GET /api/venues/{valid_venue_id} → 200")
-    else:
-        print(f"\n[TEST A6c] SKIPPED - no venues available")
-    
-    # ========================================================================
-    # PART B - GUEST MUST BE BLOCKED (401)
-    # ========================================================================
-    
-    print("\n" + "=" * 80)
-    print("PART B - GUEST MUST BE BLOCKED (EXPECT 401)")
-    print("=" * 80)
-    
-    # Test B1: GET /api/auth/me as guest
-    print("\n[TEST B1] GET /api/auth/me as guest...")
-    me_resp = requests.get(f"{BASE_URL}/auth/me")
-    assert me_resp.status_code == 401, f"Expected 401, got {me_resp.status_code}: {me_resp.text}"
-    print(f"✅ GET /api/auth/me → 401 (blocked)")
-    
-    # Test B2: GET /api/friends as guest
-    print("\n[TEST B2] GET /api/friends as guest...")
-    friends_resp = requests.get(f"{BASE_URL}/friends")
-    assert friends_resp.status_code == 401, f"Expected 401, got {friends_resp.status_code}: {friends_resp.text}"
-    print(f"✅ GET /api/friends → 401 (blocked)")
-    
-    # Test B3: GET /api/notifications/unread-count as guest
-    print("\n[TEST B3] GET /api/notifications/unread-count as guest...")
-    notif_resp = requests.get(f"{BASE_URL}/notifications/unread-count")
-    assert notif_resp.status_code == 401, f"Expected 401, got {notif_resp.status_code}: {notif_resp.text}"
-    print(f"✅ GET /api/notifications/unread-count → 401 (blocked)")
-    
-    # Test B4: POST /api/events/{id}/interest as guest
-    print(f"\n[TEST B4] POST /api/events/{valid_event_id}/interest as guest...")
-    interest_resp = requests.post(f"{BASE_URL}/events/{valid_event_id}/interest", json={"status": "voy"})
-    assert interest_resp.status_code == 401, f"Expected 401, got {interest_resp.status_code}: {interest_resp.text}"
-    print(f"✅ POST /api/events/{valid_event_id}/interest → 401 (blocked)")
-    
-    # Test B5: POST /api/events/{id}/ticket as guest
-    print(f"\n[TEST B5] POST /api/events/{valid_event_id}/ticket as guest...")
-    ticket_resp = requests.post(f"{BASE_URL}/events/{valid_event_id}/ticket", json={"have": True})
-    assert ticket_resp.status_code == 401, f"Expected 401, got {ticket_resp.status_code}: {ticket_resp.text}"
-    print(f"✅ POST /api/events/{valid_event_id}/ticket → 401 (blocked)")
-    
-    # Test B6: POST /api/events/{id}/follow as guest
-    print(f"\n[TEST B6] POST /api/events/{valid_event_id}/follow as guest...")
-    follow_resp = requests.post(f"{BASE_URL}/events/{valid_event_id}/follow")
-    assert follow_resp.status_code == 401, f"Expected 401, got {follow_resp.status_code}: {follow_resp.text}"
-    print(f"✅ POST /api/events/{valid_event_id}/follow → 401 (blocked)")
-    
-    # ========================================================================
-    # PART C - AUTHENTICATED REGRESSION
-    # ========================================================================
-    
-    print("\n" + "=" * 80)
-    print("PART C - AUTHENTICATED REGRESSION (LOGIN AS ADMIN)")
-    print("=" * 80)
-    
-    # Login as admin
-    print("\n[SETUP] Logging in as admin...")
-    admin_resp = requests.post(f"{BASE_URL}/auth/login", json={
-        "email": "admin@quienva.app",
-        "password": "admin123"
-    })
-    assert admin_resp.status_code == 200, f"Admin login failed: {admin_resp.status_code} {admin_resp.text}"
-    admin_token = admin_resp.json()["token"]
-    admin_headers = {"Authorization": f"Bearer {admin_token}"}
-    print(f"✅ Admin login successful")
-    
-    # Test C1: GET /api/events as authenticated user
-    print("\n[TEST C1] GET /api/events as authenticated admin...")
-    auth_events_resp = requests.get(f"{BASE_URL}/events", headers=admin_headers)
-    assert auth_events_resp.status_code == 200, f"Expected 200, got {auth_events_resp.status_code}: {auth_events_resp.text}"
-    print(f"✅ GET /api/events → 200 (authenticated)")
-    
-    # Test C2: GET /api/events/carousels as authenticated user
-    print("\n[TEST C2] GET /api/events/carousels as authenticated admin...")
-    auth_carousels_resp = requests.get(f"{BASE_URL}/events/carousels", headers=admin_headers)
-    assert auth_carousels_resp.status_code == 200, f"Expected 200, got {auth_carousels_resp.status_code}: {auth_carousels_resp.text}"
-    print(f"✅ GET /api/events/carousels → 200 (authenticated)")
-    
-    # Test C3: GET /api/events/{id} as authenticated user
-    print(f"\n[TEST C3] GET /api/events/{valid_event_id} as authenticated admin...")
-    auth_event_resp = requests.get(f"{BASE_URL}/events/{valid_event_id}", headers=admin_headers)
-    assert auth_event_resp.status_code == 200, f"Expected 200, got {auth_event_resp.status_code}: {auth_event_resp.text}"
-    print(f"✅ GET /api/events/{valid_event_id} → 200 (authenticated)")
-    
-    # Test C4: GET /api/venues as authenticated user
-    print("\n[TEST C4] GET /api/venues as authenticated admin...")
-    auth_venues_resp = requests.get(f"{BASE_URL}/venues", headers=admin_headers)
-    assert auth_venues_resp.status_code == 200, f"Expected 200, got {auth_venues_resp.status_code}: {auth_venues_resp.text}"
-    print(f"✅ GET /api/venues → 200 (authenticated)")
-    
-    # Test C5: GET /api/auth/me as authenticated user
-    print("\n[TEST C5] GET /api/auth/me as authenticated admin...")
-    auth_me_resp = requests.get(f"{BASE_URL}/auth/me", headers=admin_headers)
-    assert auth_me_resp.status_code == 200, f"Expected 200, got {auth_me_resp.status_code}: {auth_me_resp.text}"
-    print(f"✅ GET /api/auth/me → 200 (authenticated)")
-    
-    # Test C6: GET /api/friends as authenticated user
-    print("\n[TEST C6] GET /api/friends as authenticated admin...")
-    auth_friends_resp = requests.get(f"{BASE_URL}/friends", headers=admin_headers)
-    assert auth_friends_resp.status_code == 200, f"Expected 200, got {auth_friends_resp.status_code}: {auth_friends_resp.text}"
-    print(f"✅ GET /api/friends → 200 (authenticated)")
-    
-    # Test C7: POST /api/events/{id}/interest as authenticated user
-    print(f"\n[TEST C7] POST /api/events/{valid_event_id}/interest {{status:'voy'}} as authenticated admin...")
-    auth_interest_resp = requests.post(f"{BASE_URL}/events/{valid_event_id}/interest", 
-                                       headers=admin_headers, 
-                                       json={"status": "voy"})
-    assert auth_interest_resp.status_code == 200, f"Expected 200, got {auth_interest_resp.status_code}: {auth_interest_resp.text}"
-    print(f"✅ POST /api/events/{valid_event_id}/interest {{status:'voy'}} → 200")
-    
-    # Test C8: Verify my_status is now "voy"
-    print(f"\n[TEST C8] GET /api/events/{valid_event_id} to verify my_status='voy'...")
-    verify_resp = requests.get(f"{BASE_URL}/events/{valid_event_id}", headers=admin_headers)
-    assert verify_resp.status_code == 200, f"Expected 200, got {verify_resp.status_code}: {verify_resp.text}"
-    verify_data = verify_resp.json()
-    assert verify_data.get("my_status") == "voy", f"Expected my_status='voy', got {verify_data.get('my_status')}"
-    print(f"✅ GET /api/events/{valid_event_id} → my_status='voy' (verified)")
-    
-    # Test C9: Clean up - set status back to "none"
-    print(f"\n[TEST C9] POST /api/events/{valid_event_id}/interest {{status:'none'}} to clean up...")
-    cleanup_resp = requests.post(f"{BASE_URL}/events/{valid_event_id}/interest", 
-                                 headers=admin_headers, 
-                                 json={"status": "none"})
-    assert cleanup_resp.status_code == 200, f"Expected 200, got {cleanup_resp.status_code}: {cleanup_resp.text}"
-    print(f"✅ POST /api/events/{valid_event_id}/interest {{status:'none'}} → 200 (cleaned up)")
-    
-    # ========================================================================
-    # SUMMARY
-    # ========================================================================
-    
-    print("\n" + "=" * 80)
-    print("✅ ALL GUEST / PUBLIC BROWSING MODE TESTS PASSED")
-    print("=" * 80)
-    
-    print("\nTest Summary:")
-    print(f"  PART A - GUEST ACCESS: 11 tests passed")
-    print(f"    ✅ GET /api/events → 200 with empty social fields")
-    print(f"    ✅ GET /api/events/genres → 200")
-    print(f"    ✅ GET /api/events/top-weekend → 200")
-    print(f"    ✅ GET /api/events/carousels → 200 with friends_going=[]")
-    print(f"    ✅ GET /api/events/{{id}} → 200 with empty social fields")
-    print(f"    ✅ GET /api/events/nonexistent-id → 404")
-    print(f"    ✅ GET /api/venues → 200")
-    print(f"    ✅ GET /api/venues/meta/zones → 200")
-    print(f"    ✅ GET /api/venues/{{id}} → 200")
-    print(f"  PART B - GUEST BLOCKED: 6 tests passed")
-    print(f"    ✅ All protected endpoints return 401 for guest")
-    print(f"  PART C - AUTHENTICATED REGRESSION: 9 tests passed")
-    print(f"    ✅ All endpoints work correctly with Bearer token")
-    print(f"    ✅ Interest toggle works (voy → verified → none)")
-    print(f"\n  TOTAL: 26 tests passed, 0 failed")
-    
-    return {
-        "total_tests": 26,
-        "passed": 26,
-        "failed": 0,
-        "valid_event_id": valid_event_id,
-        "valid_venue_id": valid_venue_id
-    }
+# Admin credentials
+ADMIN_EMAIL = "admin@quienva.app"
+ADMIN_PASSWORD = "admin123"
 
-if __name__ == "__main__":
+def login_admin():
+    """Login as admin and return token and headers."""
+    resp = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": ADMIN_EMAIL,
+        "password": ADMIN_PASSWORD
+    })
+    assert resp.status_code == 200, f"Admin login failed: {resp.status_code} {resp.text}"
+    token = resp.json()["token"]
+    return token, {"Authorization": f"Bearer {token}"}
+
+def register_user(email, password, username, city="Ibiza"):
+    """Register a new user and return token and headers."""
+    resp = requests.post(f"{BASE_URL}/auth/register", json={
+        "email": email,
+        "password": password,
+        "username": username,
+        "name": f"Test User {username}",
+        "city": city,
+        "birthdate": "1995-01-01"
+    })
+    assert resp.status_code == 200, f"User registration failed: {resp.status_code} {resp.text}"
+    token = resp.json()["token"]
+    return token, {"Authorization": f"Bearer {token}"}
+
+def test_task_4_events_min():
+    """
+    TASK 4 — GET /api/admin/events-min (notification composer fix)
+    
+    Tests:
+    1. As admin, GET /admin/events-min → 200 with {events:[...]}
+       - Every event has date >= today (Europe/Madrid)
+       - List is sorted ascending by date
+       - NO event has city == "Pendiente"
+       - Each item has id, name, venue, date, city
+    2. GET /admin/events-min?city=Madrid → only Madrid events
+       GET /admin/events-min?city=Ibiza → only Ibiza events
+       GET /admin/events-min?city=Palma de Mallorca → only Palma de Mallorca events
+       Verify results are non-empty and correctly filtered
+    3. GET /admin/events-min as non-admin → 403
+       Unauthenticated → 401
+    """
+    print("\n" + "=" * 80)
+    print("TASK 4 — GET /api/admin/events-min (notification composer fix)")
+    print("=" * 80)
+    
+    # Get admin token
+    admin_token, admin_headers = login_admin()
+    print("✅ Admin login successful")
+    
+    # Test 1: GET /admin/events-min as admin
+    print("\n[TEST 4.1] GET /admin/events-min as admin...")
+    resp = requests.get(f"{BASE_URL}/admin/events-min", headers=admin_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert "events" in data, f"Missing 'events' key in response"
+    events = data["events"]
+    assert isinstance(events, list), f"Expected events to be a list, got {type(events)}"
+    assert len(events) > 0, f"Expected non-empty events list, got {len(events)}"
+    print(f"✅ GET /admin/events-min → 200 with {len(events)} events")
+    
+    # Verify every event has date >= today
+    today = datetime.now().date().isoformat()
+    for event in events:
+        assert "id" in event, f"Event missing 'id' field"
+        assert "name" in event, f"Event missing 'name' field"
+        assert "venue" in event, f"Event missing 'venue' field"
+        assert "date" in event, f"Event missing 'date' field"
+        assert "city" in event, f"Event missing 'city' field"
+        assert event["date"] >= today, f"Event {event['id']} has date {event['date']} < today {today}"
+        assert event["city"] != "Pendiente", f"Event {event['id']} has city='Pendiente' (should be excluded)"
+    print(f"✅ All events have date >= today ({today})")
+    print(f"✅ All events have required fields: id, name, venue, date, city")
+    print(f"✅ NO event has city == 'Pendiente'")
+    
+    # Verify list is sorted ascending by date
+    dates = [event["date"] for event in events]
+    assert dates == sorted(dates), f"Events are not sorted ascending by date"
+    print(f"✅ Events are sorted ascending by date (soonest first)")
+    
+    # Test 2a: GET /admin/events-min?city=Madrid
+    print("\n[TEST 4.2a] GET /admin/events-min?city=Madrid...")
+    resp = requests.get(f"{BASE_URL}/admin/events-min?city=Madrid", headers=admin_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    madrid_events = data["events"]
+    assert len(madrid_events) > 0, f"Expected non-empty Madrid events list, got {len(madrid_events)}"
+    for event in madrid_events:
+        # Madrid region includes "Madrid" city
+        assert event["city"] == "Madrid", f"Event {event['id']} has city='{event['city']}' (expected Madrid)"
+    print(f"✅ GET /admin/events-min?city=Madrid → 200 with {len(madrid_events)} Madrid events (no leakage)")
+    
+    # Test 2b: GET /admin/events-min?city=Ibiza
+    print("\n[TEST 4.2b] GET /admin/events-min?city=Ibiza...")
+    resp = requests.get(f"{BASE_URL}/admin/events-min?city=Ibiza", headers=admin_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    ibiza_events = data["events"]
+    assert len(ibiza_events) > 0, f"Expected non-empty Ibiza events list, got {len(ibiza_events)}"
+    for event in ibiza_events:
+        assert event["city"] == "Ibiza", f"Event {event['id']} has city='{event['city']}' (expected Ibiza)"
+    print(f"✅ GET /admin/events-min?city=Ibiza → 200 with {len(ibiza_events)} Ibiza events (no leakage)")
+    
+    # Test 2c: GET /admin/events-min?city=Palma de Mallorca
+    print("\n[TEST 4.2c] GET /admin/events-min?city=Palma de Mallorca...")
+    resp = requests.get(f"{BASE_URL}/admin/events-min?city=Palma de Mallorca", headers=admin_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    palma_events = data["events"]
+    assert len(palma_events) > 0, f"Expected non-empty Palma events list, got {len(palma_events)}"
+    for event in palma_events:
+        # Palma de Mallorca region may include other Mallorca cities
+        # But for this test, we expect "Palma de Mallorca" specifically
+        assert event["city"] == "Palma de Mallorca", f"Event {event['id']} has city='{event['city']}' (expected Palma de Mallorca)"
+    print(f"✅ GET /admin/events-min?city=Palma de Mallorca → 200 with {len(palma_events)} Palma events (no leakage)")
+    
+    # Test 3a: GET /admin/events-min as non-admin
+    print("\n[TEST 4.3a] GET /admin/events-min as non-admin user...")
+    user_token, user_headers = register_user(
+        f"testuser_{int(time.time())}@test.com",
+        "TestPass123!",
+        f"testuser{int(time.time())}",
+        "Ibiza"
+    )
+    resp = requests.get(f"{BASE_URL}/admin/events-min", headers=user_headers)
+    assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
+    print(f"✅ GET /admin/events-min as non-admin → 403")
+    
+    # Test 3b: GET /admin/events-min unauthenticated
+    print("\n[TEST 4.3b] GET /admin/events-min unauthenticated...")
+    resp = requests.get(f"{BASE_URL}/admin/events-min")
+    assert resp.status_code == 401, f"Expected 401, got {resp.status_code}: {resp.text}"
+    print(f"✅ GET /admin/events-min unauthenticated → 401")
+    
+    print("\n✅ TASK 4 — ALL TESTS PASSED (8 tests)")
+    return True
+
+def test_task_2_affiliate_set_city():
+    """
+    TASK 2 — POST /api/admin/affiliate/set-city (manual city reassignment + PENDING_CITY)
+    
+    Tests:
+    1. GET /api/cities → 200 and response contains pending_city == "Pendiente"
+    2. As admin, create an event with a DISTINCTIVE venue via POST /api/admin/events
+       Use unique venue name like "ZZTestClub QA" and city "Ibiza"
+       Capture the created event id
+    3. POST /admin/affiliate/set-city {venue:"ZZTestClub QA", city:"Pendiente"} → 200
+       with {ok:true} and events_updated >= 1
+       Then GET the event and confirm its city == "Pendiente"
+       Confirm it is NOT returned by GET /admin/events-min (pending excluded)
+       Confirm it is NOT in an Ibiza user's public feed GET /events
+    4. POST /admin/affiliate/set-city {venue:"ZZTestClub QA", city:"Madrid"} → 200
+       Confirm the event city is now "Madrid"
+       Confirm it appears in GET /admin/events-min?city=Madrid
+    5. Validation:
+       - POST with invalid city "Atlantis" → 400
+       - POST with neither slug nor venue → 400
+       - POST as non-admin → 403
+    """
+    print("\n" + "=" * 80)
+    print("TASK 2 — POST /api/admin/affiliate/set-city (manual city reassignment)")
+    print("=" * 80)
+    
+    # Get admin token
+    admin_token, admin_headers = login_admin()
+    print("✅ Admin login successful")
+    
+    # Test 1: GET /api/cities
+    print("\n[TEST 2.1] GET /api/cities → verify pending_city present...")
+    resp = requests.get(f"{BASE_URL}/cities")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert "pending_city" in data, f"Missing 'pending_city' key in response"
+    assert data["pending_city"] == "Pendiente", f"Expected pending_city='Pendiente', got '{data['pending_city']}'"
+    print(f"✅ GET /api/cities → 200 with pending_city='Pendiente'")
+    
+    # Test 2: Create an event with distinctive venue
+    print("\n[TEST 2.2] POST /api/admin/events with distinctive venue 'ZZTestClub QA'...")
+    unique_venue = f"ZZTestClub QA {int(time.time())}"
+    event_data = {
+        "name": f"Test Event {int(time.time())}",
+        "venue": unique_venue,
+        "address": "Test Address 123",
+        "date": "2026-09-15",
+        "time": "23:00",
+        "city": "Ibiza",
+        "genre": "Techno",
+        "image_url": "https://example.com/test.jpg",
+        "price_tiers": [{"name": "General", "price": 25.0}],
+        "sale_state": "a_la_venta"
+    }
+    resp = requests.post(f"{BASE_URL}/admin/events", headers=admin_headers, json=event_data)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    created_event = resp.json()
+    event_id = created_event["id"]
+    assert created_event["city"] == "Ibiza", f"Expected city='Ibiza', got '{created_event['city']}'"
+    print(f"✅ POST /api/admin/events → 200, created event {event_id} with venue '{unique_venue}' in Ibiza")
+    
+    # Test 3a: POST /admin/affiliate/set-city to move to "Pendiente"
+    print(f"\n[TEST 2.3a] POST /admin/affiliate/set-city {{venue:'{unique_venue}', city:'Pendiente'}}...")
+    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=admin_headers, json={
+        "venue": unique_venue,
+        "city": "Pendiente"
+    })
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["ok"] == True, f"Expected ok=true, got {data}"
+    assert data["events_updated"] >= 1, f"Expected events_updated >= 1, got {data['events_updated']}"
+    print(f"✅ POST /admin/affiliate/set-city → 200 with ok=true, events_updated={data['events_updated']}")
+    
+    # Test 3b: Verify event city is now "Pendiente"
+    print(f"\n[TEST 2.3b] GET /events/{event_id} to verify city='Pendiente'...")
+    resp = requests.get(f"{BASE_URL}/events/{event_id}")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    event = resp.json()
+    assert event["city"] == "Pendiente", f"Expected city='Pendiente', got '{event['city']}'"
+    print(f"✅ Event {event_id} city is now 'Pendiente'")
+    
+    # Test 3c: Verify event is NOT in /admin/events-min (pending excluded)
+    print(f"\n[TEST 2.3c] GET /admin/events-min → verify event NOT in list (pending excluded)...")
+    resp = requests.get(f"{BASE_URL}/admin/events-min", headers=admin_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    events = resp.json()["events"]
+    event_ids = [e["id"] for e in events]
+    assert event_id not in event_ids, f"Event {event_id} should NOT be in /admin/events-min (pending excluded)"
+    print(f"✅ Event {event_id} is NOT in /admin/events-min (correctly excluded)")
+    
+    # Test 3d: Verify event is NOT in Ibiza user's public feed
+    print(f"\n[TEST 2.3d] GET /events as Ibiza user → verify event NOT in feed...")
+    ibiza_user_token, ibiza_user_headers = register_user(
+        f"ibizauser_{int(time.time())}@test.com",
+        "TestPass123!",
+        f"ibizauser{int(time.time())}",
+        "Ibiza"
+    )
+    resp = requests.get(f"{BASE_URL}/events", headers=ibiza_user_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    events = resp.json()
+    event_ids = [e["id"] for e in events]
+    assert event_id not in event_ids, f"Event {event_id} should NOT be in Ibiza user's feed (pending excluded)"
+    print(f"✅ Event {event_id} is NOT in Ibiza user's feed (correctly hidden)")
+    
+    # Test 4a: POST /admin/affiliate/set-city to move to "Madrid"
+    print(f"\n[TEST 2.4a] POST /admin/affiliate/set-city {{venue:'{unique_venue}', city:'Madrid'}}...")
+    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=admin_headers, json={
+        "venue": unique_venue,
+        "city": "Madrid"
+    })
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["ok"] == True, f"Expected ok=true, got {data}"
+    print(f"✅ POST /admin/affiliate/set-city → 200 with ok=true")
+    
+    # Test 4b: Verify event city is now "Madrid"
+    print(f"\n[TEST 2.4b] GET /events/{event_id} to verify city='Madrid'...")
+    resp = requests.get(f"{BASE_URL}/events/{event_id}")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    event = resp.json()
+    assert event["city"] == "Madrid", f"Expected city='Madrid', got '{event['city']}'"
+    print(f"✅ Event {event_id} city is now 'Madrid'")
+    
+    # Test 4c: Verify event appears in /admin/events-min?city=Madrid
+    print(f"\n[TEST 2.4c] GET /admin/events-min?city=Madrid → verify event in list...")
+    resp = requests.get(f"{BASE_URL}/admin/events-min?city=Madrid", headers=admin_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    events = resp.json()["events"]
+    event_ids = [e["id"] for e in events]
+    assert event_id in event_ids, f"Event {event_id} should be in /admin/events-min?city=Madrid"
+    print(f"✅ Event {event_id} is now in /admin/events-min?city=Madrid")
+    
+    # Test 5a: Validation - invalid city "Atlantis"
+    print(f"\n[TEST 2.5a] POST /admin/affiliate/set-city with invalid city 'Atlantis' → 400...")
+    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=admin_headers, json={
+        "venue": unique_venue,
+        "city": "Atlantis"
+    })
+    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
+    print(f"✅ POST /admin/affiliate/set-city with invalid city → 400")
+    
+    # Test 5b: Validation - missing both slug and venue
+    print(f"\n[TEST 2.5b] POST /admin/affiliate/set-city with neither slug nor venue → 400...")
+    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=admin_headers, json={
+        "city": "Madrid"
+    })
+    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
+    print(f"✅ POST /admin/affiliate/set-city with neither slug nor venue → 400")
+    
+    # Test 5c: Validation - non-admin user
+    print(f"\n[TEST 2.5c] POST /admin/affiliate/set-city as non-admin → 403...")
+    user_token, user_headers = register_user(
+        f"testuser2_{int(time.time())}@test.com",
+        "TestPass123!",
+        f"testuser2{int(time.time())}",
+        "Madrid"
+    )
+    resp = requests.post(f"{BASE_URL}/admin/affiliate/set-city", headers=user_headers, json={
+        "venue": unique_venue,
+        "city": "Madrid"
+    })
+    assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
+    print(f"✅ POST /admin/affiliate/set-city as non-admin → 403")
+    
+    print("\n✅ TASK 2 — ALL TESTS PASSED (13 tests)")
+    return True
+
+def test_task_3_username_uniqueness():
+    """
+    TASK 3 — PUT /api/auth/profile username uniqueness
+    
+    Tests:
+    1. Register two users A and B
+       Note their usernames from /auth/me
+    2. As A, PUT /auth/profile {username:"qauniqueusername1"} → 200
+       GET /auth/me shows username "qauniqueusername1"
+    3. As A, PUT /auth/profile {username:"<B's exact username>"} → 400
+       with detail about username already existing
+    4. As A, PUT /auth/profile {username:"qauniqueusername1"} (own current) → 200 (no clash)
+    """
+    print("\n" + "=" * 80)
+    print("TASK 3 — PUT /api/auth/profile username uniqueness")
+    print("=" * 80)
+    
+    # Test 1: Register two users A and B
+    print("\n[TEST 3.1] Register user A and user B...")
+    ts = int(time.time())
+    user_a_token, user_a_headers = register_user(
+        f"usera_{ts}@test.com",
+        "TestPass123!",
+        f"usera{ts}",
+        "Madrid"
+    )
+    user_b_token, user_b_headers = register_user(
+        f"userb_{ts}@test.com",
+        "TestPass123!",
+        f"userb{ts}",
+        "Barcelona"
+    )
+    print(f"✅ Registered user A and user B")
+    
+    # Get user A's username
+    resp = requests.get(f"{BASE_URL}/auth/me", headers=user_a_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    user_a_data = resp.json()
+    user_a_username = user_a_data["username"]
+    print(f"   User A username: {user_a_username}")
+    
+    # Get user B's username
+    resp = requests.get(f"{BASE_URL}/auth/me", headers=user_b_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    user_b_data = resp.json()
+    user_b_username = user_b_data["username"]
+    print(f"   User B username: {user_b_username}")
+    
+    # Test 2: As A, change username to unique value
+    print(f"\n[TEST 3.2] As user A, PUT /auth/profile {{username:'qauniqueusername1'}}...")
+    new_username = f"qauniqueusername1{ts}"
+    resp = requests.put(f"{BASE_URL}/auth/profile", headers=user_a_headers, json={
+        "username": new_username
+    })
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    print(f"✅ PUT /auth/profile {{username:'{new_username}'}} → 200")
+    
+    # Verify username changed in /auth/me
+    resp = requests.get(f"{BASE_URL}/auth/me", headers=user_a_headers)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    user_a_data = resp.json()
+    assert user_a_data["username"] == new_username, f"Expected username='{new_username}', got '{user_a_data['username']}'"
+    print(f"✅ GET /auth/me shows username='{new_username}'")
+    
+    # Test 3: As A, try to change username to B's username (should fail)
+    print(f"\n[TEST 3.3] As user A, PUT /auth/profile {{username:'{user_b_username}'}} (B's username) → 400...")
+    resp = requests.put(f"{BASE_URL}/auth/profile", headers=user_a_headers, json={
+        "username": user_b_username
+    })
+    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
+    error_data = resp.json()
+    assert "detail" in error_data, f"Missing 'detail' key in error response"
+    assert "ya existe" in error_data["detail"].lower() or "already" in error_data["detail"].lower(), \
+        f"Expected error message about username already existing, got: {error_data['detail']}"
+    print(f"✅ PUT /auth/profile with B's username → 400 with detail: '{error_data['detail']}'")
+    
+    # Test 4: As A, change username to own current username (should succeed - no-op)
+    print(f"\n[TEST 3.4] As user A, PUT /auth/profile {{username:'{new_username}'}} (own current) → 200...")
+    resp = requests.put(f"{BASE_URL}/auth/profile", headers=user_a_headers, json={
+        "username": new_username
+    })
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    print(f"✅ PUT /auth/profile with own current username → 200 (no clash)")
+    
+    print("\n✅ TASK 3 — ALL TESTS PASSED (4 tests)")
+    return True
+
+def main():
+    """Run all tests."""
+    print("=" * 80)
+    print("BACKEND TEST — 3 NEW FEATURES (¿Quién va? app)")
+    print("=" * 80)
+    print(f"Backend URL: {BACKEND_URL}")
+    print(f"Admin: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
+    print(f"System date: 2026-08-10 (all events are upcoming)")
+    print("=" * 80)
+    
+    total_tests = 0
+    passed_tests = 0
+    failed_tests = 0
+    
+    # Test TASK 4
     try:
-        result = test_guest_public_browsing()
-        print("\n✅ Test completed successfully!")
-        print(f"\nResult: {result['passed']}/{result['total_tests']} tests passed")
+        test_task_4_events_min()
+        passed_tests += 8
+        total_tests += 8
     except AssertionError as e:
-        print(f"\n❌ Test failed: {e}")
-        exit(1)
+        print(f"\n❌ TASK 4 FAILED: {e}")
+        failed_tests += 1
+        total_tests += 8
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\n❌ TASK 4 ERROR: {e}")
         import traceback
         traceback.print_exc()
-        exit(1)
+        failed_tests += 1
+        total_tests += 8
+    
+    # Test TASK 2
+    try:
+        test_task_2_affiliate_set_city()
+        passed_tests += 13
+        total_tests += 13
+    except AssertionError as e:
+        print(f"\n❌ TASK 2 FAILED: {e}")
+        failed_tests += 1
+        total_tests += 13
+    except Exception as e:
+        print(f"\n❌ TASK 2 ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        failed_tests += 1
+        total_tests += 13
+    
+    # Test TASK 3
+    try:
+        test_task_3_username_uniqueness()
+        passed_tests += 4
+        total_tests += 4
+    except AssertionError as e:
+        print(f"\n❌ TASK 3 FAILED: {e}")
+        failed_tests += 1
+        total_tests += 4
+    except Exception as e:
+        print(f"\n❌ TASK 3 ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        failed_tests += 1
+        total_tests += 4
+    
+    # Summary
+    print("\n" + "=" * 80)
+    print("TEST SUMMARY")
+    print("=" * 80)
+    print(f"Total tests: {total_tests}")
+    print(f"Passed: {passed_tests}")
+    print(f"Failed: {failed_tests}")
+    
+    if failed_tests == 0:
+        print("\n✅ ALL TESTS PASSED")
+        return 0
+    else:
+        print(f"\n❌ {failed_tests} TEST(S) FAILED")
+        return 1
+
+if __name__ == "__main__":
+    exit(main())

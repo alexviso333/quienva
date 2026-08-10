@@ -22,6 +22,7 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const fileRef = useRef(null);
   const [name, setName] = useState(user?.name || "");
+  const [username, setUsername] = useState(user?.username || "");
   const [city, setCity] = useState(user?.city || "Palma de Mallorca");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -139,9 +140,14 @@ export default function Settings() {
   const save = async () => {
     setSaving(true);
     const cityChanged = city !== (user?.city);
+    const cleanUsername = (username || "").toLowerCase().trim().replace(/\s+/g, "");
+    const usernameChanged = cleanUsername && cleanUsername !== (user?.username || "");
     try {
-      const { data } = await api.put("/auth/profile", { name, city });
+      const payload = { name, city };
+      if (usernameChanged) payload.username = cleanUsername;
+      const { data } = await api.put("/auth/profile", payload);
       setUser(data);
+      if (usernameChanged) setUsername(data.username || cleanUsername);
       if (cityChanged) {
         // Drop the old city's cached parties so the feed reloads instantly for
         // the new city instead of showing stale events during a slow refetch.
@@ -215,6 +221,22 @@ export default function Settings() {
         <div>
           <label className="text-xs text-white/40 font-bold">Nombre</label>
           <Input data-testid="profile-name" value={name} onChange={(e) => setName(e.target.value)} className="h-12 mt-1.5 bg-white/5 border-white/15 rounded-2xl text-white" />
+        </div>
+        <div>
+          <label className="text-xs text-white/40 font-bold">Nombre de usuario</label>
+          <div className="relative mt-1.5">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 font-bold">@</span>
+            <Input
+              data-testid="profile-username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ""))}
+              placeholder="tu_usuario"
+              autoCapitalize="none"
+              autoCorrect="off"
+              className="h-12 pl-8 bg-white/5 border-white/15 rounded-2xl text-white"
+            />
+          </div>
+          <p className="text-white/30 text-[11px] mt-1">Único. Es lo que ven los demás usuarios. No puede repetirse.</p>
         </div>
         <div>
           <label className="text-xs text-white/40 font-bold">Ciudad</label>

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -15,14 +16,26 @@ function whenText(iso) {
 /**
  * Estado de afiliado FourVenues — solo admin.
  * Muestra los sitios/ciudades de TU slug y cuáles faltan por añadir a la app.
+ * Permite reasignar manualmente la ciudad de cada sitio (cuando la detección
+ * automática falla) o mandarlo a "Pendiente de añadir".
  */
 export default function AdminAffiliatePanel() {
   const qc = useQueryClient();
+  const [busyKey, setBusyKey] = useState("");
+
   const { data, isLoading } = useQuery({
     queryKey: ["admin-affiliate-status"],
     queryFn: async () => (await api.get("/admin/affiliate-status")).data,
     staleTime: 60_000,
   });
+
+  const { data: citiesData } = useQuery({
+    queryKey: ["cities"],
+    queryFn: async () => (await api.get("/cities")).data,
+    staleTime: 60 * 60_000,
+  });
+  const cities = citiesData?.cities || [];
+  const pendingCity = citiesData?.pending_city || "Pendiente";
 
   const refresh = useMutation({
     mutationFn: async () => (await api.post("/admin/affiliate-refresh")).data,
@@ -33,36 +46,82 @@ export default function AdminAffiliatePanel() {
     onError: () => toast.error("Error al actualizar"),
   });
 
+  const setCity = useMutation({
+    mutationFn: async ({ slug, venue, city }) => (await api.post("/admin/affiliate/set-city", { slug, venue, city })).data,
+    onSuccess: (d) => {
+      const where = d.city === pendingCity ? "Pendientes de añadir" : d.city;
+      toast.success(`Movido a ${where}${d.events_updated ? ` · ${d.events_updated} fiestas` : ""} ✅`);
+      qc.invalidateQueries({ queryKey: ["admin-affiliate-status"] });
+      qc.invalidateQueries({ queryKey: ["admin-scrapers"] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+      setBusyKey("");
+    },
+    onError: (e) => { toast.error(e.response?.data?.detail || "No se pudo cambiar la ciudad"); setBusyKey("");},
+  });
+
   const venues = data?.venues || [];
   const inApp = venues.filter((v) => v.in_app);
   const pending = venues.filter((v) => !v.in_app);
 
+  const rowKey = (v, i, pendingRow) => `${pendingRow ? "p" : "a"}-${v.slug || v.key || v.venue}-${i}`;
+
   const renderVenueRow = (v, i, pendingRow) => {
     const gap = !pendingRow && (v.matched || 0) === 0; // in-app club with 0 marked → coverage gap
+    const key = rowKey(v, i, pendingRow);
+    const isBusy = busyKey === key && setCity.isPending;
+    const selectValue = v.override ? v.city : ""; // "" = auto-detectado / sin decidir
     return (
-    <div
-      key={`${v.venue}-${v.city}-${i}`}
-      className={`flex items-center gap-2.5 p-2 rounded-xl border ${gap ? "bg-red-500/10 border-red-400/40" : "bg-white/[0.03] border-white/5"}`}
-      data-testid={`affiliate-venue-${pendingRow ? "pending" : "inapp"}-${i}`}
-    >
-      <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${pendingRow ? "bg-orange-400/15 text-orange-300" : "bg-emerald-400/15 text-emerald-300"}`}>
-        {pendingRow ? <MapPin className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="text-white text-xs font-semibold truncate">{v.venue}</p>
-        <p className="text-white/40 text-[10px] truncate">{v.city || "Ciudad desconocida"}</p>
+      <div
+        key={key}
+        className={`p-2 rounded-xl border ${gap ? "bg-red-500/10 border-red-400/40" : "bg-white/[0.03] border-white/5"}`}
+        data-testid={`affiliate-venue-${pendingRow ? "pending" : "inapp"}-${i}`}
+      >
+        <div className="flex items-center gap-2.5">
+          <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${pendingRow ? "bg-orange-400/15 text-orange-300" : "bg-emerald-400/15 text-emerald-300"}`}>
+            {pendingRow ? <MapPin className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-xs font-semibold truncate">{v.venue}</p>
+            <p className="text-white/40 text-[10px] truncate">
+              {v.city || v.detected_city || "Ciudad desconocida"}
+              {v.override ? " · manual" : v.detected_city ? " · auto" : ""}
+            </p>
+          </div>
+          {pendingRow ? (
+            <span className="text-white/50 text-[10px] font-bold shrink-0 bg-white/5 rounded-full px-2 py-0.5">{v.events} {v.events === 1 ? "fiesta" : "fiestas"}</span>
+          ) : (
+            <span
+              className={`text-[10px] font-bold shrink-0 rounded-full px-2 py-0.5 ${gap ? "bg-red-400/20 text-red-300" : "bg-emerald-400/15 text-emerald-300"}`}
+              title="Fiestas marcadas en la app / fiestas que llevas por tu link"
+            >
+              {v.matched ?? 0}/{v.events} marcadas
+            </span>
+          )}
+        </div>
+        {/* City reassignment control */}
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-white/40 text-[10px] font-bold uppercase tracking-wide shrink-0">Ciudad</span>
+          <select
+            data-testid={`affiliate-setcity-${pendingRow ? "pending" : "inapp"}-${i}`}
+            value={selectValue}
+            disabled={isBusy}
+            onChange={(e) => {
+              const city = e.target.value;
+              if (!city) return;
+              setBusyKey(key);
+              setCity.mutate({ slug: v.slug || "", venue: v.venue || "", city });
+            }}
+            className="flex-1 h-8 rounded-lg bg-white/5 border border-white/15 text-white text-[11px] px-2 appearance-none disabled:opacity-50"
+          >
+            <option value="" className="bg-[#121215]">{pendingRow ? "Elegir ciudad…" : "Cambiar ciudad…"}</option>
+            {cities.map((c) => (
+              <option key={c.id} value={c.id} className="bg-[#121215]">{c.emoji ? `${c.emoji} ` : ""}{c.label}</option>
+            ))}
+            <option value={pendingCity} className="bg-[#121215]">⏳ Pendiente de añadir</option>
+          </select>
+          {isBusy && <Loader2 className="w-4 h-4 animate-spin text-white/60 shrink-0" />}
+        </div>
       </div>
-      {pendingRow ? (
-        <span className="text-white/50 text-[10px] font-bold shrink-0 bg-white/5 rounded-full px-2 py-0.5">{v.events} {v.events === 1 ? "fiesta" : "fiestas"}</span>
-      ) : (
-        <span
-          className={`text-[10px] font-bold shrink-0 rounded-full px-2 py-0.5 ${gap ? "bg-red-400/20 text-red-300" : "bg-emerald-400/15 text-emerald-300"}`}
-          title="Fiestas marcadas en la app / fiestas que llevas por tu link"
-        >
-          {v.matched ?? 0}/{v.events} marcadas
-        </span>
-      )}
-    </div>
     );
   };
 
@@ -101,7 +160,7 @@ export default function AdminAffiliatePanel() {
               <p className="text-orange-300 text-[11px] font-bold uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" /> Pendientes de añadir ({pending.length})
               </p>
-              <p className="text-white/40 text-[10px] mb-2">Sitios de tu slug que aún NO están en la app. Pídelos para que se scrapeen.</p>
+              <p className="text-white/40 text-[10px] mb-2">Sitios de tu slug que aún NO están en la app. Elige su ciudad para añadirlos (si no se detectó bien).</p>
               <div className="space-y-1.5">
                 {pending.map((v, i) => renderVenueRow(v, i, true))}
               </div>
@@ -112,6 +171,7 @@ export default function AdminAffiliatePanel() {
               <p className="text-emerald-300 text-[11px] font-bold uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Ya en la app ({inApp.length})
               </p>
+              <p className="text-white/40 text-[10px] mb-2">Puedes cambiarlos a otra ciudad o mandarlos a "Pendiente de añadir".</p>
               <div className="space-y-1.5">
                 {inApp.map((v, i) => renderVenueRow(v, i, false))}
               </div>

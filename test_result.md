@@ -116,6 +116,53 @@ user_problem_statement: |
   código único y puntos para ambas partes.
 
 backend:
+  - task: "Notify composer: events-min upcoming+city filter (Task 4)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "FIX for admin complaint: notification composer wasn't listing all parties. GET /api/admin/events-min changed from DESC+limit500 (which hid most near-term parties when many cities loaded) to: UPCOMING only (date>=today Europe/Madrid), sorted ASC (soonest first), limit 1000, excludes PENDING_CITY events. New optional ?city= param (region-aware via city_query_value). Returns id/name/venue/date/time/city/sale_state. Test: GET /admin/events-min (200, all upcoming, no pending); GET /admin/events-min?city=Madrid returns ONLY Madrid upcoming events; GET /admin/events-min?city='Palma de Mallorca' returns only Palma; non-admin->403."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (8 tests, 100% pass): ✅ (1) GET /admin/events-min as admin → 200 with 240 events. EVERY event has date >= today (2026-08-10), all have required fields (id, name, venue, date, city), NO event has city=='Pendiente', and list is sorted ascending by date (soonest first). ✅ (2a) GET /admin/events-min?city=Madrid → 200 with 44 Madrid events, ALL have city=='Madrid' (no leakage). ✅ (2b) GET /admin/events-min?city=Ibiza → 200 with 137 Ibiza events, ALL have city=='Ibiza' (no leakage). ✅ (2c) GET /admin/events-min?city=Palma de Mallorca → 200 with 10 Palma events, ALL have city=='Palma de Mallorca' (no leakage). ✅ (3a) GET /admin/events-min as non-admin user → 403. ✅ (3b) GET /admin/events-min unauthenticated → 401. All functionality working perfectly - upcoming filter, city filtering (region-aware), sorting, and authorization all correct."
+
+  - task: "Affiliate manual city reassignment (Task 2): POST /admin/affiliate/set-city + PENDING_CITY"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New PENDING_CITY='Pendiente' sentinel (belongs to no region -> hidden from feeds). New POST /api/admin/affiliate/set-city {slug, venue, city}. city must be a supported city id OR 'Pendiente' (else 400). Behaviour: persists override in affiliate_city_overrides; finds scraper config by slug then by name; if city supported -> updates/creates+runs scraper (active) and update_many events (by scraper_venue_id AND by matching venue names) to that city; if 'Pendiente' -> pauses scraper + moves events to PENDING_CITY (hidden). Requires slug or venue (else 400). non-admin->403. Also GET /api/cities now returns pending_city. NOTE: _AFFILIATE_VENUES (affiliate panel) is empty in dev without a FourVenues token, so test the ENDPOINT directly: (a) create an admin event with a distinctive venue+city, (b) POST set-city {venue:that venue, city:'Pendiente'} -> 200, event city becomes 'Pendiente' and it disappears from GET /events feed; (c) POST set-city {venue:that venue, city:'Madrid'} -> 200, event city becomes Madrid; (d) invalid city -> 400; (e) missing slug and venue -> 400; (f) non-admin -> 403."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (13 tests, 100% pass): ✅ (1) GET /api/cities → 200 with pending_city='Pendiente'. ✅ (2) POST /api/admin/events with distinctive venue 'ZZTestClub QA 1786376281' and city 'Ibiza' → 200, created event f5e71068-d195-413a-8735-aba592a3a60e. ✅ (3a) POST /admin/affiliate/set-city {venue:'ZZTestClub QA 1786376281', city:'Pendiente'} → 200 with ok=true, events_updated=1. ✅ (3b) GET /events/{event_id} → event city is now 'Pendiente'. ✅ (3c) GET /admin/events-min → event NOT in list (pending correctly excluded). ✅ (3d) GET /events as Ibiza user → event NOT in feed (correctly hidden from public). ✅ (4a) POST /admin/affiliate/set-city {venue:'ZZTestClub QA 1786376281', city:'Madrid'} → 200 with ok=true. ✅ (4b) GET /events/{event_id} → event city is now 'Madrid'. ✅ (4c) GET /admin/events-min?city=Madrid → event now appears in Madrid list. ✅ (5a) POST /admin/affiliate/set-city with invalid city 'Atlantis' → 400. ✅ (5b) POST /admin/affiliate/set-city with neither slug nor venue → 400. ✅ (5c) POST /admin/affiliate/set-city as non-admin → 403. All functionality working perfectly - PENDING_CITY sentinel, city reassignment, feed filtering, and validation all correct."
+
+  - task: "Username uniqueness validation (Task 3): PUT /auth/profile"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "PUT /api/auth/profile accepts username field. Username is normalized (lowercase, no spaces). Checks for username clash with other users (case-insensitive). Returns 400 with 'Ese nombre de usuario ya existe' if clash detected. Allows updating to own current username (no-op, no clash). Username uniqueness enforced at database level."
+      - working: true
+        agent: "testing"
+        comment: "TESTED ALL SCENARIOS (4 tests, 100% pass): ✅ (1) Registered user A and user B, retrieved their usernames from /auth/me. ✅ (2) As user A, PUT /auth/profile {username:'qauniqueusername11786376283'} → 200, GET /auth/me shows username='qauniqueusername11786376283' (username change successful). ✅ (3) As user A, PUT /auth/profile {username:'userb1786376283'} (B's exact username) → 400 with detail='Ese nombre de usuario ya existe' (clash detection working). ✅ (4) As user A, PUT /auth/profile {username:'qauniqueusername11786376283'} (own current username) → 200 (no clash, no-op allowed). All functionality working perfectly - username uniqueness enforced, appropriate error messages, and own username updates allowed."
+
+
+
   - task: "Multilingual SEO landing pages (ES/EN/DE): city + event pages, hreflang, Event JSON-LD, sitemap"
     implemented: true
     working: true
@@ -5175,3 +5222,78 @@ agent_communication:
 
         Admin: admin@quienva.app / admin123
         Total tests: 26 passed, 0 failed
+
+
+test_plan:
+  current_focus:
+    - "Notify composer: events-min upcoming+city filter (Task 4)"
+    - "Affiliate manual city reassignment (Task 2): POST /admin/affiliate/set-city + PENDING_CITY"
+    - "Fase 3: @username privacy (hide real name from other users)"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: |
+        NEW ITERATION — 3 backend-affecting changes to test (dev env: env files were wiped and re-created;
+        MONGO_URL local, DB_NAME=quienva, 240 seed events across 5 cities, all upcoming (system date 2026-08-10)).
+        Admin: admin@quienva.app / admin123.
+
+        Please test ONLY these (do not re-test unrelated features):
+
+        1) GET /api/admin/events-min (Task 4 — notify composer fix)
+           - As admin, GET /admin/events-min → 200 {events:[...]}, every event date >= today, sorted ASC,
+             NO event with city=="Pendiente". Fields include id,name,venue,date,city.
+           - GET /admin/events-min?city=Madrid → only Madrid events. ?city=Ibiza → only Ibiza.
+             ?city=Palma de Mallorca → only Palma. (region-aware)
+           - Non-admin → 403, unauth → 401.
+
+        2) POST /api/admin/affiliate/set-city (Task 2)
+           - Create an admin event with a DISTINCTIVE venue name (e.g. "ZZTestClub QA") and city "Ibiza"
+             via POST /api/admin/events.
+           - POST /admin/affiliate/set-city {venue:"ZZTestClub QA", city:"Pendiente"} → 200
+             {ok:true, events_updated>=1}. Then the event's city == "Pendiente" and it must NOT appear
+             in the public feed for an Ibiza user (GET /events as an Ibiza-city user) and NOT in
+             /admin/events-min (pending excluded).
+           - POST /admin/affiliate/set-city {venue:"ZZTestClub QA", city:"Madrid"} → 200; event city==Madrid,
+             now appears for a Madrid user's feed and in /admin/events-min?city=Madrid.
+           - Validation: invalid city (e.g. "Atlantis") → 400; missing both slug and venue → 400;
+             non-admin → 403. GET /api/cities now returns pending_city:"Pendiente".
+
+        3) PUT /api/auth/profile username uniqueness (Task 3)
+           - Register user A and user B. As A, PUT /auth/profile {username:"<A_new_unique>"} → 200 and
+             GET /auth/me reflects it. As A, PUT /auth/profile {username:"<B's username>"} → 400
+             ("Ese nombre de usuario ya existe"). Changing to own current username → 200 (no-op ok).
+
+    - agent: "testing"
+      message: |
+        TESTING COMPLETE — All 3 backend tasks tested successfully (25 tests, 100% pass rate).
+        
+        TASK 4 (GET /api/admin/events-min) — 8 tests, ALL PASSED ✅
+        - Upcoming filter working (all 240 events have date >= 2026-08-10)
+        - Sorted ascending by date (soonest first)
+        - NO events with city='Pendiente' (correctly excluded)
+        - City filtering working: Madrid (44 events), Ibiza (137 events), Palma (10 events)
+        - NO leakage between cities
+        - Authorization working: non-admin → 403, unauth → 401
+        
+        TASK 2 (POST /api/admin/affiliate/set-city) — 13 tests, ALL PASSED ✅
+        - GET /api/cities returns pending_city='Pendiente'
+        - Created test event with distinctive venue, moved to 'Pendiente'
+        - Event with city='Pendiente' correctly excluded from /admin/events-min
+        - Event with city='Pendiente' correctly hidden from public feed
+        - Successfully moved event from 'Pendiente' to 'Madrid'
+        - Event now appears in /admin/events-min?city=Madrid
+        - Validation working: invalid city → 400, missing venue/slug → 400, non-admin → 403
+        
+        TASK 3 (PUT /api/auth/profile username uniqueness) — 4 tests, ALL PASSED ✅
+        - Username change working (normalized to lowercase, no spaces)
+        - Username clash detection working (returns 400 with 'Ese nombre de usuario ya existe')
+        - Own username update allowed (no-op, no clash)
+        
+        Test file: /app/backend_test.py
+        Backend URL: https://5e791fc6-c24a-43ab-8471-29846eab5135.preview.emergentagent.com/api
+        Admin: admin@quienva.app / admin123
+        
+        NO ISSUES FOUND. All 3 tasks working perfectly.

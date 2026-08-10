@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Input } from "@/components/ui/input";
-import { Bell, Search, Send, Loader2, Users, Globe, Check, Megaphone, MapPin, Music, Clock, Calendar, Trash2 } from "lucide-react";
+import { Bell, Search, Send, Loader2, Users, Globe, Check, Megaphone, MapPin, Music, Clock, Calendar, Trash2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
 const AUDIENCES = [
@@ -20,32 +20,46 @@ export default function AdminNotifyComposer() {
   const [eventName, setEventName] = useState("");
   const [body, setBody] = useState("");
   const [search, setSearch] = useState("");
-  const [showList, setShowList] = useState(false);
   const [city, setCity] = useState("Palma de Mallorca");
   const [genre, setGenre] = useState("");
   const [sendAt, setSendAt] = useState("");
   const [schedule, setSchedule] = useState(false);
+  // Event-picker filters: narrow by city, then by venue (discoteca), then party.
+  const [filterCity, setFilterCity] = useState("");
+  const [venueFilter, setVenueFilter] = useState("");
 
   const { data: presetsData } = useQuery({ queryKey: ["notify-presets"], queryFn: async () => (await api.get("/admin/notify/presets")).data, staleTime: 5 * 60_000 });
-  const { data: eventsData } = useQuery({ queryKey: ["events-min"], queryFn: async () => (await api.get("/admin/events-min")).data, staleTime: 60_000 });
+  const { data: citiesData } = useQuery({ queryKey: ["cities"], queryFn: async () => (await api.get("/cities")).data, staleTime: 60 * 60_000 });
+  const { data: eventsData, isLoading: eventsLoading } = useQuery({
+    queryKey: ["events-min", filterCity],
+    queryFn: async () => (await api.get("/admin/events-min", { params: { city: filterCity || undefined } })).data,
+    staleTime: 60_000,
+  });
   const { data: genresData } = useQuery({ queryKey: ["event-genres-admin"], queryFn: async () => (await api.get("/events/genres")).data, staleTime: 5 * 60_000 });
   const { data: scheduledData } = useQuery({ queryKey: ["notify-scheduled"], queryFn: async () => (await api.get("/admin/notify/scheduled")).data, staleTime: 20_000 });
 
   const presets = presetsData?.presets || [];
+  const cities = citiesData?.cities || [];
   const events = eventsData?.events || [];
   const genres = genresData || [];
   const scheduled = scheduledData?.scheduled || [];
 
-  const cities = useMemo(() => {
-    const s = new Set(["Palma de Mallorca"]);
-    return Array.from(s);
-  }, []);
+  // Distinct venues (discotecas) present in the currently loaded events, sorted.
+  const venues = useMemo(() => {
+    const s = new Set();
+    events.forEach((e) => { if (e.venue) s.add(e.venue); });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }, [events]);
 
   const filteredEvents = useMemo(() => {
-    if (!search) return events.slice(0, 40);
-    const s = search.toLowerCase();
-    return events.filter((e) => e.name.toLowerCase().includes(s) || (e.venue || "").toLowerCase().includes(s)).slice(0, 40);
-  }, [events, search]);
+    let list = events;
+    if (venueFilter) list = list.filter((e) => e.venue === venueFilter);
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter((e) => e.name.toLowerCase().includes(s) || (e.venue || "").toLowerCase().includes(s));
+    }
+    return list.slice(0, 80);
+  }, [events, venueFilter, search]);
 
   const preview = useMemo(() => body.replace(/\{name\}/g, eventName || "…"), [body, eventName]);
   const needsEvent = /\{name\}/.test(body) || audience === "event";
@@ -78,7 +92,7 @@ export default function AdminNotifyComposer() {
     onError: () => toast.error("Error"),
   });
 
-  const canSend = body.trim() && (!needsEvent || eventId) && (audience !== "genre" || genre) && (!schedule || sendAt);
+  const canSend = body.trim() && (!needsEvent || eventId) && (audience !== "genre" || genre) && (audience !== "city" || city) && (!schedule || sendAt);
 
   return (
     <div data-testid="admin-notify-composer">
@@ -114,12 +128,13 @@ export default function AdminNotifyComposer() {
         })}
       </div>
 
-      {/* City selector */}
+      {/* City selector (audience = por ciudad → avisa a TODOS los de esa ciudad) */}
       {audience === "city" && (
         <div className="mb-3">
+          <p className="text-[11px] text-white/40 mb-1.5">Se avisará a todos los usuarios de esta ciudad.</p>
           <select data-testid="notify-city" value={city} onChange={(e) => setCity(e.target.value)}
             className="w-full h-11 rounded-xl bg-white/5 border border-white/15 text-white px-3 text-sm">
-            {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+            {cities.map((c) => <option key={c.id} value={c.id} className="bg-[#121215]">{c.emoji ? `${c.emoji} ` : ""}{c.label}</option>)}
           </select>
         </div>
       )}
@@ -135,30 +150,62 @@ export default function AdminNotifyComposer() {
         </div>
       )}
 
-      {/* Event dropdown */}
+      {/* Event picker: filter by city → discoteca → party */}
       {needsEvent && (
         <div className="mb-3">
           <p className="text-[11px] uppercase tracking-widest text-white/40 font-bold mb-2">Fiesta {eventName && <span className="text-qv-primary normal-case">· {eventName}</span>}</p>
+
+          {/* City filter chips */}
+          <div className="flex flex-wrap gap-1.5 mb-2" data-testid="notify-event-city-chips">
+            <button onClick={() => { setFilterCity(""); setVenueFilter(""); }}
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${filterCity === "" ? "bg-qv-secondary text-black border-qv-secondary" : "bg-white/5 text-white/60 border-white/10"}`}>
+              Todas
+            </button>
+            {cities.map((c) => (
+              <button key={c.id} data-testid={`notify-filter-city-${c.id}`} onClick={() => { setFilterCity(c.id); setVenueFilter(""); }}
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${filterCity === c.id ? "bg-qv-secondary text-black border-qv-secondary" : "bg-white/5 text-white/60 border-white/10"}`}>
+                {c.emoji ? `${c.emoji} ` : ""}{(c.label || c.id).split(" de ")[0].split(",")[0]}
+              </button>
+            ))}
+          </div>
+
+          {/* Discoteca (venue) selector */}
+          <div className="relative mb-2">
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+            <select data-testid="notify-venue" value={venueFilter} onChange={(e) => setVenueFilter(e.target.value)}
+              className="w-full h-11 pl-9 rounded-xl bg-white/5 border border-white/15 text-white text-sm appearance-none">
+              <option value="" className="bg-[#121215]">Todas las discotecas ({venues.length})</option>
+              {venues.map((v) => <option key={v} value={v} className="bg-[#121215]">{v}</option>)}
+            </select>
+          </div>
+
+          {/* Party search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-            <Input data-testid="notify-event-search" value={search} onFocus={() => setShowList(true)}
-              onChange={(e) => { setSearch(e.target.value); setShowList(true); }}
-              placeholder={eventName || "Buscar y elegir fiesta..."}
+            <Input data-testid="notify-event-search" value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar fiesta por nombre..."
               className="h-11 pl-9 bg-white/5 border-white/15 rounded-xl text-white placeholder:text-white/40" />
           </div>
-          {showList && (
-            <div className="mt-1.5 max-h-56 overflow-y-auto hide-scrollbar rounded-xl border border-white/10 bg-[#121215]">
-              {filteredEvents.length === 0 ? <p className="text-white/40 text-xs p-3">Sin resultados</p> :
-                filteredEvents.map((e) => (
-                  <button key={e.id} data-testid={`notify-event-${e.id}`}
-                    onClick={() => { setEventId(e.id); setEventName(e.name); setSearch(""); setShowList(false); }}
-                    className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-white/5 ${eventId === e.id ? "bg-qv-primary/10" : ""}`}>
-                    <div className="min-w-0"><p className="text-white text-sm font-semibold truncate">{e.name}</p><p className="text-white/40 text-[11px] truncate">{e.venue} · {e.date}</p></div>
-                    {eventId === e.id && <Check className="w-4 h-4 text-qv-primary shrink-0" />}
-                  </button>
-                ))}
-            </div>
-          )}
+
+          {/* Party list (always visible so the admin sees every party of the filter) */}
+          <div className="mt-1.5 max-h-60 overflow-y-auto hide-scrollbar rounded-xl border border-white/10 bg-[#121215]" data-testid="notify-event-list">
+            {eventsLoading ? (
+              <div className="p-4 flex justify-center"><Loader2 className="w-4 h-4 animate-spin text-white/40" /></div>
+            ) : filteredEvents.length === 0 ? (
+              <p className="text-white/40 text-xs p-3">No hay fiestas con este filtro.</p>
+            ) : (
+              filteredEvents.map((e) => (
+                <button key={e.id} data-testid={`notify-event-${e.id}`}
+                  onClick={() => { setEventId(e.id); setEventName(e.name); }}
+                  className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-white/5 ${eventId === e.id ? "bg-qv-primary/10" : ""}`}>
+                  <div className="min-w-0"><p className="text-white text-sm font-semibold truncate">{e.name}</p><p className="text-white/40 text-[11px] truncate">{e.venue} · {e.date}{e.city ? ` · ${e.city}` : ""}</p></div>
+                  {eventId === e.id && <Check className="w-4 h-4 text-qv-primary shrink-0" />}
+                </button>
+              ))
+            )}
+          </div>
+          <p className="text-white/30 text-[10px] mt-1">{filteredEvents.length} fiesta(s) mostradas{events.length > filteredEvents.length ? ` de ${events.length}` : ""}.</p>
         </div>
       )}
 

@@ -214,6 +214,11 @@ SUPPORTED_CITIES = [
     {"id": "Marbella", "label": "Marbella / Puerto Ban\u00fas", "emoji": "\U0001F6E5\uFE0F"},
 ]
 CITY_IDS = {c["id"] for c in SUPPORTED_CITIES}
+# Sentinel city for scraped venues/parties that are NOT yet assigned to a
+# supported city (admin marked them "pendiente de añadir"). It belongs to no
+# region, so events with this city are hidden from every public feed until an
+# admin reassigns them to a real supported city.
+PENDING_CITY = "Pendiente"
 
 # Each app-city behaves like its own isolated app. A region groups the canonical
 # city with all of its sub-zones (the `city` value stored on venues/events), so
@@ -649,7 +654,7 @@ async def list_cities(response: Response):
     """Public list of supported cities for the registration / settings selector."""
     # Static content — let the browser/CDN cache it for an hour to skip round-trips.
     response.headers["Cache-Control"] = "public, max-age=3600"
-    return {"cities": SUPPORTED_CITIES}
+    return {"cities": SUPPORTED_CITIES, "pending_city": PENDING_CITY}
 
 
 def _es_share_date(date_str: str) -> str:
@@ -4787,14 +4792,25 @@ async def admin_set_featured(event_id: str, inp: FeaturedInput, admin: dict = De
 
 
 @api_router.get("/admin/events-min")
-async def admin_events_min(admin: dict = Depends(require_admin), q: str = Query("")):
-    """Lightweight event list for the notification dropdown (id/name/venue/date).
-    Fast: single projected query, no per-event counts."""
-    query = {}
+async def admin_events_min(admin: dict = Depends(require_admin), q: str = Query(""), city: str = Query("")):
+    """Lightweight event list for the notification composer (id/name/venue/date/city).
+    Returns UPCOMING events sorted ASC (soonest first) so the admin can find any
+    party that is about to happen — the old DESC+500 cap hid most near-term
+    parties when many cities were loaded. Supports an optional ?city= filter
+    (region-aware) and always excludes 'pending' (unassigned) events."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    query = {"date": {"$gte": today}}
+    if city and city in CITY_IDS:
+        query["city"] = city_query_value(city)
+    else:
+        query["city"] = {"$ne": PENDING_CITY}
     if q:
-        query = {"name": {"$regex": q, "$options": "i"}}
+        query["name"] = {"$regex": q, "$options": "i"}
     out = []
-    async for ev in db.events.find(query, {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "sale_state": 1}).sort("date", -1).limit(500):
+    async for ev in db.events.find(
+        query,
+        {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1, "sale_state": 1},
+    ).sort("date", 1).limit(1000):
         out.append(ev)
     return {"events": out}
 
@@ -7641,14 +7657,17 @@ def _names_refer_same(a: str, b: str) -> bool:
     return ta == tb or ta <= tb or tb <= ta
 
 
-async def _auto_seed_affiliate_clubs(org_seed: dict) -> int:
+async def _auto_seed_affiliate_clubs(org_seed: dict, overrides: dict = None) -> int:
     """Ensure every club we carry (from our RRPP link) that sits in a SUPPORTED
     city has its own FourVenues scraper, so its events show up in the feed, get
     the 'Mi link' marker and rank first — WITHOUT us hand-adding each new club.
     Deduped by slug AND by name (so we never duplicate a club already scraped).
-    org_seed: {org_slug: [org_name, {app_city: count}]}. Returns how many added."""
+    org_seed: {org_slug: [org_name, {app_city: count}]}. Returns how many added.
+    Respects admin overrides: a slug marked 'Pendiente' is skipped; a slug
+    overridden to a supported city is seeded in THAT city."""
     if not org_seed:
         return 0
+    overrides = overrides or {}
     try:
         existing_slugs = set()
         existing_names = []  # (norm-ready name)
@@ -7661,9 +7680,15 @@ async def _auto_seed_affiliate_clubs(org_seed: dict) -> int:
         for slug, (name, city_counts) in org_seed.items():
             if not slug or slug in existing_slugs:
                 continue
-            if not city_counts:
+            ov = overrides.get(slug)
+            if ov == PENDING_CITY:
+                continue  # admin marked this club as pending → do not auto-create
+            if ov and ov in CITY_IDS:
+                city = ov
+            elif city_counts:
+                city = max(city_counts.items(), key=lambda kv: kv[1])[0]
+            else:
                 continue
-            city = max(city_counts.items(), key=lambda kv: kv[1])[0]
             if any(_names_refer_same(name, en) for en in existing_names):
                 continue  # a scraper for this club already exists under another slug
             doc = {
@@ -7757,6 +7782,7 @@ async def refresh_affiliate_events() -> int:
     venue_agg: dict = {}     # (venue, city) -> count
     org_seed: dict = {}      # org_slug -> (org_name, app_city) for auto-seeding
     all_orgs: dict = {}      # org_slug -> venue name (every carried club in our RRPP)
+    org_agg: dict = {}       # org key -> {slug, venue, cities:{detected_city:count}, events}
     try:
         async with httpx.AsyncClient(timeout=20, headers=headers) as client:
             page = 1
@@ -7826,12 +7852,23 @@ async def refresh_affiliate_events() -> int:
                     # (classified by its MOST COMMON supported city → robust for
                     # touring promoters) without hand-adding each one.
                     org_slug = str(org.get("slug") or "").strip()
+                    _det_city = _supported_city_for(addr)
+                    # Per-club aggregation (keyed by microsite slug, or venue name
+                    # as fallback) that powers the affiliate panel + admin city
+                    # reassignment. Records the DETECTED supported city (best guess)
+                    # so the admin can confirm/correct it.
+                    _okey = org_slug or _norm_name(venue or "?")
+                    _orec = org_agg.setdefault(_okey, {"slug": org_slug, "venue": venue or org_slug or "?", "cities": {}, "events": 0})
+                    _orec["events"] += 1
+                    _dc = _det_city or ""
+                    _orec["cities"][_dc] = _orec["cities"].get(_dc, 0) + 1
                     if org_slug:
                         all_orgs[org_slug] = venue or org_slug
-                        app_city = _supported_city_for(addr)
-                        if app_city:
-                            rec = org_seed.setdefault(org_slug, [venue or org_slug, {}])
-                            rec[1][app_city] = rec[1].get(app_city, 0) + 1
+                        # Always record the org for auto-seed (empty city map is OK);
+                        # a supported detected city adds a vote for classification.
+                        rec = org_seed.setdefault(org_slug, [venue or org_slug, {}])
+                        if _det_city:
+                            rec[1][_det_city] = rec[1].get(_det_city, 0) + 1
                 # The FourVenues API returns a VARIABLE page size (~170) that is
                 # SMALLER than the requested pageSize=200, so we must NOT stop on
                 # "len < pageSize" (that quit after page 1 → only ~172 of ~700
@@ -7843,16 +7880,36 @@ async def refresh_affiliate_events() -> int:
             return len(_AFFILIATE_MAP)
         _AFFILIATE_MAP = amap
         _AFFILIATE_BY_DN = by_dn
-        _AFFILIATE_VENUES = sorted(
-            [{"venue": v, "city": c, "events": n, "in_app": _city_in_app(c)}
-             for (v, c), n in venue_agg.items()],
-            key=lambda x: (-x["events"], x["venue"]),
-        )
+        # Load admin city overrides (persistent manual reassignments) keyed by
+        # club slug (or normalized venue name) so the panel reflects the admin's
+        # choice even when auto-detection guessed a different / no city.
+        overrides = {}
+        async for _o in db.affiliate_city_overrides.find({}, {"_id": 0}):
+            _k = _o.get("slug") or _o.get("key")
+            if _k:
+                overrides[_k] = _o.get("city")
+        _vlist = []
+        for _key, _rec in org_agg.items():
+            _slug = _rec.get("slug") or ""
+            _cities = {c: n for c, n in _rec.get("cities", {}).items() if c}
+            _detected = max(_cities.items(), key=lambda kv: kv[1])[0] if _cities else ""
+            _ov = overrides.get(_slug) or overrides.get(_key)
+            _effective = _ov or _detected
+            _pending = (_ov == PENDING_CITY)
+            _in_app = (_effective in CITY_IDS) if _ov else _city_in_app(_detected)
+            _vlist.append({
+                "slug": _slug, "key": _key, "venue": _rec.get("venue") or "?",
+                "city": _effective or "", "detected_city": _detected,
+                "events": _rec.get("events", 0),
+                "in_app": bool(_in_app) and not _pending,
+                "override": bool(_ov), "pending": _pending,
+            })
+        _AFFILIATE_VENUES = sorted(_vlist, key=lambda x: (-x["events"], x["venue"]))
         _AFFILIATE_TS = time.time()
         logger.info(f"[affiliate] '{AFFILIATE_SLUG}' → {len(amap)} events across {len(_AFFILIATE_VENUES)} venues are mine")
         # Self-maintaining coverage: create a scraper for any carried club in a
         # supported city that we don't already scrape (deduped by slug + name).
-        await _auto_seed_affiliate_clubs(org_seed)
+        await _auto_seed_affiliate_clubs(org_seed, overrides)
         # Alert admins when a NEW club appears in our RRPP link (additive; does not
         # affect matching/linking). First run only records a baseline (no spam).
         await _notify_new_carried_clubs(all_orgs)
@@ -8644,6 +8701,129 @@ async def admin_affiliate_refresh(admin: dict = Depends(require_admin)):
     """Manually re-read our affiliate events from FourVenues (also runs auto every 20 min)."""
     n = await refresh_affiliate_events()
     return {"slug": AFFILIATE_SLUG, "mine_count": n}
+
+
+async def _matching_event_venue_names(venue: str) -> list:
+    """All distinct event `venue` values that refer to the same physical club as
+    `venue` (accent/word-subset aware). Used to move a club's events between
+    cities when the admin reassigns it from the affiliate panel."""
+    if not venue:
+        return []
+    names = []
+    for vn in await db.events.distinct("venue"):
+        if vn and _names_refer_same(vn, venue):
+            names.append(vn)
+    return names
+
+
+class AffiliateSetCityInput(BaseModel):
+    slug: str = ""
+    venue: str = ""
+    city: str  # a supported city id OR the PENDING_CITY sentinel
+
+
+@app.post("/api/admin/affiliate/set-city")
+async def admin_affiliate_set_city(inp: AffiliateSetCityInput, admin: dict = Depends(require_admin)):
+    """Manually (re)assign the app-city of an affiliate club/venue.
+
+    Works for BOTH the "Pendientes de añadir" list (club whose city wasn't
+    auto-detected → pick the right one so it enters the app) and the "Ya en la
+    app" list (move a club to another city, or send it back to "Pendiente" so it
+    disappears from the feed until re-added). Persists the choice, moves the
+    club's existing events, and syncs/creates the FourVenues scraper.
+    """
+    city = (inp.city or "").strip()
+    if city != PENDING_CITY and city not in CITY_IDS:
+        raise HTTPException(status_code=400, detail="Ciudad no válida")
+    slug = (inp.slug or "").strip()
+    venue = (inp.venue or "").strip()
+    if not slug and not venue:
+        raise HTTPException(status_code=400, detail="Falta el sitio (slug o nombre)")
+    key = slug or _norm_name(venue)
+
+    # 1) Persist the override (survives the 20-min affiliate refresh).
+    await db.affiliate_city_overrides.update_one(
+        {"key": key},
+        {"$set": {"key": key, "slug": slug, "venue": venue, "city": city,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+
+    # 2) Locate an existing scraper config for this club (by slug, then by name).
+    cfg = None
+    if slug:
+        cfg = await db.scraped_venues.find_one({"slug": slug}, {"_id": 0})
+    if not cfg and venue:
+        async for v in db.scraped_venues.find({}, {"_id": 0}):
+            if _names_refer_same(v.get("name", ""), venue):
+                cfg = v
+                break
+
+    events_updated = 0
+    scraper_action = "none"
+    name_matches = await _matching_event_venue_names(venue) if venue else []
+
+    if city == PENDING_CITY:
+        # Send to pending: pause the scraper and hide its events from feeds.
+        if cfg:
+            await db.scraped_venues.update_one(
+                {"id": cfg["id"]}, {"$set": {"active": False, "city": PENDING_CITY}})
+            scraper_action = "paused"
+            r = await db.events.update_many(
+                {"scraper_venue_id": cfg["id"]}, {"$set": {"city": PENDING_CITY}})
+            events_updated += r.modified_count
+        if name_matches:
+            r2 = await db.events.update_many(
+                {"venue": {"$in": name_matches}}, {"$set": {"city": PENDING_CITY}})
+            events_updated += r2.modified_count
+    else:
+        # Assign to a supported city: sync/create the scraper and move events.
+        if cfg:
+            await db.scraped_venues.update_one(
+                {"id": cfg["id"]}, {"$set": {"city": city, "active": True}})
+            scraper_action = "updated"
+            r = await db.events.update_many(
+                {"scraper_venue_id": cfg["id"]}, {"$set": {"city": city}})
+            events_updated += r.modified_count
+        elif slug:
+            cfg = {
+                "id": str(uuid.uuid4()), "name": venue or slug, "slug": slug, "city": city,
+                "adapter_type": "fourvenues_api", "active": True,
+                "url": f"https://site.fourvenues.com/es/{slug}",
+                "auto_affiliate": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "last_run_at": None, "last_run_ok": None, "last_run_events": 0,
+                "last_run_new": 0, "last_run_updated": 0, "last_run_error": None,
+            }
+            await db.scraped_venues.insert_one(cfg)
+            scraper_action = "created"
+        if name_matches:
+            r2 = await db.events.update_many(
+                {"venue": {"$in": name_matches}}, {"$set": {"city": city}})
+            events_updated += r2.modified_count
+        # Fetch this club's calendar in the background if we just created it.
+        if cfg and scraper_action == "created":
+            _c = dict(cfg)
+            try:
+                asyncio.create_task(run_scraper_for_venue(_c))
+            except Exception:
+                pass
+
+    # 3) Reflect the change instantly in the in-memory affiliate panel data.
+    try:
+        for e in _AFFILIATE_VENUES:
+            if (slug and e.get("slug") == slug) or e.get("key") == key:
+                e["city"] = city
+                e["override"] = True
+                e["pending"] = (city == PENDING_CITY)
+                e["in_app"] = (city in CITY_IDS)
+    except Exception:
+        pass
+
+    _invalidate_stats_cache()
+    return {"ok": True, "slug": slug, "venue": venue, "city": city,
+            "events_updated": events_updated, "scraper": scraper_action}
+
 
 
 @app.post("/api/admin/maintenance/cleanup-old-events")
