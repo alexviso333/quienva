@@ -836,55 +836,149 @@ async def _upcoming_for_city(city_id: str, limit: int = 60) -> list:
 SEO_LANGS = ("es", "en", "de")
 
 _SEO_CSS = """
-:root{color-scheme:dark}
+:root{color-scheme:dark;--pink:#ff0055;--cyan:#00f0ff;--bg:#0a0a0c;--card:#131118;--line:#242029;--muted:#a1a1aa}
 *{box-sizing:border-box}
-body{margin:0;background:radial-gradient(1200px 600px at 50% -100px,#16131f 0%,#0a0a0c 60%);color:#fff;font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
-.wrap{max-width:960px;margin:0 auto;padding:22px 16px 64px}
-h1{font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:28px;line-height:1.15;margin:10px 0 6px;letter-spacing:-.01em}
-p.sub{color:#a1a1aa;margin:0 0 20px;font-size:15px}
-.grid{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:14px}
-.card{display:flex;flex-direction:column;background:#141118;border:1px solid #232029;border-radius:18px;overflow:hidden;text-decoration:none;color:#fff;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
-.card:hover{transform:translateY(-3px);border-color:#00f0ff55;box-shadow:0 10px 30px -12px #00f0ff40}
-.poster{position:relative;width:100%;aspect-ratio:4/5;background:#1c1922;overflow:hidden}
-.poster img{width:100%;height:100%;object-fit:cover;display:block}
-.poster .ph{width:100%;height:100%;background:linear-gradient(135deg,#241f30,#12101a)}
-.poster:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(10,10,12,.85) 100%)}
-.badges{position:absolute;left:8px;bottom:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;z-index:2}
-.sb{font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;backdrop-filter:blur(6px);white-space:nowrap}
-.sb-on{background:rgba(16,185,129,.28);color:#a7f3d0}
-.sb-few{background:rgba(249,115,22,.32);color:#fed7aa}
-.sb-out{background:rgba(255,255,255,.12);color:#c9c9d1}
-.sb-list{background:rgba(139,92,246,.3);color:#ddd6fe}
-.sb-soon{background:rgba(255,255,255,.14);color:#d4d4d8}
-.pp{font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:rgba(190,242,100,.9);color:#0a0a0c}
-.body{padding:10px 12px 13px;display:flex;flex-direction:column;gap:3px}
-.n{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:14px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.m{color:#a1a1aa;font-size:12.5px}
-.empty{grid-column:1/-1;color:#a1a1aa;padding:26px;text-align:center;background:#141118;border:1px solid #232029;border-radius:18px}
-.cta{display:inline-block;margin:20px 0;background:linear-gradient(90deg,#00f0ff,#7c3aed);color:#001014;font-family:'Unbounded',system-ui,sans-serif;font-weight:800;padding:12px 22px;border-radius:999px;text-decoration:none}
-.cities{margin-top:34px;border-top:1px solid #232029;padding-top:18px}
-.cities a{color:#00f0ff;margin-right:14px;text-decoration:none;display:inline-block;margin-bottom:8px}
-.cities b{display:inline-block;margin-bottom:6px}
-.hero{width:100%;max-height:360px;object-fit:cover;border-radius:18px;margin:8px 0 18px;border:1px solid #232029}
-.meta{display:flex;flex-direction:column;gap:8px;margin:18px 0}
-.meta > div{background:#141118;border:1px solid #232029;border-radius:14px;padding:12px 14px}
-.meta b{color:#00f0ff;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:2px}
-.langs{margin-top:26px;font-size:13px;color:#71717a}
-.langs a{color:#a1a1aa;margin-right:12px;text-decoration:none}
-footer{margin-top:30px;color:#71717a;font-size:13px}
-.bc{font-size:12px;color:#71717a;margin-bottom:6px}
+body{margin:0;background:var(--bg);color:#fff;font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.bgfx{position:fixed;inset:0;z-index:-1;background:
+  radial-gradient(900px 500px at 15% -120px,rgba(255,0,85,.20),transparent 60%),
+  radial-gradient(900px 520px at 100% 0,rgba(0,240,255,.16),transparent 55%),
+  #0a0a0c}
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;background:rgba(10,10,12,.72);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.06)}
+.brand{font-family:'Unbounded',system-ui,sans-serif;font-weight:900;font-size:19px;letter-spacing:-.02em;text-decoration:none;color:#fff}
+.brand span{color:var(--pink)}
+.open{display:inline-flex;align-items:center;gap:6px;background:#fff;color:#0a0a0c;font-weight:800;font-size:13px;padding:9px 15px;border-radius:999px;text-decoration:none;transition:transform .15s ease}
+.open:active{transform:scale(.95)}
+.wrap{max-width:1000px;margin:0 auto;padding:26px 16px 96px}
+.bc{font-size:12px;color:#71717a;margin-bottom:14px}
 .bc a{color:#a1a1aa;text-decoration:none}
-.faq{margin-top:34px;border-top:1px solid #232029;padding-top:16px}
-.faq h2{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:19px;margin:0 0 12px}
-.faq details{background:#141118;border:1px solid #232029;border-radius:14px;padding:12px 15px;margin-bottom:8px}
-.faq summary{font-weight:700;cursor:pointer}
-.faq p{color:#a1a1aa;margin:8px 0 0}
-@media(max-width:520px){.grid{grid-template-columns:repeat(2,1fr);gap:11px}h1{font-size:24px}}
+.bc a:hover{color:#fff}
+.hero-sec{position:relative;margin-bottom:26px}
+.kicker{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:10px}
+h1{font-family:'Unbounded',system-ui,sans-serif;font-weight:900;font-size:clamp(30px,6vw,48px);line-height:1.05;margin:0 0 12px;letter-spacing:-.02em}
+h1 .dot{color:var(--pink)}
+p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+.stat{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:8px 13px;font-size:13px;font-weight:600;color:#e6e6ea}
+.stat b{color:var(--cyan);font-weight:800}
+.cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(90deg,var(--pink),#ff3d7f);color:#fff;font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:15px;padding:14px 26px;border-radius:999px;text-decoration:none;box-shadow:0 12px 34px -12px rgba(255,0,85,.7);transition:transform .15s ease,box-shadow .15s ease}
+.cta:hover{transform:translateY(-2px);box-shadow:0 16px 40px -12px rgba(255,0,85,.85)}
+.cta.ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:#fff;box-shadow:none}
+.ctarow{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0}
+.sectitle{font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:20px;margin:38px 0 16px;letter-spacing:-.01em}
+.nav-tf{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+.nav-tf a,.nav-tf b{font-size:13px;font-weight:700;padding:8px 14px;border-radius:999px;text-decoration:none}
+.nav-tf a{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);color:#c9c9d1}
+.nav-tf b{background:var(--cyan);color:#04121a}
+.grid{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
+.card{position:relative;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;text-decoration:none;color:#fff;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.card:hover{transform:translateY(-4px);border-color:rgba(0,240,255,.5);box-shadow:0 18px 40px -18px rgba(0,240,255,.45)}
+.poster{position:relative;width:100%;aspect-ratio:4/5;background:#1c1922;overflow:hidden}
+.poster img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s ease}
+.card:hover .poster img{transform:scale(1.05)}
+.poster .ph{width:100%;height:100%;background:linear-gradient(135deg,#2a2340,#12101a)}
+.poster:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(10,10,12,.92) 100%)}
+.badges{position:absolute;left:9px;bottom:9px;right:9px;display:flex;gap:6px;flex-wrap:wrap;z-index:2}
+.sb{font-size:11px;font-weight:800;padding:5px 10px;border-radius:999px;backdrop-filter:blur(6px);white-space:nowrap}
+.sb-on{background:rgba(16,185,129,.32);color:#a7f3d0}
+.sb-few{background:rgba(249,115,22,.36);color:#fed7aa}
+.sb-out{background:rgba(255,255,255,.14);color:#c9c9d1}
+.sb-list{background:rgba(139,92,246,.34);color:#ddd6fe}
+.sb-soon{background:rgba(255,255,255,.16);color:#d4d4d8}
+.pp{font-size:11px;font-weight:900;padding:5px 10px;border-radius:999px;background:var(--cyan);color:#04121a}
+.body{padding:12px 13px 14px;display:flex;flex-direction:column;gap:4px}
+.n{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:14.5px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.m{color:var(--muted);font-size:12.5px}
+.empty{grid-column:1/-1;color:var(--muted);padding:30px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:20px}
+.benes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:16px 0 8px}
+.bene{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px}
+.bene .ic{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px;background:rgba(255,0,85,.14)}
+.bene:nth-child(2) .ic{background:rgba(0,240,255,.14)}
+.bene:nth-child(3) .ic{background:rgba(139,92,246,.16)}
+.bene h3{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:15px;margin:0 0 6px}
+.bene p{color:var(--muted);font-size:13.5px;margin:0}
+.joinband{margin-top:22px;background:linear-gradient(120deg,rgba(255,0,85,.16),rgba(0,240,255,.12));border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:26px 22px;text-align:center}
+.joinband h2{font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:22px;margin:0 0 8px}
+.joinband p{color:#d4d4d8;margin:0 0 18px}
+.hero{width:100%;max-height:420px;object-fit:cover;border-radius:22px;margin:6px 0 20px;border:1px solid var(--line)}
+.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:20px 0}
+.meta > div{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+.meta b{color:var(--cyan);font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px}
+.stickycta{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:rgba(12,10,16,.9);backdrop-filter:blur(14px);border-top:1px solid rgba(255,255,255,.08)}
+.stickycta .pr{flex:0 0 auto;line-height:1.1}
+.stickycta .pr small{display:block;color:var(--muted);font-size:11px}
+.stickycta .pr b{font-family:'Unbounded',system-ui,sans-serif;font-size:17px}
+.stickycta .cta{flex:1;padding:13px 18px}
+.cities{margin-top:38px;border-top:1px solid var(--line);padding-top:20px}
+.cities a{color:var(--cyan);margin-right:16px;text-decoration:none;display:inline-block;margin-bottom:8px;font-weight:600}
+.cities a:hover{color:#fff}
+.cities b{display:block;margin-bottom:10px;color:#fff}
+.langs{margin-top:28px;font-size:13px;color:#71717a}
+.langs a{color:#a1a1aa;margin-right:12px;text-decoration:none}
+footer{margin-top:34px;color:#71717a;font-size:13px;border-top:1px solid var(--line);padding-top:18px}
+.faq{margin-top:8px}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px}
+.faq summary{font-weight:700;cursor:pointer;list-style:none}
+.faq summary::-webkit-details-marker{display:none}
+.faq p{color:var(--muted);margin:10px 0 0}
+@media(max-width:640px){.benes{grid-template-columns:1fr}.meta{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,1fr);gap:12px}}
 """
+
+def _seo_topbar(front, lang, e):
+    ui = _SEO_UI.get(lang, _SEO_UI["es"])
+    return (f'<header class="topbar"><a class="brand" href="{front}/">\u00bfQui\u00e9n va?<span>.</span></a>'
+            f'<a class="open" href="{front}/feed">{e(ui["open"])} \u2192</a></header>')
+
+
+def _seo_benefits(lang, e):
+    ui = _SEO_UI.get(lang, _SEO_UI["es"])
+    return (f'<h2 class="sectitle">{e(ui["why"])}</h2><div class="benes">'
+            f'<div class="bene"><div class="ic">\U0001F465</div><h3>{e(ui["b1t"])}</h3><p>{e(ui["b1d"])}</p></div>'
+            f'<div class="bene"><div class="ic">\U0001F3AB</div><h3>{e(ui["b2t"])}</h3><p>{e(ui["b2d"])}</p></div>'
+            f'<div class="bene"><div class="ic">\u26A1</div><h3>{e(ui["b3t"])}</h3><p>{e(ui["b3d"])}</p></div>'
+            f'</div>')
+
+
+def _seo_joinband(front, lang, e):
+    ui = _SEO_UI.get(lang, _SEO_UI["es"])
+    return (f'<div class="joinband"><h2>{e(ui["join_h"])}</h2><p>{e(ui["join_p"])}</p>'
+            f'<a class="cta" href="{front}/feed">{e(ui["join"])}</a></div>')
 
 _SEO_FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
               '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
               '<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">')
+
+# Localized micro-copy for the redesigned SEO pages (topbar CTA, benefits,
+# join band). Kept separate from SEO_T so it is easy to extend.
+_SEO_UI = {
+    "es": {
+        "open": "Abrir app",
+        "why": "Por qu\u00e9 \u00bfQui\u00e9n va?",
+        "b1t": "Descubre qui\u00e9n va", "b1d": "Mira qu\u00e9 amigos van a cada fiesta antes de decidir el plan.",
+        "b2t": "Entradas al mejor precio", "b2d": "Precios reales y avisos cuando bajan o quedan pocas entradas.",
+        "b3t": "No te pierdas nada", "b3d": "Todas las discotecas y fiestas de tu ciudad, en un solo sitio.",
+        "join": "\u00danete gratis", "join_h": "Vive la noche con tus amigos",
+        "join_p": "Reg\u00edstrate gratis: mira qui\u00e9n va, consigue tus entradas y no te pierdas ni una fiesta.",
+    },
+    "en": {
+        "open": "Open app",
+        "why": "Why \u00bfQui\u00e9n va?",
+        "b1t": "See who's going", "b1d": "Check which friends are going to each party before you decide.",
+        "b2t": "Tickets at the best price", "b2d": "Real prices and alerts when they drop or are running low.",
+        "b3t": "Never miss out", "b3d": "Every club and party in your city, all in one place.",
+        "join": "Join free", "join_h": "Live the night with your friends",
+        "join_p": "Sign up free: see who's going, grab your tickets and never miss a party.",
+    },
+    "de": {
+        "open": "App \u00f6ffnen",
+        "why": "Warum \u00bfQui\u00e9n va?",
+        "b1t": "Sieh, wer hingeht", "b1d": "Sieh, welche Freunde zu jeder Party gehen, bevor du dich entscheidest.",
+        "b2t": "Tickets zum besten Preis", "b2d": "Echte Preise und Hinweise, wenn sie sinken oder knapp werden.",
+        "b3t": "Verpass nichts", "b3d": "Alle Clubs und Partys deiner Stadt an einem Ort.",
+        "join": "Kostenlos beitreten", "join_h": "Erlebe die Nacht mit deinen Freunden",
+        "join_p": "Melde dich kostenlos an: sieh wer hingeht, hol dir Tickets und verpass keine Party.",
+    },
+}
 
 SEO_T = {
     "es": {
@@ -1350,8 +1444,18 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
         u = _city_tf_paths(front, slug_l, tf)[lang]
         lbl = e(T[key])
         nav.append(f'<b>{lbl}</b>' if tf == timeframe else f'<a href="{e(u)}">{lbl}</a>')
-    nav_sep = " \u00b7 "
-    nav_html = f'<div class="cities">{nav_sep.join(nav)}</div>'
+    nav_html = f'<div class="nav-tf">{"".join(nav)}</div>'
+
+    # Stat chips for the hero (social proof + value props).
+    _sl = {"es": ("planes esta semana", "Precios reales", "Qui\u00e9n va con amigos"),
+           "en": ("plans this week", "Real prices", "Who's going"),
+           "de": ("Pl\u00e4ne diese Woche", "Echte Preise", "Wer hingeht")}.get(lang, ("planes", "Precios reales", "Qui\u00e9n va"))
+    stats_html = (f'<div class="stats"><span class="stat"><b>{n}</b> {e(_sl[0])}</span>'
+                  f'<span class="stat">\U0001F3AB {e(_sl[1])}</span>'
+                  f'<span class="stat">\U0001F465 {e(_sl[2])}</span></div>')
+    topbar = _seo_topbar(front, lang, e)
+    benefits = _seo_benefits(lang, e)
+    joinband = _seo_joinband(front, lang, e)
 
     other_cities = "".join(
         f'<a href="{e(_city_paths(front, _city_slug(c["id"]))[lang])}">{e(c["label"])}</a>'
@@ -1390,14 +1494,22 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 {''.join(jsonld)}{extra_jsonld}
 {_SEO_FONTS}
 <style>{_SEO_CSS}</style></head>
-<body><div class="wrap">
+<body><div class="bgfx"></div>
+{topbar}
+<div class="wrap">
 {bc_html}
-<h1>{h1}</h1>
+<section class="hero-sec">
+<span class="kicker">{e(label)}</span>
+<h1>{h1}<span class="dot">.</span></h1>
 <p class="sub">{sub}</p>
+{stats_html}
+<div class="ctarow"><a class="cta" href="{front}/feed">{e(T["open_app"])}</a></div>
 {nav_html}
-<a class="cta" href="{front}/feed">{e(T["open_app"])}</a>
+</section>
 <ul class="grid">{''.join(items_html)}</ul>
-<div class="cities"><b>{e(T["other_cities"])}</b><br>{other_cities}</div>
+{benefits}
+{joinband}
+<div class="cities"><b>{e(T["other_cities"])}</b>{other_cities}</div>
 {faq_html}
 {langsw}
 <footer>{e(T["footer"])}</footer>
@@ -1503,10 +1615,10 @@ async def _render_event(event_id: str, lang: str, request: Request):
             ru = _event_paths(front, r.get("id", ""), _event_slug(r))[lang]
             lis.append(f'<li>{_seo_card(r, ru, lang, e)}</li>')
         if lis:
-            more_url = _city_paths(front, _slugify(city_id))[lang]
-            related_html = (f'<div class="cities"><b>{e(T["more_in"].format(label=city_label))}</b></div>'
+            more_url = _city_paths(front, _city_slug(city_id))[lang]
+            related_html = (f'<h2 class="sectitle">{e(T["more_in"].format(label=city_label))}</h2>'
                             f'<ul class="grid">{"".join(lis[:6])}</ul>'
-                            f'<a class="cta" href="{e(more_url)}">{e(T["more_in"].format(label=city_label))}</a>')
+                            f'<div class="ctarow"><a class="cta ghost" href="{e(more_url)}">{e(T["more_in"].format(label=city_label))}</a></div>')
 
     genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(ev.get("genre",""))}</div>' if ev.get("genre") else ""
     addr = (", " + e(ev.get("address", ""))) if ev.get("address") else ""
@@ -1517,7 +1629,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
     addr_plain = (", " + ev.get("address", "")) if ev.get("address") else ""
     bc_items = [(T["bc_home"], f"{front}/")]
     if city_id:
-        bc_items.append((city_label, _city_paths(front, _slugify(city_id))[lang]))
+        bc_items.append((city_label, _city_paths(front, _city_slug(city_id))[lang]))
     bc_items.append((name, canonical))
     bc_html = _breadcrumb_html(bc_items, e)
     faq_pairs = [
@@ -1543,45 +1655,68 @@ async def _render_event(event_id: str, lang: str, request: Request):
     # Freshness / churn handling: past parties are noindex,follow (Google drops the
     # stale page but still follows links to upcoming events), no misleading offers,
     # and the primary CTA funnels to the city's upcoming parties instead of tickets.
-    robots_meta = '<meta name="robots" content="noindex, follow">' if is_past else ''
+    robots_meta = ('<meta name="robots" content="noindex, follow">' if is_past
+                   else '<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">')
     ended_html = f'<p class="sub" style="color:#f5a524;font-weight:700">{e(T["ev_ended"])}</p>' if is_past else ''
+    ui = _SEO_UI.get(lang, _SEO_UI["es"])
+    topbar = _seo_topbar(front, lang, e)
+    benefits = _seo_benefits(lang, e)
+    joinband = _seo_joinband(front, lang, e)
+    ghost_open = f'<a class="cta ghost" href="{front}/feed">{e(ui["open"])}</a>'
     if is_past and city_id:
-        primary_cta = f'<a class="cta" href="{e(_city_paths(front, _slugify(city_id))[lang])}">{e(T["more_in"].format(label=city_label))}</a>'
+        primary_cta = f'<a class="cta" href="{e(_city_paths(front, _city_slug(city_id))[lang])}">{e(T["more_in"].format(label=city_label))}</a>'
+        ctarow_html = f'<div class="ctarow">{primary_cta}</div>'
+        sticky_html = ''
     else:
         primary_cta = f'<a class="cta" href="{front}/event/{e(event_id)}">{e(T["ev_cta"])}</a>'
+        ctarow_html = f'<div class="ctarow">{primary_cta}{ghost_open}</div>'
+        sticky_html = (f'<div class="stickycta"><div class="pr"><small>{e(T["ev_price"])}</small>'
+                       f'<b>{e(pl or T["free"])}</b></div>'
+                       f'<a class="cta" href="{front}/event/{e(event_id)}">{e(T["ev_cta"])}</a></div>')
+    ogloc = {'es': 'es_ES', 'en': 'en_US', 'de': 'de_DE'}[lang]
     html_out = f"""<!doctype html>
 <html lang="{T['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+{robots_meta}
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <link rel="canonical" href="{e(canonical)}">
 {hreflang}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
+<meta property="og:locale" content="{ogloc}">
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
 <meta property="og:url" content="{e(canonical)}">{ogimg_tag}
 <meta name="twitter:card" content="summary_large_image">
-{robots_meta}
 {jsonld}{extra_jsonld}
 {_SEO_FONTS}
 <style>{_SEO_CSS}</style></head>
-<body><div class="wrap">
+<body><div class="bgfx"></div>
+{topbar}
+<div class="wrap">
 {bc_html}
 {hero}
-<h1>{e(ev.get("name","Fiesta"))}</h1>
+<section class="hero-sec">
+<span class="kicker">{e(city)}</span>
+<h1>{e(ev.get("name","Fiesta"))}<span class="dot">.</span></h1>
 <p class="sub">{e(ev.get("venue",""))} \u00b7 {e(city)}</p>
 {ended_html}
+</section>
 <div class="meta">
 <div><b>{e(T["ev_when"])}</b>{e(when)}</div>
 <div><b>{e(T["ev_where"])}</b>{e(ev.get("venue",""))}{addr}, {e(city)}</div>
 {genre_row}
 <div><b>{e(T["ev_price"])}</b>{e(pl or T["free"])}</div>
 </div>
-{primary_cta}
+{ctarow_html}
 {related_html}
+{benefits}
+{joinband}
 {faq_html}
 {langsw}
 <footer>{e(T["footer"])}</footer>
-</div></body></html>"""
+</div>
+{sticky_html}
+</body></html>"""
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
                              headers={"Cache-Control": "public, max-age=1800"})
 
