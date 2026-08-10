@@ -1,447 +1,310 @@
 #!/usr/bin/env python3
 """
-Backend test for SEO indexing bug fix.
-Tests apex->www canonical host + short city slugs + richer Event JSON-LD.
+Backend test for SEO routes HEAD request bug fix
+Testing sitemap/robots/SEO routes to ensure they accept both GET and HEAD requests
 """
 import requests
-import json
-import re
-from xml.etree import ElementTree as ET
+import sys
+import os
+from typing import Dict, Tuple
 
 # Base URL from frontend/.env
-BASE_URL = "https://5e791fc6-c24a-43ab-8471-29846eab5135.preview.emergentagent.com/api"
+BASE_URL = "https://multilang-feed-core.preview.emergentagent.com"
+API_BASE = f"{BASE_URL}/api"
 
-# CRITICAL: All requests must include these headers to simulate the public domain
+# Required headers for all requests
 HEADERS = {
     "x-forwarded-host": "quienva.me",
     "x-forwarded-proto": "https"
 }
 
-def test_city_page_palma():
-    """Test 1: GET /api/ciudad/palma - verify canonical, hreflang, robots meta"""
-    print("\n=== TEST 1: City page Palma ===")
-    url = f"{BASE_URL}/ciudad/palma"
-    resp = requests.get(url, headers=HEADERS)
-    
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    html = resp.text
-    
-    # Extract canonical URL
-    canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
-    assert canonical_match, "No canonical link found"
-    canonical = canonical_match.group(1)
-    
-    print(f"Canonical URL: {canonical}")
-    
-    # MUST be exactly https://www.quienva.me/fiestas/palma
-    expected_canonical = "https://www.quienva.me/fiestas/palma"
-    assert canonical == expected_canonical, f"Expected canonical '{expected_canonical}', got '{canonical}'"
-    
-    # Check for robots meta tag
-    assert '<meta name="robots"' in html, "No robots meta tag found"
-    print("✓ Robots meta tag present")
-    
-    # Check for 4 hreflang alternates (es, en, de, x-default)
-    hreflang_es = re.search(r'<link rel="alternate" hreflang="es" href="([^"]+)"', html)
-    hreflang_en = re.search(r'<link rel="alternate" hreflang="en" href="([^"]+)"', html)
-    hreflang_de = re.search(r'<link rel="alternate" hreflang="de" href="([^"]+)"', html)
-    hreflang_default = re.search(r'<link rel="alternate" hreflang="x-default" href="([^"]+)"', html)
-    
-    assert hreflang_es, "No hreflang es found"
-    assert hreflang_en, "No hreflang en found"
-    assert hreflang_de, "No hreflang de found"
-    assert hreflang_default, "No hreflang x-default found"
-    
-    # Verify hreflang URLs
-    assert hreflang_es.group(1) == "https://www.quienva.me/fiestas/palma", f"ES hreflang incorrect: {hreflang_es.group(1)}"
-    assert hreflang_en.group(1) == "https://www.quienva.me/en/parties/palma", f"EN hreflang incorrect: {hreflang_en.group(1)}"
-    assert hreflang_de.group(1) == "https://www.quienva.me/de/partys/palma", f"DE hreflang incorrect: {hreflang_de.group(1)}"
-    
-    print(f"✓ ES hreflang: {hreflang_es.group(1)}")
-    print(f"✓ EN hreflang: {hreflang_en.group(1)}")
-    print(f"✓ DE hreflang: {hreflang_de.group(1)}")
-    print(f"✓ x-default hreflang: {hreflang_default.group(1)}")
-    
-    # Verify NO apex without www
-    assert "https://quienva.me/" not in html or "https://www.quienva.me/" in html, "Found bare apex URL without www"
-    print("✓ No bare apex URLs found")
-    
-    print("✅ TEST 1 PASSED")
-    return True
+# Admin credentials
+ADMIN_EMAIL = "admin@quienva.app"
+ADMIN_PASSWORD = "admin123"
 
+# Test results storage
+test_results = []
 
-def test_city_pages_all():
-    """Test 2: Test all city pages (madrid, barcelona, ibiza, marbella) for correct canonicals"""
-    print("\n=== TEST 2: All city pages ===")
-    cities = [
-        ("madrid", "https://www.quienva.me/fiestas/madrid"),
-        ("barcelona", "https://www.quienva.me/fiestas/barcelona"),
-        ("ibiza", "https://www.quienva.me/fiestas/ibiza"),
-        ("marbella", "https://www.quienva.me/fiestas/marbella")
-    ]
-    
-    for slug, expected_canonical in cities:
-        print(f"\nTesting /ciudad/{slug}...")
-        url = f"{BASE_URL}/ciudad/{slug}"
-        resp = requests.get(url, headers=HEADERS)
+def log_test(test_name: str, passed: bool, details: str = ""):
+    """Log test result"""
+    status = "✅ PASS" if passed else "❌ FAIL"
+    result = f"{status}: {test_name}"
+    if details:
+        result += f" - {details}"
+    print(result)
+    test_results.append({
+        "name": test_name,
+        "passed": passed,
+        "details": details
+    })
+
+def test_endpoint(path: str, method: str, expected_status: int, expected_content_type: str) -> Tuple[bool, str]:
+    """
+    Test an endpoint with specified method
+    Returns (passed, details)
+    """
+    url = f"{API_BASE}{path}"
+    try:
+        if method == "GET":
+            response = requests.get(url, headers=HEADERS, timeout=10)
+        elif method == "HEAD":
+            response = requests.head(url, headers=HEADERS, timeout=10)
+        else:
+            return False, f"Invalid method: {method}"
         
-        assert resp.status_code == 200, f"Expected 200 for {slug}, got {resp.status_code}"
-        html = resp.text
+        status_ok = response.status_code == expected_status
+        content_type = response.headers.get("Content-Type", "")
+        content_type_ok = expected_content_type.lower() in content_type.lower()
         
-        canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
-        assert canonical_match, f"No canonical link found for {slug}"
-        canonical = canonical_match.group(1)
+        if status_ok and content_type_ok:
+            return True, f"{method} {path} → {response.status_code} {content_type}"
+        else:
+            details = f"{method} {path} → {response.status_code} {content_type} (expected {expected_status} {expected_content_type})"
+            return False, details
+            
+    except Exception as e:
+        return False, f"{method} {path} → ERROR: {str(e)}"
+
+def get_admin_token() -> str:
+    """Login as admin and get token"""
+    try:
+        response = requests.post(
+            f"{API_BASE}/auth/login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+            headers=HEADERS,
+            timeout=10
+        )
+        if response.status_code == 200:
+            return response.json().get("token", "")
+        return ""
+    except Exception:
+        return ""
+
+def get_valid_event_id(token: str) -> str:
+    """Get a valid upcoming event ID"""
+    try:
+        # Try to get events-min (admin endpoint)
+        response = requests.get(
+            f"{API_BASE}/admin/events-min",
+            headers={**HEADERS, "Authorization": f"Bearer {token}"},
+            timeout=10
+        )
+        if response.status_code == 200:
+            events = response.json().get("events", [])
+            if events:
+                return events[0]["id"]
         
-        print(f"  Canonical: {canonical}")
-        assert canonical == expected_canonical, f"Expected '{expected_canonical}', got '{canonical}'"
+        # Fallback: try to get from sitemap
+        response = requests.get(
+            f"{API_BASE}/sitemap-events-ibiza.xml",
+            headers=HEADERS,
+            timeout=10
+        )
+        if response.status_code == 200:
+            # Extract first event ID from sitemap
+            import re
+            match = re.search(r'/fiesta/([a-f0-9-]+)', response.text)
+            if match:
+                return match.group(1)
         
-        # Verify NO long slugs like palma-de-mallorca or marbella-puerto-banus
-        assert "palma-de-mallorca" not in html, f"Found long slug 'palma-de-mallorca' in {slug}"
-        assert "marbella-puerto-banus" not in html, f"Found long slug 'marbella-puerto-banus' in {slug}"
+        return ""
+    except Exception:
+        return ""
+
+def test_content_sanity(path: str, checks: list) -> Tuple[bool, str]:
+    """Test GET response content"""
+    url = f"{API_BASE}{path}"
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code != 200:
+            return False, f"GET {path} returned {response.status_code}"
         
-        # Verify NO bare apex
-        # Count occurrences - www should be present, bare apex should not
-        www_count = html.count("https://www.quienva.me/")
-        bare_apex_pattern = re.compile(r'https://quienva\.me/(?!.*www)')
-        bare_matches = bare_apex_pattern.findall(html)
+        content = response.text
+        failed_checks = []
         
-        print(f"  ✓ Canonical uses www and short slug")
-    
-    print("\n✅ TEST 2 PASSED")
-    return True
-
-
-def test_long_slug_alias():
-    """Test 3: GET /api/ciudad/palma-de-mallorca (long alias) should canonicalize to short slug"""
-    print("\n=== TEST 3: Long slug alias ===")
-    url = f"{BASE_URL}/ciudad/palma-de-mallorca"
-    resp = requests.get(url, headers=HEADERS)
-    
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    html = resp.text
-    
-    canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
-    assert canonical_match, "No canonical link found"
-    canonical = canonical_match.group(1)
-    
-    print(f"Canonical URL: {canonical}")
-    
-    # MUST canonicalize to short slug
-    expected_canonical = "https://www.quienva.me/fiestas/palma"
-    assert canonical == expected_canonical, f"Expected canonical '{expected_canonical}', got '{canonical}'"
-    
-    print("✅ TEST 3 PASSED - Long slug correctly canonicalizes to short slug")
-    return True
-
-
-def test_invalid_city():
-    """Test 4: GET /api/ciudad/ciudad-inexistente should return 404"""
-    print("\n=== TEST 4: Invalid city slug ===")
-    url = f"{BASE_URL}/ciudad/ciudad-inexistente"
-    resp = requests.get(url, headers=HEADERS)
-    
-    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
-    assert resp.headers.get("content-type", "").startswith("text/html"), "Expected HTML response"
-    
-    print("✅ TEST 4 PASSED - Invalid city returns 404")
-    return True
-
-
-def test_sitemap_cities():
-    """Test 5: GET /api/sitemap-cities.xml - verify all URLs use www and short slugs"""
-    print("\n=== TEST 5: Sitemap cities ===")
-    url = f"{BASE_URL}/sitemap-cities.xml"
-    resp = requests.get(url, headers=HEADERS)
-    
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    assert "application/xml" in resp.headers.get("content-type", ""), "Expected XML content-type"
-    
-    xml_content = resp.text
-    
-    # Parse XML
-    root = ET.fromstring(xml_content)
-    
-    # Find all <loc> elements
-    ns = {'sm': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
-    locs = root.findall('.//sm:loc', ns)
-    
-    print(f"Found {len(locs)} <loc> entries")
-    
-    for loc in locs:
-        url_text = loc.text
+        for check in checks:
+            if check["type"] == "contains":
+                if check["value"] not in content:
+                    failed_checks.append(f"Missing: {check['value']}")
+            elif check["type"] == "not_contains":
+                if check["value"] in content:
+                    failed_checks.append(f"Should not contain: {check['value']}")
+            elif check["type"] == "starts_with":
+                if not content.startswith(check["value"]):
+                    failed_checks.append(f"Should start with: {check['value']}")
         
-        # EVERY <loc> must start with https://www.quienva.me
-        assert url_text.startswith("https://www.quienva.me"), f"URL does not start with www: {url_text}"
+        if failed_checks:
+            return False, "; ".join(failed_checks)
+        return True, f"Content checks passed for {path}"
         
-        # Check for forbidden long slugs
-        assert "palma-de-mallorca" not in url_text, f"Found long slug 'palma-de-mallorca' in: {url_text}"
-        assert "marbella-puerto-banus" not in url_text, f"Found long slug 'marbella-puerto-banus' in: {url_text}"
-    
-    # Verify short slugs are present
-    xml_str = xml_content
-    assert "/fiestas/palma" in xml_str, "Short slug 'palma' not found"
-    assert "/fiestas/ibiza" in xml_str, "Short slug 'ibiza' not found"
-    assert "/fiestas/madrid" in xml_str, "Short slug 'madrid' not found"
-    assert "/fiestas/barcelona" in xml_str, "Short slug 'barcelona' not found"
-    assert "/fiestas/marbella" in xml_str, "Short slug 'marbella' not found"
-    
-    print("✓ All URLs use https://www.quienva.me")
-    print("✓ All city URLs use short slugs")
-    print("✓ No long slugs found")
-    
-    print("✅ TEST 5 PASSED")
-    return True
-
-
-def test_sitemap_index():
-    """Test 6: GET /api/sitemap.xml - verify child sitemaps use www and short slugs"""
-    print("\n=== TEST 6: Sitemap index ===")
-    url = f"{BASE_URL}/sitemap.xml"
-    resp = requests.get(url, headers=HEADERS)
-    
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    assert "application/xml" in resp.headers.get("content-type", ""), "Expected XML content-type"
-    
-    xml_content = resp.text
-    
-    # Parse XML
-    root = ET.fromstring(xml_content)
-    
-    # Find all <loc> elements in sitemap index
-    ns = {'sm': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
-    locs = root.findall('.//sm:loc', ns)
-    
-    print(f"Found {len(locs)} child sitemap entries")
-    
-    for loc in locs:
-        url_text = loc.text
-        print(f"  {url_text}")
-        
-        # All child sitemaps must use www
-        assert url_text.startswith("https://www.quienva.me"), f"Child sitemap does not use www: {url_text}"
-    
-    # Verify expected child sitemaps with short slugs
-    xml_str = xml_content
-    assert "sitemap-cities.xml" in xml_str, "sitemap-cities.xml not found"
-    assert "sitemap-events-palma.xml" in xml_str, "sitemap-events-palma.xml not found"
-    assert "sitemap-events-ibiza.xml" in xml_str, "sitemap-events-ibiza.xml not found"
-    assert "sitemap-events-madrid.xml" in xml_str, "sitemap-events-madrid.xml not found"
-    assert "sitemap-events-barcelona.xml" in xml_str, "sitemap-events-barcelona.xml not found"
-    assert "sitemap-events-marbella.xml" in xml_str, "sitemap-events-marbella.xml not found"
-    
-    print("✓ All child sitemaps use www")
-    print("✓ All event sitemaps use short city slugs")
-    
-    print("✅ TEST 6 PASSED")
-    return True
-
-
-def test_robots_txt():
-    """Test 7: GET /api/robots.txt - verify Sitemap line uses www"""
-    print("\n=== TEST 7: Robots.txt ===")
-    url = f"{BASE_URL}/robots.txt"
-    resp = requests.get(url, headers=HEADERS)
-    
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    assert "text/plain" in resp.headers.get("content-type", ""), "Expected text/plain content-type"
-    
-    content = resp.text
-    print(f"Robots.txt content:\n{content}")
-    
-    # Verify Sitemap line uses www
-    assert "Sitemap: https://www.quienva.me/sitemap.xml" in content, "Sitemap line does not use www host"
-    
-    print("✅ TEST 7 PASSED")
-    return True
-
-
-def get_event_with_price():
-    """Helper: Get an event ID that has a price"""
-    print("\n=== Finding event with price ===")
-    # Get events from admin endpoint
-    url = f"{BASE_URL}/admin/events-min"
-    
-    # Need to login as admin first
-    login_url = f"{BASE_URL}/auth/login"
-    login_data = {"email": "admin@quienva.me", "password": "admin123"}
-    login_resp = requests.post(login_url, json=login_data)
-    
-    if login_resp.status_code != 200:
-        print(f"Warning: Could not login as admin (status {login_resp.status_code})")
-        # Try to get any event from the database
-        # We'll just use a known event ID from the seed data
-        return None
-    
-    token = login_resp.json().get("token")
-    headers_with_auth = {**HEADERS, "Authorization": f"Bearer {token}"}
-    
-    resp = requests.get(url, headers=headers_with_auth)
-    if resp.status_code != 200:
-        print(f"Warning: Could not get events (status {resp.status_code})")
-        return None
-    
-    events = resp.json().get("events", [])
-    
-    # Get full event details to find one with price
-    for event in events[:50]:  # Check first 50 events
-        event_id = event.get("id")
-        event_url = f"{BASE_URL}/events/{event_id}"
-        event_resp = requests.get(event_url, headers=headers_with_auth)
-        
-        if event_resp.status_code == 200:
-            event_data = event_resp.json()
-            price_tiers = event_data.get("price_tiers", [])
-            if price_tiers and any(t.get("price") for t in price_tiers):
-                print(f"Found event with price: {event_id} - {event_data.get('name')}")
-                return event_id
-    
-    print("Warning: No event with price found, will use first available event")
-    return events[0].get("id") if events else None
-
-
-def test_event_page_jsonld():
-    """Test 8: GET /api/fiesta/{id} - verify Event JSON-LD has all required fields"""
-    print("\n=== TEST 8: Event page JSON-LD ===")
-    
-    # Get an event with price
-    event_id = get_event_with_price()
-    
-    if not event_id:
-        print("⚠️  Could not find event with price, skipping test")
-        return False
-    
-    url = f"{BASE_URL}/fiesta/{event_id}"
-    resp = requests.get(url, headers=HEADERS)
-    
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    html = resp.text
-    
-    # Extract JSON-LD
-    jsonld_match = re.search(r'<script type="application/ld\+json">({.*?"@type":\s*"Event".*?})</script>', html, re.DOTALL)
-    assert jsonld_match, "No Event JSON-LD found"
-    
-    jsonld_str = jsonld_match.group(1)
-    jsonld = json.loads(jsonld_str)
-    
-    print(f"Event JSON-LD keys: {list(jsonld.keys())}")
-    
-    # Verify required fields
-    assert "@context" in jsonld, "Missing @context"
-    assert "@type" in jsonld and jsonld["@type"] == "Event", "Missing or incorrect @type"
-    assert "name" in jsonld, "Missing name"
-    assert "startDate" in jsonld, "Missing startDate"
-    
-    # NEW FIELDS from the fix
-    assert "endDate" in jsonld, "Missing endDate"
-    print(f"✓ endDate: {jsonld['endDate']}")
-    
-    assert "description" in jsonld, "Missing description"
-    assert jsonld["description"], "description is empty"
-    print(f"✓ description: {jsonld['description'][:50]}...")
-    
-    assert "performer" in jsonld, "Missing performer"
-    assert jsonld["performer"].get("@type"), "performer missing @type"
-    assert jsonld["performer"].get("name"), "performer missing name"
-    print(f"✓ performer: {jsonld['performer']}")
-    
-    # Check offers (if event has price)
-    if "offers" in jsonld:
-        offers = jsonld["offers"]
-        print(f"✓ offers present")
-        
-        assert "price" in offers, "offers missing price"
-        assert "priceCurrency" in offers, "offers missing priceCurrency"
-        assert "availability" in offers, "offers missing availability"
-        assert "url" in offers, "offers missing url"
-        
-        # NEW FIELDS from the fix
-        assert "validFrom" in offers, "offers missing validFrom"
-        print(f"✓ offers.validFrom: {offers['validFrom']}")
-        
-        assert "priceValidUntil" in offers, "offers missing priceValidUntil"
-        print(f"✓ offers.priceValidUntil: {offers['priceValidUntil']}")
-        
-        # Verify offer URL uses www
-        assert offers["url"].startswith("https://www.quienva.me"), f"Offer URL does not use www: {offers['url']}"
-    
-    # Verify JSON-LD url uses www
-    assert jsonld["url"].startswith("https://www.quienva.me"), f"JSON-LD url does not use www: {jsonld['url']}"
-    print(f"✓ JSON-LD url uses www: {jsonld['url']}")
-    
-    # Verify canonical link uses www
-    canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
-    assert canonical_match, "No canonical link found"
-    canonical = canonical_match.group(1)
-    assert canonical.startswith("https://www.quienva.me"), f"Canonical does not use www: {canonical}"
-    print(f"✓ Canonical uses www: {canonical}")
-    
-    print("✅ TEST 8 PASSED")
-    return True
-
-
-def test_invalid_event():
-    """Test 9: GET /api/fiesta/nonexistentid123 should return 404"""
-    print("\n=== TEST 9: Invalid event ID ===")
-    url = f"{BASE_URL}/fiesta/nonexistentid123"
-    resp = requests.get(url, headers=HEADERS)
-    
-    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
-    assert resp.headers.get("content-type", "").startswith("text/html"), "Expected HTML response"
-    
-    print("✅ TEST 9 PASSED - Invalid event returns 404")
-    return True
-
+    except Exception as e:
+        return False, f"ERROR: {str(e)}"
 
 def main():
-    """Run all tests"""
     print("=" * 80)
-    print("SEO INDEXING BUG FIX TEST SUITE")
-    print("Testing: apex->www canonical + short city slugs + richer Event JSON-LD")
+    print("SEO ROUTES HEAD REQUEST BUG FIX TEST")
     print("=" * 80)
+    print(f"Base URL: {BASE_URL}")
+    print(f"Headers: {HEADERS}")
+    print()
     
-    tests = [
-        ("City page Palma (canonical, hreflang, robots)", test_city_page_palma),
-        ("All city pages (madrid, barcelona, ibiza, marbella)", test_city_pages_all),
-        ("Long slug alias (palma-de-mallorca)", test_long_slug_alias),
-        ("Invalid city slug", test_invalid_city),
-        ("Sitemap cities (www + short slugs)", test_sitemap_cities),
-        ("Sitemap index (child sitemaps)", test_sitemap_index),
-        ("Robots.txt (www sitemap)", test_robots_txt),
-        ("Event page JSON-LD (endDate, description, performer, offers)", test_event_page_jsonld),
-        ("Invalid event ID", test_invalid_event),
-    ]
+    # Test 1: /api/sitemap.xml
+    print("TEST 1: /api/sitemap.xml")
+    passed, details = test_endpoint("/sitemap.xml", "GET", 200, "application/xml")
+    log_test("GET /api/sitemap.xml → 200 application/xml", passed, details)
     
-    passed = 0
-    failed = 0
-    skipped = 0
+    passed, details = test_endpoint("/sitemap.xml", "HEAD", 200, "application/xml")
+    log_test("HEAD /api/sitemap.xml → 200 application/xml (NOT 405, NOT application/json)", passed, details)
+    print()
     
-    for name, test_func in tests:
-        try:
-            result = test_func()
-            if result is False:
-                skipped += 1
-                print(f"⚠️  SKIPPED: {name}")
-            else:
-                passed += 1
-        except AssertionError as e:
-            failed += 1
-            print(f"❌ FAILED: {name}")
-            print(f"   Error: {e}")
-        except Exception as e:
-            failed += 1
-            print(f"❌ ERROR: {name}")
-            print(f"   Exception: {e}")
+    # Test 2: /api/sitemap-cities.xml
+    print("TEST 2: /api/sitemap-cities.xml")
+    passed, details = test_endpoint("/sitemap-cities.xml", "GET", 200, "application/xml")
+    log_test("GET /api/sitemap-cities.xml → 200 application/xml", passed, details)
     
-    print("\n" + "=" * 80)
-    print(f"TEST RESULTS: {passed} passed, {failed} failed, {skipped} skipped")
+    passed, details = test_endpoint("/sitemap-cities.xml", "HEAD", 200, "application/xml")
+    log_test("HEAD /api/sitemap-cities.xml → 200 application/xml", passed, details)
+    print()
+    
+    # Test 3: /api/sitemap-events-ibiza.xml
+    print("TEST 3: /api/sitemap-events-ibiza.xml")
+    passed, details = test_endpoint("/sitemap-events-ibiza.xml", "GET", 200, "application/xml")
+    log_test("GET /api/sitemap-events-ibiza.xml → 200 application/xml", passed, details)
+    
+    passed, details = test_endpoint("/sitemap-events-ibiza.xml", "HEAD", 200, "application/xml")
+    log_test("HEAD /api/sitemap-events-ibiza.xml → 200 application/xml", passed, details)
+    print()
+    
+    # Test 4: /api/robots.txt
+    print("TEST 4: /api/robots.txt")
+    passed, details = test_endpoint("/robots.txt", "GET", 200, "text/plain")
+    log_test("GET /api/robots.txt → 200 text/plain", passed, details)
+    
+    passed, details = test_endpoint("/robots.txt", "HEAD", 200, "text/plain")
+    log_test("HEAD /api/robots.txt → 200 text/plain", passed, details)
+    print()
+    
+    # Test 5: /api/ciudad/madrid
+    print("TEST 5: /api/ciudad/madrid")
+    passed, details = test_endpoint("/ciudad/madrid", "GET", 200, "text/html")
+    log_test("GET /api/ciudad/madrid → 200 text/html", passed, details)
+    
+    passed, details = test_endpoint("/ciudad/madrid", "HEAD", 200, "text/html")
+    log_test("HEAD /api/ciudad/madrid → 200 text/html", passed, details)
+    print()
+    
+    # Test 6: /api/fiesta/{valid_id}
+    print("TEST 6: /api/fiesta/{valid_id}")
+    print("Getting admin token...")
+    token = get_admin_token()
+    if token:
+        print("✓ Admin login successful")
+        event_id = get_valid_event_id(token)
+        if event_id:
+            print(f"✓ Found valid event ID: {event_id}")
+            
+            passed, details = test_endpoint(f"/fiesta/{event_id}", "GET", 200, "text/html")
+            log_test(f"GET /api/fiesta/{event_id} → 200 text/html", passed, details)
+            
+            passed, details = test_endpoint(f"/fiesta/{event_id}", "HEAD", 200, "text/html")
+            log_test(f"HEAD /api/fiesta/{event_id} → 200 text/html", passed, details)
+        else:
+            log_test("Get valid event ID", False, "Could not retrieve event ID")
+    else:
+        log_test("Admin login", False, "Could not login as admin")
+    print()
+    
+    # Test 7: Content sanity - GET /api/sitemap.xml
+    print("TEST 7: Content sanity - GET /api/sitemap.xml")
+    passed, details = test_content_sanity("/sitemap.xml", [
+        {"type": "starts_with", "value": "<?xml"},
+        {"type": "contains", "value": "<sitemapindex"},
+        {"type": "contains", "value": "https://www.quienva.me/sitemap-cities.xml"},
+        {"type": "not_contains", "value": "application/json"},
+        {"type": "not_contains", "value": "405"}
+    ])
+    log_test("GET /api/sitemap.xml content: starts with <?xml, contains <sitemapindex>, uses www host", passed, details)
+    print()
+    
+    # Test 8: Content sanity - GET /api/sitemap-cities.xml
+    print("TEST 8: Content sanity - GET /api/sitemap-cities.xml")
+    passed, details = test_content_sanity("/sitemap-cities.xml", [
+        {"type": "contains", "value": "<url>"},
+        {"type": "contains", "value": "https://www.quienva.me"},
+        {"type": "contains", "value": "/fiestas/palma"},
+        {"type": "contains", "value": "/fiestas/ibiza"},
+        {"type": "contains", "value": "/fiestas/madrid"},
+        {"type": "contains", "value": "/fiestas/barcelona"},
+        {"type": "contains", "value": "/fiestas/marbella"},
+        {"type": "not_contains", "value": "palma-de-mallorca"},
+        {"type": "not_contains", "value": "application/json"},
+        {"type": "not_contains", "value": "405"}
+    ])
+    log_test("GET /api/sitemap-cities.xml content: contains <url>, uses www host, uses SHORT city slugs", passed, details)
+    print()
+    
+    # Summary
     print("=" * 80)
+    print("TEST SUMMARY")
+    print("=" * 80)
+    total = len(test_results)
+    passed = sum(1 for r in test_results if r["passed"])
+    failed = total - passed
+    
+    print(f"Total tests: {total}")
+    print(f"Passed: {passed}")
+    print(f"Failed: {failed}")
+    print()
     
     if failed > 0:
-        exit(1)
+        print("FAILED TESTS:")
+        for result in test_results:
+            if not result["passed"]:
+                print(f"  ❌ {result['name']}")
+                if result["details"]:
+                    print(f"     {result['details']}")
+        print()
+    
+    # Create results table
+    print("RESULTS TABLE:")
+    print("-" * 80)
+    print(f"{'Endpoint':<40} {'Method':<8} {'Status':<10} {'Content-Type':<20}")
+    print("-" * 80)
+    
+    endpoints = [
+        ("/api/sitemap.xml", "GET", "200", "application/xml"),
+        ("/api/sitemap.xml", "HEAD", "200", "application/xml"),
+        ("/api/sitemap-cities.xml", "GET", "200", "application/xml"),
+        ("/api/sitemap-cities.xml", "HEAD", "200", "application/xml"),
+        ("/api/sitemap-events-ibiza.xml", "GET", "200", "application/xml"),
+        ("/api/sitemap-events-ibiza.xml", "HEAD", "200", "application/xml"),
+        ("/api/robots.txt", "GET", "200", "text/plain"),
+        ("/api/robots.txt", "HEAD", "200", "text/plain"),
+        ("/api/ciudad/madrid", "GET", "200", "text/html"),
+        ("/api/ciudad/madrid", "HEAD", "200", "text/html"),
+        ("/api/fiesta/{id}", "GET", "200", "text/html"),
+        ("/api/fiesta/{id}", "HEAD", "200", "text/html"),
+    ]
+    
+    for endpoint, method, status, content_type in endpoints:
+        # Find matching test result
+        test_name = f"{method} {endpoint}"
+        result = next((r for r in test_results if test_name in r["name"]), None)
+        if result:
+            status_icon = "✅" if result["passed"] else "❌"
+            print(f"{endpoint:<40} {method:<8} {status:<10} {content_type:<20} {status_icon}")
+        else:
+            print(f"{endpoint:<40} {method:<8} {status:<10} {content_type:<20} ⚠️")
+    
+    print("-" * 80)
+    print()
+    
+    if failed == 0:
+        print("🎉 ALL TESTS PASSED! Bug fix verified successfully.")
+        return 0
     else:
-        print("\n✅ ALL TESTS PASSED!")
-        exit(0)
-
+        print("⚠️  SOME TESTS FAILED. Bug fix needs attention.")
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

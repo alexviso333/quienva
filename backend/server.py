@@ -1617,47 +1617,47 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
                              headers={"Cache-Control": "public, max-age=1800"})
 
 
-@api_router.get("/ciudad/{slug}")
+@api_router.api_route("/ciudad/{slug}", methods=["GET", "HEAD"])
 async def seo_city_es(slug: str, request: Request):
     return await _render_city(slug, "es", request)
 
 
-@api_router.get("/ciudad/{slug}/esta-noche")
+@api_router.api_route("/ciudad/{slug}/esta-noche", methods=["GET", "HEAD"])
 async def seo_city_es_tonight(slug: str, request: Request):
     return await _render_city(slug, "es", request, "tonight")
 
 
-@api_router.get("/ciudad/{slug}/este-finde")
+@api_router.api_route("/ciudad/{slug}/este-finde", methods=["GET", "HEAD"])
 async def seo_city_es_weekend(slug: str, request: Request):
     return await _render_city(slug, "es", request, "weekend")
 
 
-@api_router.get("/en/city/{slug}")
+@api_router.api_route("/en/city/{slug}", methods=["GET", "HEAD"])
 async def seo_city_en(slug: str, request: Request):
     return await _render_city(slug, "en", request)
 
 
-@api_router.get("/en/city/{slug}/tonight")
+@api_router.api_route("/en/city/{slug}/tonight", methods=["GET", "HEAD"])
 async def seo_city_en_tonight(slug: str, request: Request):
     return await _render_city(slug, "en", request, "tonight")
 
 
-@api_router.get("/en/city/{slug}/this-weekend")
+@api_router.api_route("/en/city/{slug}/this-weekend", methods=["GET", "HEAD"])
 async def seo_city_en_weekend(slug: str, request: Request):
     return await _render_city(slug, "en", request, "weekend")
 
 
-@api_router.get("/de/city/{slug}")
+@api_router.api_route("/de/city/{slug}", methods=["GET", "HEAD"])
 async def seo_city_de(slug: str, request: Request):
     return await _render_city(slug, "de", request)
 
 
-@api_router.get("/de/city/{slug}/heute")
+@api_router.api_route("/de/city/{slug}/heute", methods=["GET", "HEAD"])
 async def seo_city_de_tonight(slug: str, request: Request):
     return await _render_city(slug, "de", request, "tonight")
 
 
-@api_router.get("/de/city/{slug}/wochenende")
+@api_router.api_route("/de/city/{slug}/wochenende", methods=["GET", "HEAD"])
 async def seo_city_de_weekend(slug: str, request: Request):
     return await _render_city(slug, "de", request, "weekend")
 
@@ -1821,25 +1821,25 @@ async def _render_event(event_id: str, lang: str, request: Request):
                              headers={"Cache-Control": "public, max-age=1800"})
 
 
-@api_router.get("/fiesta/{event_id}")
-@api_router.get("/fiesta/{event_id}/{slug}")
+@api_router.api_route("/fiesta/{event_id}", methods=["GET", "HEAD"])
+@api_router.api_route("/fiesta/{event_id}/{slug}", methods=["GET", "HEAD"])
 async def seo_event_es(event_id: str, request: Request, slug: str = ""):
     return await _render_event(event_id, "es", request)
 
 
-@api_router.get("/en/party/{event_id}")
-@api_router.get("/en/party/{event_id}/{slug}")
+@api_router.api_route("/en/party/{event_id}", methods=["GET", "HEAD"])
+@api_router.api_route("/en/party/{event_id}/{slug}", methods=["GET", "HEAD"])
 async def seo_event_en(event_id: str, request: Request, slug: str = ""):
     return await _render_event(event_id, "en", request)
 
 
-@api_router.get("/de/party/{event_id}")
-@api_router.get("/de/party/{event_id}/{slug}")
+@api_router.api_route("/de/party/{event_id}", methods=["GET", "HEAD"])
+@api_router.api_route("/de/party/{event_id}/{slug}", methods=["GET", "HEAD"])
 async def seo_event_de(event_id: str, request: Request, slug: str = ""):
     return await _render_event(event_id, "de", request)
 
 
-@api_router.get("/sitemap.xml")
+@api_router.api_route("/sitemap.xml", methods=["GET", "HEAD"])
 async def seo_sitemap(request: Request, scope: str = "", city: str = ""):
     """Sitemap INDEX by default; child sitemaps via clean paths
     (/sitemap-cities.xml, /sitemap-events-<city>.xml). Path-based children
@@ -1855,14 +1855,14 @@ async def seo_sitemap(request: Request, scope: str = "", city: str = ""):
     return _sitemap_response(_sitemap_index_xml(front, today))
 
 
-@api_router.get("/sitemap-cities.xml")
+@api_router.api_route("/sitemap-cities.xml", methods=["GET", "HEAD"])
 async def seo_sitemap_cities(request: Request):
     front = _frontend_base(request)
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
     return _sitemap_response(await _sitemap_cities_xml(front, today))
 
 
-@api_router.get("/sitemap-events-{city}.xml")
+@api_router.api_route("/sitemap-events-{city}.xml", methods=["GET", "HEAD"])
 async def seo_sitemap_events(city: str, request: Request):
     front = _frontend_base(request)
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
@@ -1920,7 +1920,7 @@ def _sitemap_index_xml(front: str, today: str) -> str:
             '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</sitemapindex>")
 
 
-@api_router.get("/robots.txt")
+@api_router.api_route("/robots.txt", methods=["GET", "HEAD"])
 async def seo_robots(request: Request):
     front = _frontend_base(request)
     txt = f"User-agent: *\nAllow: /\nSitemap: {front}/sitemap.xml\n"
