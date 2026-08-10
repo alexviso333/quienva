@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # Base URL from frontend/.env
-BASE_URL = "https://multilang-feed-core.preview.emergentagent.com/api"
+BASE_URL = "https://nightlife-guide-3.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"

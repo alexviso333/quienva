@@ -9,7 +9,7 @@ import os
 from typing import Dict, Tuple
 
 # Base URL from frontend/.env
-BASE_URL = "https://multilang-feed-core.preview.emergentagent.com"
+BASE_URL = "https://nightlife-guide-3.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Required headers for all requests
