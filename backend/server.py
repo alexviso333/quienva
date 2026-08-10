@@ -865,6 +865,8 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .cta:hover{transform:translateY(-2px);box-shadow:0 16px 40px -12px rgba(255,0,85,.85)}
 .cta.ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:#fff;box-shadow:none}
 .ctarow{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0}
+.intro{margin:2px 0 26px;color:#c9c9d1;font-size:15.5px;line-height:1.75;max-width:780px}
+.intro p{margin:0}
 .sectitle{font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:20px;margin:38px 0 16px;letter-spacing:-.01em}
 .nav-tf{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
 .nav-tf a,.nav-tf b{font-size:13px;font-weight:700;padding:8px 14px;border-radius:999px;text-decoration:none}
@@ -943,6 +945,100 @@ def _seo_joinband(front, lang, e):
     ui = _SEO_UI.get(lang, _SEO_UI["es"])
     return (f'<div class="joinband"><h2>{e(ui["join_h"])}</h2><p>{e(ui["join_p"])}</p>'
             f'<a class="cta" href="{front}/feed">{e(ui["join"])}</a></div>')
+
+
+def _org_website_jsonld(front: str) -> str:
+    """Site-wide brand knowledge: Organization + WebSite (with a Sitelinks
+    Searchbox action) so Google can show brand info and a search box."""
+    org = {
+        "@context": "https://schema.org", "@type": "Organization",
+        "name": "\u00bfQui\u00e9n va?", "url": front + "/",
+        "logo": front + "/icons/icon-512.png",
+        "description": "Descubre las fiestas y discotecas de tu ciudad, mira qu\u00e9 amigos van y consigue tus entradas.",
+    }
+    web = {
+        "@context": "https://schema.org", "@type": "WebSite",
+        "name": "\u00bfQui\u00e9n va?", "url": front + "/",
+        "inLanguage": ["es", "en", "de"],
+        "potentialAction": {
+            "@type": "SearchAction",
+            "target": {"@type": "EntryPoint", "urlTemplate": front + "/feed?buscar={search_term_string}"},
+            "query-input": "required name=search_term_string",
+        },
+    }
+    return (f'<script type="application/ld+json">{json.dumps(org, ensure_ascii=False)}</script>'
+            f'<script type="application/ld+json">{json.dumps(web, ensure_ascii=False)}</script>')
+
+
+# Per-city, keyword-rich intro copy (unique per city → helps Google understand
+# and rank each landing page). Club names are universal; vibe/areas localized.
+_CITY_INTRO_DATA = {
+    "Palma de Mallorca": {
+        "clubs": "Tito's, BCM Planet Dance, Pacha Mallorca o Social Club",
+        "areas": {"es": "el Paseo Mar\u00edtimo de Palma y el ambiente sin fin de Magaluf",
+                  "en": "Palma's Paseo Mar\u00edtimo and the non-stop scene in Magaluf",
+                  "de": "die Uferpromenade von Palma und das endlose Treiben in Magaluf"},
+        "vibe": {"es": "la capital de la noche balear", "en": "the nightlife capital of the Balearics",
+                 "de": "die Ausgeh-Hauptstadt der Balearen"},
+    },
+    "Ibiza": {
+        "clubs": "Pacha, Amnesia, H\u00ef Ibiza, Ushua\u00efa, DC10 o Eden",
+        "areas": {"es": "Playa d'en Bossa, San Antonio y Dalt Vila",
+                  "en": "Playa d'en Bossa, San Antonio and Dalt Vila",
+                  "de": "Playa d'en Bossa, San Antonio und Dalt Vila"},
+        "vibe": {"es": "la capital mundial del clubbing", "en": "the clubbing capital of the world",
+                 "de": "die Welthauptstadt des Clubbings"},
+    },
+    "Madrid": {
+        "clubs": "Fabrik, Teatro Barcel\u00f3, Kapital, Joy Eslava o Sh\u00f4ko",
+        "areas": {"es": "Gran V\u00eda, Malasa\u00f1a y Chueca", "en": "Gran V\u00eda, Malasa\u00f1a and Chueca",
+                  "de": "Gran V\u00eda, Malasa\u00f1a und Chueca"},
+        "vibe": {"es": "una de las ciudades con m\u00e1s vida nocturna de Europa",
+                 "en": "one of Europe's liveliest nightlife cities",
+                 "de": "eine der lebendigsten Nachtleben-St\u00e4dte Europas"},
+    },
+    "Barcelona": {
+        "clubs": "Opium, Pacha Barcelona, Razzmatazz, Input o Bling Bling",
+        "areas": {"es": "el Port Ol\u00edmpic, la Barceloneta y el Eixample",
+                  "en": "Port Ol\u00edmpic, Barceloneta and the Eixample",
+                  "de": "Port Ol\u00edmpic, Barceloneta und das Eixample"},
+        "vibe": {"es": "el epicentro de la fiesta mediterr\u00e1nea", "en": "the epicentre of Mediterranean partying",
+                 "de": "das Epizentrum der mediterranen Party"},
+    },
+    "Marbella": {
+        "clubs": "Olivia Valere, Nikki Beach, Ocean Club o La Suite",
+        "areas": {"es": "Puerto Ban\u00fas y la Milla de Oro", "en": "Puerto Ban\u00fas and the Golden Mile",
+                  "de": "Puerto Ban\u00fas und die Goldene Meile"},
+        "vibe": {"es": "el lujo y los beach clubs de la Costa del Sol",
+                 "en": "the luxury and beach clubs of the Costa del Sol",
+                 "de": "der Luxus und die Beachclubs der Costa del Sol"},
+    },
+}
+
+
+def _city_intro(city_id, label, n, lang, e):
+    d = _CITY_INTRO_DATA.get(city_id)
+    if not d:
+        return ""
+    clubs = d["clubs"]
+    areas = d["areas"].get(lang, d["areas"]["es"])
+    vibe = d["vibe"].get(lang, d["vibe"]["es"])
+    if lang == "en":
+        txt = (f"{label} is {vibe}. From {clubs} to countless parties around {areas}, there's something on "
+               f"every night. On \u00bfQui\u00e9n va? we gather every party in {label} \u2014 {n} plans this week \u2014 with "
+               f"line-ups, start times, real ticket prices and, best of all, which of your friends are going. "
+               f"Browse tonight's and this weekend's parties, compare clubs and grab your tickets before they sell out.")
+    elif lang == "de":
+        txt = (f"{label} ist {vibe}. Von {clubs} bis zu unz\u00e4hligen Partys rund um {areas} ist jede Nacht etwas los. "
+               f"Auf \u00bfQui\u00e9n va? b\u00fcndeln wir alle Partys in {label} \u2014 {n} Pl\u00e4ne diese Woche \u2014 mit Line-ups, "
+               f"Startzeiten, echten Ticketpreisen und vor allem: welche Freunde hingehen. Entdecke die Partys heute "
+               f"Abend und am Wochenende, vergleiche Clubs und sichere dir Tickets, bevor sie ausverkauft sind.")
+    else:
+        txt = (f"{label} es {vibe}. Desde {clubs} hasta un sinf\u00edn de fiestas por {areas}, cada noche hay planazo. "
+               f"En \u00bfQui\u00e9n va? reunimos todas las fiestas de {label} \u2014 {n} planes esta semana \u2014 con cartel, "
+               f"horarios, precios reales de entrada y, lo mejor, qu\u00e9 amigos van a cada una. Descubre las fiestas de "
+               f"esta noche y este finde, compara discotecas y consigue tus entradas antes de que se agoten.")
+    return f'<div class="intro"><p>{e(txt)}</p></div>'
 
 _SEO_FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
               '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
@@ -1474,8 +1570,10 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
         (T["faq_c_q2"], T["faq_c_a2"]),
         (T["faq_c_q3"], T["faq_c_a3"]),
     ]
+    intro_html = _city_intro(city_id, label, n, lang, e) if timeframe == "all" else ""
     faq_html = _faq_html(T["faq_title"], faq_pairs, e)
-    extra_jsonld = (f'<script type="application/ld+json">{_breadcrumb_jsonld(bc_items)}</script>'
+    extra_jsonld = (_org_website_jsonld(front)
+                    + f'<script type="application/ld+json">{_breadcrumb_jsonld(bc_items)}</script>'
                     f'<script type="application/ld+json">{_faq_jsonld(faq_pairs)}</script>')
 
     html_out = f"""<!doctype html>
@@ -1506,6 +1604,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 <div class="ctarow"><a class="cta" href="{front}/feed">{e(T["open_app"])}</a></div>
 {nav_html}
 </section>
+{intro_html}
 <ul class="grid">{''.join(items_html)}</ul>
 {benefits}
 {joinband}
@@ -1649,7 +1748,8 @@ async def _render_event(event_id: str, lang: str, request: Request):
     faq_pairs.append((T["faq_e_q_friends"].format(name=name),
                       T["faq_e_a_friends"].format(name=name)))
     faq_html = _faq_html(T["faq_title"], faq_pairs, e)
-    extra_jsonld = (f'<script type="application/ld+json">{_breadcrumb_jsonld(bc_items)}</script>'
+    extra_jsonld = (_org_website_jsonld(front)
+                    + f'<script type="application/ld+json">{_breadcrumb_jsonld(bc_items)}</script>'
                     f'<script type="application/ld+json">{_faq_jsonld(faq_pairs)}</script>')
 
     # Freshness / churn handling: past parties are noindex,follow (Google drops the
