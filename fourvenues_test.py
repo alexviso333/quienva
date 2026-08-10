@@ -9,7 +9,7 @@ import json
 from datetime import datetime, timedelta
 
 # Use the production backend URL from frontend/.env
-BASE_URL = "https://nightlife-guide-3.preview.emergentagent.com/api"
+BASE_URL = "https://logo-search-fix.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"

@@ -17,11 +17,60 @@
         <!-- PWA / iOS -->
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-192.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
         <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+        <link rel="shortcut icon" href="/icons/icon-192.png" />
+        <link rel="mask-icon" href="/icons/icon-512.png" color="#0a0a0c" />
 
         <!-- Canonical -->
         <link rel="canonical" href="https://www.quienva.me/" />
+
+        <!-- Structured data: Organization + logo (Google Search logo/knowledge panel) -->
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "@id": "https://www.quienva.me/#organization",
+            "name": "¿Quién va?",
+            "alternateName": ["Quien va", "quienva.me", "QuienVa"],
+            "url": "https://www.quienva.me/",
+            "logo": {
+                "@type": "ImageObject",
+                "url": "https://www.quienva.me/icons/icon-512.png",
+                "contentUrl": "https://www.quienva.me/icons/icon-512.png",
+                "width": 512,
+                "height": 512,
+                "caption": "¿Quién va?"
+            },
+            "image": "https://www.quienva.me/icons/icon-512.png",
+            "description": "Descubre las fiestas y discotecas de tu ciudad, mira qué amigos van y consigue tus entradas.",
+            "sameAs": [
+                "https://www.instagram.com/quienva.me",
+                "https://www.tiktok.com/@quienva.me"
+            ]
+        }
+        </script>
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "@id": "https://www.quienva.me/#website",
+            "name": "¿Quién va?",
+            "url": "https://www.quienva.me/",
+            "inLanguage": ["es", "en", "de"],
+            "publisher": { "@id": "https://www.quienva.me/#organization" },
+            "potentialAction": {
+                "@type": "SearchAction",
+                "target": {
+                    "@type": "EntryPoint",
+                    "urlTemplate": "https://www.quienva.me/feed?buscar={search_term_string}"
+                },
+                "query-input": "required name=search_term_string"
+            }
+        }
+        </script>
 
         <!-- Open Graph / Social share (WhatsApp, Instagram, Twitter, etc.) -->
         <meta property="og:type" content="website" />
