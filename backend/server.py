@@ -786,6 +786,38 @@ def _price_line(ev: dict) -> str:
     return ""
 
 
+# --- Freshness signal: current month/year injected into SEO titles/descriptions
+# (Google favours pages that look up-to-date, and it lifts CTR for "esta semana"
+# style queries). Localised month names for ES / EN / DE.
+_MONTHS = {
+    "es": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+           "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
+    "en": ["January", "February", "March", "April", "May", "June", "July",
+           "August", "September", "October", "November", "December"],
+    "de": ["Januar", "Februar", "M\u00e4rz", "April", "Mai", "Juni", "Juli",
+           "August", "September", "Oktober", "November", "Dezember"],
+}
+_UPDATED_WORD = {"es": "Actualizado", "en": "Updated", "de": "Aktualisiert"}
+
+
+def _seo_month(lang: str) -> str:
+    now = datetime.now(ZoneInfo("Europe/Madrid"))
+    months = _MONTHS.get(lang, _MONTHS["es"])
+    m = months[now.month - 1]
+    return f"{m[:1].upper()}{m[1:]} {now.year}"
+
+
+def _title_with_month(title: str, lang: str) -> str:
+    """Insert 'Month Year' right before the ' | ¿Quién va?' brand suffix."""
+    fr = _seo_month(lang)
+    if " | " in title:
+        head, sep, tail = title.partition(" | ")
+        return f"{head} \u2014 {fr}{sep}{tail}"
+    return f"{title} \u2014 {fr}"
+
+
+
+
 def _canonicalize_base(base: str) -> str:
     """Force the canonical www host. In production the apex `quienva.me` issues a
     308 redirect to `www.quienva.me`, so any canonical / sitemap / hreflang / og
@@ -1556,10 +1588,14 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
         h1 = e(T[f"{tk}_h1"].format(label=label))
         sub = e(T[f"{tk}_sub"].format(n=n))
         empty = e(T[f"{tk}_empty"].format(label=label))
-    og_img = ""
-    for ev in events:
-        if str(ev.get("image_url", "")).startswith("http"):
-            og_img = e(ev["image_url"]); break
+    # Freshness signal (month + year) → better CTR & "up-to-date" ranking signal.
+    title = _title_with_month(title, lang)
+    _mo = _seo_month(lang)
+    h1 = f"{h1} \u2014 {_mo}"
+    desc = f"{desc} {_UPDATED_WORD.get(lang, 'Actualizado')} {_mo}."
+    # Branded 1200x630 social banner per city → richer link previews on
+    # WhatsApp / Instagram / Twitter (higher share CTR = more visits & registros).
+    og_img = f"{front}/og/og-{slug_l}.png"
 
     items_html = []
     jsonld = []
@@ -1594,7 +1630,11 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
         for c in SUPPORTED_CITIES if c["id"] != city_id)
     hreflang = _hreflang_links(paths, e)
     langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)
-    ogimg_tag = f'<meta property="og:image" content="{og_img}">' if og_img else ''
+    ogimg_tag = (f'<meta property="og:image" content="{og_img}">'
+                 '<meta property="og:image:width" content="1200">'
+                 '<meta property="og:image:height" content="630">'
+                 f'<meta property="og:image:alt" content="{title}">'
+                 f'<meta name="twitter:image" content="{og_img}">') if og_img else ''
 
     # Breadcrumbs + FAQ (rich results). Static text, no extra DB cost.
     bc_items = [(T["bc_home"], f"{front}/"), (label, _city_paths(front, slug_l)[lang])]
@@ -2050,8 +2090,9 @@ async def _render_home(lang: str, request: Request):
 <meta property="og:locale" content="{ogloc}">
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">
 <meta property="og:url" content="{e(canonical)}">
-<meta property="og:image" content="{front}/icons/icon-512.png">
-<meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="{front}/og/og-default.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="{front}/og/og-default.png">
 {extra_jsonld}
 {_SEO_FONTS}
 <style>{_SEO_CSS}{_HOME_EXTRA_CSS}</style></head>
@@ -2244,6 +2285,44 @@ _BLOG_POSTS = {
             ("\u00bfQu\u00e9 es un promotor de discoteca?", "Un intermediario independiente que trabaja por comisi\u00f3n consiguiendo p\u00fablico. A cambio ofrece descuentos, entrada VIP o gratis. Se contactan por Instagram o apps especializadas."),
             ("\u00bfLas mesas VIP salen m\u00e1s baratas que la entrada?", "Depende del tama\u00f1o del grupo. Si vais 8-10 personas, una mesa desde 500\u20ac (con botella) puede salir m\u00e1s barata que entrada + copas individuales, y ganas comodidad y acceso r\u00e1pido."),
             ("\u00bfCu\u00e1ndo son m\u00e1s baratas las entradas de discoteca?", "Entre semana (mi\u00e9rcoles y jueves), en pre-venta anticipada, en meses de baja temporada (mayo, octubre en Ibiza) y en las primeras horas de apertura."),
+        ],
+        "related_cities": ["ibiza", "madrid", "barcelona", "palma", "marbella"],
+    },
+    "donde-salir-esta-noche-espana": {
+        "title": "¿Dónde salir esta noche en España? Fiestas de hoy por ciudad",
+        "description": "Guía rápida para decidir dónde salir esta noche: las mejores fiestas y discotecas abiertas hoy en Madrid, Barcelona, Ibiza, Palma y Marbella, y con qué amigos vas.",
+        "published": "2026-08-08",
+        "updated": "2026-08-08",
+        "sections": [
+            ("Cómo decidir el plan de esta noche en 2 minutos", "La clave para no quedarte en casa es ver de un vistazo <b>qué está abierto hoy</b> y <b>qué amigos van</b>. En <a href=\"/feed\">¿Quién va?</a> filtras por tu ciudad y por \"esta noche\", ves horarios y precios reales de cada discoteca y descubres a qué fiesta van tus amigos. Así el plan se decide solo: vas donde está tu gente."),
+            ("Fiestas esta noche en Madrid", "Entre semana Madrid nunca duerme: Kapital, Teatro Barceló, Opium e Icon suelen tener noche todos los días, y los jueves universitarios llenan Malasaña y Gran Vía. Mira las <a href=\"/fiestas/madrid/esta-noche\">fiestas de esta noche en Madrid</a> con precios actualizados."),
+            ("Fiestas esta noche en Barcelona e Ibiza", "En Barcelona, Opium, Pacha, Shôko y Razzmatazz marcan la agenda nocturna del Port Olímpic. En Ibiza (mayo-octubre) cada día tiene su fiesta icónica en Pacha, Amnesia, Hï o [UNVRS]. Consulta <a href=\"/fiestas/barcelona/esta-noche\">Barcelona esta noche</a> e <a href=\"/fiestas/ibiza/esta-noche\">Ibiza esta noche</a>."),
+            ("Fiestas esta noche en Palma y Marbella", "Palma de Mallorca reparte la noche entre el Paseo Marítimo, Tito's y Magaluf, mientras Marbella y Puerto Banús ofrecen el clubbing más premium (Olivia Valere, Pangea, Nikki Beach). Revisa <a href=\"/fiestas/palma/esta-noche\">Palma esta noche</a> y <a href=\"/fiestas/marbella/esta-noche\">Marbella esta noche</a>."),
+        ],
+        "faq": [
+            ("¿Dónde puedo ver qué fiestas hay hoy cerca de mí?", "En ¿Quién va? eliges tu ciudad y el filtro \"esta noche\" para ver todas las discotecas y fiestas abiertas hoy, con horario, precio y qué amigos van a cada una."),
+            ("¿A qué hora se sale de fiesta en España?", "Lo habitual es empezar con copas entre las 23:00 y las 00:30 y entrar a la discoteca a partir de la 01:00. Muchos clubs tienen entrada más barata o guest-list gratis si llegas antes de cierta hora."),
+            ("¿Cómo sé a qué fiesta van mis amigos esta noche?", "En ¿Quién va? tus amigos marcan \"Voy\" o \"Me interesa\" en cada fiesta y tú lo ves en tiempo real, así puedes decidir el plan según dónde esté tu grupo."),
+            ("¿Puedo comprar la entrada desde la app?", "Sí. En cada fiesta tienes el botón para conseguir la entrada online al precio actualizado, evitando la cola de taquilla."),
+        ],
+        "related_cities": ["madrid", "barcelona", "ibiza", "palma", "marbella"],
+    },
+    "mejores-fiestas-este-finde-espana": {
+        "title": "Las mejores fiestas de este fin de semana en España",
+        "description": "Todos los planes del finde en un sitio: las mejores fiestas y discotecas del fin de semana en Madrid, Barcelona, Ibiza, Palma y Marbella con precios y quién va.",
+        "published": "2026-08-07",
+        "updated": "2026-08-07",
+        "sections": [
+            ("Planea tu finde antes de que se agoten las entradas", "Las mejores fiestas del fin de semana vuelan: las fechas con DJ conocido se agotan días antes. Adelántate viendo la <a href=\"/feed\">agenda del finde</a> por ciudad, compara precios y asegúrate la entrada online (suele ser un 20-30% más barata que en taquilla)."),
+            ("El finde en Madrid y Barcelona", "En Madrid, viernes y sábado llenan Fabrik, Kapital y las salas de Gran Vía; los macroeventos de techno son la gran cita del finde. En Barcelona, Opium y Pacha del Port Olímpic más Razzmatazz concentran el ambiente. Mira <a href=\"/fiestas/madrid/este-finde\">Madrid este finde</a> y <a href=\"/fiestas/barcelona/este-finde\">Barcelona este finde</a>."),
+            ("El finde en Ibiza, Palma y Marbella", "Ibiza vive su punto álgido de viernes a domingo con las residencias top en Amnesia, Hï y Pacha. Palma reparte fiesta por toda la isla y Marbella enciende sus clubs de lujo con headliners internacionales en verano. Consulta <a href=\"/fiestas/ibiza/este-finde\">Ibiza este finde</a>, <a href=\"/fiestas/palma/este-finde\">Palma este finde</a> y <a href=\"/fiestas/marbella/este-finde\">Marbella este finde</a>."),
+            ("Sal con tu grupo, no en solitario", "El mejor finde es el que compartes. En ¿Quién va? ves a qué fiestas van tus amigos, te avisamos cuando alguien de tu grupo se apunta a un plan y podéis coordinar la noche desde la app para no perderos entre tanta oferta."),
+        ],
+        "faq": [
+            ("¿Cuáles son las mejores fiestas de este fin de semana?", "Depende de tu ciudad. En ¿Quién va? tienes la agenda del finde de Madrid, Barcelona, Ibiza, Palma y Marbella ordenada por fecha, con precios reales y qué amigos van a cada fiesta."),
+            ("¿Conviene comprar la entrada con antelación para el finde?", "Sí. Las fiestas del fin de semana con DJ conocido suelen agotarse, y comprar online anticipado es más barato que en taquilla y te evita la cola."),
+            ("¿Qué ciudad tiene mejor ambiente de fiesta el fin de semana?", "En verano Ibiza y Marbella son imbatibles; durante todo el año Madrid y Barcelona tienen la escena más constante. Palma sube muchísimo en temporada alta."),
+            ("¿Cómo organizo el finde con mis amigos?", "En ¿Quién va? cada uno marca las fiestas a las que va y todos lo veis en tiempo real, así elegís el plan donde esté vuestro grupo y compráis la entrada juntos."),
         ],
         "related_cities": ["ibiza", "madrid", "barcelona", "palma", "marbella"],
     },

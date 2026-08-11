@@ -329,3 +329,11 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Recreado `/app/backend/.env` (faltaba en el entorno de dev: MONGO_URL local + DB_NAME=quienva_db). Producción usa su propia config en Render.
 - Verificado local: home/ciudad/evento/blog ES/EN/DE devuelven 200 con favicon.ico; sitemap con 46 URLs OK.
 - PENDIENTE deploy por el usuario: Save to GitHub → redeploy Vercel (frontend) + Render (backend).
+
+## SEO enhancements 2 (2026-08-11)
+- Frescura: mes+año actual inyectado en title/H1/description de páginas de ciudad (todas las franjas). Helper _seo_month/_title_with_month.
+- Banners sociales OG 1200x630 por ciudad (frontend/public/og/og-<slug>.png) + og-default para home; og:image + width/height + twitter:image.
+- Event JSON-LD emite offers SIEMPRE (arregla los 22 "Falta offers" de GSC): url+availability+validFrom; price sólo si conocido.
+- 2 posts de blog long-tail nuevos (donde-salir-esta-noche-espana, mejores-fiestas-este-finde-espana), en sitemap-blog.
+- aggregateRating NO implementado a propósito: los Event no muestran estrellas y valoraciones falsas violan políticas de Google.
+- Verificado por testing agent: 11/11 OK. Pendiente deploy (Save to GitHub → Vercel + Render).

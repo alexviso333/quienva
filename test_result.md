@@ -5649,3 +5649,136 @@ test_plan:
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+# ==================== SEO ITERATION 2026-08-11 (favicon/logo + freshness + OG banners + blog) ====================
+backend:
+  - task: "Favicon/logo injected into all server-rendered SEO pages + real /favicon.ico"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added _ICONS_HEAD (favicon.ico + png + apple-touch + manifest + theme-color) after every <link rel=canonical> across home/city/event/venue/blog ES/EN/DE. Created real favicon.ico/apple-touch-icon in frontend/public. Organization JSON-LD upgraded to ImageObject logo."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL SCENARIOS (100% pass): ✅ (1) GET /api/ciudad/madrid → 200 with <link rel='icon' href='/favicon.ico'> in <head>. ✅ (2) GET /api/ciudad/ibiza → 200 with favicon link present. ✅ (3) GET /api/home → 200 with favicon link present. ✅ (4) GET /api/blog/donde-salir-esta-noche-espana → 200 with favicon link present. All SEO pages correctly include favicon reference. Note: Actual /favicon.ico file is served by Vercel frontend (frontend/public), not backend - only HTML reference tested as per requirements."
+  - task: "Freshness: current month+year injected into city page title/H1/description"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Helper _title_with_month + _seo_month. City title now e.g. '...este fin de semana — Agosto 2026 | ¿Quién va?'. Applied to all timeframes (all/tonight/weekend) in _render_city."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL SCENARIOS (100% pass): ✅ (1) GET /api/ciudad/madrid → 200 with <title> containing 'Agosto 2026' and <h1> containing 'Agosto 2026'. Title: 'Fiestas y discotecas en Madrid hoy y este fin de semana — Agosto 2026 | ¿Quién va?'. H1: 'Fiestas en Madrid hoy y este fin de semana — Agosto 2026.' ✅ (2) GET /api/ciudad/ibiza → 200 with <title> and <h1> both containing 'Agosto 2026'. ✅ (3) GET /api/ciudad/madrid/esta-noche → 200 with title 'Fiestas esta noche en Madrid — Agosto 2026 | ¿Quién va?'. ✅ (4) GET /api/ciudad/madrid/este-finde → 200 with title 'Fiestas este fin de semana en Madrid — Agosto 2026 | ¿Quién va?'. Current month/year (computed from Europe/Madrid timezone) correctly injected into all city page titles and H1 tags."
+  - task: "OG social banners 1200x630 per city + default (home)"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "City pages og:image now /og/og-<slug>.png (1200x630) with width/height + twitter:image. Home uses /og/og-default.png. PNG banners generated in frontend/public/og/."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL SCENARIOS (100% pass): ✅ (1) GET /api/ciudad/madrid → 200 with og:image='https://www.quienva.me/og/og-madrid.png', og:image:width='1200', og:image:height='630'. ✅ (2) GET /api/ciudad/ibiza → 200 with og:image='https://www.quienva.me/og/og-ibiza.png', og:image:width='1200', og:image:height='630'. ✅ (3) GET /api/home → 200 with og:image='https://www.quienva.me/og/og-default.png'. All OG image meta tags correctly reference city-specific banners with proper dimensions (1200x630). Note: Actual PNG files are served by Vercel frontend (frontend/public/og/), not backend - only HTML meta tag references tested as per requirements."
+  - task: "Event JSON-LD always emits offers (fix 22 missing offers in GSC)"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "_event_jsonld now always includes offers (url+availability+validFrom; price/priceCurrency/priceValidUntil only when known). endDate/description/performer already present."
+        - working: true
+          agent: "testing"
+          comment: "TESTED EVENT JSON-LD STRUCTURE (100% pass): ✅ (1) Extracted event ID 'a94735fa-2842-4e2e-bb1a-74d13f6184ac' from GET /api/ciudad/palma. ✅ (2) GET /api/fiesta/{event_id} → 200 with 5 JSON-LD scripts. ✅ (3) Found Event type JSON-LD with @type='Event'. ✅ (4) Event JSON-LD contains 'offers' object with all required fields: offers.url='https://www.quienva.me/fiesta/...', offers.availability='https://schema.org/InStock', offers.validFrom='2026-08-11'. ✅ (5) Event JSON-LD contains all other required fields: endDate='2026-08-13T05:59', description='Techno Underground en Sala Focus · Palma de Mallorca...', performer={'@type':'PerformingGroup','name':'Techno Underground'}. All Event JSON-LD pages now correctly emit offers object with minimum required fields (url, availability, validFrom) plus endDate, description, and performer. This fixes the 22 missing offers reported in Google Search Console."
+  - task: "Two new long-tail blog posts (donde-salir-esta-noche-espana, mejores-fiestas-este-finde-espana)"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added to _BLOG_POSTS with sections+FAQ+related_cities. Should render 200 and appear in sitemap-blog.xml."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL BLOG POST SCENARIOS (100% pass): ✅ (1) GET /api/blog/donde-salir-esta-noche-espana → 200 with correct <title> containing '¿Dónde salir esta noche en España? Fiestas de hoy por ciudad | ¿Quién va?'. ✅ (2) GET /api/blog/mejores-fiestas-este-finde-espana → 200 with correct <title> containing 'Las mejores fiestas de este fin de semana en España | ¿Quién va?'. ✅ (3) GET /api/sitemap-blog.xml → 200 (application/xml) containing both blog post slugs: 'donde-salir-esta-noche-espana' and 'mejores-fiestas-este-finde-espana'. Both new long-tail blog posts are correctly implemented, render with proper titles, and are indexed in the blog sitemap."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.5"
+  test_sequence: 6
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Favicon/logo injected into all server-rendered SEO pages + real /favicon.ico"
+    - "Freshness: current month+year injected into city page title/H1/description"
+    - "OG social banners 1200x630 per city + default (home)"
+    - "Event JSON-LD always emits offers (fix 22 missing offers in GSC)"
+    - "Two new long-tail blog posts"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Please test the SEO server-rendered endpoints (backend) after this iteration. Use headers
+      x-forwarded-host: www.quienva.me and x-forwarded-proto: https on every request.
+      Verify (all should be HTTP 200 text/html unless noted):
+      1) GET /api/ciudad/madrid (and /api/ciudad/ibiza): <title> and <h1> must contain the current
+         month+year (e.g. "Agosto 2026"); must contain og:image ".../og/og-madrid.png" with
+         og:image:width 1200 and og:image:height 630; must contain a <link rel="icon" href="/favicon.ico".
+      2) GET /api/home: og:image must be ".../og/og-default.png"; must contain favicon.ico link.
+      3) GET /api/ciudad/madrid/esta-noche and /este-finde: 200 and title contains month+year.
+      4) GET /api/blog/donde-salir-esta-noche-espana and /api/blog/mejores-fiestas-este-finde-espana:
+         200 with correct <title>.
+      5) GET /api/sitemap-blog.xml: contains both new post slugs.
+      6) Event JSON-LD: on any /api/fiesta/<id> page, the Event application/ld+json must contain an
+         "offers" object (with url+availability+validFrom at minimum). If DB has no events locally,
+         just confirm city/home/blog endpoints; note it.
+      7) Regression: /api/en/city/madrid and /api/de/city/madrid still return 200.
+      Note: /og/*.png and /favicon.ico files are served by Vercel (frontend/public), NOT the backend,
+      so do NOT expect the backend to serve those image files — only that the HTML references them.
+  - agent: "testing"
+    message: |
+      ✅ COMPLETED: All 11 SEO endpoint tests passed (100% success rate). Tested all requirements from the 2026-08-11 SEO iteration:
+      
+      PASSED TESTS:
+      1. ✅ GET /api/ciudad/madrid - Title/H1 contain "Agosto 2026", og:image ends with /og/og-madrid.png (1200x630), favicon present
+      2. ✅ GET /api/ciudad/ibiza - Title/H1 contain "Agosto 2026", og:image ends with /og/og-ibiza.png (1200x630), favicon present
+      3. ✅ GET /api/home - og:image ends with /og/og-default.png, favicon present
+      4. ✅ GET /api/ciudad/madrid/esta-noche - Title contains "Agosto 2026"
+      5. ✅ GET /api/ciudad/madrid/este-finde - Title contains "Agosto 2026"
+      6. ✅ GET /api/blog/donde-salir-esta-noche-espana - Correct title "¿Dónde salir esta noche en España..."
+      7. ✅ GET /api/blog/mejores-fiestas-este-finde-espana - Correct title "Las mejores fiestas de este fin de semana en España"
+      8. ✅ GET /api/sitemap-blog.xml - Contains both blog slugs (donde-salir-esta-noche-espana, mejores-fiestas-este-finde-espana)
+      9. ✅ Event JSON-LD offers - Event page contains offers object with url/availability/validFrom, plus endDate/description/performer
+      10. ✅ GET /api/en/city/madrid - Returns 200 (regression test)
+      11. ✅ GET /api/de/city/madrid - Returns 200 (regression test)
+      
+      All headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) were sent on every request as required.
+      All endpoints returned HTTP 200 with correct content-types (text/html for pages, application/xml for sitemap).
+      Month/year computation from Europe/Madrid timezone working correctly (Agosto 2026).
+      
+      NO ISSUES FOUND. All SEO improvements from this iteration are working perfectly.
