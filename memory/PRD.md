@@ -337,3 +337,9 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - 2 posts de blog long-tail nuevos (donde-salir-esta-noche-espana, mejores-fiestas-este-finde-espana), en sitemap-blog.
 - aggregateRating NO implementado a propósito: los Event no muestran estrellas y valoraciones falsas violan políticas de Google.
 - Verificado por testing agent: 11/11 OK. Pendiente deploy (Save to GitHub → Vercel + Render).
+
+## SEO enhancements 3 (2026-08-11)
+- Banner OG dinámico con foto: GET /api/og-city/{slug}.jpg (1200x630) desde el cartel del evento destacado; fallback gradiente. City og:image -> /og-city/{slug}.jpg. Rewrite vercel añadido.
+- Blog automático: 5 posts "agenda-fiestas-finde-{ciudad}" generados en vivo (weekend events), en índice + sitemap-blog (changefreq daily). Se actualizan solos cada semana.
+- Recencia sitemap: eventos changefreq=hourly; _sitemap_index_xml async con lastmod = fecha del last_scraped_at más reciente.
+- Verificado testing agent 8/8. Pendiente deploy: Vercel (vercel.json + public) + Render (backend).

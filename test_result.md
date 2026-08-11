@@ -5782,3 +5782,112 @@ agent_communication:
       Month/year computation from Europe/Madrid timezone working correctly (Agosto 2026).
       
       NO ISSUES FOUND. All SEO improvements from this iteration are working perfectly.
+
+# ==================== SEO ITERATION 3 (2026-08-11): dynamic OG w/ photo + auto blog + sitemap recency ====================
+backend:
+  - task: "Dynamic OG banner per city from featured event poster (/api/og-city/{slug}.jpg)"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "New endpoint GET /api/og-city/{slug}.jpg returns a 1200x630 image/jpeg built from the featured upcoming event poster (blurred cover bg + poster card + city name + live plan count); brand gradient fallback if no poster. City pages og:image now points to /og-city/{slug}.jpg. Vercel rewrite /og-city/:slug.jpg added."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL DYNAMIC OG IMAGE SCENARIOS (100% pass): ✅ (1) GET /api/og-city/madrid.jpg → 200 with content-type=image/jpeg, size=57654 bytes (>56KB). ✅ (2) GET /api/og-city/palma.jpg → 200 with content-type=image/jpeg, size=51905 bytes (>50KB). ✅ (3) GET /api/og-city/ibiza.jpg → 200 with content-type=image/jpeg, size=58788 bytes (>57KB). ✅ (4) GET /api/og-city/noexiste.jpg (unknown city) → 200 with image/jpeg (gradient fallback, NOT 500). ✅ (5) GET /api/ciudad/madrid → 200, og:image meta points to /og-city/madrid.jpg with og:image:width=1200 and og:image:height=630. All headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) sent on every request. All dynamic OG images working perfectly with correct content-types, sizes >10KB, and proper fallback for unknown cities."
+  - task: "Auto blog: self-updating weekend agenda post per city (agenda-fiestas-finde-{slug})"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "5 dynamic blog posts (one per city) generated live from this weekend's events. Rendered via _render_blog_post when slug matches _agenda_lookup. Listed first in /api/blog index and included in /api/sitemap-blog.xml (changefreq daily)."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL AUTO BLOG SCENARIOS (100% pass): ✅ (1) GET /api/blog/agenda-fiestas-finde-madrid → 200 with correct title 'Fiestas de este fin de semana en Madrid: agenda actualizada', blog section markup (<article>/<section>), 'Preguntas frecuentes' FAQ block, and BlogPosting JSON-LD (BlogPosting is a subtype of Article in schema.org, semantically correct for blog posts). ✅ (2) GET /api/blog/agenda-fiestas-finde-ibiza → 200 with correct title 'Fiestas de este fin de semana en Ibiza: agenda actualizada', blog markup, FAQ block, and BlogPosting JSON-LD. ✅ (3) GET /api/blog (index) → 200, lists all 5 agenda slugs: agenda-fiestas-finde-madrid, agenda-fiestas-finde-barcelona, agenda-fiestas-finde-ibiza, agenda-fiestas-finde-palma, agenda-fiestas-finde-marbella. ✅ (4) GET /api/sitemap-blog.xml → 200, contains all 5 agenda slugs. All headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) sent on every request. All auto blog posts working perfectly with correct titles, structured content, FAQ blocks, and rich JSON-LD schema."
+  - task: "Sitemap recency signals (events changefreq hourly + index lastmod = freshest scrape date)"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Events sitemap URLs now changefreq=hourly. _sitemap_index_xml is async and sets events/venues child lastmod to the freshest last_scraped_at date (never future)."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL SITEMAP RECENCY SCENARIOS (100% pass): ✅ (1) GET /api/sitemap-events-madrid.xml → 200, all <url> entries contain <changefreq>hourly</changefreq>. ✅ (2) GET /api/sitemap.xml (index) → 200, valid XML sitemapindex starting with <?xml and containing <sitemapindex> tag. ✅ (3) REGRESSION: GET /api/ciudad/ibiza → 200. ✅ (4) REGRESSION: GET /api/home → 200. ✅ (5) REGRESSION: GET /api/blog/donde-salir-esta-noche-espana → 200. All headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) sent on every request. All sitemap recency signals working correctly with hourly changefreq for events and valid sitemap index structure."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.6"
+  test_sequence: 8
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Test these NEW backend SEO endpoints. Send headers on EVERY request:
+      x-forwarded-host: www.quienva.me  and  x-forwarded-proto: https
+      1) GET /api/og-city/madrid.jpg AND /api/og-city/palma.jpg AND /api/og-city/ibiza.jpg:
+         must return HTTP 200 with content-type image/jpeg and non-trivial body (>10KB).
+         Also GET /api/og-city/noexiste.jpg (unknown city): should still return an image (200 jpeg
+         gradient fallback) OR a 302 redirect — either is acceptable, must NOT be a 500.
+      2) GET /api/ciudad/madrid: og:image meta must now point to a URL ending with /og-city/madrid.jpg
+         and still include og:image:width 1200 / og:image:height 630.
+      3) GET /api/blog/agenda-fiestas-finde-madrid AND /api/blog/agenda-fiestas-finde-ibiza:
+         200 with <title> "Fiestas de este fin de semana en <City>: agenda actualizada". Body should
+         contain blog sections and a "Preguntas frecuentes" FAQ block, plus an Article application/ld+json.
+      4) GET /api/blog (index): must list all 5 agenda slugs (agenda-fiestas-finde-madrid, -barcelona,
+         -ibiza, -palma, -marbella).
+      5) GET /api/sitemap-blog.xml: must contain all 5 agenda slugs.
+      6) GET /api/sitemap.xml (index): valid XML sitemapindex, 200.
+      7) GET /api/sitemap-events-madrid.xml: URLs must have <changefreq>hourly</changefreq>.
+      8) Regression: GET /api/ciudad/ibiza, /api/home, /api/blog/donde-salir-esta-noche-espana still 200.
+      NOTE: /og-city/*.jpg is served by the BACKEND (this is an API route), while /og/*.png and
+      /favicon.ico are Vercel static files — do not GET those static files from the backend.
+  - agent: "testing"
+    message: |
+      ✅ ALL 8 TEST SCENARIOS PASSED (100% success rate)
+      
+      Tested all NEW server-rendered SEO endpoints with required headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) on EVERY request:
+      
+      1. Dynamic OG images (/api/og-city/{slug}.jpg):
+         - madrid.jpg, palma.jpg, ibiza.jpg: All return 200 with image/jpeg, sizes >50KB
+         - noexiste.jpg (unknown city): Returns 200 with image/jpeg gradient fallback (NOT 500) ✓
+      
+      2. City page og:image meta:
+         - /api/ciudad/madrid: og:image points to /og-city/madrid.jpg with width=1200, height=630 ✓
+      
+      3. Auto blog posts (weekend agenda):
+         - /api/blog/agenda-fiestas-finde-madrid: Correct title, blog markup, FAQ block, BlogPosting JSON-LD ✓
+         - /api/blog/agenda-fiestas-finde-ibiza: Correct title, blog markup, FAQ block, BlogPosting JSON-LD ✓
+         - NOTE: Implementation uses BlogPosting JSON-LD (subtype of Article), which is semantically correct
+      
+      4. Blog index: Lists all 5 agenda slugs (madrid, barcelona, ibiza, palma, marbella) ✓
+      
+      5. Blog sitemap: Contains all 5 agenda slugs ✓
+      
+      6. Sitemap index: Valid XML sitemapindex, 200 ✓
+      
+      7. Events sitemap: URLs have <changefreq>hourly</changefreq> ✓
+      
+      8. Regression tests: All existing endpoints still return 200 ✓
+      
+      NO ISSUES FOUND. All SEO endpoints working perfectly.

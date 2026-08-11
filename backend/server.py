@@ -1593,9 +1593,9 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     _mo = _seo_month(lang)
     h1 = f"{h1} \u2014 {_mo}"
     desc = f"{desc} {_UPDATED_WORD.get(lang, 'Actualizado')} {_mo}."
-    # Branded 1200x630 social banner per city → richer link previews on
-    # WhatsApp / Instagram / Twitter (higher share CTR = more visits & registros).
-    og_img = f"{front}/og/og-{slug_l}.png"
+    # Dynamic 1200x630 banner built from the featured event poster (falls back to
+    # the static branded banner). Richer link previews on WhatsApp/Instagram/Twitter.
+    og_img = f"{front}/og-city/{slug_l}.jpg"
 
     items_html = []
     jsonld = []
@@ -2385,6 +2385,92 @@ def _blog_common_css() -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# AUTO BLOG — a self-updating "agenda del finde" post per city. Content is built
+# live from this weekend's events, so it stays fresh every week with zero manual
+# work. Indexed like a normal blog post (Article + FAQ + Breadcrumb).
+# ---------------------------------------------------------------------------
+def _agenda_meta() -> list:
+    metas = []
+    for c in SUPPORTED_CITIES:
+        cs = _city_slug(c["id"])
+        metas.append({
+            "slug": f"agenda-fiestas-finde-{cs}",
+            "city_id": c["id"], "city_slug": cs, "label": c["label"],
+            "title": f"Fiestas de este fin de semana en {c['label']}: agenda actualizada",
+            "description": (f"Agenda actualizada de las mejores fiestas y discotecas de este fin de "
+                            f"semana en {c['label']}: horarios, precios y qu\u00e9 amigos van. Con \u00bfQui\u00e9n va?"),
+        })
+    return metas
+
+
+_AGENDA_BY_SLUG = None
+
+
+def _agenda_lookup(slug: str):
+    global _AGENDA_BY_SLUG
+    if _AGENDA_BY_SLUG is None:
+        _AGENDA_BY_SLUG = {m["slug"]: m for m in _agenda_meta()}
+    return _AGENDA_BY_SLUG.get(slug)
+
+
+async def _build_agenda_post(meta: dict, front: str) -> dict:
+    import html as _h
+    e = _h.escape
+    city_id, label, cs = meta["city_id"], meta["label"], meta["city_slug"]
+    events = await _events_for_timeframe(city_id, "weekend")
+    if not events:
+        events = await _upcoming_for_city(city_id, 12)
+    rows = []
+    for ev in events[:10]:
+        u = _event_paths(front, ev.get("id", ""), _event_slug(ev))["es"]
+        d = _es_share_date(ev.get("date", "")) or ev.get("date", "")
+        pl = _price_line(ev)
+        pls = f" \u00b7 {e(pl)}" if pl else ""
+        rows.append(f'<li><a href="{e(u)}"><b>{e(ev.get("name") or "Fiesta")}</b></a> \u2014 '
+                    f'{e(ev.get("venue") or "")}, {e(d)}{pls}</li>')
+    n = len(events)
+    if rows:
+        list_html = ("<p>Estas son las fiestas destacadas de este fin de semana en "
+                     f"{e(label)}, ordenadas por fecha. Toca cualquiera para ver horario, precio y "
+                     "qu\u00e9 amigos van:</p><ul>" + "".join(rows) + "</ul>")
+    else:
+        list_html = (f"<p>A\u00fan no hay fiestas confirmadas para este finde en {e(label)}. Consulta la "
+                     f'<a href="/fiestas/{cs}">agenda completa de {e(label)}</a> o vuelve en unas horas: '
+                     "la actualizamos constantemente.</p>")
+    s2 = (f'En <b>\u00bfQui\u00e9n va?</b> no solo ves qu\u00e9 fiestas hay este fin de semana en {e(label)}: '
+          "ves a cu\u00e1les van tus amigos, recibes un aviso cuando alguien de tu grupo se apunta y compras "
+          "la entrada online al precio actualizado. As\u00ed el finde se organiza solo. Mira la "
+          f'<a href="/fiestas/{cs}/este-finde">agenda del finde en {e(label)}</a> y '
+          f'<a href="/fiestas/{cs}/esta-noche">las fiestas de esta noche</a>.')
+    sections = [
+        (f"Las mejores fiestas de este fin de semana en {label}", list_html),
+        ("Sal con tu grupo, no en solitario", s2),
+    ]
+    faq = [
+        (f"\u00bfQu\u00e9 fiestas hay este fin de semana en {label}?",
+         f"Ahora mismo hay {n} planes en {label} para este finde con horarios y precios actualizados. "
+         "\u00c1brelos en \u00bfQui\u00e9n va? para ver a qu\u00e9 va cada uno de tus amigos."),
+        ("\u00bfCon qu\u00e9 antelaci\u00f3n conviene comprar la entrada?",
+         "Las fiestas del finde con DJ conocido suelen agotarse; comprar online anticipado suele ser "
+         "m\u00e1s barato que en taquilla y te evita la cola."),
+        ("\u00bfC\u00f3mo veo a qu\u00e9 fiesta van mis amigos?",
+         "En \u00bfQui\u00e9n va? cada amigo marca \u201cVoy\u201d o \u201cMe interesa\u201d y t\u00fa lo ves en tiempo real, "
+         "as\u00ed eliges el plan donde est\u00e9 tu grupo."),
+    ]
+    now = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    monday = now - timedelta(days=now.weekday())
+    return {
+        "title": meta["title"], "description": meta["description"],
+        "hero_image": f"{front}/og-city/{cs}.jpg",
+        "published": monday.isoformat(), "updated": now.isoformat(),
+        "city": label, "city_slug": cs,
+        "sections": sections, "faq": faq,
+        "related_cities": [x for x in ["madrid", "barcelona", "ibiza", "palma", "marbella"] if x != cs][:4],
+    }
+
+
+
 async def _render_blog_index(request: Request):
     import html as _html
     e = _html.escape
@@ -2394,13 +2480,24 @@ async def _render_blog_index(request: Request):
 
     cards = []
     itemlist = []
-    for i, (slug, p) in enumerate(posts, start=1):
+    pos = 1
+    # Auto-updating weekly "agenda del finde" posts first (freshest content).
+    for m in _agenda_meta():
+        url = _blog_url(front, m["slug"])
+        cards.append(
+            f'<li class="blogcard"><a href="{e(url)}"><b>{e(m["title"])}</b>'
+            f'<small>{e(m["description"])}</small></a></li>'
+        )
+        itemlist.append({"@type": "ListItem", "position": pos, "url": url, "name": m["title"]})
+        pos += 1
+    for (slug, p) in posts:
         url = _blog_url(front, slug)
         cards.append(
             f'<li class="blogcard"><a href="{e(url)}"><b>{e(p["title"])}</b>'
             f'<small>{e(p["description"])}</small></a></li>'
         )
-        itemlist.append({"@type": "ListItem", "position": i, "url": url, "name": p["title"]})
+        itemlist.append({"@type": "ListItem", "position": pos, "url": url, "name": p["title"]})
+        pos += 1
 
     bc_items = [("Inicio", f"{front}/"), ("Blog", canonical)]
     bc_html = _breadcrumb_html(bc_items, e)
@@ -2447,6 +2544,10 @@ async def _render_blog_post(slug: str, request: Request):
     e = _html.escape
     front = _frontend_base(request)
     post = _BLOG_POSTS.get(slug)
+    if not post:
+        _am = _agenda_lookup(slug)
+        if _am:
+            post = await _build_agenda_post(_am, front)
     if not post:
         # Soft 404: redirect to blog index
         html_out = f'<!doctype html><meta http-equiv="refresh" content="0;url={front}/blog"><script>location.replace("{front}/blog")</script>'
@@ -2554,6 +2655,14 @@ async def _sitemap_blog_xml(front: str, today: str) -> str:
         parts.append(
             f'<url><loc>{_blog_url(front, slug)}</loc><lastmod>{lm}</lastmod>'
             f'<changefreq>monthly</changefreq>{img_xml}</url>'
+        )
+    # Auto weekly agenda posts (fresh every day → lastmod=today, changefreq daily).
+    for m in _agenda_meta():
+        img = f"{front}/og-city/{m['city_slug']}.jpg"
+        img_xml = f'<image:image><image:loc>{img.replace("&", "&amp;")}</image:loc></image:image>'
+        parts.append(
+            f'<url><loc>{_blog_url(front, m["slug"])}</loc><lastmod>{today}</lastmod>'
+            f'<changefreq>daily</changefreq>{img_xml}</url>'
         )
     return _sitemap_urlset(parts)
 
@@ -2792,7 +2901,7 @@ async def seo_sitemap(request: Request, scope: str = "", city: str = ""):
         return _sitemap_response(await _sitemap_cities_xml(front, today))
     if scope == "events":
         return _sitemap_response(await _sitemap_events_xml(front, today, city))
-    return _sitemap_response(_sitemap_index_xml(front, today))
+    return _sitemap_response(await _sitemap_index_xml(front, today))
 
 
 @api_router.api_route("/sitemap-cities.xml", methods=["GET", "HEAD"])
@@ -2862,7 +2971,7 @@ async def _sitemap_events_xml(front: str, today: str, city: str) -> str:
             lm = _ev_lastmod(ev, today)
             img = ev.get("image_url", "")
             for lang in SEO_LANGS:
-                parts.append(_sitemap_url(ep, lang, lm, "daily", image=img))
+                parts.append(_sitemap_url(ep, lang, lm, "hourly", image=img))
     return _sitemap_urlset(parts)
 
 
@@ -2880,10 +2989,29 @@ async def _sitemap_venues_xml(front: str, today: str) -> str:
     return _sitemap_urlset(parts)
 
 
-def _sitemap_index_xml(front: str, today: str) -> str:
-    children = [f"{front}/sitemap-cities.xml", f"{front}/sitemap-venues.xml", f"{front}/sitemap-blog.xml"]
+async def _sitemap_index_xml(front: str, today: str) -> str:
+    # Recency signal: child sitemaps carry the freshest content date so Google
+    # re-fetches them soon after new parties are scraped (crawl sooner).
+    fresh = today
+    try:
+        doc = await db.events.find_one({}, {"_id": 0, "last_scraped_at": 1},
+                                       sort=[("last_scraped_at", -1)])
+        raw = str((doc or {}).get("last_scraped_at") or "")[:10]
+        if len(raw) == 10:
+            # Honest lastmod: the real freshest scrape date, never in the future.
+            fresh = raw if raw <= today else today
+    except Exception:
+        pass
+    static_lm = {
+        f"{front}/sitemap-cities.xml": today,
+        f"{front}/sitemap-venues.xml": fresh,
+        f"{front}/sitemap-blog.xml": today,
+    }
+    children = list(static_lm.keys())
     children += [f"{front}/sitemap-events-{_city_slug(c['id'])}.xml" for c in SUPPORTED_CITIES]
-    body = "".join(f"<sitemap><loc>{u}</loc><lastmod>{today}</lastmod></sitemap>" for u in children)
+    body = "".join(
+        f"<sitemap><loc>{u}</loc><lastmod>{static_lm.get(u, fresh)}</lastmod></sitemap>"
+        for u in children)
     return ('<?xml version="1.0" encoding="UTF-8"?>'
             '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</sitemapindex>")
 
@@ -3091,6 +3219,102 @@ async def story_image(event_id: str, request: Request):
     return StarletteResponse(content=buf.getvalue(), media_type="image/jpeg",
                              headers={"Cache-Control": "public, max-age=3600",
                                       "Content-Disposition": f'inline; filename="quienva-{event_id}.jpg"'})
+
+
+@api_router.get("/og-city/{slug}.jpg")
+async def og_city_image(slug: str, request: Request):
+    """Dynamic 1200x630 social/OG banner for a city, built from the poster of the
+    featured upcoming event (blurred cover background + poster card + city name +
+    live plan count). Falls back to a clean brand gradient when there is no poster.
+    Served via Vercel rewrite /og-city/:slug.jpg -> /api/og-city/:slug.jpg."""
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+    W, H = 1200, 630
+    front = _frontend_base(request)
+    city_id = _CITY_SLUGS.get(slug.lower())
+    label = next((c["label"] for c in SUPPORTED_CITIES if c["id"] == city_id), (city_id or slug.title()))
+    short = label.split(" / ")[0].split(" de ")[0].strip()
+
+    def _font(kind, size):
+        fname = "Unbounded.ttf" if kind == "title" else "Outfit.ttf"
+        return ImageFont.truetype(os.path.join(_ASSETS_FONTS, fname), size)
+
+    try:
+        poster, n = None, 0
+        if city_id:
+            events = await _upcoming_for_city(city_id, limit=30)
+            n = len(events)
+            for ev in events:
+                u = ev.get("image_url") or ""
+                if u.startswith("http"):
+                    try:
+                        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as c:
+                            r = await c.get(u)
+                        if r.status_code == 200:
+                            poster = Image.open(io.BytesIO(r.content)).convert("RGB")
+                            break
+                    except Exception:
+                        poster = None
+
+        def _cover(im, w, h):
+            bw, bh = im.size
+            s = max(w / bw, h / bh)
+            rr = im.resize((int(bw * s) + 1, int(bh * s) + 1))
+            bx = (rr.width - w) // 2
+            by = (rr.height - h) // 2
+            return rr.crop((bx, by, bx + w, by + h))
+
+        if poster is not None:
+            bg = _cover(poster, W, H).filter(ImageFilter.GaussianBlur(30))
+            bg = Image.blend(bg, Image.new("RGB", (W, H), (8, 8, 12)), 0.5)
+        else:
+            bg = Image.new("RGB", (W, H), (10, 10, 12))
+            for y in range(H):
+                t = y / H
+                bg.paste((int(20 + 60 * (1 - t)), int(6 + 10 * t), int(36 + 70 * t)), (0, y, W, y + 1))
+        # Left-to-right dark ramp so the text column stays legible over any poster.
+        ramp = Image.new("L", (W, 1), 0)
+        for x in range(W):
+            ramp.putpixel((x, 0), int(215 * (1 - min(1.0, x / (W * 0.62)))))
+        ramp = ramp.resize((W, H))
+        img = Image.composite(Image.new("RGB", (W, H), (5, 5, 9)), bg, ramp)
+        draw = ImageDraw.Draw(img)
+
+        # Featured poster as a rounded card on the right.
+        if poster is not None:
+            pw = 300
+            full_h = int(poster.height * (pw / poster.width))
+            ph = min(full_h, 486)
+            pc = poster.resize((pw, full_h)).crop((0, 0, pw, ph))
+            px = W - pw - 72
+            py = (H - ph) // 2
+            mask = Image.new("L", (pw, ph), 0)
+            ImageDraw.Draw(mask).rounded_rectangle((0, 0, pw, ph), 26, fill=255)
+            img.paste(pc, (px, py), mask)
+            draw.rounded_rectangle((px, py, px + pw, py + ph), 26, outline=(255, 255, 255), width=3)
+
+        # Brand + accent + city name + tagline + live plan count.
+        draw.text((70, 60), "\u00bfQui\u00e9n va?", font=_font("title", 42), fill=(255, 255, 255))
+        draw.rounded_rectangle((72, 150, 192, 162), 6, fill=(255, 0, 85))
+        fcity = _font("title", 104 if len(short) <= 9 else 74)
+        draw.text((68, 188), short, font=fcity, fill=(255, 255, 255))
+        ty = 188 + int(fcity.size * 1.12)
+        draw.text((72, ty), "Fiestas y discotecas \u00b7 qui\u00e9n va con tus amigos",
+                  font=_font("body", 33), fill=(206, 209, 221))
+        if n:
+            draw.text((72, ty + 50), f"{n} planes esta semana", font=_font("body", 30), fill=(0, 240, 255))
+
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, format="JPEG", quality=85)
+        buf.seek(0)
+        return StarletteResponse(content=buf.getvalue(), media_type="image/jpeg",
+                                 headers={"Cache-Control": "public, max-age=3600, s-maxage=21600",
+                                          "Content-Disposition": f'inline; filename="quienva-{slug}.jpg"'})
+    except Exception as _e:
+        logger.warning(f"og_city_image failed for {slug}: {_e}")
+        # Fall back to the static branded banner shipped in the frontend.
+        return StarletteResponse(status_code=302, content="",
+                                 headers={"Location": f"{front}/og/og-{slug.lower()}.png"})
+
 
 
 

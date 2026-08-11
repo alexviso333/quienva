@@ -22,6 +22,7 @@
     { "source": "/sitemap-cities.xml", "destination": "https://quienva.onrender.com/api/sitemap-cities.xml" },
     { "source": "/sitemap-venues.xml", "destination": "https://quienva.onrender.com/api/sitemap-venues.xml" },
     { "source": "/sitemap-events-:city.xml", "destination": "https://quienva.onrender.com/api/sitemap-events-:city.xml" },
+    { "source": "/og-city/:slug.jpg", "destination": "https://quienva.onrender.com/api/og-city/:slug.jpg" },
     { "source": "/robots.txt", "destination": "https://quienva.onrender.com/api/robots.txt" },
     { "source": "/", "destination": "https://quienva.onrender.com/api/home" },
     { "source": "/en", "destination": "https://quienva.onrender.com/api/en/home" },
