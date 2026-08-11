@@ -853,6 +853,28 @@ async def _upcoming_for_city(city_id: str, limit: int = 60) -> list:
     return [e async for e in cur]
 
 
+async def _city_venues(city_id: str, limit: int = 18) -> list:
+    """Nightclubs of a city (from upcoming events) with a cover image + count,
+    for the 'Discotecas' grid on the city landing page."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    pipeline = [
+        {"$match": {"city": city_query_value(city_id), "date": {"$gte": today},
+                    "venue": {"$nin": ["", None]}}},
+        {"$group": {"_id": "$venue", "count": {"$sum": 1}, "image": {"$max": "$image_url"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": limit},
+    ]
+    out = []
+    async for r in db.events.aggregate(pipeline):
+        v = r.get("_id") or ""
+        if not v:
+            continue
+        img = r.get("image") or ""
+        out.append({"venue": v, "slug": _slugify(v), "count": r.get("count", 0),
+                    "image": img if str(img).startswith("http") else ""})
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Multilingual SEO (ES / EN / DE) — server-rendered, crawlable landing pages.
 # Served on the main domain via Vercel rewrites:
@@ -904,15 +926,36 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .nav-tf a,.nav-tf b{font-size:13px;font-weight:700;padding:8px 14px;border-radius:999px;text-decoration:none}
 .nav-tf a{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);color:#c9c9d1}
 .nav-tf b{background:var(--cyan);color:#04121a}
+.finder{position:relative;margin:2px 0 20px;max-width:520px}
+.finder input{width:100%;padding:15px 16px 15px 46px;border-radius:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#fff;font-size:15px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.finder input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,240,255,.16)}
+.finder input::placeholder{color:#8b8b96}
+.finder .fic{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.55;font-size:16px}
+.sech{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:32px 0 14px}
+.sech h2{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:20px;margin:0}
+.sech span{color:var(--muted);font-size:13px}
+.venues{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.vcard{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;text-decoration:none;color:#fff;transition:transform .18s ease,border-color .18s ease}
+.vcard:hover{transform:translateY(-3px);border-color:rgba(255,0,85,.5)}
+.vthumb{width:46px;height:46px;border-radius:12px;flex:0 0 auto;background:linear-gradient(135deg,#2a0f42,#0d2b34);display:flex;align-items:center;justify-content:center;font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:17px;color:#fff;overflow:hidden}
+.vthumb img{width:100%;height:100%;object-fit:cover}
+.vmeta{min-width:0}
+.vmeta b{display:block;font-size:13.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vmeta small{color:var(--muted);font-size:12px}
+.nores{grid-column:1/-1;color:var(--muted);padding:22px;text-align:center;display:none}
 .grid{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
 .card{position:relative;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;text-decoration:none;color:#fff;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
 .card:hover{transform:translateY(-4px);border-color:rgba(0,240,255,.5);box-shadow:0 18px 40px -18px rgba(0,240,255,.45)}
 .poster{position:relative;width:100%;aspect-ratio:4/5;background:#1c1922;overflow:hidden}
-.poster img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s ease}
+.poster img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;z-index:1;transition:transform .4s ease}
 .card:hover .poster img{transform:scale(1.05)}
-.poster .ph{width:100%;height:100%;background:linear-gradient(135deg,#2a2340,#12101a)}
-.poster:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(10,10,12,.92) 100%)}
-.badges{position:absolute;left:9px;bottom:9px;right:9px;display:flex;gap:6px;flex-wrap:wrap;z-index:2}
+.poster .ph{position:absolute;inset:0;width:100%;height:100%;background:linear-gradient(150deg,#2a0f42 0%,#48173a 45%,#0d2b34 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px 14px}
+.poster .ph:before{content:"";position:absolute;top:-30%;left:-20%;width:70%;height:70%;background:radial-gradient(circle,rgba(255,0,85,.5),transparent 65%);filter:blur(22px)}
+.phn{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:15px;color:#fff;text-align:center;line-height:1.18;text-shadow:0 2px 14px rgba(0,0,0,.55);position:relative;z-index:1;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.phv{font-size:12px;color:rgba(255,255,255,.72);text-align:center;position:relative;z-index:1}
+.phb{position:absolute;top:10px;left:11px;font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:10px;letter-spacing:.2px;color:rgba(255,255,255,.85);z-index:1}
+.poster:after{content:"";position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,transparent 45%,rgba(10,10,12,.92) 100%)}
+.badges{position:absolute;left:9px;bottom:9px;right:9px;display:flex;gap:6px;flex-wrap:wrap;z-index:3}
 .sb{font-size:11px;font-weight:800;padding:5px 10px;border-radius:999px;backdrop-filter:blur(6px);white-space:nowrap}
 .sb-on{background:rgba(16,185,129,.32);color:#a7f3d0}
 .sb-few{background:rgba(249,115,22,.36);color:#fed7aa}
@@ -1348,16 +1391,21 @@ def _seo_card(ev, ev_url, lang, e) -> str:
     when = _seo_date(ev.get("date", ""), lang, ev.get("time", ""))
     venue = e(ev.get("venue", ""))
     meta = " \u00b7 ".join([x for x in [venue, e(when)] if x])
+    vn = e(ev.get("venue", "") or "")
+    ph = (f'<div class="ph"><span class="phn">{e(ev.get("name","Fiesta"))}</span>'
+          f'{f"<span class=phv>{vn}</span>" if vn else ""}'
+          f'<span class="phb">\u00bfQui\u00e9n va?</span></div>')
     img = ev.get("image_url", "")
     if str(img).startswith("http"):
-        poster = f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy">'
+        poster = ph + (f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy" '
+                       f'onerror="this.style.display=&#39;none&#39;">')
     else:
-        poster = '<div class="ph"></div>'
+        poster = ph
     blabel, bcls = _seo_sale_badge(ev, lang)
     badge = f'<span class="sb {bcls}">{e(blabel)}</span>'
     price = f'<span class="pp">{e(pl)}</span>' if pl else ''
     return (
-        f'<a class="card" href="{e(ev_url)}">'
+        f'<a class="card" data-s="{e((str(ev.get("name","")) + " " + str(ev.get("venue","")) ).lower())}" href="{e(ev_url)}">'
         f'<div class="poster">{poster}<div class="badges">{badge}{price}</div></div>'
         f'<div class="body"><span class="n">{e(ev.get("name","Fiesta"))}</span>'
         f'<span class="m">{meta}</span></div></a>')
@@ -1614,13 +1662,52 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
         nav.append(f'<b>{lbl}</b>' if tf == timeframe else f'<a href="{e(u)}">{lbl}</a>')
     nav_html = f'<div class="nav-tf">{"".join(nav)}</div>'
 
-    # Stat chips for the hero (social proof + value props).
-    _sl = {"es": ("planes esta semana", "Precios reales", "Qui\u00e9n va con amigos"),
-           "en": ("plans this week", "Real prices", "Who's going"),
-           "de": ("Pl\u00e4ne diese Woche", "Echte Preise", "Wer hingeht")}.get(lang, ("planes", "Precios reales", "Qui\u00e9n va"))
-    stats_html = (f'<div class="stats"><span class="stat"><b>{n}</b> {e(_sl[0])}</span>'
-                  f'<span class="stat">\U0001F3AB {e(_sl[1])}</span>'
-                  f'<span class="stat">\U0001F465 {e(_sl[2])}</span></div>')
+    # Nightclubs of this city (for the stats bar + "Discotecas" grid). The full
+    # grid shows on the main landing; tonight/weekend stay lean.
+    venues = await _city_venues(city_id) if timeframe == "all" else []
+    n_ven = len(venues)
+    _lbl = {
+        "es": {"plans": "planes esta semana", "clubs": "discotecas", "prices": "Precios reales",
+               "search": "Busca tu fiesta o discoteca\u2026", "vh": f"Discotecas en {label}",
+               "vsub": "Toca una discoteca para ver todas sus fiestas", "parties": "fiestas",
+               "nores": "Sin resultados para tu b\u00fasqueda"},
+        "en": {"plans": "plans this week", "clubs": "clubs", "prices": "Real prices",
+               "search": "Search a party or club\u2026", "vh": f"Nightclubs in {label}",
+               "vsub": "Tap a club to see all its parties", "parties": "parties",
+               "nores": "No results for your search"},
+        "de": {"plans": "Pl\u00e4ne diese Woche", "clubs": "Clubs", "prices": "Echte Preise",
+               "search": "Party oder Club suchen\u2026", "vh": f"Clubs in {label}",
+               "vsub": "Tippe auf einen Club f\u00fcr alle Partys", "parties": "Partys",
+               "nores": "Keine Ergebnisse"},
+    }
+    L2 = _lbl.get(lang, _lbl["es"])
+    ven_stat = f'<span class="stat"><b>{n_ven}</b> {e(L2["clubs"])}</span>' if n_ven else ''
+    stats_html = (f'<div class="stats"><span class="stat"><b>{n}</b> {e(L2["plans"])}</span>'
+                  f'{ven_stat}'
+                  f'<span class="stat">\U0001F3AB {e(L2["prices"])}</span></div>')
+    # Hero search box (client-side filter of the cards below — progressive enhancement).
+    finder_html = (f'<div class="finder"><span class="fic">\U0001F50D</span>'
+                   f'<input id="qvf" type="search" autocomplete="off" placeholder="{e(L2["search"])}" '
+                   f'oninput="qvFilter(this.value)" aria-label="{e(L2["search"])}"></div>')
+    # "Discotecas" grid with cover/logo.
+    venues_html = ""
+    if venues:
+        vcards = []
+        for v in venues:
+            thumb = (f'<span class="vthumb"><img src="{e(v["image"])}" alt="{e(v["venue"])}" loading="lazy"></span>'
+                     if v["image"] else
+                     f'<span class="vthumb">{e((v["venue"][:1] or "?").upper())}</span>')
+            vcards.append(
+                f'<a class="vcard" href="{e(_venue_paths(front, v["slug"])[lang])}">{thumb}'
+                f'<span class="vmeta"><b>{e(v["venue"])}</b><small>{v["count"]} {e(L2["parties"])}</small></span></a>')
+        venues_html = (f'<div class="sech"><h2>{e(L2["vh"])}</h2><span>{n_ven}</span></div>'
+                       f'<div style="color:var(--muted);font-size:13px;margin:-8px 0 12px">{e(L2["vsub"])}</div>'
+                       f'<div class="venues">{"".join(vcards)}</div>')
+    _search_js = ('<script>function qvFilter(q){q=(q||"").toLowerCase().trim();'
+                  'var c=document.querySelectorAll(".grid .card"),nr=document.getElementById("qvnores"),shown=0;'
+                  'c.forEach(function(el){var m=!q||(el.getAttribute("data-s")||"").indexOf(q)>=0;'
+                  'el.style.display=m?"":"none";if(m)shown++;});'
+                  'if(nr)nr.style.display=(shown===0&&q)?"block":"none";}</script>')
     topbar = _seo_topbar(front, lang, e)
     benefits = _seo_benefits(lang, e)
     joinband = _seo_joinband(front, lang, e)
@@ -1682,7 +1769,9 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 {nav_html}
 </section>
 {intro_html}
-<ul class="grid">{''.join(items_html)}</ul>
+{finder_html}
+<ul class="grid">{''.join(items_html)}<li class="nores" id="qvnores">{e(L2["nores"])}</li></ul>
+{venues_html}
 {benefits}
 {joinband}
 {guides_html}
@@ -1690,7 +1779,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 {faq_html}
 {langsw}
 <footer>{e(T["footer"])}</footer>
-</div></body></html>"""
+</div>{_search_js}</body></html>"""
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
                              headers={"Cache-Control": "public, max-age=1800"})
 

@@ -6068,3 +6068,96 @@ agent_communication:
       
       NO ISSUES FOUND. All multilingual evergreen guide endpoints working perfectly with correct localization, hreflang cross-linking, rich JSON-LD schema, and sitemap indexing. Momentos highlight fallback mechanism working as designed - older moments surface when no recent captures available.
 
+
+# ==================== ITERATION 6 (2026-08-11): city page premium redesign (search + stats + venues grid + robust cards) ====================
+backend:
+  - task: "City page redesign: hero search, real stats (clubs count), Discotecas grid, robust branded card placeholders"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added client-side search (.finder + qvFilter filtering .card by data-s), stats bar now includes real nightclub count (_city_venues), new 'Discotecas' grid (venues with cover/logo + party count, links to /discoteca/{slug}) on the 'all' timeframe, and robust card posters (branded .ph name layer always behind + <img> overlay with onerror hide) so cards are never black. Localized ES/EN/DE."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL CITY PAGE REDESIGN SCENARIOS (5 test groups, 100% pass): ✅ (1) GET /api/ciudad/madrid → 200 text/html with ALL required elements: (a) class='finder' with input oninput='qvFilter' ✓, (b) stats chip containing 'discotecas' ✓, (c) class='venues' grid with at least one class='vcard' with href containing '/discoteca/' ✓, (d) <script> defining function qvFilter ✓, (e) event cards each having data-s attribute ✓, (f) at least one class='ph' branded placeholder layer inside poster ✓. ✅ (2) GET /api/en/city/ibiza → 200 text/html containing 'Nightclubs in Ibiza' and 'Search a party or club' (English localization working) ✓. ✅ (3) GET /api/de/city/madrid → 200 text/html containing 'Clubs in Madrid' and 'Party oder Club suchen' (German localization working) ✓. ✅ (4) GET /api/ciudad/madrid/esta-noche → 200 with finder present ✓, GET /api/ciudad/madrid/este-finde → 200 with finder present ✓ (venues grid not required on timeframe pages, as expected). ✅ (5) REGRESSION TESTS (6 endpoints, all 200): GET /api/home ✓, GET /api/blog ✓, GET /api/en/blog ✓, GET /api/sitemap.xml (application/xml) ✓, GET /api/og-city/madrid.jpg (image/jpeg) ✓, GET /api/stories with Authorization: Bearer qvtest_8546d7e84b6d4428b99f039104181221 → 200 JSON array with at least one element having kind='moment' and is_old=true ✓. All requests sent with required headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https). All city page redesign features working perfectly with correct localization (ES/EN/DE), search functionality, stats display, venues grid, robust card placeholders, and all regression endpoints functioning correctly."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.9"
+  test_sequence: 10
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Send headers x-forwarded-host: www.quienva.me and x-forwarded-proto: https on every request. All 200 text/html.
+      1) GET /api/ciudad/madrid : must contain class="finder" (search input with oninput="qvFilter"), a stats chip containing "discotecas", a class="venues" grid with at least one class="vcard" linking to /discoteca/, the qvFilter <script>, and event cards that each have a data-s attribute AND a class="ph" branded placeholder layer. (Madrid has seeded demo venues.)
+      2) GET /api/en/city/ibiza : contains "Nightclubs in Ibiza" and "Search a party or club".
+      3) GET /api/de/city/madrid : contains "Clubs in Madrid" and "Party oder Club suchen".
+      4) GET /api/ciudad/madrid/esta-noche and /este-finde : still 200 (finder present, venues grid NOT required).
+      5) Regression 200: GET /api/home, GET /api/blog, GET /api/en/blog, GET /api/sitemap.xml, GET /api/og-city/madrid.jpg (image/jpeg), GET /api/stories with header Authorization: Bearer qvtest_8546d7e84b6d4428b99f039104181221 (array; at least one item kind=moment is_old=true).
+      Do NOT test frontend/UI. /og-city/*.jpg is a backend route; /og/*.png & /favicon.ico are Vercel static.
+  - agent: "testing"
+    message: |
+      ✅ ALL TESTS PASSED - CITY PAGE PREMIUM REDESIGN VERIFIED (100% success rate)
+      
+      Completed comprehensive backend testing of city page redesign with all required headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) on EVERY request.
+      
+      TEST RESULTS:
+      
+      ✅ TEST 1: GET /api/ciudad/madrid (6 sub-checks, all passed)
+         - Status: 200 text/html ✓
+         - (a) class="finder" with input oninput="qvFilter" ✓
+         - (b) Stats chip containing "discotecas" ✓
+         - (c) class="venues" grid with class="vcard" linking to /discoteca/ ✓
+         - (d) <script> defining function qvFilter ✓
+         - (e) Event cards with data-s attribute ✓
+         - (f) At least one class="ph" branded placeholder layer ✓
+      
+      ✅ TEST 2: GET /api/en/city/ibiza (English localization)
+         - Status: 200 text/html ✓
+         - Contains "Nightclubs in Ibiza" ✓
+         - Contains "Search a party or club" ✓
+      
+      ✅ TEST 3: GET /api/de/city/madrid (German localization)
+         - Status: 200 text/html ✓
+         - Contains "Clubs in Madrid" ✓
+         - Contains "Party oder Club suchen" ✓
+      
+      ✅ TEST 4: Timeframe endpoints
+         - GET /api/ciudad/madrid/esta-noche → 200 with finder ✓
+         - GET /api/ciudad/madrid/este-finde → 200 with finder ✓
+         - (Venues grid not required on timeframe pages, as expected)
+      
+      ✅ TEST 5: Regression tests (6 endpoints, all passed)
+         - GET /api/home → 200 ✓
+         - GET /api/blog → 200 ✓
+         - GET /api/en/blog → 200 ✓
+         - GET /api/sitemap.xml → 200 application/xml ✓
+         - GET /api/og-city/madrid.jpg → 200 image/jpeg ✓
+         - GET /api/stories (with Authorization: Bearer qvtest_8546d7e84b6d4428b99f039104181221) → 200 JSON array with 1 item, found moment with kind='moment' and is_old=true ✓
+      
+      CONCLUSION:
+      All city page redesign features are working perfectly. The premium redesign includes:
+      - Client-side search with qvFilter function filtering event cards by data-s attribute
+      - Real stats display showing nightclub count ("discotecas")
+      - Discotecas grid with venue cards (vcard) linking to /discoteca/ pages
+      - Robust branded card placeholders (class="ph") ensuring cards are never black
+      - Full multilingual support (ES/EN/DE) with correct localization
+      - Timeframe pages (esta-noche, este-finde) working with finder present
+      - All regression endpoints functioning correctly
+      
+      NO ISSUES FOUND. All requirements met. City page premium redesign is production-ready.
+      
+      Test file: /app/backend_test.py
