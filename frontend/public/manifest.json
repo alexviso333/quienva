@@ -1,15 +1,22 @@
 {
-  "name": "¿Quién va?",
+  "id": "/",
+  "name": "¿Quién va? — Fiestas y discotecas",
   "short_name": "¿Quién va?",
-  "description": "Descubre los planes del finde y mira qué amigos van a cada sitio.",
+  "description": "Descubre las fiestas de esta semana en Ibiza, Madrid, Barcelona, Palma y Marbella. Mira qué amigos van y consigue tus entradas.",
   "start_url": "/feed",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#0A0A0C",
   "background_color": "#0A0A0C",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["social", "entertainment", "lifestyle", "events"],
+  "prefer_related_applications": false,
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
