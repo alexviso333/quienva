@@ -1648,6 +1648,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     ]
     intro_html = _city_intro(city_id, label, n, lang, e) if timeframe == "all" else ""
     faq_html = _faq_html(T["faq_title"], faq_pairs, e)
+    guides_html = _city_guides_block(front, slug_l, label, lang, e)
     extra_jsonld = (_org_website_jsonld(front)
                     + f'<script type="application/ld+json">{_breadcrumb_jsonld(bc_items)}</script>'
                     f'<script type="application/ld+json">{_faq_jsonld(faq_pairs)}</script>')
@@ -1684,6 +1685,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 <ul class="grid">{''.join(items_html)}</ul>
 {benefits}
 {joinband}
+{guides_html}
 <div class="cities"><b>{e(T["other_cities"])}</b>{other_cities}</div>
 {faq_html}
 {langsw}
@@ -2329,13 +2331,14 @@ _BLOG_POSTS = {
 }
 
 
-def _blog_url(front: str, slug: str = "") -> str:
+def _blog_url(front: str, slug: str = "", lang: str = "es") -> str:
+    base = {"es": f"{front}/blog", "en": f"{front}/en/blog", "de": f"{front}/de/blog"}.get(lang, f"{front}/blog")
     if not slug:
-        return f"{front}/blog"
-    return f"{front}/blog/{slug}"
+        return base
+    return f"{base}/{slug}"
 
 
-def _blog_article_jsonld(post: dict, canonical: str, front: str) -> str:
+def _blog_article_jsonld(post: dict, canonical: str, front: str, lang: str = "es") -> str:
     """Article + BlogPosting JSON-LD (Google-friendly)."""
     obj = {
         "@context": "https://schema.org",
@@ -2345,7 +2348,7 @@ def _blog_article_jsonld(post: dict, canonical: str, front: str) -> str:
         "image": post.get("hero_image") or f"{front}/icons/icon-512.png",
         "datePublished": post["published"],
         "dateModified": post.get("updated") or post["published"],
-        "inLanguage": "es",
+        "inLanguage": lang,
         "url": canonical,
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical},
         "author": {"@type": "Organization", "name": "\u00bfQui\u00e9n va?", "url": front + "/"},
@@ -2390,170 +2393,265 @@ def _blog_common_css() -> str:
 # live from this weekend's events, so it stays fresh every week with zero manual
 # work. Indexed like a normal blog post (Article + FAQ + Breadcrumb).
 # ---------------------------------------------------------------------------
-def _agenda_meta() -> list:
+_AGENDA_L10N = {
+    "es": {
+        "slug": "agenda-fiestas-finde-{cs}",
+        "title": "Fiestas de este fin de semana en {label}: agenda actualizada",
+        "desc": "Agenda actualizada de las mejores fiestas y discotecas de este fin de semana en {label}: horarios, precios y qu\u00e9 amigos van. Con \u00bfQui\u00e9n va?",
+        "sec1": "Las mejores fiestas de este fin de semana en {label}",
+        "intro": "Estas son las fiestas destacadas de este fin de semana en {label}, ordenadas por fecha. Toca cualquiera para ver horario, precio y qu\u00e9 amigos van:",
+        "empty": 'A\u00fan no hay fiestas confirmadas para este finde en {label}. Consulta la <a href="{city}">agenda completa de {label}</a> o vuelve en unas horas: la actualizamos constantemente.',
+        "sec2": "Sal con tu grupo, no en solitario",
+        "sec2_body": 'En <b>\u00bfQui\u00e9n va?</b> no solo ves qu\u00e9 fiestas hay este fin de semana en {label}: ves a cu\u00e1les van tus amigos, recibes un aviso cuando alguien de tu grupo se apunta y compras la entrada online al precio actualizado. As\u00ed el finde se organiza solo. Mira la <a href="{wk}">agenda del finde en {label}</a> y <a href="{tn}">las fiestas de esta noche</a>.',
+        "faq": [
+            ("\u00bfQu\u00e9 fiestas hay este fin de semana en {label}?", "Ahora mismo hay {n} planes en {label} para este finde con horarios y precios actualizados. \u00c1brelos en \u00bfQui\u00e9n va? para ver a qu\u00e9 va cada uno de tus amigos."),
+            ("\u00bfCon qu\u00e9 antelaci\u00f3n conviene comprar la entrada?", "Las fiestas del finde con DJ conocido suelen agotarse; comprar online anticipado suele ser m\u00e1s barato que en taquilla y te evita la cola."),
+            ("\u00bfC\u00f3mo veo a qu\u00e9 fiesta van mis amigos?", "En \u00bfQui\u00e9n va? cada amigo marca \u201cVoy\u201d o \u201cMe interesa\u201d y t\u00fa lo ves en tiempo real, as\u00ed eliges el plan donde est\u00e9 tu grupo."),
+        ],
+    },
+    "en": {
+        "slug": "weekend-parties-{cs}",
+        "title": "Parties this weekend in {label}: live agenda",
+        "desc": "The updated agenda of the best parties and clubs this weekend in {label}: times, real prices and which friends are going. On \u00bfQui\u00e9n va?",
+        "sec1": "The best parties this weekend in {label}",
+        "intro": "These are the top parties this weekend in {label}, sorted by date. Tap any of them to see the time, price and which friends are going:",
+        "empty": 'No parties confirmed yet for this weekend in {label}. Check the <a href="{city}">full {label} agenda</a> or come back in a few hours: we update it constantly.',
+        "sec2": "Go out with your crew, not alone",
+        "sec2_body": 'On <b>\u00bfQui\u00e9n va?</b> you don\u2019t just see which parties are on this weekend in {label}: you see which ones your friends are going to, get a heads-up when someone from your group joins a plan, and buy your ticket online at the up-to-date price. Check the <a href="{wk}">{label} weekend agenda</a> and <a href="{tn}">tonight\u2019s parties</a>.',
+        "faq": [
+            ("What parties are on this weekend in {label}?", "Right now there are {n} plans in {label} for this weekend with up-to-date times and prices. Open them on \u00bfQui\u00e9n va? to see which of your friends are going."),
+            ("How far in advance should I buy tickets?", "Weekend parties with a well-known DJ tend to sell out; buying online in advance is usually cheaper than at the door and saves you the queue."),
+            ("How do I see which party my friends are going to?", "On \u00bfQui\u00e9n va? each friend marks \u201cGoing\u201d or \u201cInterested\u201d and you see it in real time, so you pick the plan where your crew is."),
+        ],
+    },
+    "de": {
+        "slug": "wochenend-partys-{cs}",
+        "title": "Partys an diesem Wochenende in {label}: aktuelle \u00dcbersicht",
+        "desc": "Die aktuelle \u00dcbersicht der besten Partys und Clubs an diesem Wochenende in {label}: Zeiten, echte Preise und welche Freunde hingehen. Auf \u00bfQui\u00e9n va?",
+        "sec1": "Die besten Partys an diesem Wochenende in {label}",
+        "intro": "Das sind die Top-Partys an diesem Wochenende in {label}, nach Datum sortiert. Tippe auf eine, um Uhrzeit, Preis und welche Freunde hingehen zu sehen:",
+        "empty": 'Noch keine Partys f\u00fcr dieses Wochenende in {label} best\u00e4tigt. Sieh dir die <a href="{city}">komplette Agenda von {label}</a> an oder komm in ein paar Stunden wieder: Wir aktualisieren sie st\u00e4ndig.',
+        "sec2": "Geh mit deiner Crew aus, nicht allein",
+        "sec2_body": 'Auf <b>\u00bfQui\u00e9n va?</b> siehst du nicht nur, welche Partys an diesem Wochenende in {label} laufen: Du siehst, zu welchen deine Freunde gehen, wirst benachrichtigt, wenn jemand aus deiner Gruppe zusagt, und kaufst dein Ticket online zum aktuellen Preis. Sieh dir die <a href="{wk}">Wochenend-Agenda von {label}</a> und <a href="{tn}">die Partys heute Abend</a> an.',
+        "faq": [
+            ("Welche Partys gibt es an diesem Wochenende in {label}?", "Aktuell gibt es {n} Pl\u00e4ne in {label} f\u00fcr dieses Wochenende mit aktuellen Zeiten und Preisen. \u00d6ffne sie auf \u00bfQui\u00e9n va?, um zu sehen, welche deiner Freunde hingehen."),
+            ("Wie fr\u00fch sollte ich Tickets kaufen?", "Wochenend-Partys mit bekanntem DJ sind oft ausverkauft; online im Voraus zu kaufen ist meist g\u00fcnstiger als an der Abendkasse und erspart die Schlange."),
+            ("Wie sehe ich, zu welcher Party meine Freunde gehen?", "Auf \u00bfQui\u00e9n va? markiert jeder Freund \u201eGehe hin\u201c oder \u201eInteressiert\u201c und du siehst es in Echtzeit, so w\u00e4hlst du den Plan, wo deine Crew ist."),
+        ],
+    },
+}
+
+
+def _agenda_meta(lang: str = "es") -> list:
+    L = _AGENDA_L10N.get(lang, _AGENDA_L10N["es"])
     metas = []
     for c in SUPPORTED_CITIES:
         cs = _city_slug(c["id"])
         metas.append({
-            "slug": f"agenda-fiestas-finde-{cs}",
-            "city_id": c["id"], "city_slug": cs, "label": c["label"],
-            "title": f"Fiestas de este fin de semana en {c['label']}: agenda actualizada",
-            "description": (f"Agenda actualizada de las mejores fiestas y discotecas de este fin de "
-                            f"semana en {c['label']}: horarios, precios y qu\u00e9 amigos van. Con \u00bfQui\u00e9n va?"),
+            "slug": L["slug"].format(cs=cs),
+            "city_id": c["id"], "city_slug": cs, "label": c["label"], "lang": lang,
+            "title": L["title"].format(label=c["label"]),
+            "description": L["desc"].format(label=c["label"]),
         })
     return metas
 
 
-_AGENDA_BY_SLUG = None
+_AGENDA_BY_SLUG: dict = {}
 
 
-def _agenda_lookup(slug: str):
-    global _AGENDA_BY_SLUG
-    if _AGENDA_BY_SLUG is None:
-        _AGENDA_BY_SLUG = {m["slug"]: m for m in _agenda_meta()}
-    return _AGENDA_BY_SLUG.get(slug)
+def _agenda_lookup(slug: str, lang: str = "es"):
+    if lang not in _AGENDA_BY_SLUG:
+        _AGENDA_BY_SLUG[lang] = {m["slug"]: m for m in _agenda_meta(lang)}
+    return _AGENDA_BY_SLUG[lang].get(slug)
 
 
-async def _build_agenda_post(meta: dict, front: str) -> dict:
+def _agenda_hreflang(front: str, city_slug: str) -> dict:
+    """The 3 language URLs for a city's weekend-agenda post (for hreflang)."""
+    return {l: _blog_url(front, _AGENDA_L10N[l]["slug"].format(cs=city_slug), l)
+            for l in SEO_LANGS}
+
+
+async def _build_agenda_post(meta: dict, front: str, lang: str = "es") -> dict:
     import html as _h
     e = _h.escape
+    L = _AGENDA_L10N.get(lang, _AGENDA_L10N["es"])
     city_id, label, cs = meta["city_id"], meta["label"], meta["city_slug"]
+    city_url = _city_paths(front, cs)[lang]
+    wk_url = _city_tf_paths(front, cs, "weekend")[lang]
+    tn_url = _city_tf_paths(front, cs, "tonight")[lang]
     events = await _events_for_timeframe(city_id, "weekend")
     if not events:
         events = await _upcoming_for_city(city_id, 12)
     rows = []
     for ev in events[:10]:
-        u = _event_paths(front, ev.get("id", ""), _event_slug(ev))["es"]
-        d = _es_share_date(ev.get("date", "")) or ev.get("date", "")
+        u = _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang]
+        d = _es_share_date(ev.get("date", "")) if lang == "es" else (ev.get("date", "") or "")
         pl = _price_line(ev)
         pls = f" \u00b7 {e(pl)}" if pl else ""
         rows.append(f'<li><a href="{e(u)}"><b>{e(ev.get("name") or "Fiesta")}</b></a> \u2014 '
                     f'{e(ev.get("venue") or "")}, {e(d)}{pls}</li>')
     n = len(events)
     if rows:
-        list_html = ("<p>Estas son las fiestas destacadas de este fin de semana en "
-                     f"{e(label)}, ordenadas por fecha. Toca cualquiera para ver horario, precio y "
-                     "qu\u00e9 amigos van:</p><ul>" + "".join(rows) + "</ul>")
+        list_html = f'<p>{e(L["intro"].format(label=label))}</p><ul>' + "".join(rows) + "</ul>"
     else:
-        list_html = (f"<p>A\u00fan no hay fiestas confirmadas para este finde en {e(label)}. Consulta la "
-                     f'<a href="/fiestas/{cs}">agenda completa de {e(label)}</a> o vuelve en unas horas: '
-                     "la actualizamos constantemente.</p>")
-    s2 = (f'En <b>\u00bfQui\u00e9n va?</b> no solo ves qu\u00e9 fiestas hay este fin de semana en {e(label)}: '
-          "ves a cu\u00e1les van tus amigos, recibes un aviso cuando alguien de tu grupo se apunta y compras "
-          "la entrada online al precio actualizado. As\u00ed el finde se organiza solo. Mira la "
-          f'<a href="/fiestas/{cs}/este-finde">agenda del finde en {e(label)}</a> y '
-          f'<a href="/fiestas/{cs}/esta-noche">las fiestas de esta noche</a>.')
-    sections = [
-        (f"Las mejores fiestas de este fin de semana en {label}", list_html),
-        ("Sal con tu grupo, no en solitario", s2),
-    ]
-    faq = [
-        (f"\u00bfQu\u00e9 fiestas hay este fin de semana en {label}?",
-         f"Ahora mismo hay {n} planes en {label} para este finde con horarios y precios actualizados. "
-         "\u00c1brelos en \u00bfQui\u00e9n va? para ver a qu\u00e9 va cada uno de tus amigos."),
-        ("\u00bfCon qu\u00e9 antelaci\u00f3n conviene comprar la entrada?",
-         "Las fiestas del finde con DJ conocido suelen agotarse; comprar online anticipado suele ser "
-         "m\u00e1s barato que en taquilla y te evita la cola."),
-        ("\u00bfC\u00f3mo veo a qu\u00e9 fiesta van mis amigos?",
-         "En \u00bfQui\u00e9n va? cada amigo marca \u201cVoy\u201d o \u201cMe interesa\u201d y t\u00fa lo ves en tiempo real, "
-         "as\u00ed eliges el plan donde est\u00e9 tu grupo."),
-    ]
+        list_html = "<p>" + L["empty"].format(label=e(label), city=e(city_url)) + "</p>"
+    s2 = L["sec2_body"].format(label=e(label), wk=e(wk_url), tn=e(tn_url))
+    sections = [(L["sec1"].format(label=label), list_html), (L["sec2"], s2)]
+    faq = [(q.format(label=label), a.format(label=label, n=n)) for q, a in L["faq"]]
     now = datetime.now(ZoneInfo("Europe/Madrid")).date()
     monday = now - timedelta(days=now.weekday())
     return {
         "title": meta["title"], "description": meta["description"],
         "hero_image": f"{front}/og-city/{cs}.jpg",
         "published": monday.isoformat(), "updated": now.isoformat(),
-        "city": label, "city_slug": cs,
+        "city": label, "city_slug": cs, "lang": lang,
+        "hreflang": _agenda_hreflang(front, cs),
         "sections": sections, "faq": faq,
         "related_cities": [x for x in ["madrid", "barcelona", "ibiza", "palma", "marbella"] if x != cs][:4],
     }
 
 
 
-async def _render_blog_index(request: Request):
+def _city_guides_block(front: str, slug_l: str, label: str, lang: str, e) -> str:
+    """Internal-links block on each city page: weekend agenda (localised) + the
+    Spanish evergreen guides for that city + the blog index. Boosts crawl depth
+    and gives users more to explore."""
+    links = []
+    ag_slug = _AGENDA_L10N[lang]["slug"].format(cs=slug_l)
+    ag_title = _AGENDA_L10N[lang]["title"].format(label=label)
+    links.append(f'<a href="{e(_blog_url(front, ag_slug, lang))}">{e(ag_title)}</a>')
+    if lang == "es":
+        for slug, p in _BLOG_POSTS.items():
+            if p.get("city_slug") == slug_l:
+                links.append(f'<a href="{e(_blog_url(front, slug))}">{e(p["title"])}</a>')
+    idx_label = {"es": "Todas las gu\u00edas del blog", "en": "All blog guides",
+                 "de": "Alle Blog-Guides"}.get(lang, "Blog")
+    links.append(f'<a href="{e(_blog_url(front, lang=lang))}">{e(idx_label)}</a>')
+    heading = {"es": f"Gu\u00edas y agenda de {label}",
+               "en": f"{label} guides & weekend agenda",
+               "de": f"{label}: Guides & Wochenend-Agenda"}.get(lang, label)
+    return f'<div class="cities"><b>{e(heading)}</b>{"".join(links)}</div>'
+
+
+
+_BLOG_UI = {
+    "es": {"home": "Inicio", "blog": "Blog", "faq": "Preguntas frecuentes", "pub": "Publicado el",
+           "upd": "Actualizado el", "explore": "Sigue explorando", "parties_in": "Fiestas en", "open": "Abrir \u00bfQui\u00e9n va?"},
+    "en": {"home": "Home", "blog": "Blog", "faq": "FAQ", "pub": "Published", "upd": "Updated",
+           "explore": "Keep exploring", "parties_in": "Parties in", "open": "Open \u00bfQui\u00e9n va?"},
+    "de": {"home": "Start", "blog": "Blog", "faq": "H\u00e4ufige Fragen", "pub": "Ver\u00f6ffentlicht am",
+           "upd": "Aktualisiert am", "explore": "Weiter st\u00f6bern", "parties_in": "Partys in", "open": "\u00bfQui\u00e9n va? \u00f6ffnen"},
+}
+_BLOG_IDX = {
+    "es": {"title": "Blog: gu\u00edas de fiestas y discotecas en Espa\u00f1a | \u00bfQui\u00e9n va?",
+           "desc": "Gu\u00edas y consejos para salir de fiesta: mejores discotecas de Ibiza, Madrid, Barcelona, Palma y Marbella; entradas baratas y agenda del finde por ciudad.",
+           "h1": "Blog: gu\u00edas de fiestas por ciudad",
+           "sub": "Aprende a moverte por la noche espa\u00f1ola: gu\u00edas por ciudad, precios reales, trucos de entradas y la agenda actualizada del finde.",
+           "il": "Art\u00edculos del blog", "html_lang": "es"},
+    "en": {"title": "Blog: party & nightclub guides in Spain | \u00bfQui\u00e9n va?",
+           "desc": "Guides and tips to go out in Spain: the best clubs in Ibiza, Madrid, Barcelona, Palma and Marbella, plus this weekend's party agenda by city.",
+           "h1": "Blog: weekend party agendas by city",
+           "sub": "The updated weekend party agenda for every city in Spain, plus tips to make the most of the night.",
+           "il": "Blog articles", "html_lang": "en"},
+    "de": {"title": "Blog: Party- & Club-Guides in Spanien | \u00bfQui\u00e9n va?",
+           "desc": "Guides und Tipps zum Ausgehen in Spanien: die besten Clubs in Ibiza, Madrid, Barcelona, Palma und Marbella, plus die Wochenend-Agenda pro Stadt.",
+           "h1": "Blog: Wochenend-Party-Agenda pro Stadt",
+           "sub": "Die aktuelle Wochenend-Party-Agenda f\u00fcr jede Stadt in Spanien und Tipps, um die Nacht optimal zu nutzen.",
+           "il": "Blog-Artikel", "html_lang": "de"},
+}
+
+
+async def _render_blog_index(request: Request, lang: str = "es"):
     import html as _html
     e = _html.escape
     front = _frontend_base(request)
-    canonical = _blog_url(front)
-    posts = sorted(_BLOG_POSTS.items(), key=lambda kv: kv[1]["published"], reverse=True)
+    UI = _BLOG_UI.get(lang, _BLOG_UI["es"])
+    IDX = _BLOG_IDX.get(lang, _BLOG_IDX["es"])
+    canonical = _blog_url(front, lang=lang)
 
     cards = []
     itemlist = []
     pos = 1
     # Auto-updating weekly "agenda del finde" posts first (freshest content).
-    for m in _agenda_meta():
-        url = _blog_url(front, m["slug"])
+    for m in _agenda_meta(lang):
+        url = _blog_url(front, m["slug"], lang)
         cards.append(
             f'<li class="blogcard"><a href="{e(url)}"><b>{e(m["title"])}</b>'
             f'<small>{e(m["description"])}</small></a></li>'
         )
         itemlist.append({"@type": "ListItem", "position": pos, "url": url, "name": m["title"]})
         pos += 1
-    for (slug, p) in posts:
-        url = _blog_url(front, slug)
-        cards.append(
-            f'<li class="blogcard"><a href="{e(url)}"><b>{e(p["title"])}</b>'
-            f'<small>{e(p["description"])}</small></a></li>'
-        )
-        itemlist.append({"@type": "ListItem", "position": pos, "url": url, "name": p["title"]})
-        pos += 1
+    # Hand-written evergreen guides only exist in Spanish.
+    if lang == "es":
+        for (slug, p) in sorted(_BLOG_POSTS.items(), key=lambda kv: kv[1]["published"], reverse=True):
+            url = _blog_url(front, slug)
+            cards.append(
+                f'<li class="blogcard"><a href="{e(url)}"><b>{e(p["title"])}</b>'
+                f'<small>{e(p["description"])}</small></a></li>'
+            )
+            itemlist.append({"@type": "ListItem", "position": pos, "url": url, "name": p["title"]})
+            pos += 1
 
-    bc_items = [("Inicio", f"{front}/"), ("Blog", canonical)]
+    idx_paths = {l: _blog_url(front, lang=l) for l in SEO_LANGS}
+    hreflang = _hreflang_links(idx_paths, e)
+    bc_items = [(UI["home"], f"{front}/"), (UI["blog"], canonical)]
     bc_html = _breadcrumb_html(bc_items, e)
     bc_json = _breadcrumb_jsonld(bc_items)
     il_json = json.dumps({"@context": "https://schema.org", "@type": "ItemList",
-                          "name": "Art\u00edculos del blog", "itemListElement": itemlist}, ensure_ascii=False)
+                          "name": IDX["il"], "itemListElement": itemlist}, ensure_ascii=False)
     org_ld = _org_website_jsonld(front)
-
-    title = "Blog: gu\u00edas de fiestas y discotecas en Espa\u00f1a | \u00bfQui\u00e9n va?"
-    desc = "Gu\u00edas y consejos para salir de fiesta: mejores discotecas de Ibiza, Madrid, Barcelona, Palma y Marbella; entradas baratas y planes por ciudad."
+    title, desc = IDX["title"], IDX["desc"]
     css = _SEO_CSS + _blog_common_css()
 
     html_out = f"""<!doctype html>
-<html lang="es"><head>
+<html lang="{IDX['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
 <title>{e(title)}</title>
 <meta name="description" content="{e(desc)}">
 <link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
+{hreflang}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:title" content="{e(title)}"><meta property="og:description" content="{e(desc)}">
 <meta property="og:url" content="{e(canonical)}">
-<meta property="og:image" content="{front}/icons/icon-512.png">
-<meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="{front}/og/og-default.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="{front}/og/og-default.png">
 {org_ld}
 <script type="application/ld+json">{bc_json}</script>
 <script type="application/ld+json">{il_json}</script>
 {_SEO_FONTS}
 <style>{css}</style></head>
 <body><div class="bgfx"></div>
-{_seo_topbar(front, "es", e)}
+{_seo_topbar(front, lang, e)}
 <div class="wrap"><div class="blogwrap">
 {bc_html}
-<h1 class="blogtitle">Blog: gu\u00edas de fiestas por ciudad</h1>
-<p class="blogmeta">Aprende a moverte por la noche espa\u00f1ola: gu\u00edas por ciudad, precios reales, trucos de entradas y todo lo que necesitas para no perderte el mejor plan.</p>
+<h1 class="blogtitle">{e(IDX["h1"])}</h1>
+<p class="blogmeta">{e(IDX["sub"])}</p>
 <ul class="bloglist">{''.join(cards)}</ul>
 </div></div></body></html>"""
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
                              headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
 
 
-async def _render_blog_post(slug: str, request: Request):
+async def _render_blog_post(slug: str, request: Request, lang: str = "es"):
     import html as _html
     e = _html.escape
     front = _frontend_base(request)
-    post = _BLOG_POSTS.get(slug)
+    UI = _BLOG_UI.get(lang, _BLOG_UI["es"])
+    post = _BLOG_POSTS.get(slug) if lang == "es" else None
     if not post:
-        _am = _agenda_lookup(slug)
+        _am = _agenda_lookup(slug, lang)
         if _am:
-            post = await _build_agenda_post(_am, front)
+            post = await _build_agenda_post(_am, front, lang)
     if not post:
-        # Soft 404: redirect to blog index
-        html_out = f'<!doctype html><meta http-equiv="refresh" content="0;url={front}/blog"><script>location.replace("{front}/blog")</script>'
+        # Soft 404: redirect to the (localised) blog index
+        bidx = _blog_url(front, lang=lang)
+        html_out = f'<!doctype html><meta http-equiv="refresh" content="0;url={bidx}"><script>location.replace("{bidx}")</script>'
         return StarletteResponse(content=html_out, status_code=404, media_type="text/html; charset=utf-8")
 
-    canonical = _blog_url(front, slug)
+    canonical = _blog_url(front, slug, lang)
+    hreflang = _hreflang_links(post["hreflang"], e) if post.get("hreflang") else ""
     hero = post.get("hero_image") or f"{front}/icons/icon-512.png"
 
     # Build sections HTML
@@ -2570,7 +2668,7 @@ async def _render_blog_post(slug: str, request: Request):
             f'<details><summary>{e(q)}</summary><p>{e(a)}</p></details>'
             for q, a in post["faq"]
         )
-        faq_html = f'<div class="blogfaq"><h2>Preguntas frecuentes</h2>{details}</div>'
+        faq_html = f'<div class="blogfaq"><h2>{e(UI["faq"])}</h2>{details}</div>'
         faq_json = f'<script type="application/ld+json">{_faq_jsonld(post["faq"])}</script>'
 
     # Related cities band
@@ -2580,16 +2678,16 @@ async def _render_blog_post(slug: str, request: Request):
         for cs in post["related_cities"]:
             for c in SUPPORTED_CITIES:
                 if _city_slug(c["id"]) == cs:
-                    chips.append(f'<a href="{e(_city_paths(front, cs)["es"])}">{c.get("emoji","")} Fiestas en {e(c["label"])}</a>')
+                    chips.append(f'<a href="{e(_city_paths(front, cs)[lang])}">{c.get("emoji","")} {e(UI["parties_in"])} {e(c["label"])}</a>')
                     break
         if chips:
-            rel_html = f'<div class="relband"><b>Sigue explorando</b>{"".join(chips)}</div>'
+            rel_html = f'<div class="relband"><b>{e(UI["explore"])}</b>{"".join(chips)}</div>'
 
     # Breadcrumb + Article JSON-LD
-    bc_items = [("Inicio", f"{front}/"), ("Blog", _blog_url(front)), (post["title"], canonical)]
+    bc_items = [(UI["home"], f"{front}/"), (UI["blog"], _blog_url(front, lang=lang)), (post["title"], canonical)]
     bc_html = _breadcrumb_html(bc_items, e)
     bc_json = _breadcrumb_jsonld(bc_items)
-    article_json = _blog_article_jsonld(post, canonical, front)
+    article_json = _blog_article_jsonld(post, canonical, front, lang)
     org_ld = _org_website_jsonld(front)
 
     css = _SEO_CSS + _blog_common_css()
@@ -2597,15 +2695,16 @@ async def _render_blog_post(slug: str, request: Request):
     updated_h = post.get("updated") or published_h
     city_link = ""
     if post.get("city_slug"):
-        city_link = f' · <a href="{e(_city_paths(front, post["city_slug"])["es"])}">Fiestas en {e(post.get("city") or post["city_slug"])}</a>'
+        city_link = f' \u00b7 <a href="{e(_city_paths(front, post["city_slug"])[lang])}">{e(UI["parties_in"])} {e(post.get("city") or post["city_slug"])}</a>'
 
     html_out = f"""<!doctype html>
-<html lang="es"><head>
+<html lang="{lang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
 <title>{e(post["title"])} | \u00bfQui\u00e9n va?</title>
 <meta name="description" content="{e(post["description"])}">
 <link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
+{hreflang}
 <meta property="og:type" content="article"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:title" content="{e(post['title'])}"><meta property="og:description" content="{e(post['description'])}">
 <meta property="og:url" content="{e(canonical)}">
@@ -2620,11 +2719,11 @@ async def _render_blog_post(slug: str, request: Request):
 {_SEO_FONTS}
 <style>{css}</style></head>
 <body><div class="bgfx"></div>
-{_seo_topbar(front, "es", e)}
+{_seo_topbar(front, lang, e)}
 <div class="wrap"><div class="blogwrap">
 {bc_html}
 <h1 class="blogtitle">{e(post["title"])}</h1>
-<p class="blogmeta">Publicado el {e(published_h)} · Actualizado el {e(updated_h)}{city_link}</p>
+<p class="blogmeta">{e(UI["pub"])} {e(published_h)} \u00b7 {e(UI["upd"])} {e(updated_h)}{city_link}</p>
 <img class="bloghero" src="{e(hero)}" alt="{e(post['title'])}" loading="eager" fetchpriority="high" />
 {sections_html}
 {faq_html}
@@ -2636,16 +2735,38 @@ async def _render_blog_post(slug: str, request: Request):
 
 @api_router.api_route("/blog", methods=["GET", "HEAD"])
 async def seo_blog_index(request: Request):
-    return await _render_blog_index(request)
+    return await _render_blog_index(request, "es")
 
 
 @api_router.api_route("/blog/{slug}", methods=["GET", "HEAD"])
 async def seo_blog_post(slug: str, request: Request):
-    return await _render_blog_post(slug, request)
+    return await _render_blog_post(slug, request, "es")
+
+
+@api_router.api_route("/en/blog", methods=["GET", "HEAD"])
+async def seo_blog_index_en(request: Request):
+    return await _render_blog_index(request, "en")
+
+
+@api_router.api_route("/en/blog/{slug}", methods=["GET", "HEAD"])
+async def seo_blog_post_en(slug: str, request: Request):
+    return await _render_blog_post(slug, request, "en")
+
+
+@api_router.api_route("/de/blog", methods=["GET", "HEAD"])
+async def seo_blog_index_de(request: Request):
+    return await _render_blog_index(request, "de")
+
+
+@api_router.api_route("/de/blog/{slug}", methods=["GET", "HEAD"])
+async def seo_blog_post_de(slug: str, request: Request):
+    return await _render_blog_post(slug, request, "de")
 
 
 async def _sitemap_blog_xml(front: str, today: str) -> str:
     parts = [f"<url><loc>{_blog_url(front)}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq></url>"]
+    parts.append(f"<url><loc>{_blog_url(front, lang='en')}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq></url>")
+    parts.append(f"<url><loc>{_blog_url(front, lang='de')}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq></url>")
     for slug, p in _BLOG_POSTS.items():
         lm = (p.get("updated") or p.get("published") or today)
         img = p.get("hero_image") or ""
@@ -2656,14 +2777,15 @@ async def _sitemap_blog_xml(front: str, today: str) -> str:
             f'<url><loc>{_blog_url(front, slug)}</loc><lastmod>{lm}</lastmod>'
             f'<changefreq>monthly</changefreq>{img_xml}</url>'
         )
-    # Auto weekly agenda posts (fresh every day → lastmod=today, changefreq daily).
-    for m in _agenda_meta():
-        img = f"{front}/og-city/{m['city_slug']}.jpg"
-        img_xml = f'<image:image><image:loc>{img.replace("&", "&amp;")}</image:loc></image:image>'
-        parts.append(
-            f'<url><loc>{_blog_url(front, m["slug"])}</loc><lastmod>{today}</lastmod>'
-            f'<changefreq>daily</changefreq>{img_xml}</url>'
-        )
+    # Auto weekly agenda posts in every language (fresh daily → changefreq daily).
+    for lg in SEO_LANGS:
+        for m in _agenda_meta(lg):
+            img = f"{front}/og-city/{m['city_slug']}.jpg"
+            img_xml = f'<image:image><image:loc>{img.replace("&", "&amp;")}</image:loc></image:image>'
+            parts.append(
+                f'<url><loc>{_blog_url(front, m["slug"], lg)}</loc><lastmod>{today}</lastmod>'
+                f'<changefreq>daily</changefreq>{img_xml}</url>'
+            )
     return _sitemap_urlset(parts)
 
 

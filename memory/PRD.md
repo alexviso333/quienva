@@ -343,3 +343,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Blog automático: 5 posts "agenda-fiestas-finde-{ciudad}" generados en vivo (weekend events), en índice + sitemap-blog (changefreq daily). Se actualizan solos cada semana.
 - Recencia sitemap: eventos changefreq=hourly; _sitemap_index_xml async con lastmod = fecha del last_scraped_at más reciente.
 - Verificado testing agent 8/8. Pendiente deploy: Vercel (vercel.json + public) + Render (backend).
+
+## SEO enhancements 4 (2026-08-11)
+- Blog/agenda multi-idioma ES/EN/DE con hreflang (es/en/de/x-default). Rutas /en/blog, /de/blog + posts weekend-parties-{c}/wochenend-partys-{c}. Índices EN/DE.
+- Bloque "Guías y agenda" en TODAS las páginas de ciudad (localizado): enlaza a la agenda del finde + guías ES + índice del blog. Mejora enlazado interno.
+- FIX crítico: /blog, /blog/:slug y /sitemap-blog.xml NO estaban en vercel.json (el blog no era accesible en el dominio). Añadidos 8 rewrites (ES + EN/DE + sitemap-blog).
+- sitemap-blog: 15 URLs de agenda (5 ciudades x 3 idiomas) + índices en/de.
+- Verificado testing agent 10/10. Pendiente deploy Vercel (vercel.json) + Render (backend).

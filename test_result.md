@@ -5891,3 +5891,93 @@ agent_communication:
       8. Regression tests: All existing endpoints still return 200 ✓
       
       NO ISSUES FOUND. All SEO endpoints working perfectly.
+
+# ==================== SEO ITERATION 4 (2026-08-11): multilingual blog/agenda + city guides block + blog vercel routing ====================
+backend:
+  - task: "Multilingual auto-agenda blog (ES/EN/DE) with hreflang"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Agenda posts now in es/en/de: /blog/agenda-fiestas-finde-{c}, /en/blog/weekend-parties-{c}, /de/blog/wochenend-partys-{c}. Localized content + hreflang (es/en/de/x-default). EN/DE blog index routes added. Static ES guides still ES-only. sitemap-blog lists all 15 agenda urls + en/de indexes."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL MULTILINGUAL BLOG SCENARIOS (100% pass): ✅ (1) GET /api/blog (ES) → 200, lists all 5 ES agenda slugs (agenda-fiestas-finde-madrid, -barcelona, -ibiza, -palma, -marbella) AND ES static guide 'mejores-discotecas-madrid'. ✅ (2) GET /api/en/blog → 200, <title> contains 'party & nightclub guides' ('Blog: party & nightclub guides in Spain | ¿Quién va?'), lists all 5 EN agenda slugs (weekend-parties-madrid, -barcelona, -ibiza, -palma, -marbella). ✅ (3) GET /api/de/blog → 200, <title> contains 'Party- & Club-Guides' ('Blog: Party- & Club-Guides in Spanien | ¿Quién va?'), lists all 5 DE agenda slugs (wochenend-partys-madrid, -barcelona, -ibiza, -palma, -marbella). ✅ (4) GET /api/en/blog/weekend-parties-madrid → 200, <title> is 'Parties this weekend in Madrid: live agenda | ¿Quién va?', contains all 4 hreflang alternate links (es, en, de, x-default), body contains FAQ block, and BlogPosting JSON-LD with inLanguage 'en'. ✅ (5) GET /api/de/blog/wochenend-partys-ibiza → 200, German <title> starts with 'Partys an diesem Wochenende in Ibiza' (full: 'Partys an diesem Wochenende in Ibiza: aktuelle Übersicht | ¿Quién va?'). ✅ (6) GET /api/blog/agenda-fiestas-finde-madrid → 200 (ES), contains all 4 hreflang alternate links. All headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) sent on every request. All multilingual blog endpoints working perfectly with correct localization, hreflang implementation, and rich JSON-LD schema."
+  - task: "City page internal-links 'Guides & agenda' block (localized)"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "_city_guides_block added to every city page (all languages): links to that city's weekend agenda (localized), its Spanish evergreen guides (ES only), and the blog index. Boosts internal linking/crawl depth."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL CITY GUIDES BLOCK SCENARIOS (100% pass): ✅ (7) GET /api/ciudad/madrid → 200, contains guides block heading 'Guías y agenda de Madrid', links to 'agenda-fiestas-finde-madrid', links to static guide 'mejores-discotecas-madrid', and links to blog index (/blog). ✅ (8) GET /api/en/city/madrid → 200, contains guides block heading 'Madrid guides', links to 'weekend-parties-madrid', and contains 'All blog guides' text. ✅ (9) GET /api/sitemap-blog.xml → 200, contains all 15 agenda slugs across 3 languages (5 ES + 5 EN + 5 DE), contains /en/blog index URL, and contains /de/blog index URL. ✅ (10) REGRESSION TESTS: GET /api/home → 200 text/html, GET /api/ciudad/ibiza → 200 text/html, GET /api/de/city/madrid → 200 text/html, GET /api/sitemap.xml → 200 application/xml, GET /api/og-city/madrid.jpg → 200 image/jpeg. All headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) sent on every request. All city guides blocks working perfectly with correct localization and internal linking structure."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.7"
+  test_sequence: 9
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Test the multilingual blog + city guides block. Send on EVERY request:
+      x-forwarded-host: www.quienva.me  and  x-forwarded-proto: https
+      1) GET /api/blog (200, ES): lists agenda-fiestas-finde-{madrid,barcelona,ibiza,palma,marbella} AND the ES static guides (e.g. mejores-discotecas-madrid).
+      2) GET /api/en/blog (200): <title> contains "party & nightclub guides"; lists weekend-parties-{5 cities}.
+      3) GET /api/de/blog (200): <title> contains "Party- & Club-Guides"; lists wochenend-partys-{5 cities}.
+      4) GET /api/en/blog/weekend-parties-madrid (200): <title> "Parties this weekend in Madrid: live agenda | ¿Quién va?"; must contain 4 hreflang alternate links (es, en, de, x-default); body has FAQ + Article ld+json inLanguage "en".
+      5) GET /api/de/blog/wochenend-partys-ibiza (200): German <title> "Partys an diesem Wochenende in Ibiza...".
+      6) GET /api/blog/agenda-fiestas-finde-madrid (200): still works (ES), contains hreflang alternates.
+      7) GET /api/ciudad/madrid (200): must contain the guides block heading "Guías y agenda de Madrid" and links to agenda-fiestas-finde-madrid AND a static guide (mejores-discotecas-madrid) AND blog index.
+      8) GET /api/en/city/madrid (200): guides block "Madrid guides & weekend agenda" linking to weekend-parties-madrid and "All blog guides".
+      9) GET /api/sitemap-blog.xml (200): contains all 15 agenda slugs across languages + /en/blog and /de/blog index URLs.
+      10) Regression (200): /api/home, /api/ciudad/ibiza, /api/de/city/madrid, /api/og-city/madrid.jpg (image/jpeg), /api/sitemap.xml.
+      NOTE: og-city/*.jpg is a backend route; /og/*.png, /favicon.ico are Vercel static (not backend). Do not UI-test.
+  - agent: "testing"
+    message: |
+      ✅ ALL 10 TEST SCENARIOS PASSED (100% success rate)
+      
+      Tested all multilingual blog + city guides block endpoints with required headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) on EVERY request:
+      
+      MULTILINGUAL BLOG TESTS (Tests 1-6):
+      1. Blog index ES (/api/blog): Lists all 5 ES agenda slugs + static guide 'mejores-discotecas-madrid' ✓
+      2. Blog index EN (/api/en/blog): Title contains 'party & nightclub guides', lists all 5 EN agenda slugs ✓
+      3. Blog index DE (/api/de/blog): Title contains 'Party- & Club-Guides', lists all 5 DE agenda slugs ✓
+      4. Blog post EN Madrid (/api/en/blog/weekend-parties-madrid): Correct title, 4 hreflang links, FAQ block, BlogPosting JSON-LD with inLanguage 'en' ✓
+      5. Blog post DE Ibiza (/api/de/blog/wochenend-partys-ibiza): German title starts with 'Partys an diesem Wochenende in Ibiza' ✓
+      6. Blog post ES Madrid (/api/blog/agenda-fiestas-finde-madrid): Returns 200 with 4 hreflang links ✓
+      
+      CITY GUIDES BLOCK TESTS (Tests 7-8):
+      7. City guides ES (/api/ciudad/madrid): Heading 'Guías y agenda de Madrid', links to agenda + static guide + blog index ✓
+      8. City guides EN (/api/en/city/madrid): Heading 'Madrid guides', links to weekend-parties-madrid + 'All blog guides' ✓
+      
+      SITEMAP TEST (Test 9):
+      9. Blog sitemap (/api/sitemap-blog.xml): Contains all 15 agenda slugs (5 per language) + /en/blog + /de/blog index URLs ✓
+      
+      REGRESSION TESTS (Test 10):
+      10. All regression endpoints return 200 with correct content-types:
+          - /api/home (text/html) ✓
+          - /api/ciudad/ibiza (text/html) ✓
+          - /api/de/city/madrid (text/html) ✓
+          - /api/sitemap.xml (application/xml) ✓
+          - /api/og-city/madrid.jpg (image/jpeg) ✓
+      
+      NO ISSUES FOUND. All multilingual blog and city guides endpoints working perfectly with correct localization, hreflang implementation, internal linking, and rich JSON-LD schema.
