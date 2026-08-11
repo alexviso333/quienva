@@ -350,3 +350,8 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - FIX crítico: /blog, /blog/:slug y /sitemap-blog.xml NO estaban en vercel.json (el blog no era accesible en el dominio). Añadidos 8 rewrites (ES + EN/DE + sitemap-blog).
 - sitemap-blog: 15 URLs de agenda (5 ciudades x 3 idiomas) + índices en/de.
 - Verificado testing agent 10/10. Pendiente deploy Vercel (vercel.json) + Render (backend).
+
+## Iteration 5 (2026-08-11)
+- Guías EN/DE: traducidas Ibiza (best-parties-ibiza-summer / beste-partys-ibiza-sommer) y entradas baratas (cheap-nightclub-tickets / guenstige-disco-tickets) con hreflang cruzado es/en/de. En índices EN/DE, sitemap-blog y bloque de guías de ciudad EN/DE.
+- Momentos highlight fallback: _moments_as_stories muestra momentos antiguos (is_old=true) cuando no hay ninguno en 24h, respetando moment_privacy (amigos=amigos+propios; publico=+públicos). Frontend Stories.js: anillo gris + estrella + etiqueta "Destacado". i18n stories.highlight (es/en/de).
+- Verificado testing agent 12/12. Pendiente deploy: Vercel (frontend Stories.js + i18n) + Render (backend).

@@ -5981,3 +5981,90 @@ agent_communication:
           - /api/og-city/madrid.jpg (image/jpeg) ✓
       
       NO ISSUES FOUND. All multilingual blog and city guides endpoints working perfectly with correct localization, hreflang implementation, internal linking, and rich JSON-LD schema.
+
+# ==================== SEO/APP ITERATION 5 (2026-08-11): EN/DE evergreen guides + Momentos highlight fallback ====================
+backend:
+  - task: "EN/DE translations of top evergreen guides (Ibiza summer + cheap tickets) with hreflang"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "_BLOG_POSTS_L10N with EN (best-parties-ibiza-summer, cheap-nightclub-tickets) and DE (beste-partys-ibiza-sommer, guenstige-disco-tickets). Cross-language hreflang between es/en/de originals. Listed in /en/blog & /de/blog indexes, in sitemap-blog, and linked from EN/DE city guides block."
+        - working: true
+          agent: "testing"
+          comment: "TESTED ALL EN/DE EVERGREEN GUIDE SCENARIOS (7 tests, 100% pass): ✅ (A1) GET /api/en/blog/best-parties-ibiza-summer → 200 with correct <title> 'Best parties in Ibiza this summer: complete 2025 guide | ¿Quién va?', contains all 4 hreflang alternate links (es, en, de, x-default), and BlogPosting JSON-LD with inLanguage 'en'. ✅ (A2) GET /api/de/blog/guenstige-disco-tickets → 200 with German <title> starting 'So bekommst du günstige' (full: 'So bekommst du günstige (oder kostenlose) Disco-Tickets 2025 | ¿Quién va?'). ✅ (A3) GET /api/blog/mejores-fiestas-ibiza-verano → 200 and now contains all 4 hreflang alternate links (cross-linked to EN/DE versions). ✅ (A4) GET /api/en/blog → 200, lists both 'best-parties-ibiza-summer' AND 'cheap-nightclub-tickets'. ✅ (A5) GET /api/de/blog → 200, lists both 'beste-partys-ibiza-sommer' AND 'guenstige-disco-tickets'. ✅ (A6) GET /api/sitemap-blog.xml → 200, contains all 4 translated guide slugs (best-parties-ibiza-summer, cheap-nightclub-tickets, beste-partys-ibiza-sommer, guenstige-disco-tickets). ✅ (A7) GET /api/en/city/ibiza → 200, page contains link to 'best-parties-ibiza-summer' in guides block. All headers (x-forwarded-host: www.quienva.me, x-forwarded-proto: https) sent on every request. All multilingual evergreen guide endpoints working perfectly with correct localization, hreflang cross-linking, and rich JSON-LD schema."
+  - task: "Momentos highlight fallback: show older moments when none in last 24h"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "_moments_as_stories: if no captures in last 24h, fall back to most recent OLD captures (limit 12) respecting viewer moment_privacy ('amigos'=friends+own; 'publico'=also public users), flagged is_old=true. /stories sorts highlights last. Frontend Stories.js marks highlight groups (gray ring + Star badge, label 'Destacado')."
+        - working: true
+          agent: "testing"
+          comment: "TESTED MOMENTOS HIGHLIGHT FALLBACK (1 test, 100% pass): ✅ (B8) GET /api/stories with Authorization: Bearer qvtest_8546d7e84b6d4428b99f039104181221 (test viewer qv_test_viewer) → 200 with JSON array. VERIFIED: Response contains at least one moment with kind='moment' AND is_old=true. This confirms the fallback logic is working correctly - when there are no captures in the last 24h, the backend surfaces older moments (5-day-old capture from friend qv_test_friend) as highlights flagged with is_old=true. The Momentos row is never empty thanks to this fallback mechanism. All functionality working perfectly."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.8"
+  test_sequence: 10
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Send headers x-forwarded-host: www.quienva.me and x-forwarded-proto: https on the PUBLIC (blog/city/sitemap) requests below.
+      A) EN/DE guides (public, no auth):
+        1) GET /api/en/blog/best-parties-ibiza-summer -> 200, <title> "Best parties in Ibiza this summer: complete 2025 guide | ¿Quién va?", must have 4 hreflang alternates (es,en,de,x-default) and a BlogPosting ld+json with inLanguage "en".
+        2) GET /api/de/blog/guenstige-disco-tickets -> 200, German <title> starting "So bekommst du günstige".
+        3) GET /api/blog/mejores-fiestas-ibiza-verano -> 200 and now contains 4 hreflang alternates (cross-linked to EN/DE).
+        4) GET /api/en/blog -> lists best-parties-ibiza-summer AND cheap-nightclub-tickets.
+        5) GET /api/de/blog -> lists beste-partys-ibiza-sommer AND guenstige-disco-tickets.
+        6) GET /api/sitemap-blog.xml -> contains all 4 translated guide slugs.
+        7) GET /api/en/city/ibiza -> guides block links to best-parties-ibiza-summer.
+      B) Momentos highlight fallback (AUTH via Bearer token from /app/memory/test_credentials.md):
+        Header: Authorization: Bearer qvtest_8546d7e84b6d4428b99f039104181221
+        8) GET /api/stories -> 200 JSON array; must contain at least one item with kind=="moment" AND is_old==true (the seeded 5-day-old capture from friend qv_test_friend surfaces as a highlight because there are no captures in the last 24h).
+      C) Regression (200): GET /api/blog, GET /api/ciudad/madrid, GET /api/sitemap.xml, GET /api/og-city/ibiza.jpg (image/jpeg).
+      NOTE: /og-city/*.jpg is a backend route; /og/*.png & /favicon.ico are Vercel static (not backend). Do NOT test frontend/UI.
+  - agent: "testing"
+    message: |
+      ✅ ALL 12 TEST SCENARIOS PASSED (100% success rate)
+      
+      Tested EN/DE evergreen guides + Momentos highlight fallback + regression endpoints with required headers on EVERY request:
+      
+      SECTION A: EN/DE EVERGREEN GUIDE TRANSLATIONS (7 tests, 100% pass):
+      ✅ A1. GET /api/en/blog/best-parties-ibiza-summer → 200 with correct title "Best parties in Ibiza this summer: complete 2025 guide | ¿Quién va?", 4 hreflang alternates (es, en, de, x-default), BlogPosting JSON-LD with inLanguage 'en'
+      ✅ A2. GET /api/de/blog/guenstige-disco-tickets → 200 with German title starting "So bekommst du günstige" (full: "So bekommst du günstige (oder kostenlose) Disco-Tickets 2025 | ¿Quién va?")
+      ✅ A3. GET /api/blog/mejores-fiestas-ibiza-verano → 200 with 4 hreflang alternates (cross-linked to EN/DE versions)
+      ✅ A4. GET /api/en/blog → 200, lists both 'best-parties-ibiza-summer' AND 'cheap-nightclub-tickets'
+      ✅ A5. GET /api/de/blog → 200, lists both 'beste-partys-ibiza-sommer' AND 'guenstige-disco-tickets'
+      ✅ A6. GET /api/sitemap-blog.xml → 200, contains all 4 translated guide slugs
+      ✅ A7. GET /api/en/city/ibiza → 200, page contains link to 'best-parties-ibiza-summer' in guides block
+      
+      SECTION B: MOMENTOS HIGHLIGHT FALLBACK (1 test, 100% pass):
+      ✅ B8. GET /api/stories (authenticated with Bearer token qvtest_8546d7e84b6d4428b99f039104181221) → 200 JSON array containing at least one moment with kind='moment' AND is_old=true. VERIFIED: Fallback logic working correctly - when no captures in last 24h, backend surfaces older moments (5-day-old capture from friend) as highlights flagged with is_old=true. Momentos row never empty.
+      
+      SECTION C: REGRESSION TESTS (4 tests, 100% pass):
+      ✅ C9. GET /api/blog → 200
+      ✅ C10. GET /api/ciudad/madrid → 200
+      ✅ C11. GET /api/sitemap.xml → 200
+      ✅ C12. GET /api/og-city/ibiza.jpg → 200 with content-type image/jpeg
+      
+      NO ISSUES FOUND. All multilingual evergreen guide endpoints working perfectly with correct localization, hreflang cross-linking, rich JSON-LD schema, and sitemap indexing. Momentos highlight fallback mechanism working as designed - older moments surface when no recent captures available.
+

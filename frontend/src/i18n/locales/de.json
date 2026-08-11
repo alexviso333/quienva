@@ -586,7 +586,8 @@
     "archive_empty": "Du hast noch keine Story gepostet.",
     "timeago_now": "jetzt",
     "timeago_min": "vor {{n}} Min.",
-    "timeago_hour": "vor {{n}} Std."
+    "timeago_hour": "vor {{n}} Std.",
+    "highlight": "R\u00fcckblick"
   },
   "eventcard": {
     "follow_on": "Wir sagen dir Bescheid, wenn sie verfügbar sind 🔔",

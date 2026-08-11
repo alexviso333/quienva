@@ -2331,6 +2331,128 @@ _BLOG_POSTS = {
 }
 
 
+# English & German translations of the top tourist-facing evergreen guides.
+_BLOG_POSTS_L10N = {
+    "en": {
+        "best-parties-ibiza-summer": {
+            "title": "Best parties in Ibiza this summer: complete 2025 guide",
+            "description": "Discover the best parties and clubs in Ibiza this summer: Pacha, Ushua\u00efa, Amnesia, H\u00ef Ibiza, [UNVRS] and DC-10 with times, prices and tips.",
+            "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/ibiza-summer.jpg",
+            "published": "2025-06-15", "updated": "2025-07-01",
+            "city": "Ibiza", "city_slug": "ibiza",
+            "sections": [
+                ("Ibiza's most iconic nightclubs", "Ibiza packs some of the world's best clubs into barely 40 km of coastline. <b>Pacha Ibiza</b> has set the pace of international clubbing since 1973 and is still a benchmark thanks to its legendary parties. <b>Ushua\u00efa Ibiza</b>, on Playa d'en Bossa, offers the unique open-air club experience with the biggest DJs on the planet. <b>Amnesia</b> is the techno mecca with two giant rooms and the famous Terrace, while <b>H\u00ef Ibiza</b>, Ushua\u00efa's sister club, was named the world's best club several years in a row. Add <b>[UNVRS]</b>, <b>DC-10</b> (underground techno cult), <b>Eden</b> and <b>Club Chinois</b> and the line-up covers every genre."),
+                ("Top DJs of summer 2025 in Ibiza", "David Guetta continues his iconic F*** Me I'm Famous residency at Ushua\u00efa; Solomun stays at Pacha with his Sunday Special; Marco Carola brings Music On to Amnesia; Black Coffee holds his residency at H\u00ef Ibiza; Circoloco takes over DC-10 on Mondays; and ANTS returns to Ushua\u00efa on Saturdays with a techno line-up. Check the updated weekly agenda on <a href=\"/en/parties/ibiza\">our Ibiza parties page</a>."),
+                ("How much a night out in Ibiza costs", "The average ticket in 2025 ranges from <b>\u20ac40 to \u20ac90</b> depending on the DJ and the club. Top dates with headliners (David Guetta, Calvin Harris, Solomun) can top <b>\u20ac120</b>. Drinks inside the club are around <b>\u20ac18-25</b> and a table bottle starts at \u20ac400. Tip: buying online in advance is usually 20-30% cheaper than at the door, and some nights have free guest-list until a certain hour."),
+                ("How to get to Ibiza's clubs", "The <b>Discob\u00fas</b> (line 9) connects Ibiza Town, San Antonio and Playa d'en Bossa all night for \u20ac4. A taxi between areas costs <b>\u20ac20-40</b>. Many clubs offer a free private shuttle from partner hotels. If you drive, parking in Playa d'en Bossa or San Antonio is usually free but fills up early on weekends."),
+                ("Tips to enjoy the Ibiza night", "1) Book your ticket online in advance to save. 2) Arrive early (11pm-midnight) to skip the queue and pay less. 3) Stay hydrated: bottled water in the club is about \u20ac10 but essential. 4) Combine a club night with a beach-club day (Blue Marlin, Nassau, Nikki Beach) for the full Ibiza effect. 5) On <b>\u00bfQui\u00e9n va?</b> you can see which friends have a ticket for the same club and plan the night together."),
+            ],
+            "faq": [
+                ("What are the 5 best clubs in Ibiza?", "The 5 best clubs in Ibiza are Pacha, Ushua\u00efa, Amnesia, H\u00ef Ibiza and DC-10. All rank among the world's clubbing elite and host residencies with the biggest DJs every summer."),
+                ("When does the Ibiza party season start?", "The season officially kicks off in May with the Opening Parties and ends in early October with the Closing Parties. Peak months are July and August."),
+                ("How much is a club ticket in Ibiza?", "Between \u20ac40 and \u20ac90 on average in 2025. Dates with world-famous DJs (Guetta, Solomun, Black Coffee) can top \u20ac120. Buying online in advance is cheaper."),
+                ("Which is the best day to party in Ibiza?", "Each day has its iconic party: Monday Circoloco at DC-10, Tuesday ANTS at Ushua\u00efa, Wednesday Pyramid at Amnesia, Thursday David Guetta at Ushua\u00efa, Friday Music On at Amnesia, Saturday H\u00ef Ibiza and Sunday Solomun at Pacha."),
+                ("How do I reach Ibiza's clubs without a car?", "The Discob\u00fas (line 9) runs along the whole coast until dawn for \u20ac4. Taxis cost \u20ac20-40 depending on distance. Many hotels offer a free shuttle to partner clubs."),
+            ],
+            "related_cities": ["madrid", "barcelona", "palma"],
+        },
+        "cheap-nightclub-tickets": {
+            "title": "How to get cheap (or free) nightclub tickets in 2025",
+            "description": "Tricks and tips to get cheaper or free nightclub tickets: VIP lists, guest-list, online pre-sale, promoters, apps and discount codes.",
+            "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/tickets-tips.jpg",
+            "published": "2025-06-05", "updated": "2025-07-01",
+            "city": None, "city_slug": None,
+            "sections": [
+                ("1. Buy your ticket online in advance", "The most effective trick. In almost every club in <b>Ibiza, Marbella, Madrid and Barcelona</b>, the advance online ticket costs <b>20-40% less</b> than at the door. You also skip the queue. Many clubs open a pre-sale with a reduced price for the first 100-500 tickets."),
+                ("2. Join the guest-list or free list", "Almost every club has a free <b>guest-list</b> until a certain hour (usually between 11pm and 00:30). Just sign up on the club's website, on Instagram or through a promoter. In Madrid and Barcelona it's very common to get in free until 2am by signing up in advance."),
+                ("3. Contact local promoters", "Every club has independent <b>promoters</b> who work on commission. They get you exclusive discounts, skip-the-line VIP entry or even free entry in exchange for filling the club with your group. Find them on Instagram (hashtags like #promoibiza, #promomadrid). \u00bfQui\u00e9n va? has a <a href=\"/feed\">referral code</a> system that saves money for both sides."),
+                ("4. Take advantage of free nights and \"ladies free\"", "Many clubs in Spain have <b>free-entry nights</b> midweek (university Thursdays) or promos like <b>\"ladies free until a certain hour\"</b>. Check the weekly agenda so you don't miss these days."),
+                ("5. Book a table with friends", "If you're 6-10 people, a <b>VIP table</b> can work out cheaper than paying entry + drinks individually. A table from \u20ac400 includes entry, a bottle and fast access for the whole group. In Marbella and Puerto Ban\u00fas clubs it's especially worth it."),
+                ("6. Subscribe to newsletters and apps", "Clubs send <b>discount codes</b> by email and push. Download <a href=\"/feed\">\u00bfQui\u00e9n va?</a> and turn on notifications to get alerts for price drops, last-minute tickets and free guest-list."),
+                ("7. Go early and avoid top dates", "The same clubs charge different prices depending on the night. A Wednesday at Amnesia can cost \u20ac30 while a Saturday with David Guetta tops \u20ac100. Go on weekdays or outside top dates (August in Ibiza) and save up to 60%."),
+            ],
+            "faq": [
+                ("How do I get into a nightclub for free?", "Sign up for the club's guest-list before 11pm, contact a local promoter, or look for free-entry nights midweek (university Thursdays, \"ladies free\" promos)."),
+                ("How much do I save buying online?", "Between 20% and 40% versus the door, depending on the club. You also skip the queue. Early pre-sale prices are usually the cheapest."),
+                ("What is a club promoter?", "An independent middleman who works on commission bringing in crowds. In exchange they offer discounts, VIP or free entry. You reach them via Instagram or specialised apps."),
+                ("Are VIP tables cheaper than tickets?", "It depends on group size. If you're 8-10 people, a table from \u20ac500 (with a bottle) can be cheaper than individual entry + drinks, plus you get comfort and fast access."),
+                ("When are nightclub tickets cheapest?", "Midweek (Wednesday and Thursday), in early pre-sale, in low-season months (May, October in Ibiza) and in the first opening hours."),
+            ],
+            "related_cities": ["ibiza", "madrid", "barcelona", "palma", "marbella"],
+        },
+    },
+    "de": {
+        "beste-partys-ibiza-sommer": {
+            "title": "Beste Partys auf Ibiza in diesem Sommer: kompletter Guide 2025",
+            "description": "Entdecke die besten Partys und Clubs auf Ibiza in diesem Sommer: Pacha, Ushua\u00efa, Amnesia, H\u00ef Ibiza, [UNVRS] und DC-10 mit Zeiten, Preisen und Tipps.",
+            "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/ibiza-summer.jpg",
+            "published": "2025-06-15", "updated": "2025-07-01",
+            "city": "Ibiza", "city_slug": "ibiza",
+            "sections": [
+                ("Die ikonischsten Clubs auf Ibiza", "Ibiza vereint einige der besten Clubs der Welt auf kaum 40 km K\u00fcste. <b>Pacha Ibiza</b> gibt seit 1973 den Takt des internationalen Clubbings vor und ist dank seiner legend\u00e4ren Partys weiterhin eine Referenz. <b>Ushua\u00efa Ibiza</b> an der Playa d'en Bossa bietet das einzigartige Open-Air-Club-Erlebnis mit den gr\u00f6\u00dften DJs des Planeten. <b>Amnesia</b> ist das Techno-Mekka mit zwei riesigen S\u00e4len und der ber\u00fchmten Terrace, w\u00e4hrend <b>H\u00ef Ibiza</b>, der Schwesterclub von Ushua\u00efa, mehrere Jahre in Folge zum besten Club der Welt gek\u00fcrt wurde. Dazu <b>[UNVRS]</b>, <b>DC-10</b> (Underground-Techno-Kult), <b>Eden</b> und <b>Club Chinois</b> \u2013 das Programm deckt jedes Genre ab."),
+                ("Die Top-DJs im Sommer 2025 auf Ibiza", "David Guetta setzt seine ikonische Residency F*** Me I'm Famous im Ushua\u00efa fort; Solomun bleibt mit seinem Sunday Special im Pacha; Marco Carola bringt Music On ins Amnesia; Black Coffee h\u00e4lt seine Residency im H\u00ef Ibiza; Circoloco \u00fcbernimmt montags das DC-10; und ANTS kehrt samstags mit Techno ins Ushua\u00efa zur\u00fcck. Sieh dir die aktuelle W\u00f6chenagenda auf <a href=\"/de/partys/ibiza\">unserer Ibiza-Party-Seite</a> an."),
+                ("Was eine Partynacht auf Ibiza kostet", "Der durchschnittliche Eintritt liegt 2025 zwischen <b>40\u20ac und 90\u20ac</b>, je nach DJ und Club. Top-Termine mit Headlinern (David Guetta, Calvin Harris, Solomun) k\u00f6nnen <b>120\u20ac</b> \u00fcbersteigen. Getr\u00e4nke im Club kosten rund <b>18-25\u20ac</b>, eine Tischflasche ab 400\u20ac. Tipp: online im Voraus kaufen ist meist 20-30% g\u00fcnstiger als an der Abendkasse, und manche N\u00e4chte haben bis zu einer bestimmten Uhrzeit kostenlose Gästeliste."),
+                ("So kommst du zu den Clubs auf Ibiza", "Der <b>Discob\u00fas</b> (Linie 9) verbindet Ibiza-Stadt, San Antonio und Playa d'en Bossa die ganze Nacht f\u00fcr 4\u20ac. Ein Taxi zwischen den Zonen kostet <b>20-40\u20ac</b>. Viele Clubs bieten einen kostenlosen Shuttle von Partnerhotels. Wer f\u00e4hrt: Parken in Playa d'en Bossa oder San Antonio ist meist gratis, aber am Wochenende schnell voll."),
+                ("Tipps f\u00fcr die Nacht auf Ibiza", "1) Buche dein Ticket im Voraus online, um zu sparen. 2) Komm fr\u00fch (23:00-00:00), um die Schlange zu vermeiden und weniger zu zahlen. 3) Bleib hydriert: Wasser im Club kostet ca. 10\u20ac, ist aber wichtig. 4) Kombiniere eine Clubnacht mit einem Beachclub-Tag (Blue Marlin, Nassau, Nikki Beach) f\u00fcr das volle Ibiza-Gef\u00fchl. 5) Auf <b>\u00bfQui\u00e9n va?</b> siehst du, welche Freunde ein Ticket f\u00fcr denselben Club haben, und plant die Nacht gemeinsam."),
+            ],
+            "faq": [
+                ("Was sind die 5 besten Clubs auf Ibiza?", "Die 5 besten Clubs auf Ibiza sind Pacha, Ushua\u00efa, Amnesia, H\u00ef Ibiza und DC-10. Alle geh\u00f6ren zur Weltspitze des Clubbings und bieten jeden Sommer Residencies mit den gr\u00f6\u00dften DJs."),
+                ("Wann beginnt die Party-Saison auf Ibiza?", "Die Saison startet offiziell im Mai mit den Opening Parties und endet Anfang Oktober mit den Closing Parties. Hauptmonate sind Juli und August."),
+                ("Wie viel kostet ein Club-Ticket auf Ibiza?", "Im Schnitt zwischen 40\u20ac und 90\u20ac im Jahr 2025. Termine mit weltbekannten DJs (Guetta, Solomun, Black Coffee) k\u00f6nnen 120\u20ac \u00fcbersteigen. Online im Voraus ist g\u00fcnstiger."),
+                ("Welcher ist der beste Tag zum Feiern auf Ibiza?", "Jeder Tag hat seine ikonische Party: Montag Circoloco im DC-10, Dienstag ANTS im Ushua\u00efa, Mittwoch Pyramid im Amnesia, Donnerstag David Guetta im Ushua\u00efa, Freitag Music On im Amnesia, Samstag H\u00ef Ibiza und Sonntag Solomun im Pacha."),
+                ("Wie komme ich ohne Auto zu den Clubs auf Ibiza?", "Der Discob\u00fas (Linie 9) f\u00e4hrt die ganze K\u00fcste entlang bis zum Morgengrauen f\u00fcr 4\u20ac. Taxis kosten je nach Entfernung 20-40\u20ac. Viele Hotels bieten einen kostenlosen Shuttle zu Partnerclubs."),
+            ],
+            "related_cities": ["madrid", "barcelona", "palma"],
+        },
+        "guenstige-disco-tickets": {
+            "title": "So bekommst du g\u00fcnstige (oder kostenlose) Disco-Tickets 2025",
+            "description": "Tricks und Tipps f\u00fcr g\u00fcnstigere oder kostenlose Disco-Tickets: VIP-Listen, G\u00e4steliste, Online-Vorverkauf, Promoter, Apps und Rabattcodes.",
+            "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/tickets-tips.jpg",
+            "published": "2025-06-05", "updated": "2025-07-01",
+            "city": None, "city_slug": None,
+            "sections": [
+                ("1. Kauf dein Ticket im Voraus online", "Der wirksamste Trick. In fast jedem Club in <b>Ibiza, Marbella, Madrid und Barcelona</b> kostet das Online-Ticket im Voraus <b>20-40% weniger</b> als an der Abendkasse. Au\u00dferdem sparst du dir die Schlange. Viele Clubs starten einen Vorverkauf mit reduziertem Preis f\u00fcr die ersten 100-500 Tickets."),
+                ("2. Trag dich in die G\u00e4steliste ein", "Fast jeder Club hat bis zu einer bestimmten Uhrzeit (meist zwischen 23:00 und 00:30) eine kostenlose <b>G\u00e4steliste</b>. Einfach auf der Website des Clubs, auf Instagram oder \u00fcber einen Promoter anmelden. In Madrid und Barcelona kommt man mit Voranmeldung oft bis 2:00 gratis rein."),
+                ("3. Kontaktiere lokale Promoter", "Jeder Club hat unabh\u00e4ngige <b>Promoter</b>, die auf Provision arbeiten. Sie besorgen exklusive Rabatte, VIP-Eintritt ohne Schlange oder sogar Gratis-Eintritt, wenn du mit deiner Gruppe f\u00fcllst. Du findest sie auf Instagram (Hashtags wie #promoibiza, #promomadrid). \u00bfQui\u00e9n va? hat ein <a href=\"/feed\">Empfehlungscode</a>-System, das beiden Seiten Geld spart."),
+                ("4. Nutze Gratis-N\u00e4chte und \"Ladies free\"", "Viele Clubs in Spanien haben unter der Woche <b>N\u00e4chte mit freiem Eintritt</b> (Uni-Donnerstage) oder Aktionen wie <b>\"Ladies free bis zu einer bestimmten Uhrzeit\"</b>. Schau in die W\u00f6chenagenda, um diese Tage nicht zu verpassen."),
+                ("5. Reserviere einen Tisch mit Freunden", "Wenn ihr 6-10 Personen seid, kann ein <b>VIP-Tisch</b> g\u00fcnstiger sein als Eintritt + Getr\u00e4nke einzeln. Ein Tisch ab 400\u20ac umfasst Eintritt, eine Flasche und schnellen Zugang f\u00fcr die ganze Gruppe. In Clubs in Marbella und Puerto Ban\u00fas lohnt es sich besonders."),
+                ("6. Abonniere Newsletter und Apps", "Clubs verschicken <b>Rabattcodes</b> per E-Mail und Push. Lade <a href=\"/feed\">\u00bfQui\u00e9n va?</a> herunter und aktiviere Benachrichtigungen f\u00fcr Preissenkungen, Last-Minute-Tickets und kostenlose G\u00e4steliste."),
+                ("7. Komm fr\u00fch und meide Top-Termine", "Dieselben Clubs verlangen je nach Nacht unterschiedliche Preise. Ein Mittwoch im Amnesia kann 30\u20ac kosten, ein Samstag mit David Guetta \u00fcber 100\u20ac. Geh an Wochentagen oder au\u00dferhalb der Top-Termine (August auf Ibiza) und spare bis zu 60%."),
+            ],
+            "faq": [
+                ("Wie komme ich gratis in eine Disco?", "Trag dich vor 23:00 in die G\u00e4steliste des Clubs ein, kontaktiere einen lokalen Promoter oder such nach N\u00e4chten mit freiem Eintritt unter der Woche (Uni-Donnerstage, \"Ladies free\"-Aktionen)."),
+                ("Wie viel spare ich beim Online-Kauf?", "Zwischen 20% und 40% gegen\u00fcber der Abendkasse, je nach Club. Au\u00dferdem sparst du dir die Schlange. Die ersten Vorverkaufspreise sind meist am g\u00fcnstigsten."),
+                ("Was ist ein Club-Promoter?", "Ein unabh\u00e4ngiger Vermittler, der auf Provision Publikum bringt. Daf\u00fcr bietet er Rabatte, VIP- oder Gratis-Eintritt. Man erreicht sie \u00fcber Instagram oder spezialisierte Apps."),
+                ("Sind VIP-Tische g\u00fcnstiger als Tickets?", "Kommt auf die Gruppengr\u00f6\u00dfe an. Bei 8-10 Personen kann ein Tisch ab 500\u20ac (mit Flasche) g\u00fcnstiger sein als Eintritt + Getr\u00e4nke einzeln \u2013 plus Komfort und schneller Zugang."),
+                ("Wann sind Disco-Tickets am g\u00fcnstigsten?", "Unter der Woche (Mittwoch und Donnerstag), im fr\u00fchen Vorverkauf, in Nebensaison-Monaten (Mai, Oktober auf Ibiza) und in den ersten \u00d6ffnungsstunden."),
+            ],
+            "related_cities": ["ibiza", "madrid", "barcelona", "palma", "marbella"],
+        },
+    },
+}
+
+# (es_slug, en_slug, de_slug) for the translated evergreen guides.
+_GUIDE_L10N_MAP = [
+    ("mejores-fiestas-ibiza-verano", "best-parties-ibiza-summer", "beste-partys-ibiza-sommer"),
+    ("como-conseguir-entradas-discoteca-baratas", "cheap-nightclub-tickets", "guenstige-disco-tickets"),
+]
+_GUIDE_SLUG2ES = {}
+for _es, _en, _de in _GUIDE_L10N_MAP:
+    _GUIDE_SLUG2ES[("es", _es)] = _es
+    _GUIDE_SLUG2ES[("en", _en)] = _es
+    _GUIDE_SLUG2ES[("de", _de)] = _es
+
+
+def _guide_hreflang(front: str, es_slug: str):
+    for _es, _en, _de in _GUIDE_L10N_MAP:
+        if _es == es_slug:
+            return {"es": _blog_url(front, _es, "es"),
+                    "en": _blog_url(front, _en, "en"),
+                    "de": _blog_url(front, _de, "de")}
+    return None
+
+
+
 def _blog_url(front: str, slug: str = "", lang: str = "es") -> str:
     base = {"es": f"{front}/blog", "en": f"{front}/en/blog", "de": f"{front}/de/blog"}.get(lang, f"{front}/blog")
     if not slug:
@@ -2524,6 +2646,10 @@ def _city_guides_block(front: str, slug_l: str, label: str, lang: str, e) -> str
         for slug, p in _BLOG_POSTS.items():
             if p.get("city_slug") == slug_l:
                 links.append(f'<a href="{e(_blog_url(front, slug))}">{e(p["title"])}</a>')
+    else:
+        for slug, p in _BLOG_POSTS_L10N.get(lang, {}).items():
+            if p.get("city_slug") == slug_l:
+                links.append(f'<a href="{e(_blog_url(front, slug, lang))}">{e(p["title"])}</a>')
     idx_label = {"es": "Todas las gu\u00edas del blog", "en": "All blog guides",
                  "de": "Alle Blog-Guides"}.get(lang, "Blog")
     links.append(f'<a href="{e(_blog_url(front, lang=lang))}">{e(idx_label)}</a>')
@@ -2581,16 +2707,16 @@ async def _render_blog_index(request: Request, lang: str = "es"):
         )
         itemlist.append({"@type": "ListItem", "position": pos, "url": url, "name": m["title"]})
         pos += 1
-    # Hand-written evergreen guides only exist in Spanish.
-    if lang == "es":
-        for (slug, p) in sorted(_BLOG_POSTS.items(), key=lambda kv: kv[1]["published"], reverse=True):
-            url = _blog_url(front, slug)
-            cards.append(
-                f'<li class="blogcard"><a href="{e(url)}"><b>{e(p["title"])}</b>'
-                f'<small>{e(p["description"])}</small></a></li>'
-            )
-            itemlist.append({"@type": "ListItem", "position": pos, "url": url, "name": p["title"]})
-            pos += 1
+    # Hand-written evergreen guides: Spanish originals + EN/DE translations.
+    static_src = _BLOG_POSTS if lang == "es" else _BLOG_POSTS_L10N.get(lang, {})
+    for (slug, p) in sorted(static_src.items(), key=lambda kv: kv[1]["published"], reverse=True):
+        url = _blog_url(front, slug, lang)
+        cards.append(
+            f'<li class="blogcard"><a href="{e(url)}"><b>{e(p["title"])}</b>'
+            f'<small>{e(p["description"])}</small></a></li>'
+        )
+        itemlist.append({"@type": "ListItem", "position": pos, "url": url, "name": p["title"]})
+        pos += 1
 
     idx_paths = {l: _blog_url(front, lang=l) for l in SEO_LANGS}
     hreflang = _hreflang_links(idx_paths, e)
@@ -2639,7 +2765,7 @@ async def _render_blog_post(slug: str, request: Request, lang: str = "es"):
     e = _html.escape
     front = _frontend_base(request)
     UI = _BLOG_UI.get(lang, _BLOG_UI["es"])
-    post = _BLOG_POSTS.get(slug) if lang == "es" else None
+    post = _BLOG_POSTS.get(slug) if lang == "es" else _BLOG_POSTS_L10N.get(lang, {}).get(slug)
     if not post:
         _am = _agenda_lookup(slug, lang)
         if _am:
@@ -2649,6 +2775,12 @@ async def _render_blog_post(slug: str, request: Request, lang: str = "es"):
         bidx = _blog_url(front, lang=lang)
         html_out = f'<!doctype html><meta http-equiv="refresh" content="0;url={bidx}"><script>location.replace("{bidx}")</script>'
         return StarletteResponse(content=html_out, status_code=404, media_type="text/html; charset=utf-8")
+
+    # Cross-language hreflang for the translated evergreen guides.
+    if not post.get("hreflang"):
+        _essrc = _GUIDE_SLUG2ES.get((lang, slug))
+        if _essrc:
+            post = {**post, "hreflang": _guide_hreflang(front, _essrc)}
 
     canonical = _blog_url(front, slug, lang)
     hreflang = _hreflang_links(post["hreflang"], e) if post.get("hreflang") else ""
@@ -2777,6 +2909,18 @@ async def _sitemap_blog_xml(front: str, today: str) -> str:
             f'<url><loc>{_blog_url(front, slug)}</loc><lastmod>{lm}</lastmod>'
             f'<changefreq>monthly</changefreq>{img_xml}</url>'
         )
+    # EN/DE translated evergreen guides.
+    for lg in ("en", "de"):
+        for slug, p in _BLOG_POSTS_L10N.get(lg, {}).items():
+            lm = (p.get("updated") or p.get("published") or today)
+            img = p.get("hero_image") or ""
+            img_xml = ""
+            if img.startswith("http"):
+                img_xml = f'<image:image><image:loc>{img.replace("&", "&amp;")}</image:loc></image:image>'
+            parts.append(
+                f'<url><loc>{_blog_url(front, slug, lg)}</loc><lastmod>{lm}</lastmod>'
+                f'<changefreq>monthly</changefreq>{img_xml}</url>'
+            )
     # Auto weekly agenda posts in every language (fresh daily → changefreq daily).
     for lg in SEO_LANGS:
         for m in _agenda_meta(lg):
@@ -7197,7 +7341,8 @@ async def list_stories(user: dict = Depends(get_current_user)):
     # Also surface friends' (and own) 'El Momento' captures from the last 24h as
     # ephemeral stories, so the top-of-feed bar shows the whole night.
     out.extend(await _moments_as_stories(allowed, cutoff, user))
-    out.sort(key=lambda x: x.get("created_at") or "")
+    # Live content first (by time); "highlight" (old) moments go to the end.
+    out.sort(key=lambda x: (bool(x.get("is_old")), x.get("created_at") or ""))
     return out
 
 
@@ -7207,8 +7352,27 @@ async def _moments_as_stories(allowed: list, cutoff: str, viewer: dict) -> list:
         {"user_id": {"$in": allowed}, "created_at": {"$gte": cutoff}}, {"_id": 0}
     ).sort("created_at", 1):
         caps.append(c)
+    is_old = False
     if not caps:
-        return []
+        # No captures in the last 24h → surface older "highlights" so the
+        # Momentos row is never empty (like Instagram "Destacadas"). Respect the
+        # viewer's own moment privacy: "amigos" → friends' (+own) past moments;
+        # "publico" → also include past PUBLIC moments from opted-in users.
+        is_old = True
+        blocked = set(await blocked_relation_ids(viewer["user_id"]))
+        author_ids = {a for a in allowed if a not in blocked}
+        if viewer.get("moment_privacy", "amigos") == "publico":
+            pub = await db.users.distinct("user_id", {"moment_privacy": "publico"})
+            author_ids.update(p for p in pub if p not in blocked)
+        author_ids = list(author_ids)
+        if not author_ids:
+            return []
+        async for c in db.captures.find(
+            {"user_id": {"$in": author_ids}, "created_at": {"$lt": cutoff}}, {"_id": 0}
+        ).sort("created_at", -1).limit(12):
+            caps.append(c)
+        if not caps:
+            return []
     cap_ids = [c["id"] for c in caps]
     like_counts = {}
     async for row in db.capture_reactions.aggregate([
@@ -7234,6 +7398,7 @@ async def _moments_as_stories(allowed: list, cutoff: str, viewer: dict) -> list:
             "event_name": ev["name"] if ev else None,
             "is_mine": c["user_id"] == viewer["user_id"],
             "kind": "moment",
+            "is_old": is_old,
             "likes": like_counts.get(c["id"], 0),
             "i_liked": c["id"] in my_liked,
             "author": _msg_author(au),

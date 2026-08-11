@@ -4,7 +4,7 @@ import api, { mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon, Send, ImageOff, Heart, Zap } from "lucide-react";
+import { Plus, X, Loader2, ImageUp, Trash2, CameraIcon, Send, ImageOff, Heart, Zap, Star } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
@@ -30,7 +30,8 @@ function timeAgo(iso) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return i18n.t("stories.timeago_now");
   if (diff < 3600) return i18n.t("stories.timeago_min", { n: Math.floor(diff / 60) });
-  return i18n.t("stories.timeago_hour", { n: Math.floor(diff / 3600) });
+  if (diff < 86400) return i18n.t("stories.timeago_hour", { n: Math.floor(diff / 3600) });
+  return `${Math.floor(diff / 86400)}d`;
 }
 
 function groupByUser(stories) {
@@ -344,6 +345,7 @@ export function StoriesBar() {
 
         {groups.map((g) => {
           const hasMoment = g.stories.some((s) => s.kind === "moment");
+          const isHighlight = g.stories.length > 0 && g.stories.every((s) => s.is_old);
           return (
           <button
             key={g.user_id}
@@ -351,18 +353,20 @@ export function StoriesBar() {
             onClick={() => setViewer(g)}
             className="flex flex-col items-center gap-1.5 shrink-0"
           >
-            <div className="relative w-16 h-16 rounded-full p-[2.5px] bg-gradient-to-tr from-qv-primary to-qv-secondary">
+            <div className={`relative w-16 h-16 rounded-full p-[2.5px] ${isHighlight ? "bg-gradient-to-tr from-white/40 to-white/15" : "bg-gradient-to-tr from-qv-primary to-qv-secondary"}`}>
               <div className="w-full h-full rounded-full p-[2px] bg-[#0A0A0C]">
                 <AvatarCircle name={g.author.name} picture={g.author.picture} size={54} ring={false} className="w-full h-full" />
               </div>
               {hasMoment && (
-                <span className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-qv-primary border-2 border-[#0A0A0C] flex items-center justify-center" data-testid={`story-moment-badge-${g.author.username}`}>
-                  <Zap className="w-3 h-3 text-white" fill="currentColor" />
+                <span className={`absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full border-2 border-[#0A0A0C] flex items-center justify-center ${isHighlight ? "bg-white/30" : "bg-qv-primary"}`} data-testid={`story-moment-badge-${g.author.username}`}>
+                  {isHighlight
+                    ? <Star className="w-3 h-3 text-white" fill="currentColor" />
+                    : <Zap className="w-3 h-3 text-white" fill="currentColor" />}
                 </span>
               )}
             </div>
             <span className="text-[11px] text-white/70 font-medium truncate max-w-[64px]">
-              {g.is_mine ? t("stories.you") : g.author.name.split(" ")[0]}
+              {isHighlight ? t("stories.highlight") : (g.is_mine ? t("stories.you") : g.author.name.split(" ")[0])}
             </span>
           </button>
           );

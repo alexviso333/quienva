@@ -586,7 +586,8 @@
     "archive_empty": "You haven't posted any story yet.",
     "timeago_now": "now",
     "timeago_min": "{{n}} min ago",
-    "timeago_hour": "{{n}} h ago"
+    "timeago_hour": "{{n}} h ago",
+    "highlight": "Highlight"
   },
   "eventcard": {
     "follow_on": "We'll let you know when they're out 🔔",

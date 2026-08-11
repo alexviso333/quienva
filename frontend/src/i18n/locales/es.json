@@ -586,7 +586,8 @@
     "archive_empty": "Todavía no has subido ninguna historia.",
     "timeago_now": "ahora",
     "timeago_min": "hace {{n}} min",
-    "timeago_hour": "hace {{n}} h"
+    "timeago_hour": "hace {{n}} h",
+    "highlight": "Destacado"
   },
   "eventcard": {
     "follow_on": "Te avisaremos cuando salgan 🔔",
