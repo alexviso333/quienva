@@ -2115,6 +2115,38 @@ def _home_paths(front: str) -> dict:
     return {l: f"{front}{tail}" for l, tail in _HOME_PATHS_TAIL.items()}
 
 
+async def _all_cities_match() -> list:
+    return [{"city": city_query_value(c["id"])} for c in SUPPORTED_CITIES]
+
+
+async def _top_events_global(limit: int = 12) -> list:
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    q = {"date": {"$gte": today}, "$or": await _all_cities_match()}
+    cur = db.events.find(q, {"_id": 0}).sort("date", 1).limit(limit)
+    return [ev async for ev in cur]
+
+
+async def _top_venues_global(limit: int = 12) -> list:
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    pipeline = [
+        {"$match": {"date": {"$gte": today}, "venue": {"$nin": ["", None]},
+                    "$or": await _all_cities_match()}},
+        {"$group": {"_id": "$venue", "count": {"$sum": 1}, "image": {"$max": "$image_url"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": limit},
+    ]
+    out = []
+    async for r in db.events.aggregate(pipeline):
+        v = r.get("_id") or ""
+        if not v:
+            continue
+        img = r.get("image") or ""
+        out.append({"venue": v, "slug": _slugify(v), "count": r.get("count", 0),
+                    "image": img if str(img).startswith("http") else ""})
+    return out
+
+
+
 async def _render_home(lang: str, request: Request):
     import html as _html
     e = _html.escape
@@ -2146,6 +2178,43 @@ async def _render_home(lang: str, request: Request):
             f'<a href="{e(tf_w)}">{e(T["weekend"])}</a></div></div>')
         itemlist.append({"@type": "ListItem", "position": i, "url": cp, "name": c["label"]})
     cities_html = "".join(city_cards)
+
+    # Premium home sections: search + upcoming parties grid + top nightclubs grid.
+    HL = {
+        "es": {"search": "Busca fiesta, discoteca o ciudad\u2026", "ev_h": "Pr\u00f3ximas fiestas en Espa\u00f1a",
+               "ve_h": "Discotecas destacadas", "parties": "fiestas", "nores": "Sin resultados"},
+        "en": {"search": "Search a party, club or city\u2026", "ev_h": "Upcoming parties in Spain",
+               "ve_h": "Top nightclubs", "parties": "parties", "nores": "No results"},
+        "de": {"search": "Party, Club oder Stadt suchen\u2026", "ev_h": "Kommende Partys in Spanien",
+               "ve_h": "Top-Clubs", "parties": "Partys", "nores": "Keine Ergebnisse"},
+    }.get(lang, None) or {"search": "Buscar\u2026", "ev_h": "Pr\u00f3ximas fiestas", "ve_h": "Discotecas",
+                          "parties": "fiestas", "nores": "Sin resultados"}
+    top_events = await _top_events_global(12)
+    top_venues = await _top_venues_global(12)
+    ev_grid = ""
+    if top_events:
+        ecards = [_seo_card(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], lang, e)
+                  for ev in top_events]
+        ev_grid = (f'<div class="sech"><h2>{e(HL["ev_h"])}</h2><span>{len(top_events)}</span></div>'
+                   f'<ul class="grid">{"".join(ecards)}<li class="nores" id="qvnores">{e(HL["nores"])}</li></ul>')
+    ve_grid = ""
+    if top_venues:
+        vc = []
+        for v in top_venues:
+            thumb = (f'<span class="vthumb"><img src="{e(v["image"])}" alt="{e(v["venue"])}" loading="lazy"></span>'
+                     if v["image"] else f'<span class="vthumb">{e((v["venue"][:1] or "?").upper())}</span>')
+            vc.append(f'<a class="vcard" data-s="{e(v["venue"].lower())}" href="{e(_venue_paths(front, v["slug"])[lang])}">'
+                      f'{thumb}<span class="vmeta"><b>{e(v["venue"])}</b><small>{v["count"]} {e(HL["parties"])}</small></span></a>')
+        ve_grid = f'<div class="sech"><h2>{e(HL["ve_h"])}</h2></div><div class="venues">{"".join(vc)}</div>'
+    finder_html = (f'<div class="finder"><span class="fic">\U0001F50D</span>'
+                   f'<input id="qvf" type="search" autocomplete="off" placeholder="{e(HL["search"])}" '
+                   f'oninput="qvFilter(this.value)" aria-label="{e(HL["search"])}"></div>')
+    home_search_js = ('<script>function qvFilter(q){q=(q||"").toLowerCase().trim();'
+                      'var c=document.querySelectorAll(".grid .card,.venues .vcard"),'
+                      'nr=document.getElementById("qvnores"),shown=0;'
+                      'c.forEach(function(el){var m=!q||(el.getAttribute("data-s")||el.textContent||"").toLowerCase().indexOf(q)>=0;'
+                      'el.style.display=m?"":"none";if(m&&el.classList.contains("card"))shown++;});'
+                      'if(nr)nr.style.display=(shown===0&&q)?"block":"none";}</script>')
 
     hreflang = _hreflang_links(paths, e)
     langsw = _lang_switch(paths, lang, e(ST["other_langs"]), e)
@@ -2196,7 +2265,10 @@ async def _render_home(lang: str, request: Request):
 <p class="sub">{e(T["sub"])}</p>
 {stats_html}
 <div class="ctarow"><a class="cta" href="{front}/feed">{e(_SEO_UI[lang]["join"])}</a></div>
+{finder_html}
 </section>
+{ev_grid}
+{ve_grid}
 <h2 class="sectitle">{e(T["cities_h"])}</h2>
 <div class="hgrid">{cities_html}</div>
 {benefits}
@@ -2205,7 +2277,7 @@ async def _render_home(lang: str, request: Request):
 {social_html}
 {langsw}
 <footer>{e(ST["footer"])}</footer>
-</div></body></html>"""
+</div>{home_search_js}</body></html>"""
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
                              headers={"Cache-Control": "public, max-age=1800, s-maxage=86400"})
 
