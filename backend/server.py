@@ -1430,18 +1430,22 @@ def _event_jsonld(ev: dict, url: str, front: str, include_offers: bool = True, l
     if str(ev.get("image_url", "")).startswith("http"):
         obj["image"] = [ev["image_url"]]
     prices = [t.get("price") for t in (ev.get("price_tiers") or []) if isinstance(t, dict) and t.get("price")]
-    if prices and include_offers:
-        valid_from = str(ev.get("created_at") or ev.get("last_scraped_at") or "")[:10]
+    if include_offers:
         event_day = str(ev.get("date") or "")[:10]
+        valid_from = str(ev.get("created_at") or ev.get("last_scraped_at") or "")[:10]
         if not valid_from or (event_day and valid_from > event_day):
             valid_from = event_day
-        offer = {"@type": "Offer", "price": int(min(prices)),
-                 "priceCurrency": ev.get("currency", "EUR") or "EUR",
-                 "availability": avail, "url": url}
+        offer = {"@type": "Offer", "availability": avail, "url": url}
         if valid_from:
             offer["validFrom"] = valid_from
-        if event_day:
-            offer["priceValidUntil"] = event_day
+        # Price is only asserted when we actually know it (scraped tiers). For
+        # events without a known price we still emit the Offer (url + validFrom
+        # + availability) so Google always sees an `offers` field.
+        if prices:
+            offer["price"] = int(min(prices))
+            offer["priceCurrency"] = ev.get("currency", "EUR") or "EUR"
+            if event_day:
+                offer["priceValidUntil"] = event_day
         obj["offers"] = offer
     return json.dumps(obj, ensure_ascii=False)
 
