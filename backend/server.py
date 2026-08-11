@@ -890,7 +890,7 @@ async def _city_venues(city_id: str, limit: int = 18) -> list:
 SEO_LANGS = ("es", "en", "de")
 
 _SEO_CSS = """
-:root{color-scheme:dark;--pink:#ff0055;--cyan:#00f0ff;--bg:#0a0a0c;--card:#131118;--line:#242029;--muted:#a1a1aa}
+:root{color-scheme:dark;--pink:#ff0055;--cyan:#00f0ff;--bg:#050508;--card:#0e0e12;--line:#242029;--muted:#a1a1aa}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:#fff;font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
 a{color:inherit}
@@ -970,9 +970,9 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .empty{grid-column:1/-1;color:var(--muted);padding:30px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:20px}
 .benes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:16px 0 8px}
 .bene{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px}
-.bene .ic{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px;background:rgba(255,0,85,.14)}
-.bene:nth-child(2) .ic{background:rgba(0,240,255,.14)}
-.bene:nth-child(3) .ic{background:rgba(139,92,246,.16)}
+.bene .ic{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;margin-bottom:13px;background:rgba(255,0,85,.14);color:var(--pink);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.bene:nth-child(2) .ic{background:rgba(0,240,255,.14);color:var(--cyan)}
+.bene:nth-child(3) .ic{background:rgba(139,92,246,.16);color:#b98cff}
 .bene h3{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:15px;margin:0 0 6px}
 .bene p{color:var(--muted);font-size:13.5px;margin:0}
 .joinband{margin-top:22px;background:linear-gradient(120deg,rgba(255,0,85,.16),rgba(0,240,255,.12));border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:26px 22px;text-align:center}
@@ -1005,7 +1005,46 @@ footer{margin-top:34px;color:#71717a;font-size:13px;border-top:1px solid var(--l
 .faq summary{font-weight:700;cursor:pointer;list-style:none}
 .faq summary::-webkit-details-marker{display:none}
 .faq p{color:var(--muted);margin:10px 0 0}
-@media(max-width:640px){.benes{grid-template-columns:1fr}.meta{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,1fr);gap:12px}}
+@media(max-width:640px){.benes{grid-template-columns:1fr}.meta{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,1fr);gap:12px}.ehero{min-height:300px;padding:22px 14px}.ehero-poster{max-width:258px}}
+/* ============ premium motion & interactivity ============ */
+html{scroll-behavior:smooth}
+.bgfx{background:
+  radial-gradient(720px 500px at 12% -140px,rgba(255,0,85,.22),transparent 60%),
+  radial-gradient(760px 540px at 100% 3%,rgba(0,240,255,.16),transparent 55%),
+  radial-gradient(620px 620px at 62% 122%,rgba(122,0,255,.15),transparent 60%),
+  #050508;animation:bgdrift 24s ease-in-out infinite alternate}
+@keyframes bgdrift{from{background-position:0 0,0 0,0 0,0 0}to{background-position:46px -34px,-46px 24px,26px -46px,0 0}}
+body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.04;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.topbar{transition:padding .25s ease,background .25s ease,box-shadow .25s ease}
+.topbar.shrink{padding:8px 16px;background:rgba(5,5,8,.92);box-shadow:0 10px 30px -18px rgba(0,0,0,.9)}
+.hero-sec>*{animation:fadeUp .75s cubic-bezier(.16,1,.3,1) both}
+.hero-sec .kicker{animation-delay:.02s}.hero-sec h1{animation-delay:.08s}
+.hero-sec p.sub{animation-delay:.16s}.hero-sec .stats{animation-delay:.24s}
+.stats .stat{animation:fadeUp .6s cubic-bezier(.16,1,.3,1) both}
+.stats .stat:nth-child(2){animation-delay:.30s}.stats .stat:nth-child(3){animation-delay:.36s}
+.ctarow{animation:fadeUp .75s cubic-bezier(.16,1,.3,1) .30s both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+.stat{background:rgba(255,255,255,.04);backdrop-filter:blur(10px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);transition:transform .2s ease,border-color .2s ease,background .2s ease}
+.stat:hover{transform:translateY(-2px);background:rgba(255,255,255,.07);border-color:rgba(0,240,255,.4)}
+.cta:not(.ghost){transition:transform .18s ease,box-shadow .25s ease}
+.cta:not(.ghost):hover{transform:translateY(-2px) scale(1.015);box-shadow:0 0 28px rgba(255,0,85,.55),0 18px 44px -12px rgba(255,0,85,.85)}
+.js-on .reveal{opacity:0;transform:translateY(38px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)}
+.js-on .reveal.in{opacity:1;transform:none}
+.card,.vcard{box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.glow-card{position:relative}
+.glow-card:before{content:"";position:absolute;top:var(--gy,50%);left:var(--gx,50%);width:320px;height:320px;background:radial-gradient(circle,rgba(0,240,255,.20),transparent 68%);transform:translate(-50%,-50%);opacity:0;transition:opacity .3s ease;pointer-events:none;z-index:5;border-radius:50%}
+.glow-card:hover:before{opacity:1}
+.sectitle,.sech{animation:fadeUp .6s cubic-bezier(.16,1,.3,1) both}
+.sb-on{padding-left:19px}
+.sb-on:after{content:"";position:absolute;left:7px;top:50%;transform:translateY(-50%);width:6px;height:6px;border-radius:50%;background:#00f0ff;box-shadow:0 0 0 0 rgba(0,240,255,.7);animation:pulse 1.8s infinite}
+.sb{position:relative}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,240,255,.6)}70%{box-shadow:0 0 0 8px rgba(0,240,255,0)}100%{box-shadow:0 0 0 0 rgba(0,240,255,0)}}
+.meta > div{transition:transform .2s ease,border-color .2s ease}
+.meta > div:hover{transform:translateY(-2px);border-color:rgba(0,240,255,.4)}
+.faq details[open] p{animation:fadeUp .35s ease both}
+.finder input{transition:border-color .2s,box-shadow .2s,background .2s}
+.finder input:focus{background:rgba(255,255,255,.09)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.js-on .reveal{opacity:1;transform:none}}
 """
 
 
@@ -1018,7 +1057,9 @@ _ICONS_HEAD = (
     '<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">'
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
     '<link rel="manifest" href="/manifest.json">'
-    '<meta name="theme-color" content="#0a0a0c">'
+    '<meta name="theme-color" content="#050508">'
+    '<script>document.documentElement.classList.add("js-on")</script>'
+    '''<script>(function(){function ready(fn){if(document.readyState!="loading")fn();else document.addEventListener("DOMContentLoaded",fn);}ready(function(){var rev=document.querySelectorAll(".reveal");if("IntersectionObserver" in window && rev.length){var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting){en.target.classList.add("in");io.unobserve(en.target);}});},{threshold:0.12,rootMargin:"0px 0px -40px 0px"});Array.prototype.forEach.call(rev,function(el,i){el.style.transitionDelay=((i%4)*70)+"ms";io.observe(el);});}else{Array.prototype.forEach.call(rev,function(el){el.classList.add("in");});}Array.prototype.forEach.call(document.querySelectorAll(".glow-card"),function(c){c.addEventListener("mousemove",function(e){var r=c.getBoundingClientRect();c.style.setProperty("--gx",(e.clientX-r.left)+"px");c.style.setProperty("--gy",(e.clientY-r.top)+"px");});});var tb=document.querySelector(".topbar");if(tb){var os=function(){if(window.scrollY>40)tb.classList.add("shrink");else tb.classList.remove("shrink");};os();window.addEventListener("scroll",os,{passive:true});}Array.prototype.forEach.call(document.querySelectorAll(".stat b"),function(b){var t=b.textContent.trim();var n=parseInt(t.replace(/[^0-9]/g,""),10);if(!n||n>100000)return;var d=Math.min(1200,300+n*8);var s=null;function step(ts){if(!s)s=ts;var p=Math.min((ts-s)/d,1);b.textContent=Math.floor(p*n).toLocaleString("es");if(p<1)requestAnimationFrame(step);else b.textContent=t;}requestAnimationFrame(step);});});})();</script>'''
 )
 
 
@@ -1030,10 +1071,13 @@ def _seo_topbar(front, lang, e):
 
 def _seo_benefits(lang, e):
     ui = _SEO_UI.get(lang, _SEO_UI["es"])
+    ic_users = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>')
+    ic_ticket = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 11v2"/><path d="M13 17v2"/></svg>')
+    ic_zap = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>')
     return (f'<h2 class="sectitle">{e(ui["why"])}</h2><div class="benes">'
-            f'<div class="bene"><div class="ic">\U0001F465</div><h3>{e(ui["b1t"])}</h3><p>{e(ui["b1d"])}</p></div>'
-            f'<div class="bene"><div class="ic">\U0001F3AB</div><h3>{e(ui["b2t"])}</h3><p>{e(ui["b2d"])}</p></div>'
-            f'<div class="bene"><div class="ic">\u26A1</div><h3>{e(ui["b3t"])}</h3><p>{e(ui["b3d"])}</p></div>'
+            f'<div class="bene glow-card reveal"><div class="ic">{ic_users}</div><h3>{e(ui["b1t"])}</h3><p>{e(ui["b1d"])}</p></div>'
+            f'<div class="bene glow-card reveal"><div class="ic">{ic_ticket}</div><h3>{e(ui["b2t"])}</h3><p>{e(ui["b2d"])}</p></div>'
+            f'<div class="bene glow-card reveal"><div class="ic">{ic_zap}</div><h3>{e(ui["b3t"])}</h3><p>{e(ui["b3d"])}</p></div>'
             f'</div>')
 
 
@@ -1413,7 +1457,7 @@ def _seo_card(ev, ev_url, lang, e) -> str:
     badge = f'<span class="sb {bcls}">{e(blabel)}</span>'
     price = f'<span class="pp">{e(pl)}</span>' if pl else ''
     return (
-        f'<a class="card" data-s="{e((str(ev.get("name","")) + " " + str(ev.get("venue","")) ).lower())}" href="{e(ev_url)}">'
+        f'<a class="card glow-card reveal" data-testid="seo-event-card" data-s="{e((str(ev.get("name","")) + " " + str(ev.get("venue","")) ).lower())}" href="{e(ev_url)}">'
         f'<div class="poster">{poster}<div class="badges">{badge}{price}</div></div>'
         f'<div class="body"><span class="n">{e(ev.get("name","Fiesta"))}</span>'
         f'<span class="m">{meta}</span></div></a>')
@@ -1706,7 +1750,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
                      if v["image"] else
                      f'<span class="vthumb">{e((v["venue"][:1] or "?").upper())}</span>')
             vcards.append(
-                f'<a class="vcard" href="{e(_venue_paths(front, v["slug"])[lang])}">{thumb}'
+                f'<a class="vcard glow-card reveal" href="{e(_venue_paths(front, v["slug"])[lang])}">{thumb}'
                 f'<span class="vmeta"><b>{e(v["venue"])}</b><small>{v["count"]} {e(L2["parties"])}</small></span></a>')
         venues_html = (f'<div class="sech"><h2>{e(L2["vh"])}</h2><span>{n_ven}</span></div>'
                        f'<div style="color:var(--muted);font-size:13px;margin:-8px 0 12px">{e(L2["vsub"])}</div>'
@@ -2216,7 +2260,7 @@ async def _render_home(lang: str, request: Request):
         for v in top_venues:
             thumb = (f'<span class="vthumb"><img src="{e(v["image"])}" alt="{e(v["venue"])}" loading="lazy"></span>'
                      if v["image"] else f'<span class="vthumb">{e((v["venue"][:1] or "?").upper())}</span>')
-            vc.append(f'<a class="vcard" data-s="{e(v["venue"].lower())}" href="{e(_venue_paths(front, v["slug"])[lang])}">'
+            vc.append(f'<a class="vcard glow-card reveal" data-s="{e(v["venue"].lower())}" href="{e(_venue_paths(front, v["slug"])[lang])}">'
                       f'{thumb}<span class="vmeta"><b>{e(v["venue"])}</b><small>{v["count"]} {e(HL["parties"])}</small></span></a>')
         ve_grid = f'<div class="sech"><h2>{e(HL["ve_h"])}</h2></div><div class="venues">{"".join(vc)}</div>'
     finder_html = (f'<div class="finder"><span class="fic">\U0001F50D</span>'
