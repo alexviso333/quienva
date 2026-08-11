@@ -22,14 +22,19 @@
         <!-- Preload the brand logo so it renders faster (LCP boost = SEO signal) -->
         <link rel="preload" as="image" href="/icons/icon-512.png" fetchpriority="high" />
 
+        <!-- Favicon for Google Search results & browser tabs (root /favicon.ico is what Googlebot probes) -->
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+        <link rel="shortcut icon" href="/favicon.ico" />
+
         <!-- PWA / iOS -->
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-192.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
         <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
-        <link rel="shortcut icon" href="/icons/icon-192.png" />
         <link rel="mask-icon" href="/icons/icon-512.png" color="#0a0a0c" />
 
         <!-- Canonical -->

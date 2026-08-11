@@ -322,3 +322,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Image sitemap** (<image:loc> on event URLs) → Google Images traffic. **sitemap-venues.xml** added + listed in index.
 - **Organization sameAs** Instagram/TikTok. **Event breadcrumb** now links Home>City>Venue>Event.
 - Requires **Save to GitHub** → Vercel + Render redeploy. backend/.env & frontend/.env are local-only (gitignored), production env untouched.
+
+## SEO / Logo fix (2026-08-11)
+- ROOT CAUSE del "logo no aparece en Google": `/favicon.ico` no existía → Vercel devolvía el HTML del SPA (content-type text/html) cuando Googlebot lo pedía, y las páginas server-rendered no tenían `<link rel="icon">`.
+- Fix: generados `favicon.ico` (16/32/48/64), `favicon-16/32/96.png`, `apple-touch-icon.png` en `frontend/public/`. `index.html` actualizado. Constante `_ICONS_HEAD` inyectada en TODAS las páginas SEO server-rendered (home/ciudad/evento/discoteca/blog ES/EN/DE). `Organization` JSON-LD reforzado (logo=ImageObject 512x512, @id, alternateName, image, publisher).
+- Recreado `/app/backend/.env` (faltaba en el entorno de dev: MONGO_URL local + DB_NAME=quienva_db). Producción usa su propia config en Render.
+- Verificado local: home/ciudad/evento/blog ES/EN/DE devuelven 200 con favicon.ico; sitemap con 46 URLs OK.
+- PENDIENTE deploy por el usuario: Save to GitHub → redeploy Vercel (frontend) + Render (backend).

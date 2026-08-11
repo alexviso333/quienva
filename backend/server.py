@@ -926,6 +926,20 @@ footer{margin-top:34px;color:#71717a;font-size:13px;border-top:1px solid var(--l
 @media(max-width:640px){.benes{grid-template-columns:1fr}.meta{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,1fr);gap:12px}}
 """
 
+
+# Favicon / icon links injected into EVERY server-rendered SEO page <head> so
+# Googlebot always finds a valid /favicon.ico (root) — required for the site
+# logo/favicon to appear in Search results & the brand knowledge panel.
+_ICONS_HEAD = (
+    '<link rel="icon" href="/favicon.ico" sizes="any">'
+    '<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">'
+    '<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">'
+    '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
+    '<link rel="manifest" href="/manifest.json">'
+    '<meta name="theme-color" content="#0a0a0c">'
+)
+
+
 def _seo_topbar(front, lang, e):
     ui = _SEO_UI.get(lang, _SEO_UI["es"])
     return (f'<header class="topbar"><a class="brand" href="{front}/">\u00bfQui\u00e9n va?<span>.</span></a>'
@@ -952,15 +966,26 @@ def _org_website_jsonld(front: str) -> str:
     Searchbox action) so Google can show brand info and a search box."""
     org = {
         "@context": "https://schema.org", "@type": "Organization",
-        "name": "\u00bfQui\u00e9n va?", "url": front + "/",
-        "logo": front + "/icons/icon-512.png",
+        "@id": front + "/#organization",
+        "name": "\u00bfQui\u00e9n va?",
+        "alternateName": ["Quien va", "quienva.me", "QuienVa"],
+        "url": front + "/",
+        "logo": {
+            "@type": "ImageObject",
+            "url": front + "/icons/icon-512.png",
+            "contentUrl": front + "/icons/icon-512.png",
+            "width": 512, "height": 512, "caption": "\u00bfQui\u00e9n va?",
+        },
+        "image": front + "/icons/icon-512.png",
         "sameAs": QV_SOCIAL,
         "description": "Descubre las fiestas y discotecas de tu ciudad, mira qu\u00e9 amigos van y consigue tus entradas.",
     }
     web = {
         "@context": "https://schema.org", "@type": "WebSite",
+        "@id": front + "/#website",
         "name": "\u00bfQui\u00e9n va?", "url": front + "/",
         "inLanguage": ["es", "en", "de"],
+        "publisher": {"@id": front + "/#organization"},
         "potentialAction": {
             "@type": "SearchAction",
             "target": {"@type": "EntryPoint", "urlTemplate": front + "/feed?buscar={search_term_string}"},
@@ -1589,7 +1614,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<link rel="canonical" href="{e(canonical)}">
+<link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
 {hreflang}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:locale" content="{ {'es':'es_ES','en':'en_US','de':'de_DE'}[lang] }">
@@ -1803,7 +1828,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
 {robots_meta}
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<link rel="canonical" href="{e(canonical)}">
+<link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
 {hreflang}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:locale" content="{ogloc}">
@@ -2015,7 +2040,7 @@ async def _render_home(lang: str, request: Request):
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<link rel="canonical" href="{e(canonical)}">
+<link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
 {hreflang}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:locale" content="{ogloc}">
@@ -2311,7 +2336,7 @@ async def _render_blog_index(request: Request):
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
 <title>{e(title)}</title>
 <meta name="description" content="{e(desc)}">
-<link rel="canonical" href="{e(canonical)}">
+<link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:title" content="{e(title)}"><meta property="og:description" content="{e(desc)}">
 <meta property="og:url" content="{e(canonical)}">
@@ -2396,7 +2421,7 @@ async def _render_blog_post(slug: str, request: Request):
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
 <title>{e(post["title"])} | \u00bfQui\u00e9n va?</title>
 <meta name="description" content="{e(post["description"])}">
-<link rel="canonical" href="{e(canonical)}">
+<link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
 <meta property="og:type" content="article"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:title" content="{e(post['title'])}"><meta property="og:description" content="{e(post['description'])}">
 <meta property="og:url" content="{e(canonical)}">
@@ -2622,7 +2647,7 @@ async def _render_venue(slug: str, lang: str, request: Request):
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<link rel="canonical" href="{e(canonical)}">
+<link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
 {hreflang}
 <meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
 <meta property="og:locale" content="{ogloc}">

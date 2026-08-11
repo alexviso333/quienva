@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://logo-search-fix.preview.emergentagent.com/api"
+BASE_URL = "https://seo-analytics-hub-11.preview.emergentagent.com/api"
 
 # Admin credentials (Palma de Mallorca user)
 ADMIN_EMAIL = "admin@quienva.app"

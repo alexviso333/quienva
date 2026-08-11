@@ -8,7 +8,7 @@ import io
 from datetime import datetime
 from PIL import Image
 
-BASE_URL = "https://logo-search-fix.preview.emergentagent.com/api"
+BASE_URL = "https://seo-analytics-hub-11.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

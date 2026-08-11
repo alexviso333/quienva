@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Backend URL from environment
-BASE_URL = "https://logo-search-fix.preview.emergentagent.com/api"
+BASE_URL = "https://seo-analytics-hub-11.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

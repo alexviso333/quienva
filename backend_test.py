@@ -11,7 +11,7 @@ from typing import Dict, Any
 import xml.etree.ElementTree as ET
 
 # Base URL from frontend/.env
-BASE_URL = "https://logo-search-fix.preview.emergentagent.com/api"
+BASE_URL = "https://seo-analytics-hub-11.preview.emergentagent.com/api"
 
 # Test counters
 tests_passed = 0
