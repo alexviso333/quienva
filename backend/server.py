@@ -946,16 +946,17 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .grid{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
 .card{position:relative;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;text-decoration:none;color:#fff;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
 .card:hover{transform:translateY(-4px);border-color:rgba(0,240,255,.5);box-shadow:0 18px 40px -18px rgba(0,240,255,.45)}
-.poster{position:relative;width:100%;aspect-ratio:4/5;background:#1c1922;overflow:hidden}
-.poster img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;z-index:1;transition:transform .4s ease}
-.card:hover .poster img{transform:scale(1.05)}
-.poster .ph{position:absolute;inset:0;width:100%;height:100%;background:linear-gradient(150deg,#2a0f42 0%,#48173a 45%,#0d2b34 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px 14px}
+.poster{position:relative;width:100%;aspect-ratio:3/4;background:#0f0d14;overflow:hidden}
+.poster img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;z-index:2;transition:transform .45s cubic-bezier(.2,.7,.2,1)}
+.card:hover .poster img{transform:scale(1.045)}
+.poster .blurbg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(22px) brightness(.5) saturate(1.25);transform:scale(1.35);z-index:1}
+.poster .ph{position:absolute;inset:0;z-index:0;width:100%;height:100%;background:linear-gradient(150deg,#2a0f42 0%,#48173a 45%,#0d2b34 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px 14px}
 .poster .ph:before{content:"";position:absolute;top:-30%;left:-20%;width:70%;height:70%;background:radial-gradient(circle,rgba(255,0,85,.5),transparent 65%);filter:blur(22px)}
 .phn{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:15px;color:#fff;text-align:center;line-height:1.18;text-shadow:0 2px 14px rgba(0,0,0,.55);position:relative;z-index:1;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .phv{font-size:12px;color:rgba(255,255,255,.72);text-align:center;position:relative;z-index:1}
 .phb{position:absolute;top:10px;left:11px;font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:10px;letter-spacing:.2px;color:rgba(255,255,255,.85);z-index:1}
-.poster:after{content:"";position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,transparent 45%,rgba(10,10,12,.92) 100%)}
-.badges{position:absolute;left:9px;bottom:9px;right:9px;display:flex;gap:6px;flex-wrap:wrap;z-index:3}
+.poster:after{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(180deg,transparent 55%,rgba(10,10,12,.92) 100%);pointer-events:none}
+.badges{position:absolute;left:9px;bottom:9px;right:9px;display:flex;gap:6px;flex-wrap:wrap;z-index:4}
 .sb{font-size:11px;font-weight:800;padding:5px 10px;border-radius:999px;backdrop-filter:blur(6px);white-space:nowrap}
 .sb-on{background:rgba(16,185,129,.32);color:#a7f3d0}
 .sb-few{background:rgba(249,115,22,.36);color:#fed7aa}
@@ -978,6 +979,12 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .joinband h2{font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:22px;margin:0 0 8px}
 .joinband p{color:#d4d4d8;margin:0 0 18px}
 .hero{width:100%;max-height:420px;object-fit:cover;border-radius:22px;margin:6px 0 20px;border:1px solid var(--line)}
+.ehero{position:relative;border-radius:24px;overflow:hidden;margin:8px 0 24px;border:1px solid var(--line);min-height:360px;display:flex;align-items:center;justify-content:center;padding:32px 20px}
+.ehero-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(40px) brightness(.42) saturate(1.35);transform:scale(1.35);z-index:0}
+.ehero:after{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(140% 100% at 50% 0,transparent 40%,rgba(10,10,12,.72))}
+.ehero-poster{position:relative;z-index:2;max-width:340px;width:100%;animation:eheroIn .6s cubic-bezier(.2,.7,.2,1) both}
+.ehero-poster img{width:100%;height:auto;max-height:480px;object-fit:contain;border-radius:18px;border:1px solid rgba(255,255,255,.16);box-shadow:0 30px 70px -24px rgba(0,0,0,.85),0 0 0 1px rgba(0,240,255,.08)}
+@keyframes eheroIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
 .meta{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:20px 0}
 .meta > div{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
 .meta b{color:var(--cyan);font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px}
@@ -1397,7 +1404,8 @@ def _seo_card(ev, ev_url, lang, e) -> str:
           f'<span class="phb">\u00bfQui\u00e9n va?</span></div>')
     img = ev.get("image_url", "")
     if str(img).startswith("http"):
-        poster = ph + (f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy" '
+        poster = ph + (f'<div class="blurbg" style="background-image:url({e(img)})"></div>'
+                       f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy" '
                        f'onerror="this.style.display=&#39;none&#39;">')
     else:
         poster = ph
@@ -1859,7 +1867,12 @@ async def _render_event(event_id: str, lang: str, request: Request):
     title = e(T["ev_title"].format(name=ev.get("name", ""), venue=ev.get("venue", ""), city=city))
     desc = e(T["ev_desc"].format(name=ev.get("name", ""), venue=ev.get("venue", ""), city=city, date=when, price=price_pref))
     img = ev.get("image_url", "")
-    hero = f'<img class="hero" src="{e(img)}" alt="{e(ev.get("name",""))}" width="720" height="340">' if str(img).startswith("http") else ""
+    if str(img).startswith("http"):
+        hero = (f'<div class="ehero"><div class="ehero-bg" style="background-image:url({e(img)})"></div>'
+                f'<div class="ehero-poster"><img src="{e(img)}" alt="{e(ev.get("name",""))}" '
+                f'width="400" height="520" onerror="this.closest(&#39;.ehero&#39;).style.display=&#39;none&#39;"></div></div>')
+    else:
+        hero = ""
     ogimg_tag = f'<meta property="og:image" content="{e(img)}">' if str(img).startswith("http") else ''
     hreflang = _hreflang_links(paths, e)
     langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)

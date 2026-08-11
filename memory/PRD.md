@@ -363,3 +363,10 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Tarjetas robustas: placeholder de marca (.ph con nombre) SIEMPRE detrás + <img> encima con onerror → nunca negras.
 - Localizado ES/EN/DE. Testing agent 10/10. Pendiente deploy Vercel + Render.
 - Fourvenues compra nativa: PENDIENTE credencial Channel Manager API (usuario pedirá por email). No implementado aún.
+
+## Iteration 7 (2026-06) — FIX cartel recortado + rediseño visual premium páginas SEO
+- **Root cause "el cartel sale mal" en la ficha de fiesta**: `_render_event` metía el cartel (vertical) en un banner ancho `.hero{max-height:420px;object-fit:cover}` → recorte brutal (texto/cara cortados). FIX: nuevo bloque `.ehero` = fondo con el PROPIO cartel difuminado+oscurecido (`.ehero-bg` blur 40px) + el cartel COMPLETO sin recortar encima (`.ehero-poster img{object-fit:contain}`), portrait, borde+sombra neón, animación de entrada. Nunca recorta.
+- **Tarjetas SEO premium (`_seo_card` + `.poster`)**: misma técnica — `.blurbg` (fondo difuminado del cartel, inyectado inline con la URL) + `<img object-fit:contain>` (cartel completo, z-index 2). Aspect ratio de tarjeta a 3/4. Ahora ningún cartel (vertical/cuadrado/apaisado) se corta; letterbox con relleno difuminado = acabado intencional/premium. Reordenados z-index (ph 0, blurbg 1, img 2, gradiente 3, badges 4).
+- Se aplica automáticamente a TODAS las páginas que usan `_seo_card`: ciudad, discoteca, home (relacionadas) y evento, en ES/EN/DE.
+- Verificado: capturas (evento/ciudad/home) muestran carteles completos sobre fondo difuminado; curl 200 en las 6 variantes con el nuevo marcado; sin errores en backend.
+- **PRODUCCIÓN**: cambio de código → requiere "Save to GitHub" para desplegar a Render (backend SSR). Solo CSS/HTML del SSR; no toca la SPA React.
