@@ -2064,6 +2064,401 @@ async def seo_home_de(request: Request):
     return await _render_home("de", request)
 
 
+# ============================================================================
+# BLOG (SEO long-tail) — server-rendered articles at /blog and /blog/{slug}
+# ============================================================================
+# Each post is a static, hand-written article targeting long-tail search
+# queries like "mejores fiestas de Ibiza este verano". Server-rendered HTML
+# so Googlebot indexes the full content, with Article + BreadcrumbList + FAQ
+# JSON-LD. Adds /sitemap-blog.xml and per-post canonical URLs.
+_BLOG_POSTS = {
+    "mejores-fiestas-ibiza-verano": {
+        "title": "Mejores fiestas de Ibiza este verano: gu\u00eda completa 2025",
+        "description": "Descubre las mejores fiestas y discotecas de Ibiza este verano: Pacha, Ushua\u00efa, Amnesia, H\u00ef Ibiza, [UNVRS] y DC-10 con horarios, precios y consejos.",
+        "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/ibiza-summer.jpg",
+        "published": "2025-06-15",
+        "updated": "2025-07-01",
+        "city": "Ibiza",
+        "city_slug": "ibiza",
+        "sections": [
+            ("Las discotecas m\u00e1s ic\u00f3nicas de Ibiza", "Ibiza concentra las mejores discotecas del mundo en apenas 40 km de costa. <b>Pacha Ibiza</b> lleva desde 1973 marcando la pauta del clubbing internacional y sigue siendo referencia con sus fiestas m\u00edticas. <b>Ushua\u00efa Ibiza</b>, en Playa d'en Bossa, ofrece la experiencia \u00fanica del open-air club con los DJs m\u00e1s importantes del planeta. <b>Amnesia</b> es la meca del techno con dos salas gigantes y el famoso Terrace, mientras que <b>H\u00ef Ibiza</b>, hermana de Ushua\u00efa, se llev\u00f3 el t\u00edtulo del mejor club del mundo m\u00faltiples a\u00f1os seguidos. Sumado a <b>[UNVRS]</b>, <b>DC-10</b> (culto techno underground), <b>Eden</b> y <b>Club Chinois</b>, la agenda cubre todos los g\u00e9neros."),
+            ("Los DJs top del verano 2025 en Ibiza", "David Guetta contin\u00faa con su icon\u00f3nica residencia F*** Me I'm Famous en Ushua\u00efa; Solomun sigue en Pacha con su Sunday Special; Marco Carola con Music On en Amnesia; Black Coffee con su residencia en H\u00ef Ibiza; Circoloco toma DC-10 los lunes; y ANTS regresa a Ushua\u00efa los s\u00e1bados con l\u00ednea techno. Consulta la agenda semanal actualizada en <a href=\"/fiestas/ibiza\">nuestra p\u00e1gina de fiestas de Ibiza</a>."),
+            ("Cu\u00e1nto cuesta ir de fiesta en Ibiza", "El precio medio de entrada en 2025 oscila entre <b>40\u20ac y 90\u20ac</b> seg\u00fan el DJ y el club. Las fechas top con headliners (David Guetta, Calvin Harris, Solomun) pueden superar los <b>120\u20ac</b>. La bebida en el club ronda los <b>18-25\u20ac</b> y una botella de mesa desde 400\u20ac. Truco: comprar la entrada online con antelaci\u00f3n suele ser 20-30% m\u00e1s barato que en taquilla, y algunas noches tienen guest-list gratis hasta cierta hora."),
+            ("C\u00f3mo llegar a las discotecas de Ibiza", "El <b>Discob\u00fas</b> (l\u00ednea 9) conecta Ibiza ciudad, San Antonio y Playa d'en Bossa toda la noche por 4\u20ac. Un taxi entre zonas cuesta entre <b>20\u20ac y 40\u20ac</b>. Muchos clubs ofrecen shuttle privado gratis desde hoteles asociados. Si conduces, aparcar en Playa d'en Bossa o San Antonio suele ser gratis pero llena pronto en fin de semana."),
+            ("Consejos para disfrutar la noche ibicenca", "1) Reserva la entrada online con antelaci\u00f3n para ahorrar. 2) Ve pronto (23:00-00:00) para evitar cola y pagar menos. 3) Hidr\u00e1tate: el agua embotellada en el club cuesta unos 10\u20ac pero es fundamental. 4) Combina noche en club con d\u00eda en un beach club (Blue Marlin, Nassau, Nikki Beach) para el efecto Ibiza completo. 5) En <b>\u00bfQui\u00e9n va?</b> puedes ver qu\u00e9 amigos tienen entrada para el mismo club y planificar la noche juntos."),
+        ],
+        "faq": [
+            ("\u00bfCu\u00e1les son las 5 mejores discotecas de Ibiza?", "Las 5 mejores discotecas de Ibiza son Pacha, Ushua\u00efa, Amnesia, H\u00ef Ibiza y DC-10. Todas est\u00e1n en el top mundial del clubbing y ofrecen residencias con los DJs m\u00e1s importantes cada verano."),
+            ("\u00bfCu\u00e1ndo empieza la temporada de fiestas en Ibiza?", "La temporada arranca oficialmente en mayo con las Opening Parties y termina a principios de octubre con las Closing Parties. Los meses de m\u00e1xima actividad son julio y agosto."),
+            ("\u00bfCu\u00e1nto cuesta una entrada de discoteca en Ibiza?", "Entre 40\u20ac y 90\u20ac de media en 2025. Las fechas con DJs de renombre mundial (Guetta, Solomun, Black Coffee) pueden superar los 120\u20ac. Comprar online con antelaci\u00f3n es m\u00e1s barato."),
+            ("\u00bfCu\u00e1l es el mejor d\u00eda para ir de fiesta a Ibiza?", "Cada d\u00eda tiene su fiesta ic\u00f3nica: lunes Circoloco en DC-10, martes ANTS en Ushua\u00efa, mi\u00e9rcoles Pyramid en Amnesia, jueves David Guetta en Ushua\u00efa, viernes Music On en Amnesia, s\u00e1bado H\u00ef Ibiza y domingo Solomun en Pacha."),
+            ("\u00bfC\u00f3mo se llega a las discotecas de Ibiza sin coche?", "El Discob\u00fas (l\u00ednea 9) recorre toda la costa hasta el amanecer por 4\u20ac. Los taxis cuestan entre 20\u20ac y 40\u20ac seg\u00fan la distancia. Muchos hoteles ofrecen shuttle gratis a los clubs asociados."),
+        ],
+        "related_cities": ["madrid", "barcelona", "palma"],
+    },
+    "mejores-discotecas-madrid": {
+        "title": "Las 10 mejores discotecas de Madrid para salir esta noche",
+        "description": "Gu\u00eda de las 10 mejores discotecas de Madrid: Kapital, Fabrik, Teatro Barcel\u00f3, Opium, Icon, Independance Club y m\u00e1s, con precios, m\u00fasica y c\u00f3mo llegar.",
+        "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/madrid-night.jpg",
+        "published": "2025-05-20",
+        "updated": "2025-07-01",
+        "city": "Madrid",
+        "city_slug": "madrid",
+        "sections": [
+            ("Los 10 clubs imprescindibles de Madrid", "Madrid tiene una de las mejores escenas nocturnas de Europa y para todos los gustos: <b>Kapital</b> (7 plantas, cada una con m\u00fasica distinta, la m\u00e1s famosa de Madrid), <b>Fabrik</b> (macro club de techno a las afueras, referente mundial), <b>Teatro Barcel\u00f3</b> (mainstream y comercial, ambiente joven), <b>Opium Madrid</b> (top y r&b, muy internacional), <b>Icon</b> (hip hop y r&b urbano), <b>Independance Club</b> (comercial en Gran V\u00eda), <b>Sala Cool</b> (electr\u00f3nica underground), <b>Mondo Disko</b> (techno y house de culto), <b>Goya Social Club</b> (elegante en el barrio de Salamanca) y <b>Panda Club</b> (nuevo hotspot). Ver <a href=\"/fiestas/madrid\">agenda completa</a>."),
+            ("Zonas de fiesta en Madrid: Gran V\u00eda, Malasa\u00f1a y Salamanca", "<b>Gran V\u00eda / Callao</b> concentra los clubs m\u00e1s grandes y mainstream. <b>Malasa\u00f1a</b> es la zona alternativa e indie con bares y pubs. <b>Chueca</b> tiene ambiente LGTBIQ+ y m\u00e1s abierto. <b>Salamanca</b> es la m\u00e1s pija con clubs elegantes tipo Goya Social Club. <b>Chamber\u00ed</b> para copas de calidad. Y las afueras (Fabrik) para macrofiestas electr\u00f3nicas."),
+            ("Precios de entrada y consumiciones", "La entrada media en Madrid oscila entre <b>15\u20ac y 25\u20ac</b> con una consumici\u00f3n incluida. Los clubs premium (Kapital, Fabrik en noches especiales) pueden llegar a <b>30-40\u20ac</b>. La copa suele costar <b>10-15\u20ac</b> dentro del club. Muchos clubs tienen listas gratis hasta las 2:00 o promociones de \"chicas gratis\" entre semana."),
+            ("Horarios y c\u00f3mo llegar", "La mayor\u00eda abren entre las <b>00:00 y las 6:00</b>, aunque algunos como Fabrik cierran a las 7:00 o 8:00 los s\u00e1bados. El metro cierra a las 1:30, pero hay <b>b\u00fahos</b> (autobuses nocturnos) que recorren toda la ciudad hasta las 6:00. Un Uber/Cabify medio cuesta 8-15\u20ac dentro de la M-30."),
+            ("Consejos para salir en Madrid", "1) Cena tarde (22:00) y llega al club sobre las 1:00, cuando empieza a llenarse. 2) Reserva mesa si vais m\u00e1s de 6, ahorra col\u00e1s y da acceso r\u00e1pido. 3) Ll\u00e9vate DNI/pasaporte, todos piden identificaci\u00f3n. 4) En <a href=\"/fiestas/madrid\">\u00bfQui\u00e9n va?</a> puedes ver qu\u00e9 discotecas tienen ambiente cada noche y quedar con tus amigos."),
+        ],
+        "faq": [
+            ("\u00bfCu\u00e1l es la mejor discoteca de Madrid?", "Kapital es la m\u00e1s famosa y visitada por su tama\u00f1o (7 plantas, cada una con m\u00fasica diferente) y ambiente internacional. Fabrik lidera la escena techno con el mejor sonido de Espa\u00f1a."),
+            ("\u00bfCu\u00e1nto cuesta la entrada a Kapital?", "La entrada a Kapital cuesta entre 15\u20ac y 25\u20ac dependiendo del d\u00eda, con una consumici\u00f3n incluida. Comprando online suele salir 5\u20ac m\u00e1s barato."),
+            ("\u00bfHasta qu\u00e9 hora est\u00e1n abiertas las discotecas en Madrid?", "La mayor\u00eda cierran a las 5:30 o 6:00. Algunos macro clubs como Fabrik amanecen y cierran a las 7:00 u 8:00 de la ma\u00f1ana los s\u00e1bados."),
+            ("\u00bfQu\u00e9 discotecas ponen reggaeton en Madrid?", "Icon Madrid, Kapital (en sus plantas urbanas), Opium y Independance Club programan reggaeton, r&b urbano y hip hop las noches m\u00e1s populares."),
+            ("\u00bfCu\u00e1l es el mejor d\u00eda para salir de fiesta en Madrid?", "Viernes y s\u00e1bado son los m\u00e1s ambiente, pero jueves (\"jueves universitarios\") y el s\u00e1bado noche de Fabrik tambi\u00e9n llenan. Los domingos hay after-hours en algunas salas."),
+        ],
+        "related_cities": ["barcelona", "ibiza", "marbella"],
+    },
+    "discotecas-marbella-puerto-banus": {
+        "title": "Discotecas en Marbella y Puerto Ban\u00fas: gu\u00eda completa 2025",
+        "description": "Las mejores discotecas de Marbella y Puerto Ban\u00fas: Olivia Valere, Pangea, Nikki Beach, Suite Club y m\u00e1s. Precios, dresscode, VIP y c\u00f3mo llegar.",
+        "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/marbella-luxury.jpg",
+        "published": "2025-06-01",
+        "updated": "2025-07-01",
+        "city": "Marbella",
+        "city_slug": "marbella",
+        "sections": [
+            ("Los clubs de lujo m\u00e1s ic\u00f3nicos de Marbella", "Marbella es la capital del <b>lujo nocturno</b> en Espa\u00f1a. <b>Olivia Valere</b> lleva d\u00e9cadas siendo el club m\u00e1s ex\u00f3tico (est\u00e9tica marroqu\u00ed, jardines, piscinas). <b>Pangea Marbella</b> es la nueva estrella con eventos temporada, celebrities y ambiente joven-premium. <b>Nikki Beach</b> combina d\u00eda y noche con su famosa sunset party. <b>Suite Club</b> en Puerto Ban\u00fas atrae al p\u00fablico m\u00e1s glam. <b>La Sala by the Sea</b> y <b>Trocadero Arena</b> completan la oferta con dinner shows premium."),
+            ("Puerto Ban\u00fas: la milla de oro de la noche", "Puerto Ban\u00fas concentra la mayor densidad de ocio nocturno de Marbella. Los mega yates atracan mientras <b>Aqwa Mist</b>, <b>Tibu</b>, <b>Momento</b> y <b>Suite</b> llenan la noche. El paseo tiene decenas de bares (Sinatra Bar, Old Joys) para el pre-drink. Es habitual ver Ferraris, Lamborghinis y celebrities."),
+            ("Precios en Marbella: entrada, copa y VIP", "Marbella es cara: <b>entrada 25-40\u20ac</b>, copa <b>15-20\u20ac</b>, mesa VIP desde <b>800\u20ac</b> (2 botellas) hasta 5.000\u20ac en fechas top. Nikki Beach camas de d\u00eda desde 200\u20ac. Olivia Valere en fin de semana con DJ internacional puede llegar a 60\u20ac de entrada. Pangea con headliner internacional 40-50\u20ac."),
+            ("Dresscode y ambiente", "Marbella es de las pocas ciudades espa\u00f1olas con <b>dresscode estricto</b>. Hombres: pantal\u00f3n largo y camisa (Olivia Valere no admite bermudas), zapato/mocas\u00edn. Mujeres: vestido/traje elegante. Nikki Beach y Ocean Club permiten estilismo m\u00e1s de d\u00eda. Es habitual ver caras conocidas: futbolistas, influencers, aristocracia \u00e1rabe."),
+            ("Consejos para la noche en Marbella", "1) Reserva mesa VIP con antelaci\u00f3n en verano, se agotan. 2) Ll\u00e9vate DNI (control estricto). 3) Combina un beach club (Nikki, Ocean Club) al atardecer y sigue en club a las 00:00. 4) Los taxis son m\u00e1s caros que en otras ciudades (25-40\u20ac una carrera media). 5) Ver <a href=\"/fiestas/marbella\">agenda actualizada de fiestas en Marbella</a> con precios y disponibilidad de entradas."),
+        ],
+        "faq": [
+            ("\u00bfCu\u00e1l es la mejor discoteca de Marbella?", "Olivia Valere es la m\u00e1s ic\u00f3nica desde hace d\u00e9cadas, con su est\u00e9tica marroqu\u00ed y ambiente exclusivo. Pangea Marbella se ha consolidado como la m\u00e1s trendy en los \u00faltimos a\u00f1os."),
+            ("\u00bfCu\u00e1nto cuesta una mesa VIP en Marbella?", "Las mesas VIP arrancan en 800\u20ac (con 2 botellas incluidas) en un club medio y pueden superar los 5.000\u20ac en Nikki Beach o Pangea en fechas top de agosto."),
+            ("\u00bfHay dresscode en las discotecas de Marbella?", "S\u00ed, y es estricto. Hombres: pantal\u00f3n largo, camisa y zapato/mocas\u00edn (nada de bermudas ni chanclas). Mujeres: vestido o estilo elegante. Muchos clubs rechazan la entrada por vestimenta inadecuada."),
+            ("\u00bfPuerto Ban\u00fas o Marbella centro para salir?", "Puerto Ban\u00fas concentra la mayor\u00eda de discotecas grandes (Aqwa Mist, Tibu, Suite Club). Marbella centro tiene m\u00e1s clubs de dinner show (Olivia Valere, Pangea). Depende del ambiente que busques."),
+            ("\u00bfCu\u00e1ndo es la mejor temporada para ir de fiesta a Marbella?", "De junio a septiembre, con el pico absoluto en agosto (\"August in Marbella\") cuando llegan celebrities y los clubs contratan DJs internacionales."),
+        ],
+        "related_cities": ["ibiza", "madrid", "barcelona"],
+    },
+    "mejores-fiestas-barcelona": {
+        "title": "Mejores fiestas y discotecas en Barcelona 2025",
+        "description": "Gu\u00eda de las mejores discotecas de Barcelona: Opium, Pacha Barcelona, Sh\u00f4ko, Bling Bling, Otto Zutz y m\u00e1s. Ambientes, precios y c\u00f3mo llegar.",
+        "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/barcelona-night.jpg",
+        "published": "2025-05-25",
+        "updated": "2025-07-01",
+        "city": "Barcelona",
+        "city_slug": "barcelona",
+        "sections": [
+            ("Discotecas top de Barcelona en 2025", "La escena nocturna barcelonesa combina mar, arquitectura y m\u00fasica. En el <b>Port Ol\u00edmpic</b> se concentran <b>Opium Barcelona</b> (comercial internacional, terraza sobre el mar), <b>Pacha Barcelona</b> (m\u00e1s house y electr\u00f3nica), <b>Sh\u00f4ko</b> (fusi\u00f3n mediterr\u00e1neo-asi\u00e1tica) y <b>CDLC</b>. En la zona alta: <b>Otto Zutz</b> (leyenda de la Barcelona indie), <b>Bling Bling</b> (r&b y urban), <b>Sutton</b> (ambiente pijo). Y para techno: <b>Nitsa Club</b> en Apolo y <b>Razzmatazz</b> con sus 5 salas es imprescindible."),
+            ("Razzmatazz: 5 clubs en uno", "<b>Razzmatazz</b> merece secci\u00f3n propia. En el edificio del Poblenou hay 5 salas simult\u00e1neas: Razz Club (indie/rock), The Loft (electr\u00f3nica), Lolita (pop/comercial), Pop Bar (retro) y Rex Room (hip hop). Con una sola entrada (15-20\u20ac) accedes a todas. Es el club m\u00e1s popular entre estudiantes internacionales y locales."),
+            ("Precios en Barcelona: m\u00e1s barato que Ibiza", "Los precios en Barcelona son m\u00e1s asequibles que en Ibiza y Marbella. <b>Entrada media 15-25\u20ac</b> (con consumici\u00f3n), copa 10-14\u20ac dentro del club, mesa VIP desde 300\u20ac. Muchos clubs tienen listas gratuitas antes de una hora determinada. Los mi\u00e9rcoles universitarios son especialmente baratos."),
+            ("Barrios de fiesta: Poblenou, Ol\u00edmpic y Eixample", "<b>Port Ol\u00edmpic</b> = clubs de playa con turistas internacionales. <b>Poblenou</b> (Razzmatazz, Nitsa) = ambiente underground/electr\u00f3nica. <b>Eixample/Ensanche</b> (Sutton, Sh\u00f4ko) = m\u00e1s pijo y elegante. <b>Gr\u00e0cia</b> tiene bares alternativos ideales para el pre-drink. <b>El Born</b> y <b>Barrio G\u00f3tico</b> son perfectos para cocktails antes de club."),
+            ("Consejos para salir de fiesta en Barcelona", "1) El metro cierra a las 2:00 (los viernes hasta las 5:00) pero hay muchos autobuses nocturnos (N-lines). 2) Reserva online, es 5-10\u20ac m\u00e1s barato. 3) Ve pronto (00:30-01:30) para evitar cola en Opium y Pacha. 4) Cuidado con las carteras en Port Ol\u00edmpic, es zona con m\u00e1s hurtos. 5) Consulta <a href=\"/fiestas/barcelona\">nuestra agenda de fiestas en Barcelona</a> con precios en tiempo real."),
+        ],
+        "faq": [
+            ("\u00bfCu\u00e1l es la mejor discoteca de Barcelona?", "Razzmatazz es la m\u00e1s popular por su tama\u00f1o (5 salas simult\u00e1neas con estilos musicales distintos) y precio asequible. Opium lidera la zona de playa con ambiente internacional."),
+            ("\u00bfCu\u00e1nto cuesta la entrada a Opium Barcelona?", "Entre 20\u20ac y 30\u20ac dependiendo del d\u00eda y DJ, con una consumici\u00f3n incluida. Los d\u00edas de sesi\u00f3n especial con headliner internacional pueden subir a 40\u20ac."),
+            ("\u00bfHasta qu\u00e9 hora abren las discotecas en Barcelona?", "La mayor\u00eda cierran a las 6:00 de la ma\u00f1ana. Razzmatazz, Opium y Pacha son de las que cierran m\u00e1s tarde, algunas noches hasta las 7:00."),
+            ("\u00bfQu\u00e9 zona de Barcelona es mejor para salir?", "Port Ol\u00edmpic si buscas ambiente internacional y clubs con vistas al mar (Opium, Pacha, Sh\u00f4ko). Poblenou si prefieres m\u00fasica electr\u00f3nica o indie (Razzmatazz, Nitsa)."),
+            ("\u00bfEs seguro salir de fiesta en Barcelona?", "S\u00ed, aunque hay que tener cuidado con carteristas en zonas tur\u00edsticas y la playa del Port Ol\u00edmpic. Recomendamos llevar solo lo justo y usar bandolera cruzada delante."),
+        ],
+        "related_cities": ["madrid", "ibiza", "palma"],
+    },
+    "vida-nocturna-palma-de-mallorca": {
+        "title": "Vida nocturna en Palma de Mallorca: gu\u00eda 2025",
+        "description": "Descubre la vida nocturna de Palma de Mallorca: Pacha Mallorca, Tito's, BCM Planet Dance, Fitz, Amok y m\u00e1s. Fiestas, precios, playas y ambiente.",
+        "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/palma-night.jpg",
+        "published": "2025-06-10",
+        "updated": "2025-07-01",
+        "city": "Palma de Mallorca",
+        "city_slug": "palma",
+        "sections": [
+            ("Palma y Magaluf: dos escenas muy distintas", "Mallorca tiene <b>dos escenas de noche</b> muy diferentes. <b>Palma ciudad</b> ofrece clubs elegantes junto al Paseo Mar\u00edtimo (<b>Pacha Mallorca</b>, <b>Social Club</b>, <b>Titos</b>, <b>Garito Caf\u00e9</b>). <b>Magaluf</b>, a 15 minutos, es el epicentro del ocio brit\u00e1nico con <b>BCM Planet Dance</b> (uno de los clubs m\u00e1s grandes de Europa) y una intensa vida nocturna en Punta Ballena."),
+            ("Pacha Mallorca y el Paseo Mar\u00edtimo", "<b>Pacha Mallorca</b> es hermana peque\u00f1a de la ibicenca y ofrece la misma esencia con menos masificaci\u00f3n. Programa DJs internacionales de electr\u00f3nica y house. En el mismo Paseo Mar\u00edtimo est\u00e1n <b>Titos</b> (leyenda desde 1923, cinco d\u00e9cadas de fiestas), <b>Social Club Mallorca</b> (m\u00fasica underground y ambiente joven) y bares como <b>Puro Beach</b>. Ver <a href=\"/fiestas/palma\">agenda semanal de Palma</a>."),
+            ("Clubs alternativos: Fitz, Amok y Over Club", "En el centro de Palma hay una escena m\u00e1s alternativa e independiente. <b>Fitz Mallorca</b> combina cocktail bar y club con DJs locales. <b>Amok</b> es referencia electr\u00f3nica underground con line-ups muy cuidados. <b>Over Club</b>, <b>Lunita</b>, <b>Mar Salada</b> y <b>Luna Palma</b> completan la oferta de nichos musicales espec\u00edficos."),
+            ("BCM Planet Dance y Magaluf", "<b>BCM</b> es uno de los clubs m\u00e1s grandes del mundo (capacidad 5.000 personas) con l\u00e1seres, pantallas gigantes y DJs internacionales de EDM. Entrada 25-40\u20ac. En Punta Ballena, la calle de fiesta de Magaluf, hay decenas de pubs de tradici\u00f3n brit\u00e1nica con happy hours desde las 20:00. Ambiente m\u00e1s j\u00f3ven y \"party holidays\"."),
+            ("Consejos y c\u00f3mo llegar", "1) El bus n\u00b3 4 conecta Palma con Magaluf hasta las 3:00. 2) Un taxi Palma-Magaluf ronda los 20\u20ac. 3) Ll\u00e9vate DNI, el control es exigente. 4) Reserva mesa en Pacha Mallorca en fechas top de agosto. 5) Combina noche en club con d\u00eda en <b>Nikki Beach</b> o <b>Purobeach</b>. 6) En <b>\u00bfQui\u00e9n va?</b> puedes ver qu\u00e9 amigos van a cada fiesta y quedar antes."),
+        ],
+        "faq": [
+            ("\u00bfCu\u00e1l es la mejor discoteca de Palma de Mallorca?", "Pacha Mallorca lidera la escena por su marca internacional y line-up. Titos es la m\u00e1s hist\u00f3rica (1923) y sigue siendo referente en el Paseo Mar\u00edtimo. BCM Planet Dance en Magaluf es la m\u00e1s grande."),
+            ("\u00bfCu\u00e1nto cuesta la entrada a BCM Mallorca?", "Entre 25\u20ac y 40\u20ac dependiendo del DJ y la noche, con consumici\u00f3n incluida en algunas fechas. Los headliners internacionales de EDM pueden subir el precio a 50\u20ac."),
+            ("\u00bfPalma o Magaluf para salir de fiesta?", "Palma ciudad para ambiente m\u00e1s elegante y variado (electr\u00f3nica, house). Magaluf para party holidays estilo brit\u00e1nico, macro clubs y ambiente joven. Ambas escenas est\u00e1n a 15 minutos en coche."),
+            ("\u00bfHasta qu\u00e9 hora abren las discotecas en Mallorca?", "En Palma la mayor\u00eda cierran entre las 5:00 y las 6:00. En Magaluf, BCM y clubs de Punta Ballena pueden cerrar a las 6:00 o 7:00 seg\u00fan la noche."),
+            ("\u00bfHay ambiente todo el a\u00f1o o solo en verano?", "El pico es de mayo a octubre. En invierno, la escena se reduce pero sigue habiendo actividad los fines de semana en Palma centro (Fitz, Amok, Social Club). Magaluf pr\u00e1cticamente cierra en invierno."),
+        ],
+        "related_cities": ["ibiza", "barcelona", "madrid"],
+    },
+    "como-conseguir-entradas-discoteca-baratas": {
+        "title": "C\u00f3mo conseguir entradas de discoteca baratas (o gratis) en 2025",
+        "description": "Trucos y consejos para conseguir entradas de discoteca m\u00e1s baratas o gratis: listas VIP, guest-list, pre-venta online, promotores, apps y c\u00f3digos descuento.",
+        "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/tickets-tips.jpg",
+        "published": "2025-06-05",
+        "updated": "2025-07-01",
+        "city": None,
+        "city_slug": None,
+        "sections": [
+            ("1. Compra la entrada online con antelaci\u00f3n", "El truco m\u00e1s efectivo. En pr\u00e1cticamente todos los clubs de <b>Ibiza, Marbella, Madrid y Barcelona</b>, la entrada anticipada online cuesta entre un <b>20% y un 40% menos</b> que en taquilla. Adem\u00e1s te evitas la cola de compra. Muchos clubs abren pre-venta con precio reducido las primeras 100-500 entradas."),
+            ("2. \u00fanete a la guest-list o lista gratis", "Casi todos los clubs tienen <b>guest-list</b> gratuita hasta cierta hora (normalmente entre las 23:00 y las 00:30). Basta con apuntarse en la web del club, en Instagram o a trav\u00e9s de un promotor. En Madrid y Barcelona es muy habitual entrar gratis hasta las 2:00 apunt\u00e1ndote con antelaci\u00f3n."),
+            ("3. Contacta con promotores locales", "Cada club tiene <b>promotores independientes</b> que trabajan por comisi\u00f3n. Ellos consiguen descuentos exclusivos, entrada VIP sin cola o incluso gratis a cambio de que llenes con tu grupo. Los encuentras en Instagram (buscar por hashtags como #promoibiza, #promomadrid). \u00bfQui\u00e9n va? tiene un sistema de <a href=\"/feed\">c\u00f3digo referido</a> que ahorra dinero a ambas partes."),
+            ("4. Aprovecha noches gratis y \"chicas gratis\"", "Muchas discotecas en Espa\u00f1a tienen <b>noches con entrada libre</b> entre semana (jueves universitarios) o promociones tipo <b>\"chicas gratis hasta cierta hora\"</b>. Consulta la agenda semanal para no perderte estos d\u00edas."),
+            ("5. Reserva mesa entre amigos", "Si vais 6-10 personas, la <b>mesa VIP</b> puede salir m\u00e1s barata que pagar entrada + copas individualmente. Una mesa desde 400\u20ac incluye entrada, botella y acceso r\u00e1pido para todo el grupo. En clubs de Marbella y Puerto Ban\u00fas es especialmente rentable."),
+            ("6. Suscr\u00edbete a newsletters y apps", "Los clubs mandan <b>c\u00f3digos descuento</b> por email y notificaciones push. Descarga <a href=\"/feed\">\u00bfQui\u00e9n va?</a> y activa las notificaciones para recibir alertas de bajadas de precio, entradas de \u00faltima hora y guest-list gratis."),
+            ("7. Ve pronto y evita fechas top", "Las mismas discotecas cobran precios distintos seg\u00fan la noche. Un mi\u00e9rcoles en Amnesia puede costar 30\u20ac mientras que un s\u00e1bado con David Guetta pasa de 100\u20ac. Ve en d\u00edas laborables o fuera de fechas top (agosto en Ibiza) y ahorra hasta un 60%."),
+        ],
+        "faq": [
+            ("\u00bfC\u00f3mo entrar gratis a una discoteca?", "Ap\u00fantate a la guest-list del club antes de las 23:00, contacta con un promotor local, o busca noches con entrada libre entre semana (jueves universitarios, promos de \"chicas gratis\")."),
+            ("\u00bfCu\u00e1nto se ahorra comprando entrada online?", "Entre un 20% y un 40% respecto a la taquilla, dependiendo del club. Adem\u00e1s te evitas la cola de compra. Los precios pre-venta iniciales suelen ser los m\u00e1s baratos."),
+            ("\u00bfQu\u00e9 es un promotor de discoteca?", "Un intermediario independiente que trabaja por comisi\u00f3n consiguiendo p\u00fablico. A cambio ofrece descuentos, entrada VIP o gratis. Se contactan por Instagram o apps especializadas."),
+            ("\u00bfLas mesas VIP salen m\u00e1s baratas que la entrada?", "Depende del tama\u00f1o del grupo. Si vais 8-10 personas, una mesa desde 500\u20ac (con botella) puede salir m\u00e1s barata que entrada + copas individuales, y ganas comodidad y acceso r\u00e1pido."),
+            ("\u00bfCu\u00e1ndo son m\u00e1s baratas las entradas de discoteca?", "Entre semana (mi\u00e9rcoles y jueves), en pre-venta anticipada, en meses de baja temporada (mayo, octubre en Ibiza) y en las primeras horas de apertura."),
+        ],
+        "related_cities": ["ibiza", "madrid", "barcelona", "palma", "marbella"],
+    },
+}
+
+
+def _blog_url(front: str, slug: str = "") -> str:
+    if not slug:
+        return f"{front}/blog"
+    return f"{front}/blog/{slug}"
+
+
+def _blog_article_jsonld(post: dict, canonical: str, front: str) -> str:
+    """Article + BlogPosting JSON-LD (Google-friendly)."""
+    obj = {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": post["title"],
+        "description": post["description"],
+        "image": post.get("hero_image") or f"{front}/icons/icon-512.png",
+        "datePublished": post["published"],
+        "dateModified": post.get("updated") or post["published"],
+        "inLanguage": "es",
+        "url": canonical,
+        "mainEntityOfPage": {"@type": "WebPage", "@id": canonical},
+        "author": {"@type": "Organization", "name": "\u00bfQui\u00e9n va?", "url": front + "/"},
+        "publisher": {
+            "@type": "Organization", "name": "\u00bfQui\u00e9n va?", "url": front + "/",
+            "logo": {"@type": "ImageObject", "url": front + "/icons/icon-512.png", "width": 512, "height": 512},
+        },
+    }
+    return json.dumps(obj, ensure_ascii=False)
+
+
+def _blog_common_css() -> str:
+    return (
+        ".blogwrap{max-width:820px;margin:0 auto;padding:0 20px}"
+        ".blogtitle{font-size:36px;line-height:1.15;margin:28px 0 12px;color:#fff;font-weight:800;letter-spacing:-0.5px}"
+        ".blogmeta{color:#9aa;font-size:13px;margin-bottom:24px}"
+        ".blogmeta a{color:#c9b3ff;text-decoration:none}"
+        ".bloghero{width:100%;height:auto;border-radius:16px;margin:0 0 28px;display:block;object-fit:cover;max-height:420px}"
+        ".blogsec h2{font-size:24px;margin:34px 0 12px;color:#fff;font-weight:700}"
+        ".blogsec p{color:#d8dde3;line-height:1.65;font-size:16.5px;margin:0 0 14px}"
+        ".blogsec a{color:#c9b3ff;text-decoration:underline}"
+        ".blogsec b{color:#fff;font-weight:600}"
+        ".bloglist{list-style:none;padding:0;margin:12px 0 28px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}"
+        ".blogcard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden}"
+        ".blogcard a{display:block;padding:18px;color:#fff;text-decoration:none}"
+        ".blogcard b{display:block;font-size:16px;margin-bottom:6px;line-height:1.3}"
+        ".blogcard small{color:#9aa;font-size:12.5px;line-height:1.4;display:block}"
+        ".blogfaq{margin:36px 0}"
+        ".blogfaq h2{font-size:24px;margin:0 0 12px;color:#fff}"
+        ".blogfaq details{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin-bottom:8px}"
+        ".blogfaq summary{color:#fff;font-weight:600;cursor:pointer;font-size:15.5px}"
+        ".blogfaq details[open] summary{margin-bottom:8px}"
+        ".blogfaq p{color:#d8dde3;margin:0;font-size:15px;line-height:1.55}"
+        ".relband{margin:36px 0;padding:20px;background:rgba(160,120,255,.08);border:1px solid rgba(160,120,255,.2);border-radius:16px}"
+        ".relband b{color:#fff;display:block;margin-bottom:10px}"
+        ".relband a{display:inline-block;margin:4px 8px 4px 0;padding:6px 12px;background:rgba(255,255,255,.06);border-radius:20px;color:#fff;text-decoration:none;font-size:14px}"
+    )
+
+
+async def _render_blog_index(request: Request):
+    import html as _html
+    e = _html.escape
+    front = _frontend_base(request)
+    canonical = _blog_url(front)
+    posts = sorted(_BLOG_POSTS.items(), key=lambda kv: kv[1]["published"], reverse=True)
+
+    cards = []
+    itemlist = []
+    for i, (slug, p) in enumerate(posts, start=1):
+        url = _blog_url(front, slug)
+        cards.append(
+            f'<li class="blogcard"><a href="{e(url)}"><b>{e(p["title"])}</b>'
+            f'<small>{e(p["description"])}</small></a></li>'
+        )
+        itemlist.append({"@type": "ListItem", "position": i, "url": url, "name": p["title"]})
+
+    bc_items = [("Inicio", f"{front}/"), ("Blog", canonical)]
+    bc_html = _breadcrumb_html(bc_items, e)
+    bc_json = _breadcrumb_jsonld(bc_items)
+    il_json = json.dumps({"@context": "https://schema.org", "@type": "ItemList",
+                          "name": "Art\u00edculos del blog", "itemListElement": itemlist}, ensure_ascii=False)
+    org_ld = _org_website_jsonld(front)
+
+    title = "Blog: gu\u00edas de fiestas y discotecas en Espa\u00f1a | \u00bfQui\u00e9n va?"
+    desc = "Gu\u00edas y consejos para salir de fiesta: mejores discotecas de Ibiza, Madrid, Barcelona, Palma y Marbella; entradas baratas y planes por ciudad."
+    css = _SEO_CSS + _blog_common_css()
+
+    html_out = f"""<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<title>{e(title)}</title>
+<meta name="description" content="{e(desc)}">
+<link rel="canonical" href="{e(canonical)}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
+<meta property="og:title" content="{e(title)}"><meta property="og:description" content="{e(desc)}">
+<meta property="og:url" content="{e(canonical)}">
+<meta property="og:image" content="{front}/icons/icon-512.png">
+<meta name="twitter:card" content="summary_large_image">
+{org_ld}
+<script type="application/ld+json">{bc_json}</script>
+<script type="application/ld+json">{il_json}</script>
+{_SEO_FONTS}
+<style>{css}</style></head>
+<body><div class="bgfx"></div>
+{_seo_topbar(front, "es", e)}
+<div class="wrap"><div class="blogwrap">
+{bc_html}
+<h1 class="blogtitle">Blog: gu\u00edas de fiestas por ciudad</h1>
+<p class="blogmeta">Aprende a moverte por la noche espa\u00f1ola: gu\u00edas por ciudad, precios reales, trucos de entradas y todo lo que necesitas para no perderte el mejor plan.</p>
+<ul class="bloglist">{''.join(cards)}</ul>
+</div></div></body></html>"""
+    return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
+                             headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
+
+
+async def _render_blog_post(slug: str, request: Request):
+    import html as _html
+    e = _html.escape
+    front = _frontend_base(request)
+    post = _BLOG_POSTS.get(slug)
+    if not post:
+        # Soft 404: redirect to blog index
+        html_out = f'<!doctype html><meta http-equiv="refresh" content="0;url={front}/blog"><script>location.replace("{front}/blog")</script>'
+        return StarletteResponse(content=html_out, status_code=404, media_type="text/html; charset=utf-8")
+
+    canonical = _blog_url(front, slug)
+    hero = post.get("hero_image") or f"{front}/icons/icon-512.png"
+
+    # Build sections HTML
+    secs_html = []
+    for (h2, body) in post["sections"]:
+        secs_html.append(f'<section class="blogsec"><h2>{e(h2)}</h2><p>{body}</p></section>')
+    sections_html = "".join(secs_html)
+
+    # FAQ HTML + JSON-LD
+    faq_html = ""
+    faq_json = ""
+    if post.get("faq"):
+        details = "".join(
+            f'<details><summary>{e(q)}</summary><p>{e(a)}</p></details>'
+            for q, a in post["faq"]
+        )
+        faq_html = f'<div class="blogfaq"><h2>Preguntas frecuentes</h2>{details}</div>'
+        faq_json = f'<script type="application/ld+json">{_faq_jsonld(post["faq"])}</script>'
+
+    # Related cities band
+    rel_html = ""
+    if post.get("related_cities"):
+        chips = []
+        for cs in post["related_cities"]:
+            for c in SUPPORTED_CITIES:
+                if _city_slug(c["id"]) == cs:
+                    chips.append(f'<a href="{e(_city_paths(front, cs)["es"])}">{c.get("emoji","")} Fiestas en {e(c["label"])}</a>')
+                    break
+        if chips:
+            rel_html = f'<div class="relband"><b>Sigue explorando</b>{"".join(chips)}</div>'
+
+    # Breadcrumb + Article JSON-LD
+    bc_items = [("Inicio", f"{front}/"), ("Blog", _blog_url(front)), (post["title"], canonical)]
+    bc_html = _breadcrumb_html(bc_items, e)
+    bc_json = _breadcrumb_jsonld(bc_items)
+    article_json = _blog_article_jsonld(post, canonical, front)
+    org_ld = _org_website_jsonld(front)
+
+    css = _SEO_CSS + _blog_common_css()
+    published_h = post["published"]
+    updated_h = post.get("updated") or published_h
+    city_link = ""
+    if post.get("city_slug"):
+        city_link = f' · <a href="{e(_city_paths(front, post["city_slug"])["es"])}">Fiestas en {e(post.get("city") or post["city_slug"])}</a>'
+
+    html_out = f"""<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<title>{e(post["title"])} | \u00bfQui\u00e9n va?</title>
+<meta name="description" content="{e(post["description"])}">
+<link rel="canonical" href="{e(canonical)}">
+<meta property="og:type" content="article"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
+<meta property="og:title" content="{e(post['title'])}"><meta property="og:description" content="{e(post['description'])}">
+<meta property="og:url" content="{e(canonical)}">
+<meta property="og:image" content="{e(hero)}">
+<meta property="article:published_time" content="{e(published_h)}">
+<meta property="article:modified_time" content="{e(updated_h)}">
+<meta name="twitter:card" content="summary_large_image">
+{org_ld}
+<script type="application/ld+json">{article_json}</script>
+<script type="application/ld+json">{bc_json}</script>
+{faq_json}
+{_SEO_FONTS}
+<style>{css}</style></head>
+<body><div class="bgfx"></div>
+{_seo_topbar(front, "es", e)}
+<div class="wrap"><div class="blogwrap">
+{bc_html}
+<h1 class="blogtitle">{e(post["title"])}</h1>
+<p class="blogmeta">Publicado el {e(published_h)} · Actualizado el {e(updated_h)}{city_link}</p>
+<img class="bloghero" src="{e(hero)}" alt="{e(post['title'])}" loading="eager" fetchpriority="high" />
+{sections_html}
+{faq_html}
+{rel_html}
+</div></div></body></html>"""
+    return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
+                             headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
+
+
+@api_router.api_route("/blog", methods=["GET", "HEAD"])
+async def seo_blog_index(request: Request):
+    return await _render_blog_index(request)
+
+
+@api_router.api_route("/blog/{slug}", methods=["GET", "HEAD"])
+async def seo_blog_post(slug: str, request: Request):
+    return await _render_blog_post(slug, request)
+
+
+async def _sitemap_blog_xml(front: str, today: str) -> str:
+    parts = [f"<url><loc>{_blog_url(front)}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq></url>"]
+    for slug, p in _BLOG_POSTS.items():
+        lm = (p.get("updated") or p.get("published") or today)
+        img = p.get("hero_image") or ""
+        img_xml = ""
+        if img.startswith("http"):
+            img_xml = f'<image:image><image:loc>{img.replace("&", "&amp;")}</image:loc></image:image>'
+        parts.append(
+            f'<url><loc>{_blog_url(front, slug)}</loc><lastmod>{lm}</lastmod>'
+            f'<changefreq>monthly</changefreq>{img_xml}</url>'
+        )
+    return _sitemap_urlset(parts)
+
+
+@api_router.api_route("/sitemap-blog.xml", methods=["GET", "HEAD"])
+async def seo_sitemap_blog(request: Request):
+    front = _frontend_base(request)
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    return _sitemap_response(await _sitemap_blog_xml(front, today))
+
+
+
+
 # --- Venue (club) pages -----------------------------------------------------
 _VENUE_T = {
     "es": {
@@ -2378,7 +2773,7 @@ async def _sitemap_venues_xml(front: str, today: str) -> str:
 
 
 def _sitemap_index_xml(front: str, today: str) -> str:
-    children = [f"{front}/sitemap-cities.xml", f"{front}/sitemap-venues.xml"]
+    children = [f"{front}/sitemap-cities.xml", f"{front}/sitemap-venues.xml", f"{front}/sitemap-blog.xml"]
     children += [f"{front}/sitemap-events-{_city_slug(c['id'])}.xml" for c in SUPPORTED_CITIES]
     body = "".join(f"<sitemap><loc>{u}</loc><lastmod>{today}</lastmod></sitemap>" for u in children)
     return ('<?xml version="1.0" encoding="UTF-8"?>'
