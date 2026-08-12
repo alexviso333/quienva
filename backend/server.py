@@ -234,6 +234,32 @@ def _ct_night_date(date_str: str, time_str: str) -> str:
     return str(date_str or "")
 
 
+_CT_URL_KEY_RE = re.compile(
+    r"/clubbing/([a-z0-9\-]+)(?:/([a-z0-9\-]+))?(?:/(\d{4}-\d{2}-\d{2}))?")
+
+
+def _ct_url_key(url: str):
+    """Canonical (venue_slug, event_slug, date) key for a clubtickets.com URL,
+    ignoring the query string (?aff=...). Used to line up a party stored on an
+    event (commission_url) with a party in the affiliate panel — the same triple
+    parse_panel produces — so the coverage panel can tell matched vs unmatched
+    regardless of aff-code re-encoding. Returns None if the URL isn't a
+    clubtickets party URL with all three parts."""
+    if not url:
+        return None
+    try:
+        path = urlparse(url).path
+    except Exception:
+        path = url.split("?")[0]
+    m = _CT_URL_KEY_RE.search(path or "")
+    if not m:
+        return None
+    vslug, eslug, d = m.group(1), m.group(2), m.group(3)
+    if not vslug or not eslug or not d:
+        return None
+    return (vslug, eslug, d)
+
+
 def _event_is_mine(ev: dict) -> bool:
     """True if this event earns us commission: either a FourVenues party we carry
     in our promoter profile, OR a party whose ticket link goes through ClubTickets
@@ -10654,6 +10680,26 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
             await _notify_event_audience(existing["id"], "event_renamed", new_name, body)
         except Exception:
             pass
+    # Affiliate-link FLIP alert: the buy link crossed the "earns us commission"
+    # line since the last run — either it LOST our ClubTickets ?aff link (now a
+    # plain direct link → no commission) or it GAINED it (now goes through us).
+    # We only care about a genuine change on an EXISTING scraped event that
+    # already had a link (not the first time it's set). Recorded in the changelog
+    # + per-event history; admins get ONE grouped push per run (see
+    # _notify_admins_affiliate_flips), never one-per-event, so a mass re-point
+    # (e.g. after fixing the matching) can't spam.
+    if "commission_url" in patch:
+        _old_url = existing.get("commission_url", "") or ""
+        _new_url = patch.get("commission_url", "") or ""
+        if _old_url and _new_url != _old_url:
+            _old_ours = _is_our_clubtickets_url(_old_url)
+            _new_ours = _is_our_clubtickets_url(_new_url)
+            if _old_ours != _new_ours:
+                _direction = "lost" if _old_ours and not _new_ours else "gained"
+                _flip_extra = {"direction": _direction,
+                               "old_url": _old_url[:400], "new_url": _new_url[:400]}
+                await _record_scrape_change(batch_id, "affiliate_flip", existing, _flip_extra)
+                await _record_event_history(existing["id"], "affiliate_flip", "scraper", _flip_extra)
     return "updated"
 
 
@@ -10731,6 +10777,7 @@ async def _enforce_clubtickets_affiliate(venue: dict, primary: list) -> list:
 
 async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
     """Run one venue's scraper and apply diffs. Returns a summary."""
+    _standalone = not batch_id
     if not batch_id:
         batch_id = uuid.uuid4().hex
     start = time.time()
@@ -10826,7 +10873,54 @@ async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
         )
     except Exception:
         pass
+    # Standalone (single-venue admin) run: send the grouped affiliate-flip alert
+    # now (a full run-all sends it once at the end instead — see run_all_scrapers).
+    if _standalone:
+        try:
+            await _notify_admins_affiliate_flips(batch_id, venue.get("name"))
+        except Exception:
+            pass
     return summary
+
+
+async def _notify_admins_affiliate_flips(batch_id: str, venue_name: str = None):
+    """Send ONE grouped notification to every admin summarising the affiliate-link
+    flips recorded in this scrape batch (parties that changed from OUR ClubTickets
+    ?aff link to a plain direct link, or vice-versa). Grouped on purpose so a mass
+    re-point never floods admins with one push per party. Opt-out via app_settings
+    key 'admin_affiliate_flip_alerts' (ON by default). Never raises."""
+    try:
+        s = await db.app_settings.find_one({"key": "admin_affiliate_flip_alerts"}, {"_id": 0})
+        if s is not None and s.get("value") is False:
+            return  # disabled by admin
+        q = {"batch_id": batch_id, "kind": "affiliate_flip"}
+        if venue_name:
+            q["venue"] = venue_name
+        flips = []
+        async for c in db.scrape_changelog.find(q, {"_id": 0}):
+            flips.append(c)
+        if not flips:
+            return
+        lost = [f for f in flips if f.get("direction") == "lost"]
+        gained = [f for f in flips if f.get("direction") == "gained"]
+        parts = []
+        if lost:
+            parts.append(f"{len(lost)} pasaron a enlace directo (sin comisión)")
+        if gained:
+            parts.append(f"{len(gained)} pasaron a tu enlace de afiliado")
+        detail = " · ".join(parts) if parts else f"{len(flips)} cambios"
+        # A couple of concrete examples so the alert is actionable at a glance.
+        sample = "; ".join(
+            f"{(f.get('event_name') or '¿?')[:30]} ({'→directo' if f.get('direction') == 'lost' else '→afiliado'})"
+            for f in flips[:3]
+        )
+        msg = f"🔀 Enlaces de venta: {detail}." + (f" Ej.: {sample}" if sample else "")
+        data = {"type": "admin_affiliate_flip", "batch_id": batch_id,
+                "lost": len(lost), "gained": len(gained), "url": "/admin"}
+        async for a in db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1}):
+            await create_notification(a["user_id"], "admin_affiliate_flip", msg, data)
+    except Exception as e:
+        logger.warning(f"[affiliate-flip-alert] failed: {e}")
 
 
 async def run_all_scrapers():
@@ -10896,6 +10990,11 @@ async def run_all_scrapers():
     # promoter link; everything else keeps its normal link.
     try:
         await refresh_affiliate_events()
+    except Exception:
+        pass
+    # One grouped admin alert for all affiliate-link flips detected this run.
+    try:
+        await _notify_admins_affiliate_flips(batch_id)
     except Exception:
         pass
     return results
@@ -10987,7 +11086,7 @@ async def admin_scrape_changelog(limit: int = 80, admin: dict = Depends(require_
     # Show the most recent changes overall (across runs), newest first, capped.
     async for c in db.scrape_changelog.find({}, {"_id": 0}).sort("created_at", -1).limit(limit):
         entries.append(c)
-    counts = {"new": 0, "price_up": 0, "price_down": 0, "state": 0, "sold_out": 0, "on_sale": 0, "renamed": 0}
+    counts = {"new": 0, "price_up": 0, "price_down": 0, "state": 0, "sold_out": 0, "on_sale": 0, "renamed": 0, "affiliate_flip": 0}
     last_batch_id = (last or {}).get("batch_id")
     last_run_counts = dict(counts)
     for e in entries:
@@ -11098,6 +11197,110 @@ async def admin_affiliate_refresh(admin: dict = Depends(require_admin)):
     """Manually re-read our affiliate events from FourVenues (also runs auto every 20 min)."""
     n = await refresh_affiliate_events()
     return {"slug": AFFILIATE_SLUG, "mine_count": n}
+
+
+@app.get("/api/admin/clubtickets-coverage")
+async def admin_clubtickets_coverage(admin: dict = Depends(require_admin), days: int = 120):
+    """Coverage of OUR ClubTickets affiliate panel: for every party we carry (per
+    club, per date) tell whether it is currently LIVE in the app through our ?aff
+    link (matched) or MISSING (unmatched) — so the owner can spot parties we're
+    leaving on the table. Matching is by the canonical (club, party, date) key of
+    the buy link, so aff-code re-encoding never breaks it. Upcoming only."""
+    from scrapers.clubtickets import get_panel_index, _INDEX_CACHE
+    try:
+        idx = await get_panel_index(CLUBTICKETS_LINKS_URL)
+    except Exception:
+        idx = {}
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    horizon = (today + timedelta(days=max(1, min(days, 400)))).isoformat()
+    today_s = today.isoformat()
+
+    # club slug -> display name (from our seed venues: ct_slug or native slug).
+    slug_name: dict = {}
+    try:
+        for v in _SEED_VENUES:
+            ct = v.get("ct_slug") or (v.get("slug") if v.get("adapter_type") == "clubtickets" else None)
+            if ct:
+                slug_name[ct] = v.get("name", ct)
+    except Exception:
+        pass
+
+    # DB index: upcoming events whose buy link is a clubtickets party URL.
+    db_idx: dict = {}
+    async for ev in db.events.find(
+            {"date": {"$gte": today_s}},
+            {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1,
+             "commission_url": 1, "price_tiers": 1, "sale_state": 1}):
+        key = _ct_url_key(ev.get("commission_url", ""))
+        if key:
+            db_idx[key] = ev
+
+    venues_out = []
+    tot_parties = tot_matched = tot_price = 0
+    for slug, parties in idx.items():
+        rows = []
+        for p in parties:
+            d = p.get("date") or ""
+            if not d or d < today_s or d > horizon:
+                continue
+            ev = db_idx.get((slug, p.get("event_slug") or "", d))
+            matched = ev is not None
+            has_price = bool(ev and ev.get("price_tiers"))
+            rows.append({
+                "name": p.get("name") or (p.get("event_slug") or "").replace("-", " ").title(),
+                "date": d,
+                "matched": matched,
+                "has_price": has_price,
+                "in_app_name": (ev or {}).get("name") if matched else None,
+                "event_id": (ev or {}).get("id") if matched else None,
+                "sale_state": (ev or {}).get("sale_state") if matched else None,
+                "url": p.get("url") or "",
+            })
+        if not rows:
+            continue
+        rows.sort(key=lambda r: (r["date"], r["name"]))
+        m = sum(1 for r in rows if r["matched"])
+        pr = sum(1 for r in rows if r["has_price"])
+        tot_parties += len(rows); tot_matched += m; tot_price += pr
+        venues_out.append({
+            "slug": slug,
+            "name": slug_name.get(slug, slug.replace("-", " ").title()),
+            "total": len(rows), "matched": m, "unmatched": len(rows) - m,
+            "with_price": pr, "parties": rows,
+        })
+    venues_out.sort(key=lambda v: (-v["unmatched"], v["name"]))
+    ts = _INDEX_CACHE.get("ts") or 0.0
+    return {
+        "aff_code": CLUBTICKETS_AFF,
+        "updated_at": (datetime.fromtimestamp(ts, timezone.utc).isoformat() if ts else None),
+        "totals": {"parties": tot_parties, "matched": tot_matched,
+                   "unmatched": tot_parties - tot_matched, "with_price": tot_price},
+        "venues": venues_out,
+    }
+
+
+class AffiliateFlipAlertsInput(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/admin/settings/affiliate-flip-alerts")
+async def admin_get_affiliate_flip_alerts(admin: dict = Depends(require_admin)):
+    """Whether admins get a grouped alert when parties change buy link
+    affiliate<->direct after a re-scrape (ON by default)."""
+    s = await db.app_settings.find_one({"key": "admin_affiliate_flip_alerts"}, {"_id": 0})
+    enabled = not (s is not None and s.get("value") is False)
+    return {"enabled": enabled}
+
+
+@app.put("/api/admin/settings/affiliate-flip-alerts")
+async def admin_set_affiliate_flip_alerts(inp: AffiliateFlipAlertsInput, admin: dict = Depends(require_admin)):
+    await db.app_settings.update_one(
+        {"key": "admin_affiliate_flip_alerts"},
+        {"$set": {"key": "admin_affiliate_flip_alerts", "value": bool(inp.enabled),
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"enabled": bool(inp.enabled)}
 
 
 async def _matching_event_venue_names(venue: str) -> list:

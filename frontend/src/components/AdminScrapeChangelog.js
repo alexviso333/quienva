@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import {
-  Sparkles, TrendingUp, TrendingDown, Ticket, Flame, Lock, Loader2, RefreshCw, Tag,
+  Sparkles, TrendingUp, TrendingDown, Ticket, Flame, Lock, Loader2, RefreshCw, Tag, Shuffle,
 } from "lucide-react";
 
 const KIND_META = {
@@ -13,6 +13,7 @@ const KIND_META = {
   state: { label: "Pocas entradas", icon: Flame, cls: "text-orange-300 bg-orange-400/15" },
   sold_out: { label: "Agotado", icon: Lock, cls: "text-white/60 bg-white/10" },
   renamed: { label: "Nuevo nombre", icon: Tag, cls: "text-fuchsia-300 bg-fuchsia-400/15" },
+  affiliate_flip: { label: "Cambio de enlace", icon: Shuffle, cls: "text-amber-300 bg-amber-400/15" },
 };
 
 function whenText(iso) {
@@ -88,6 +89,7 @@ export default function AdminScrapeChangelog() {
             if (e.kind === "price_up" && e.new_price != null) detail = `→ ${Math.round(e.new_price)}€`;
             else if (e.kind === "price_down" && e.new_price != null) detail = `→ desde ${Math.round(e.new_price)}€`;
             else if (e.kind === "renamed" && e.old_name) detail = `(antes: ${e.old_name})`;
+            else if (e.kind === "affiliate_flip") detail = e.direction === "lost" ? "→ enlace directo (sin comisión)" : "→ tu enlace de afiliado";
             else if (e.new_state) detail = `→ ${e.new_state.replace(/_/g, " ")}`;
             return (
               <button

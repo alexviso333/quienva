@@ -13,6 +13,7 @@ import AdminVenuesPanel from "@/components/AdminVenuesPanel";
 import AdminVenuePriority from "@/components/AdminVenuePriority";
 import AdminScrapeChangelog from "@/components/AdminScrapeChangelog";
 import AdminAffiliatePanel from "@/components/AdminAffiliatePanel";
+import AdminClubTicketsCoverage from "@/components/AdminClubTicketsCoverage";
 import AdminEventStats from "@/components/AdminEventStats";
 import AdminNotifyComposer from "@/components/AdminNotifyComposer";
 
@@ -272,6 +273,7 @@ export default function AdminDashboard() {
       {tab === "scrapers" && (
         <div className="px-4 pt-4">
           <AdminScrapeChangelog />
+          <AdminClubTicketsCoverage />
           <AdminAffiliatePanel />
           <AdminScrapersPanel />
           <AdminVenuePriority />

@@ -116,6 +116,83 @@ user_problem_statement: |
   código único y puntos para ambas partes.
 
 backend:
+  - task: "ClubTickets coverage panel (/api/admin/clubtickets-coverage) — matched vs unmatched affiliate parties"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          NUEVO endpoint GET /api/admin/clubtickets-coverage (admin). Lee el panel de afiliado
+          (get_panel_index) y, por cada fiesta que llevamos (club+fecha), indica si está VIVA en la
+          app con nuestro enlace ?aff (matched) o falta (unmatched), y si tiene precio real
+          (has_price = emparejada con fuente primaria) o es solo-ClubTickets. Match por clave
+          canónica (slug, event_slug, fecha) del commission_url via _ct_url_key() (ignora ?aff).
+          Devuelve totals + venues[] (ordenados por unmatched desc) con parties[]. Solo próximas
+          (<= hoy+120d por defecto, param days). Verificado con curl+admin: 200, 15 clubs, 609
+          fiestas, 154 con precio. Helper _ct_url_key añadido junto a _ct_night_date.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL CLUBTICKETS COVERAGE PANEL REQUIREMENTS (4 test scenarios, 100% pass):
+          ✅ (1) GET /api/admin/clubtickets-coverage as admin → 200 with correct JSON structure.
+          - All required keys present: aff_code (string: "CT226"), updated_at, totals, venues.
+          - totals has all required int fields: parties (609), matched, unmatched, with_price.
+          - Validated: matched + unmatched == parties (609 total parties).
+          - venues is a non-empty list with 15 clubs (expected ~15 Ibiza clubs).
+          - Each venue has all required keys: slug, name, total, matched, unmatched, with_price, parties.
+          - Each party has all required keys: name, date, matched (boolean), has_price (boolean), in_app_name, event_id, sale_state, url.
+          - Verified party.matched is boolean (not string or int).
+          - Verified party.has_price is boolean.
+          ✅ (2) GET /api/admin/clubtickets-coverage?days=30 as admin → 200 (optional days parameter working).
+          ✅ (3) GET /api/admin/clubtickets-coverage as non-admin user → 403 (authorization working).
+          ✅ (4) GET /api/admin/clubtickets-coverage without auth → 401 (authentication working).
+          All requirements met perfectly. Test file: /app/backend_test_clubtickets_admin.py
+  - task: "Affiliate-link FLIP alert (afiliado<->directo tras re-escaneo) + toggle settings"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          En _apply_scraped_event (UPDATE): detecta cuando commission_url cruza la línea
+          "gana/pierde comisión" (_is_our_clubtickets_url old vs new). Registra changelog +
+          event_history kind="affiliate_flip" con direction lost/gained. NUEVO helper
+          _notify_admins_affiliate_flips(batch_id, venue_name?) envía UNA notificación agrupada por
+          run a todos los admins (evita spam en re-points masivos). Llamado al final de
+          run_all_scrapers (todo el batch) y en run standalone por discoteca. Toggle:
+          GET/PUT /api/admin/settings/affiliate-flip-alerts (ON por defecto,
+          app_settings key admin_affiliate_flip_alerts). Changelog counts incluye affiliate_flip.
+          Verificado end-to-end (funciones reales): "The Most Beautiful Party" no llevada -> LOST,
+          "Bubbles" llevada -> GAINED, y notificación agrupada generada. Toggle GET/PUT 200.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL AFFILIATE-LINK FLIP ALERT FEATURES (3 test suites, 100% pass):
+          
+          ✅ FEATURE 2: Affiliate-link Flip Alert Toggle (6 tests, all passed)
+          - (2.1) GET /api/admin/settings/affiliate-flip-alerts as admin → 200 with enabled=true (default ON as expected).
+          - (2.2) PUT /api/admin/settings/affiliate-flip-alerts {enabled: false} → 200 with enabled=false.
+          - (2.3) GET /api/admin/settings/affiliate-flip-alerts → 200 with enabled=false (verified persistence).
+          - (2.4) PUT /api/admin/settings/affiliate-flip-alerts {enabled: true} → 200 with enabled=true (left enabled at the end as required).
+          - (2.5) GET /api/admin/settings/affiliate-flip-alerts as non-admin user → 403 (authorization working).
+          - (2.6) GET /api/admin/settings/affiliate-flip-alerts without auth → 401 (authentication working).
+          
+          ✅ FEATURE 3: Changelog Counts Include affiliate_flip (1 test, passed)
+          - (3.1) GET /api/admin/scrape-changelog?limit=10 as admin → 200 with correct structure.
+          - Verified "counts" object contains "affiliate_flip" key with int value (0 in current state).
+          - All expected count keys present and are integers: new, price_up, price_down, state, sold_out, on_sale, affiliate_flip.
+          
+          All requirements met perfectly. Toggle works bidirectionally, persists correctly, and changelog includes the new "affiliate_flip" kind.
+          Test file: /app/backend_test_clubtickets_admin.py
   - task: "ClubTickets affiliate link ENFORCED on ALL 15 clubs (own-site/FourVenues prices kept) + UNVRS real prices via unvrs.com + cross-provider feed dedup"
     implemented: true
     working: true
@@ -1412,17 +1489,66 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "2.11"
-  test_sequence: 13
+  test_sequence: 14
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "ClubTickets affiliate link ENFORCED on ALL 15 clubs + UNVRS real prices via unvrs.com + cross-provider feed dedup"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NUEVAS FEATURES (2026-08-12) para probar SOLO BACKEND. Admin: admin@quienva.app / admin123.
+      Contexto: la BD local ya está poblada por el scheduler (datos ClubTickets en vivo; FourVenues
+      puede no tener token válido local, así que muchos eventos son solo-ClubTickets).
+
+      1) Cobertura ClubTickets — GET /api/admin/clubtickets-coverage (require_admin):
+         - 200 y estructura {aff_code, updated_at, totals{parties,matched,unmatched,with_price},
+           venues[]{slug,name,total,matched,unmatched,with_price,parties[]{name,date,matched,
+           has_price,in_app_name,event_id,sale_state,url}}}.
+         - matched debe ser bool; totals.matched+unmatched == totals.parties.
+         - No-admin -> 403; sin auth -> 401. Param opcional ?days=N.
+      2) Toggle alerta de desajuste:
+         - GET /api/admin/settings/affiliate-flip-alerts -> {enabled:true} por defecto.
+         - PUT con {enabled:false} -> {enabled:false}; PUT {enabled:true} -> {enabled:true}.
+         - No-admin -> 403.
+      3) Changelog: GET /api/admin/scrape-changelog -> counts incluye la clave "affiliate_flip".
+      NOTA: la detección de flip y la notificación agrupada ya se verificaron end-to-end con las
+      funciones reales (lost+gained + una sola notificación admin). No hace falta re-testear la
+      lógica interna; centrarse en los endpoints HTTP y su auth.
+
+  - agent: "testing"
+    message: |
+      TESTING COMPLETE (2026-08-12) — ClubTickets admin features backend testing.
+      
+      ✅ ALL 3 FEATURES TESTED AND PASSED (100% success rate):
+      
+      1. ClubTickets Coverage Panel (GET /api/admin/clubtickets-coverage):
+         - ✅ Returns 200 with correct JSON structure (aff_code, updated_at, totals, venues)
+         - ✅ 15 clubs found with 609 total parties
+         - ✅ All data types correct (matched/has_price are booleans, not strings)
+         - ✅ Math validation: matched + unmatched == parties
+         - ✅ Optional ?days=30 parameter works
+         - ✅ Authorization: 403 for non-admin, 401 for no auth
+      
+      2. Affiliate-link Flip Alert Toggle:
+         - ✅ GET returns {enabled: true} by default
+         - ✅ PUT {enabled: false} → persists correctly
+         - ✅ PUT {enabled: true} → persists correctly (left enabled at end)
+         - ✅ Authorization: 403 for non-admin, 401 for no auth
+      
+      3. Changelog affiliate_flip Count:
+         - ✅ GET /api/admin/scrape-changelog returns counts object
+         - ✅ counts.affiliate_flip key exists with int value (0 currently)
+         - ✅ All expected count keys present (new, price_up, price_down, state, sold_out, on_sale, affiliate_flip)
+      
+      NO ISSUES FOUND. All endpoints working as specified. Test file: /app/backend_test_clubtickets_admin.py
+      
+      RECOMMENDATION: Main agent should summarize and finish.
+
   - agent: "main"
     message: |
       RE-TEST (2026-08-13 v2) — ClubTickets link enforcement on ALL 15 clubs + UNVRS prices + dedup.
