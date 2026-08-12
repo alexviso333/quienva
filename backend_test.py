@@ -9,7 +9,7 @@ import sys
 from urllib.parse import urlparse, parse_qs
 
 # Backend URL from frontend/.env
-BASE_URL = "https://61c5b1fa-c642-48d6-a57c-7c51ea21f839.preview.emergentagent.com/api"
+BASE_URL = "https://party-finder-52.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
