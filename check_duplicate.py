@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://02d7b382-fa5a-4744-8668-ab600acebc1f.preview.emergentagent.com"
+BACKEND_URL = "https://vercel-render-stack.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin
