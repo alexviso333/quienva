@@ -124,6 +124,31 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          CORRECCIÓN PEDIDA POR EL USUARIO (2026): el "enforce on ALL 15 clubs" era INCORRECTO.
+          El usuario NO lleva TODAS las fiestas de una discoteca, solo las que están en su panel
+          de afiliado CT226. Antes se metía el ?aff a TODO el recinto (y como fallback la landing
+          de la discoteca con ?aff), rompiendo fiestas que no lleva ("no se encuentra la fiesta").
+          NUEVO comportamiento = afiliado POR FIESTA, nunca por discoteca:
+          1) scrapers/clubtickets.py: nuevas funciones fetch_panel_html/parse_panel/get_panel_index
+             que indexan el panel por (venue_slug -> [ {name, date, url} ]).
+          2) _enforce_clubtickets_affiliate: empareja cada fiesta primaria con el panel por
+             (fecha + nombre fuzzy). Si coincide -> pone tu link clubtickets ?aff. Si NO coincide
+             -> deja el enlace directo normal del primario (FourVenues/native), SIN ?aff. Eliminado
+             el fallback a la landing con ?aff. Añade las fiestas del panel que el primario no tenía.
+          3) _apply_scraped_event (source-agnostic): usa _ct_affiliate_url_for (lookup por fiesta en
+             el panel). Solo pone ?aff si esa fiesta+fecha está en el panel; si no, deja el link tal
+             cual. Y sincroniza commission_url en UPDATE para auto-corregir enlaces malos guardados.
+          4) Serve-time _commission_url_for ya NO etiqueta a lo bruto; devuelve el commission_url tal
+             cual (ya trae ?aff solo donde toca). _event_is_mine solo cuenta como mío si el link
+             clubtickets lleva NUESTRO ?aff (nueva _is_our_clubtickets_url).
+          Verificado localmente contra el panel REAL (15 discotecas, 57 fiestas UNVRS): Anyma (en
+          panel) -> ?aff=CT226; "Jamie Jones Presents Paradise" (no en panel) -> enlace directo sin
+          ?aff. FourVenues no tocado (aún no hay link de afiliado FourVenues). Falta verificación del
+          agente de backend vía /api/events + /api/venues (que las fiestas fuera de panel NO lleven
+          ?aff y las de panel SÍ).
       - working: true
         agent: "main"
         comment: |
@@ -235,6 +260,41 @@ backend:
           Minor issue: 1 duplicate event from different scrapers (ClubTickets vs Xceed) - recommend cross-scraper deduplication logic based on venue+date+name matching.
           
           Test file: /app/backend_test_clubtickets.py
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED PER-PARTY AFFILIATE LINK IMPLEMENTATION (3 test suites, 100% pass):
+          
+          ✅ TEST 1: JAMIE JONES PRESENTS PARADISE (NOT IN PANEL) - 4/4 PASSED
+          - GET /api/events?city=Ibiza → 200 with 644 total events ✓
+          - Found event "Jamie Jones Presents Paradise" at [UNVRS] on 2026-08-12 ✓
+          - commission_url does NOT contain 'aff=' ✓
+          - commission_url is NOT a clubtickets.com URL ✓
+          - commission_url is a direct unvrs.com link: https://www.unvrs.com/events/2026/jamie-jones-paradise/12-08-2026 ✓
+          - is_affiliate field is False ✓
+          
+          ✅ TEST 2: FISHER EVENT (IN PANEL) - 3/3 PASSED
+          - Found event "FISHER" at [UNVRS] on 2026-08-13 ✓
+          - commission_url is clubtickets.com: https://www.clubtickets.com/clubbing/unvrs-ibiza/fisher/2026-08-13?aff=CT226 ✓
+          - commission_url contains 'aff=CT226' ✓
+          - is_affiliate field is True ✓
+          
+          ✅ TEST 3: REGRESSION TESTS - 4/4 PASSED
+          - GET /api/events?city=Ibiza → 200 with 644 events ✓
+          - Affiliate events rank first (last affiliate at index 611, first non-affiliate at 612) ✓
+          - NO 'aff=' injected into non-clubtickets URLs ✓
+          - GET /api/events with admin city="Palma de Mallorca" → 200 with 11 events ✓
+          
+          CONCLUSION:
+          Per-party affiliate link implementation working perfectly:
+          ✅ Parties NOT in ClubTickets panel keep their direct venue links WITHOUT aff= (Jamie Jones verified)
+          ✅ Parties IN ClubTickets panel have clubtickets.com links WITH aff=CT226 (FISHER verified)
+          ✅ Affiliate events rank first in feed ordering
+          ✅ No aff injection into non-clubtickets URLs
+          ✅ Regression tests pass (Ibiza and Palma feeds working)
+          
+          Test file: /app/backend_test_per_party_affiliate.py
+
 
   - task: "ClubTickets affiliate (aff=CT226) on all clubtickets.com ticket links + mark as 'mine' (rank first / admin flag)"
     implemented: true
@@ -1357,6 +1417,38 @@ agent_communication:
          non-clubtickets links.
 
       Do NOT modify Testing Protocol. Report pass/fail per item.
+  - agent: "testing"
+    message: |
+      COMPLETED: Per-party affiliate link testing (2026-08-13 v3).
+      
+      Tested the CRITICAL CHANGE: affiliate links now applied PER PARTY (not per venue).
+      Only parties in the ClubTickets affiliate panel get aff=CT226.
+      Parties NOT in panel keep their direct venue link WITHOUT aff=.
+      
+      Test results: ALL 3 TEST SUITES PASSED (100%)
+      
+      1) ✅ Jamie Jones Presents Paradise (NOT in panel):
+         - Has direct unvrs.com link WITHOUT aff=
+         - is_affiliate=False
+         - URL: https://www.unvrs.com/events/2026/jamie-jones-paradise/12-08-2026
+      
+      2) ✅ FISHER event (IN panel):
+         - Has clubtickets.com link WITH aff=CT226
+         - is_affiliate=True
+         - URL: https://www.clubtickets.com/clubbing/unvrs-ibiza/fisher/2026-08-13?aff=CT226
+      
+      3) ✅ Regression tests:
+         - Ibiza feed: 644 events, affiliate events rank first (last affiliate at index 611)
+         - NO aff injection into non-clubtickets URLs
+         - Palma feed: 11 events, still working
+      
+      CONCLUSION: Per-party affiliate implementation working perfectly. The system now correctly
+      applies affiliate links ONLY to parties that are in the ClubTickets panel, while keeping
+      direct venue links for parties NOT in the panel. This fixes the previous issue where ALL
+      parties at a venue were getting affiliate links, breaking parties not carried by the user.
+      
+      Test file: /app/backend_test_per_party_affiliate.py
+
   - agent: "main"
     message: |
       (Superseded) Earlier ClubTickets full-coverage test (2026-08-13 v1).
@@ -6541,12 +6633,35 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "ClubTickets affiliate link PER-PARTY (not per-venue): ?aff only on panel parties"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NUEVA VERIFICACIÓN (afiliado POR FIESTA, no por discoteca). Contexto en el task
+      "ClubTickets affiliate link ENFORCED..." (status_history entry más reciente, working: NA).
+      Admin: admin@quienva.app / admin123 (POST /api/auth/login). Para Ibiza, poner city=Ibiza
+      del admin vía PUT /api/auth/profile.
+
+      Datos ya presentes en DB (los sembré ejecutando el scraper real de [UNVRS]): 58 eventos de
+      [UNVRS], de los cuales 57 están en el panel de afiliado (llevan aff=CT226) y 1 NO
+      ("Jamie Jones Presents Paradise", 2026-08-12) que debe mantener su enlace directo de
+      unvrs.com SIN aff.
+
+      Verifica vía API (todo con admin city=Ibiza):
+      1) GET /api/events?city=Ibiza → 200. Localiza el evento "Jamie Jones Presents Paradise"
+         (venue [UNVRS], date 2026-08-12): su commission_url NO debe contener "aff=" y NO debe ser
+         clubtickets.com (debe ser el link directo de unvrs.com). is_affiliate debe ser False.
+      2) Otros eventos de [UNVRS] que SÍ están en panel (p.ej. FISHER 2026-08-13): commission_url
+         debe ser clubtickets.com con aff=CT226 y is_affiliate=True.
+      3) REGRESIÓN: el feed sigue devolviendo 200 y ordenando (los eventos "míos"=con aff primero).
+         Ningún link NO-clubtickets debe recibir aff inyectado. GET /api/events (Palma) sigue OK.
+      NO ejecutes escrituras destructivas. NO edites el bloque Testing Protocol.
+
   - agent: "user"
     message: |
       Test the "¿Quién va?" FastAPI backend at the internal URL (use REACT_APP_BACKEND_URL from frontend/.env, routes are prefixed with /api). Focus ONLY on the new ClubTickets full-coverage work described in /app/test_result.md (read it first, do NOT edit the Testing Protocol block).

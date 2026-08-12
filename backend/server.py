@@ -175,13 +175,54 @@ def _clubtickets_affiliate_url(url: str) -> str:
     return f"{url}{sep}aff={CLUBTICKETS_AFF}"
 
 
+def _is_our_clubtickets_url(url: str) -> bool:
+    """True ONLY for a clubtickets.com link that carries OUR affiliate code
+    (?aff=<CLUBTICKETS_AFF>). A plain clubtickets.com link WITHOUT our code is
+    NOT ours — it's a party we don't carry, so it never counts as commission."""
+    if not _is_clubtickets_url(url) or not CLUBTICKETS_AFF:
+        return False
+    return bool(re.search(r"[?&]aff=" + re.escape(CLUBTICKETS_AFF) + r"(?:&|$)", url or ""))
+
+
+# Words that don't help tell two party names apart (promoter boilerplate, etc.).
+_CT_NAME_STOP = {
+    "presents", "present", "pres", "the", "party", "closing", "opening", "ibiza",
+    "night", "show", "club", "con", "de", "del", "la", "el", "los", "las", "by",
+    "vs", "and", "live", "tour", "featuring", "feat", "ft", "w", "at", "en",
+    "2024", "2025", "2026", "2027",
+}
+
+
+def _ct_name_tokens(s: str) -> set:
+    s = _norm_name(s or "")
+    return {t for t in re.split(r"[^a-z0-9]+", s)
+            if t and len(t) > 1 and t not in _CT_NAME_STOP}
+
+
+def _ct_name_match(a: str, b: str) -> bool:
+    """Fuzzy party-name match between a primary-source name and an affiliate-panel
+    name (accent/case/punctuation-insensitive). True on exact/substring, or when
+    the distinctive tokens overlap by >=50% (e.g. 'Anyma' ↔ 'Anyma Presents ÆDEN')."""
+    na, nb = _norm_name(a or ""), _norm_name(b or "")
+    if not na or not nb:
+        return False
+    if na == nb or na in nb or nb in na:
+        return True
+    ta, tb = _ct_name_tokens(a), _ct_name_tokens(b)
+    if not ta or not tb:
+        return False
+    inter = ta & tb
+    return bool(inter) and (len(inter) / min(len(ta), len(tb))) >= 0.5
+
+
 def _event_is_mine(ev: dict) -> bool:
     """True if this event earns us commission: either a FourVenues party we carry
-    in our promoter profile, OR any event whose ticket link goes through
-    ClubTickets (our affiliate). Those get our affiliate link, rank first in the
-    feed and are flagged in admin; everything else keeps its normal link so
-    checkout never breaks."""
-    if _is_clubtickets_url(ev.get("commission_url", "")):
+    in our promoter profile, OR a party whose ticket link goes through ClubTickets
+    WITH OUR affiliate code (?aff) — i.e. a party we actually carry in our panel.
+    A plain clubtickets.com link WITHOUT our code (a party we don't carry) is NOT
+    ours. Ours get ranked first + admin-flagged; everything else keeps its normal
+    link so checkout never breaks."""
+    if _is_our_clubtickets_url(ev.get("commission_url", "")):
         return True
     return _affiliate_match(ev) is not None
 
@@ -237,9 +278,12 @@ def _commission_url_for(ev: dict) -> str:
         code = _fv_event_code(ev.get("commission_url", "")) or (m[0] or "")
         if code:
             return f"https://site.fourvenues.com/es/{AFFILIATE_SLUG}/events/{code}"
-    # ClubTickets: tag any clubtickets.com link with our affiliate code so the
-    # sale is attributed to us (Ushuaïa, Hï, UNVRS and all ClubTickets clubs).
-    return _clubtickets_affiliate_url(ev.get("commission_url", "") or "")
+    # ClubTickets: the buy link is already stored in its FINAL form — it carries
+    # our ?aff code ONLY for the exact parties we carry in our affiliate panel
+    # (matched per party at scrape time). Parties we don't carry keep their normal
+    # direct link (no ?aff) so the party always resolves. So serve it AS-IS: never
+    # blanket-tag a clubtickets.com link here.
+    return ev.get("commission_url", "") or ""
 
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
@@ -10377,6 +10421,30 @@ def _affiliate_ct_slug_for_name(name: str):
     return _CT_AFFILIATE_MAP.get(_norm_name(name or ""))
 
 
+async def _ct_affiliate_url_for(ct_slug: str, date_str: str, name: str):
+    """Return OUR ClubTickets ?aff link for a party ONLY if that exact party is in
+    our affiliate panel, else None. Match is PER PARTY (never per venue): the panel
+    party must be on the SAME date; when a night has a single carried party we take
+    it, when it has several we disambiguate by fuzzy name match. None → the caller
+    keeps the party's normal direct link (no ?aff)."""
+    if not ct_slug or not date_str:
+        return None
+    try:
+        from scrapers.clubtickets import get_panel_index
+        idx = await get_panel_index(CLUBTICKETS_LINKS_URL)
+    except Exception:
+        return None
+    same_date = [p for p in (idx.get(ct_slug) or []) if p.get("date") == date_str]
+    if not same_date:
+        return None
+    if len(same_date) == 1:
+        return same_date[0].get("url") or None
+    for p in same_date:
+        if _ct_name_match(name, p.get("name", "")):
+            return p.get("url") or None
+    return None
+
+
 async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "") -> str:
     """Diff a single scraped event against the DB and apply changes:
     - CREATE if not found → fires "new event" push to city.
@@ -10395,26 +10463,21 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
             se.time = "23:59"
         except Exception:
             pass
-    # Affiliate-link enforcement (source-agnostic): if this event happens at one of
-    # OUR ClubTickets clubs — no matter which scraper produced it (e.g. the city-wide
-    # Xceed feed dropping a Pikes party at 528) — force its buy link to our
-    # clubtickets.com link (?aff) so the sale is always attributed to us. Use the
-    # exact ClubTickets event link for that night when we already have one, else the
-    # club's ClubTickets landing page.
+    # Affiliate-link enforcement (source-agnostic, PER PARTY — never per venue):
+    # if this exact party (venue + date + name) appears in OUR ClubTickets affiliate
+    # panel, force its buy link to our ?aff link so the sale is attributed to us —
+    # no matter which scraper produced it (e.g. the city-wide Xceed feed, or a
+    # FourVenues party we also carry on ClubTickets). If the party is NOT in our
+    # panel we leave its link exactly as the primary source gave it (FourVenues,
+    # the club's own site, Xceed, ...) with NO ?aff, so the party always resolves.
     _ct_slug = _affiliate_ct_slug_for_name(se.venue or venue_name)
-    if _ct_slug and (not se.ticket_url or not _is_clubtickets_url(se.ticket_url)):
+    if _ct_slug:
         try:
-            _m = await db.events.find_one(
-                {"date": se.date,
-                 "venue": {"$regex": f"^{re.escape(se.venue or venue_name)}$", "$options": "i"},
-                 "commission_url": {"$regex": r"clubtickets\.com"}},
-                {"_id": 0, "commission_url": 1})
+            _aff_url = await _ct_affiliate_url_for(_ct_slug, se.date, se.name)
         except Exception:
-            _m = None
-        if _m and _m.get("commission_url"):
-            se.ticket_url = _m["commission_url"]
-        else:
-            se.ticket_url = _clubtickets_affiliate_url(f"https://www.clubtickets.com/clubbing/{_ct_slug}")
+            _aff_url = None
+        if _aff_url:
+            se.ticket_url = _aff_url  # this party IS in our panel → our ?aff link
     # 1) Lookup by external_id (most reliable)
     existing = await db.events.find_one({"external_id": se.external_id}, {"_id": 0})
     # 2) Fallback: venue + date (user might have created it manually). Only match
@@ -10505,12 +10568,12 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
     if se.ticket_url and not existing.get("commission_url"):
         patch["commission_url"] = se.ticket_url
         patch["has_commission"] = True
-    # Repoint existing scraped events to our ClubTickets affiliate link when the
-    # scraper now provides one (e.g. we became affiliates, or the primary source
-    # changed). Only overwrites when the NEW link is a clubtickets.com URL, so
-    # non-affiliate links (FourVenues checkout, etc.) are never disturbed.
+    # Keep scraped events' buy link in sync with the freshly computed one so any
+    # stale link is corrected on the next run — CRUCIALLY this repoints a party
+    # AWAY from a wrong ?aff link back to its normal direct link when we don't
+    # carry it, and onto our ?aff link when we do. Manual (non-scraper) events are
+    # never touched, so admin overrides stand.
     elif (existing.get("source") == "scraper" and se.ticket_url
-          and _is_clubtickets_url(se.ticket_url)
           and se.ticket_url != existing.get("commission_url")):
         patch["commission_url"] = se.ticket_url
         patch["has_commission"] = True
@@ -10571,19 +10634,19 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
 
 
 async def _enforce_clubtickets_affiliate(venue: dict, primary: list) -> list:
-    """For a club we carry on ClubTickets (venue['ct_slug']), guarantee that EVERY
-    event is bought through OUR clubtickets.com link (?aff=<code>) so the sale is
-    attributed to us — no matter what the primary source (FourVenues / the club's
-    own site) returned.
+    """For a club we carry on ClubTickets (venue['ct_slug']), attribute the sale to
+    us ONLY on the exact parties we actually carry in our affiliate panel — matched
+    PER PARTY (date + fuzzy name), NEVER blanket per venue.
 
-    - Keeps the primary source's richer data (real prices, poster, artist names)
-      but rewrites each event's ticket URL to the matching ClubTickets link
-      (matched by date; falls back to the club landing page + aff when there's no
-      exact per-date link).
-    - Appends any ClubTickets panel dates the primary source didn't have, so the
-      calendar is complete.
-    - If the primary produced nothing (e.g. FourVenues token expired), the whole
-      calendar comes straight from ClubTickets.
+    - A primary-source party (FourVenues / the club's own site) that MATCHES a party
+      in our panel → its buy link becomes our ClubTickets ?aff link (we keep the
+      primary's richer data: real prices, poster, artist name).
+    - A primary party that is NOT in our panel → its link is left EXACTLY as the
+      primary gave it (FourVenues / native, no ?aff), so the party always resolves
+      and checkout never breaks. We never fall back to the club landing + ?aff.
+    - Panel parties the primary didn't have are appended so the calendar is complete
+      (these carry our ?aff, since they ARE ours).
+    - If the primary produced nothing, the whole calendar comes from the panel.
     """
     ct_slug = venue.get("ct_slug")
     if not ct_slug:
@@ -10601,16 +10664,28 @@ async def _enforce_clubtickets_affiliate(venue: dict, primary: list) -> list:
     if not ct_events:
         return primary          # panel unreachable → leave primary untouched
     if not primary:
-        return ct_events        # primary empty → full ClubTickets calendar
-    by_date = {}
+        return ct_events        # primary empty → full ClubTickets affiliate calendar
+    by_date: dict = {}
     for ce in ct_events:
-        by_date.setdefault(ce.date, ce)
-    club_url = _clubtickets_affiliate_url(f"https://www.clubtickets.com/clubbing/{ct_slug}")
+        by_date.setdefault(ce.date, []).append(ce)
+    matched_ext: set = set()
     for pe in primary:
-        ce = by_date.get(pe.date)
-        pe.ticket_url = ce.ticket_url if ce else club_url
-    have = {pe.date for pe in primary}
-    extra = [ce for ce in ct_events if ce.date not in have]
+        cands = by_date.get(pe.date) or []
+        chosen = None
+        if len(cands) == 1:
+            # One carried party that night at this club → it's this night's party.
+            chosen = cands[0]
+        elif cands:
+            # Several carried parties that night → disambiguate by name.
+            for ce in cands:
+                if _ct_name_match(pe.name, ce.name):
+                    chosen = ce
+                    break
+        if chosen is not None:
+            pe.ticket_url = chosen.ticket_url        # our ?aff link — party is ours
+            matched_ext.add(chosen.external_id)
+        # else: NOT in our panel → keep pe.ticket_url (primary's own direct link)
+    extra = [ce for ce in ct_events if ce.external_id not in matched_ext]
     return primary + extra
 
 

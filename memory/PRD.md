@@ -47,6 +47,17 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - P2: PWA manifest/service worker for installability + offline.
 - P2: Multi-city expansion.
 
+## ClubTickets afiliado — corrección PER-PARTY (2026)
+- El `?aff=CT226` ahora se aplica SOLO a las fiestas que están en el panel de afiliado del usuario
+  (admin.clubtickets.com/.../links), emparejando por (fecha + nombre de fiesta), NUNCA por discoteca.
+- Fiestas NO carriadas → conservan su enlace directo normal (FourVenues/native), sin `?aff`.
+- Archivos: `backend/scrapers/clubtickets.py` (fetch_panel_html/parse_panel/get_panel_index),
+  `backend/server.py` (_enforce_clubtickets_affiliate por-fiesta, _ct_affiliate_url_for,
+  _is_our_clubtickets_url, _event_is_mine, _commission_url_for sin auto-tag, sync commission_url).
+- Verificado end-to-end con panel real + agente backend: [UNVRS] 58 fiestas → 57 con aff, y
+  "Jamie Jones Presents Paradise" sin aff (link directo unvrs.com). Deploy vía Save to GitHub → Render.
+
+
 ## Next tasks
 - Add PWA manifest + service worker for installability.
 - Implement weekly digest (scheduled job).

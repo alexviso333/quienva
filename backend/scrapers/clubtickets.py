@@ -71,6 +71,89 @@ def _clean(text: str) -> str:
     return text.lstrip("-").strip()
 
 
+async def fetch_panel_html(panel_url: str) -> str:
+    """Fetch the affiliate panel HTML (module-level), cached in-process for a
+    short TTL. Shared by every ClubTickets venue AND the server-side per-party
+    affiliate lookup so the 244KB panel is downloaded at most once per TTL."""
+    if not panel_url:
+        return ""
+    now = time.time()
+    if (_PANEL_CACHE["url"] == panel_url and _PANEL_CACHE["html"]
+            and now - _PANEL_CACHE["ts"] < _PANEL_TTL):
+        return _PANEL_CACHE["html"]
+    async with _PANEL_LOCK:
+        now = time.time()
+        if (_PANEL_CACHE["url"] == panel_url and _PANEL_CACHE["html"]
+                and now - _PANEL_CACHE["ts"] < _PANEL_TTL):
+            return _PANEL_CACHE["html"]
+        try:
+            async with httpx.AsyncClient(
+                timeout=30, follow_redirects=True,
+                headers={"User-Agent": UA, "Accept": "text/html"},
+            ) as client:
+                r = await client.get(panel_url)
+                if r.status_code == 200 and r.text:
+                    _PANEL_CACHE.update(url=panel_url, html=r.text, ts=now)
+                    return r.text
+                logger.warning(f"[clubtickets] panel HTTP {r.status_code}")
+        except Exception as e:
+            logger.warning(f"[clubtickets] panel fetch failed: {e}")
+    return _PANEL_CACHE["html"] if _PANEL_CACHE["url"] == panel_url else ""
+
+
+def parse_panel(html: str) -> dict:
+    """Parse the affiliate panel HTML into a per-venue party index:
+
+        { venue_slug: [ {"name", "event_slug", "date": "YYYY-MM-DD", "url"}, ... ] }
+
+    Only the parties/dates that literally appear in OUR affiliate panel are
+    included — this is the authoritative list of what we carry, used to decide
+    (per party, never per venue) which events get our ?aff link."""
+    out: dict = {}
+    cur_ename = ""
+    cur_eslug = ""
+    for kind, label, raw_url in _ROW_RE.findall(html or ""):
+        url = _html.unescape((raw_url or "").strip())
+        m = re.search(
+            r"/clubbing/([a-z0-9\-]+)(?:/([a-z0-9\-]+))?(?:/(\d{4}-\d{2}-\d{2}))?", url)
+        if not m:
+            continue
+        vslug, eslug, date = m.group(1), m.group(2), m.group(3)
+        if kind == "event":
+            cur_eslug = eslug or ""
+            cur_ename = _clean(label)
+        elif kind == "date":
+            if not date or not vslug:
+                continue
+            out.setdefault(vslug, []).append({
+                "name": cur_ename,
+                "event_slug": eslug or cur_eslug,
+                "date": date,
+                "url": url,  # panel URLs already carry ?aff=<code>
+            })
+    return out
+
+
+# Parsed-index cache (keyed by panel URL) so we don't re-parse 244KB per lookup.
+_INDEX_CACHE: dict = {"url": "", "index": None, "ts": 0.0}
+
+
+async def get_panel_index(panel_url: str) -> dict:
+    """Cached parsed panel index (see parse_panel). Returns {} if unreachable."""
+    if not panel_url:
+        return {}
+    now = time.time()
+    if (_INDEX_CACHE["url"] == panel_url and _INDEX_CACHE["index"] is not None
+            and now - _INDEX_CACHE["ts"] < _PANEL_TTL):
+        return _INDEX_CACHE["index"]
+    html = await fetch_panel_html(panel_url)
+    if not html:
+        return _INDEX_CACHE["index"] or {}
+    idx = parse_panel(html)
+    _INDEX_CACHE.update(url=panel_url, index=idx, ts=now)
+    return idx
+
+
 class ClubTicketsScraper(Scraper):
     """Reads the affiliate links panel and yields one venue's dated events."""
     adapter_type = "clubtickets"
@@ -90,30 +173,7 @@ class ClubTicketsScraper(Scraper):
 
     async def _get_panel(self) -> str:
         """Fetch the affiliate panel HTML, cached in-process for a short TTL."""
-        if not self.panel_url:
-            return ""
-        now = time.time()
-        if (_PANEL_CACHE["url"] == self.panel_url and _PANEL_CACHE["html"]
-                and now - _PANEL_CACHE["ts"] < _PANEL_TTL):
-            return _PANEL_CACHE["html"]
-        async with _PANEL_LOCK:
-            now = time.time()
-            if (_PANEL_CACHE["url"] == self.panel_url and _PANEL_CACHE["html"]
-                    and now - _PANEL_CACHE["ts"] < _PANEL_TTL):
-                return _PANEL_CACHE["html"]
-            try:
-                async with httpx.AsyncClient(
-                    timeout=30, follow_redirects=True,
-                    headers={"User-Agent": UA, "Accept": "text/html"},
-                ) as client:
-                    r = await client.get(self.panel_url)
-                    if r.status_code == 200 and r.text:
-                        _PANEL_CACHE.update(url=self.panel_url, html=r.text, ts=now)
-                        return r.text
-                    logger.warning(f"[clubtickets] panel HTTP {r.status_code}")
-            except Exception as e:
-                logger.warning(f"[clubtickets] panel fetch failed: {e}")
-        return _PANEL_CACHE["html"] if _PANEL_CACHE["url"] == self.panel_url else ""
+        return await fetch_panel_html(self.panel_url)
 
     def _tag(self, url: str) -> str:
         """Ensure the ticket URL carries OUR affiliate code (?aff=<code>)."""

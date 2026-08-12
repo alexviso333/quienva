@@ -150,7 +150,7 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
             <span className="text-white/30 text-xs">{g.items.length} {g.items.length === 1 ? "plan" : "planes"}</span>
             <div className="flex-1 h-px bg-white/10" />
           </div>
-          {compact ? <div className="grid grid-cols-2 gap-3">{g.items.map(renderCard)}</div> : g.items.map(renderCard)}
+          {compact ? <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">{g.items.map(renderCard)}</div> : <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">{g.items.map(renderCard)}</div>}
         </div>
       ))}
 
@@ -176,7 +176,7 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
               <div className="flex-1 h-px bg-white/10" />
             </div>
           )}
-          {compact ? <div className="grid grid-cols-2 gap-3">{g.items.map(renderCard)}</div> : g.items.map(renderCard)}
+          {compact ? <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">{g.items.map(renderCard)}</div> : <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">{g.items.map(renderCard)}</div>}
         </div>
       ))}
 

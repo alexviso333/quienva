@@ -202,7 +202,7 @@ export default function Feed() {
   }, [events]);
 
   return (
-    <AppShell>
+    <AppShell wide>
       <header className="px-5 pt-8 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
