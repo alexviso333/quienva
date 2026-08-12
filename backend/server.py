@@ -4760,14 +4760,17 @@ async def list_events(user: dict = Depends(get_optional_user),
                 return 0.0
 
         # Two-tier ordering. The FIRST key (mine=0 / others=1) guarantees our
-        # affiliate events always come first, so the remaining keys are only ever
-        # compared WITHIN the same tier (Python stops at the first differing key).
-        #   • OUR events (tier 0): most EXPENSIVE first (higher price ≈ higher
-        #     commission / better club), then soonest date. (padding keeps equal shape)
-        #   • Everyone else (tier 1): club importance → featured → popularity → date.
+        # affiliate events always come first, so a "mine" club can never fall below
+        # a non-affiliate one. WITHIN each tier the admin-curated club order
+        # (_venue_rank, lower = higher) is the primary key, so "Prioridad de
+        # discotecas" now works for OUR clubs too (e.g. Fitz above Amok), not only
+        # for the rest.
+        #   • OUR events (tier 0): club order → most EXPENSIVE first (≈ better
+        #     commission) → soonest date.
+        #   • Everyone else (tier 1): club order → featured → popularity → date.
         def _feed_sort_key(e):
             if _event_is_mine(e):
-                return (0, -_price_for_sort(e), e.get("date", ""), 0, 0.0)
+                return (0, _venue_rank(e), -_price_for_sort(e), e.get("date", ""), 0.0)
             return (1, _venue_rank(e), 0 if e.get("featured") else 1,
                     -_popularity(e), e.get("date", ""))
 

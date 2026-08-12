@@ -131,7 +131,12 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [hasMore, view]);
+    // `limit` is in the deps on purpose: after each page loads we RE-ARM the
+    // observer so, if the sentinel is still on-screen, it keeps loading. Without
+    // this the observer only fires on an intersection *change* — so once the
+    // sentinel stayed within view after a page, it never fired again and the
+    // spinner span forever ("se queda cargando y no acaba nunca").
+  }, [hasMore, view, limit]);
 
   return (
     <div className="flex flex-col gap-3">

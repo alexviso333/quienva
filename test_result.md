@@ -115,7 +115,109 @@ user_problem_statement: |
   avanzado con estadísticas, gestión de usuarios/eventos/tickets, (11) sistema de referidos con
   código único y puntos para ambas partes.
 
-backend:
+frontend:
+  - task: "Infinite scroll in main feed (Día/Discotecas/Calendario) gets stuck on a perpetual loading spinner"
+    implemented: true
+    working: true
+    file: "frontend/src/components/FeedPlans.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          BUG (usuario): al bajar mucho en la lista de discotecas se quedaba cargando y nunca
+          terminaba. CAUSA: el IntersectionObserver no dependía de `limit`, así que tras cargar una
+          página, si el centinela seguía visible, el observer no volvía a dispararse (solo reacciona
+          a CAMBIOS de intersección) -> spinner infinito. FIX: añadir `limit` al array de deps del
+          useEffect para RE-ARMAR el observer tras cada página (sigue cargando hasta que el centinela
+          sale de vista o hasMore=false).
+      - working: true
+        agent: "testing"
+        comment: |
+          Verificado (auto_frontend_testing_agent): en Día y Discotecas el spinner
+          (data-testid feed-load-more) desaparece al cargar todos los eventos, sin quedarse colgado.
+          Calendario usa selector de fecha (sin scroll infinito, por diseño). El re-armado del
+          observer (limit en deps) confirmado. El stress con 640 eventos (Ibiza) no se pudo completar
+          por complejidad de login del entorno de test, pero el mecanismo quedó confirmado.
+
+
+    implemented: true
+    working: true
+    file: "backend/server.py (list_events _feed_sort_key)"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          BUG (usuario): al reordenar discotecas en el panel (p.ej. Fitz Mallorca por encima de Amok)
+          el feed NO cambiaba. CAUSA: en _feed_sort_key los eventos "míos" (afiliado, tier 0) se
+          ordenaban por (-precio, fecha) IGNORANDO _venue_rank; como Fitz y Amok son afiliados
+          (tier 0), su orden relativo no dependía del panel. FIX: tier 0 ahora ordena por
+          (_venue_rank, -precio, fecha) y tier 1 sigue (_venue_rank, featured, popularidad, fecha).
+          Los afiliados siguen SIEMPRE por encima del resto (clave de tier 0<1). Verificar:
+          PUT /api/admin/venues/reorder cambia el orden de los eventos en GET /api/events (dentro
+          del mismo tier). NOTA: local no tiene eventos de Mallorca/afiliados; probar el mecanismo
+          reorden->feed con clubs de Ibiza que sí tienen eventos.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED VENUE REORDERING BUG FIX (10 test scenarios, 100% pass):
+          
+          ✅ CORE BUG FIX VERIFICATION:
+          - Admin login successful with admin@quienva.app
+          - Admin city set to Ibiza via PUT /api/auth/profile
+          - GET /api/venues returned 24 venues, 18 with upcoming_events > 0
+          - Selected test venues: Hï Ibiza (56 events) and Ushuaïa Ibiza (48 events)
+          
+          ✅ INITIAL FEED ORDER (before reorder):
+          - GET /api/events?city=Ibiza&date_filter=all → 644 total events
+          - Hï Ibiza first event at index: 0
+          - Ushuaïa Ibiza first event at index: 55
+          - Initial order: Hï appears BEFORE Ushuaïa
+          
+          ✅ VENUE REORDERING:
+          - PUT /api/admin/venues/reorder with Ushuaïa moved BEFORE Hï → 200 {ok:true, updated:24}
+          
+          ✅ FEED ORDER AFTER REORDER (bug fix verified):
+          - GET /api/events?city=Ibiza&date_filter=all → 644 events
+          - Hï Ibiza first event at index: 47
+          - Ushuaïa Ibiza first event at index: 0
+          - NEW order: Ushuaïa now appears BEFORE Hï ✓
+          - Feed order CHANGED correctly to reflect venue priority reordering
+          
+          ✅ TIER-BASED SORTING VERIFIED:
+          - Tier 0 (affiliate events): 612 events (indices 0-611) from 15 affiliate venues
+          - Tier 1 (non-affiliate events): 32 events (indices 612-643) from 3 non-affiliate venues
+          - Within tier 0: venue priority (order) correctly determines event order
+          - Affiliate events ALWAYS appear before non-affiliate events (tier 0 < tier 1)
+          - Reordering affects venue order WITHIN each tier independently
+          
+          ✅ DETAILED TIER 0 VENUE DISTRIBUTION (after reorder):
+          - Ushuaïa Ibiza: 48 events at indices 0-47 (moved to front)
+          - Hï Ibiza: 56 events at indices 47-102 (moved after Ushuaïa)
+          - [UNVRS]: 58 events at indices 102-159
+          - 528 Ibiza: 29 events at indices 159-187
+          - All 15 affiliate venues correctly ordered by venue priority
+          
+          ✅ ORIGINAL ORDER RESTORED:
+          - PUT /api/admin/venues/reorder with original order → 200 {ok:true}
+          
+          ✅ AUTHORIZATION CHECK:
+          - Created test user (adult, birthdate 1990-01-01)
+          - PUT /api/admin/venues/reorder as non-admin → 403 (correctly rejected)
+          
+          CONCLUSION:
+          Bug fix working perfectly. Reordering venues in "Prioridad de discotecas" now correctly
+          changes the order events appear in the feed (GET /api/events). Within tier 0 (affiliate
+          events), venue priority is the PRIMARY sort key, followed by price and date. Within tier 1
+          (non-affiliate events), venue priority is also the primary key. The two-tier system ensures
+          affiliate events always rank first, while venue reordering works correctly within each tier.
+          
+          Test files: /app/backend_test_venue_reorder.py, /app/backend_test_venue_reorder_tiers.py
   - task: "ClubTickets coverage panel (/api/admin/clubtickets-coverage) — matched vs unmatched affiliate parties"
     implemented: true
     working: true
@@ -1499,6 +1601,19 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      BUGFIX (2026-08-12) — Orden de discotecas en el feed. Admin admin@quienva.app / admin123.
+      El feed GET /api/events ordena por _feed_sort_key: tier 0 = eventos afiliados (siempre
+      primero), tier 1 = resto. Antes tier 0 ignoraba la prioridad del panel; ahora AMBOS tiers
+      respetan _venue_rank (venues.order, menor = más arriba).
+      TEST BACKEND (mecanismo reorden -> feed, usar Ibiza que tiene eventos):
+      1) Poner admin city = "Ibiza" (PUT /api/auth/profile {"city":"Ibiza"}).
+      2) GET /api/venues -> coger 2 venues con eventos (upcoming_events>0), p.ej. A y B.
+      3) GET /api/events?city=Ibiza -> anotar el orden de aparición de A vs B (primer índice).
+      4) PUT /api/admin/venues/reorder poniendo B antes que A (B con order menor).
+      5) GET /api/events?city=Ibiza -> AHORA los eventos de B deben aparecer antes que los de A.
+      6) Restaurar el orden original. Auth: reorder sin admin -> 403.
   - agent: "main"
     message: |
       NUEVAS FEATURES (2026-08-12) para probar SOLO BACKEND. Admin: admin@quienva.app / admin123.
@@ -6945,6 +7060,67 @@ agent_communication:
           3. Run enforcement logic after ALL scrapers complete, not just per-venue
           
           Test file: /app/backend_test_clubtickets_enforced.py
+
+  - agent: "testing"
+    message: |
+      ✅ VENUE REORDERING BUG FIX VERIFIED - ALL TESTS PASSED (2026-08-12)
+      
+      Tested the venue reordering bug fix as requested. The bug where reordering venues in the admin
+      "Prioridad de discotecas" panel did NOT change the feed order has been FIXED.
+      
+      TEST RESULTS (10 test scenarios, 100% pass):
+      
+      ✅ CORE BUG FIX VERIFICATION:
+      - Admin login successful with admin@quienva.app
+      - Admin city set to Ibiza via PUT /api/auth/profile → 200
+      - GET /api/venues → 24 venues, 18 with upcoming_events > 0
+      - Selected test venues: Hï Ibiza (56 events) and Ushuaïa Ibiza (48 events)
+      
+      ✅ INITIAL FEED ORDER (before reorder):
+      - GET /api/events?city=Ibiza&date_filter=all → 644 total events
+      - Hï Ibiza first event at index: 0
+      - Ushuaïa Ibiza first event at index: 55
+      - Initial order: Hï appears BEFORE Ushuaïa
+      
+      ✅ VENUE REORDERING:
+      - PUT /api/admin/venues/reorder with Ushuaïa moved BEFORE Hï → 200 {ok:true, updated:24}
+      
+      ✅ FEED ORDER AFTER REORDER (bug fix verified):
+      - GET /api/events?city=Ibiza&date_filter=all → 644 events
+      - Hï Ibiza first event at index: 47
+      - Ushuaïa Ibiza first event at index: 0
+      - NEW order: Ushuaïa now appears BEFORE Hï ✓
+      - Feed order CHANGED correctly to reflect venue priority reordering
+      
+      ✅ TIER-BASED SORTING VERIFIED:
+      - Tier 0 (affiliate events): 612 events (indices 0-611) from 15 affiliate venues
+      - Tier 1 (non-affiliate events): 32 events (indices 612-643) from 3 non-affiliate venues
+      - Within tier 0: venue priority (order) correctly determines event order
+      - Affiliate events ALWAYS appear before non-affiliate events (tier 0 < tier 1)
+      - Reordering affects venue order WITHIN each tier independently
+      
+      ✅ DETAILED TIER 0 VENUE DISTRIBUTION (after reorder):
+      - Ushuaïa Ibiza: 48 events at indices 0-47 (moved to front)
+      - Hï Ibiza: 56 events at indices 47-102 (moved after Ushuaïa)
+      - [UNVRS]: 58 events at indices 102-159
+      - 528 Ibiza: 29 events at indices 159-187
+      - All 15 affiliate venues correctly ordered by venue priority
+      
+      ✅ ORIGINAL ORDER RESTORED:
+      - PUT /api/admin/venues/reorder with original order → 200 {ok:true}
+      
+      ✅ AUTHORIZATION CHECK:
+      - Created test user (adult, birthdate 1990-01-01)
+      - PUT /api/admin/venues/reorder as non-admin → 403 (correctly rejected)
+      
+      CONCLUSION:
+      Bug fix working perfectly. Reordering venues in "Prioridad de discotecas" now correctly
+      changes the order events appear in the feed (GET /api/events). Within tier 0 (affiliate
+      events), venue priority is the PRIMARY sort key, followed by price and date. Within tier 1
+      (non-affiliate events), venue priority is also the primary key. The two-tier system ensures
+      affiliate events always rank first, while venue reordering works correctly within each tier.
+      
+      Test files: /app/backend_test_venue_reorder.py, /app/backend_test_venue_reorder_tiers.py
 
   - agent: "testing"
     message: |
