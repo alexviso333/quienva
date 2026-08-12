@@ -17,6 +17,7 @@ from typing import List, Optional
 import logging
 import uuid
 import bcrypt
+from urllib.parse import urlparse
 import secrets
 import requests
 import re
@@ -57,6 +58,19 @@ GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 # them would break checkout). The set of "our" events is refreshed periodically
 # from the FourVenues API, so as we're added to more promoters it updates itself.
 AFFILIATE_SLUG = os.environ.get("FOURVENUES_AFFILIATE_SLUG", "quienva").strip()
+# ClubTickets affiliate: our tracking code is appended to EVERY clubtickets.com
+# ticket link served to buyers (?aff=CTxxx), so the sale is attributed to us.
+# ClubTickets is Cloudflare-protected, so we can't scrape the public site; the
+# venue calendars reach us via the venues' own sites (Night League) or the
+# affiliate links panel (ClubTicketsScraper). Any event whose buy link points to
+# clubtickets.com is therefore "ours" (revenue) → ranked first + admin-flagged.
+CLUBTICKETS_AFF = os.environ.get("CLUBTICKETS_AFF", "CT226").strip()
+# Our ClubTickets affiliate "links" panel (plain HTML, NOT Cloudflare-protected).
+# The ClubTicketsScraper reads it to build each carried club's event calendar.
+CLUBTICKETS_LINKS_URL = os.environ.get(
+    "CLUBTICKETS_AFFILIATE_LINKS_URL",
+    "https://admin.clubtickets.com/api/affiliate/2ae03ffd11d66db4120c78bf6a50aab0/links",
+).strip()
 # Key = (normalized venue/org name, YYYY-MM-DD, normalized event name) -> OUR slug.
 # We match by (venue, date, name) because FourVenues gives a DIFFERENT event id/code
 # per microsite, so the venue-scraped event and our promoter event never share ids.
@@ -139,10 +153,36 @@ def _affiliate_slug_for(ev: dict) -> Optional[str]:
     return m[0] if m else None
 
 
+def _is_clubtickets_url(url: str) -> bool:
+    """True if the URL points to clubtickets.com (our ClubTickets affiliate)."""
+    if not url:
+        return False
+    try:
+        return "clubtickets.com" in urlparse(url).netloc.lower()
+    except Exception:
+        return "clubtickets.com/" in url
+
+
+def _clubtickets_affiliate_url(url: str) -> str:
+    """Append our ClubTickets affiliate code (?aff=CTxxx) to a clubtickets.com
+    link so the sale is attributed to us. Idempotent (never double-adds) and
+    leaves non-clubtickets links untouched, so checkout never breaks."""
+    if not url or not CLUBTICKETS_AFF or not _is_clubtickets_url(url):
+        return url or ""
+    if re.search(r"[?&]aff=", url):
+        return url  # already tagged (e.g. links panel already includes it)
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}aff={CLUBTICKETS_AFF}"
+
+
 def _event_is_mine(ev: dict) -> bool:
-    """True only if this event is one WE carry in our promoter profile (exact or
-    venue-alias). Only those get our affiliate link; everything else keeps its
-    normal link so checkout never breaks."""
+    """True if this event earns us commission: either a FourVenues party we carry
+    in our promoter profile, OR any event whose ticket link goes through
+    ClubTickets (our affiliate). Those get our affiliate link, rank first in the
+    feed and are flagged in admin; everything else keeps its normal link so
+    checkout never breaks."""
+    if _is_clubtickets_url(ev.get("commission_url", "")):
+        return True
     return _affiliate_match(ev) is not None
 
 
@@ -197,7 +237,9 @@ def _commission_url_for(ev: dict) -> str:
         code = _fv_event_code(ev.get("commission_url", "")) or (m[0] or "")
         if code:
             return f"https://site.fourvenues.com/es/{AFFILIATE_SLUG}/events/{code}"
-    return ev.get("commission_url", "") or ""
+    # ClubTickets: tag any clubtickets.com link with our affiliate code so the
+    # sale is attributed to us (Ushuaïa, Hï, UNVRS and all ClubTickets clubs).
+    return _clubtickets_affiliate_url(ev.get("commission_url", "") or "")
 
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
@@ -9565,7 +9607,7 @@ app.include_router(api_router)
 from scrapers import build_scraper as _build_scraper, ScrapedEvent as _ScrapedEvent
 from scrapers.base import normalize_venue_key as _norm_venue
 
-_ALLOWED_ADAPTERS = ("fourvenues_api", "fourvenues_public_api", "nextjs_html", "nightleague")
+_ALLOWED_ADAPTERS = ("fourvenues_api", "fourvenues_public_api", "nextjs_html", "nightleague", "xceed", "clubtickets")
 
 # FourVenues guest-token: long-lived JWT shared by every microsite. Read from an
 # app_settings override (editable in admin) first, then the env var. Cached briefly.
@@ -10135,6 +10177,25 @@ _SEED_VENUES = [
      "url": "https://xceed.me/es/marbella/events"},
     {"name": "Xceed · Palma", "slug": "", "city": "Palma de Mallorca", "adapter_type": "xceed",
      "url": "https://xceed.me/es/palma-de-mallorca/events"},
+    # ---- IBIZA · ClubTickets affiliate clubs (NEW venues not covered elsewhere).
+    # Data comes from our affiliate links panel; ticket links carry ?aff=CT226 so
+    # every sale is attributed to us. (Ushuaïa/Hï already exist via nightleague
+    # and Eden/Es Paradís/Chinois/Ibiza Rocks/Lío/Swag via FourVenues; those keep
+    # their scrapers and are monetized separately, so they're NOT duplicated here.)
+    {"name": "[UNVRS]", "slug": "unvrs-ibiza", "city": "Ibiza", "adapter_type": "clubtickets",
+     "url": "https://www.clubtickets.com/clubbing/unvrs-ibiza"},
+    {"name": "O Beach Ibiza", "slug": "o-beach-ibiza", "city": "Ibiza", "adapter_type": "clubtickets",
+     "url": "https://www.clubtickets.com/clubbing/o-beach-ibiza"},
+    {"name": "528 Ibiza", "slug": "528-ibiza", "city": "Ibiza", "adapter_type": "clubtickets",
+     "url": "https://www.clubtickets.com/clubbing/528-ibiza"},
+    {"name": "Baloo Ibiza", "slug": "baloo", "city": "Ibiza", "adapter_type": "clubtickets",
+     "url": "https://www.clubtickets.com/clubbing/baloo"},
+    {"name": "Bambuku Ibiza", "slug": "bambuku-ibiza", "city": "Ibiza", "adapter_type": "clubtickets",
+     "url": "https://www.clubtickets.com/clubbing/bambuku-ibiza"},
+    {"name": "Playa Soleil", "slug": "playa-soleil", "city": "Ibiza", "adapter_type": "clubtickets",
+     "url": "https://www.clubtickets.com/clubbing/playa-soleil"},
+    {"name": "Teatro Pereyra", "slug": "teatro-pereyra", "city": "Ibiza", "adapter_type": "clubtickets",
+     "url": "https://www.clubtickets.com/clubbing/teatro-pereyra"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")
@@ -10416,6 +10477,10 @@ async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
         if venue.get("adapter_type") == "fourvenues_api":
             _kwargs["slug"] = venue.get("slug") or ""
             _kwargs["guest_token"] = await _get_fourvenues_token()
+        if venue.get("adapter_type") == "clubtickets":
+            _kwargs["venue_slug"] = venue.get("slug") or ""
+            _kwargs["panel_url"] = CLUBTICKETS_LINKS_URL
+            _kwargs["aff_code"] = CLUBTICKETS_AFF
         scraper = _build_scraper(venue["adapter_type"], venue["url"], **_kwargs)
         events = await scraper.fetch()
         summary["events"] = len(events)

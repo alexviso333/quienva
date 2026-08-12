@@ -370,3 +370,14 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Se aplica automáticamente a TODAS las páginas que usan `_seo_card`: ciudad, discoteca, home (relacionadas) y evento, en ES/EN/DE.
 - Verificado: capturas (evento/ciudad/home) muestran carteles completos sobre fondo difuminado; curl 200 en las 6 variantes con el nuevo marcado; sin errores en backend.
 - **PRODUCCIÓN**: cambio de código → requiere "Save to GitHub" para desplegar a Render (backend SSR). Solo CSS/HTML del SSR; no toca la SPA React.
+
+---
+
+## Afiliado ClubTickets (CT226) + nuevas discotecas Ibiza · 2026-08-12
+- **Contexto**: nos dieron el afiliado de ClubTickets (código `CT226`). clubtickets.com está protegido por Cloudflare → NO se puede scrapear directo. El catálogo llega por el **panel de enlaces de afiliado** (`admin.clubtickets.com/api/affiliate/<token>/links`, HTML plano, sin Cloudflare).
+- **Parte 1 (afiliado universal)**: `_commission_url_for` añade `?aff=CT226` (env `CLUBTICKETS_AFF`) a CUALQUIER enlace de compra de clubtickets.com (idempotente, respeta query previa, nunca duplica). `_event_is_mine` devuelve True para todo evento con enlace clubtickets → salen PRIMEROS en el feed y muestran `is_affiliate=true` en admin. FourVenues intacto; enlaces no-clubtickets sin tocar. → Ushuaïa (que ya usaba clubtickets) queda monetizada al instante.
+- **Parte 2 (nuevas discotecas)**: nuevo adaptador `clubtickets` (`backend/scrapers/clubtickets.py`) que lee el panel de afiliado (cacheado 600s) y construye el calendario de cada club con enlaces `?aff=CT226`. Seed de 7 discotecas NUEVAS de Ibiza: **[UNVRS], O Beach Ibiza, 528 Ibiza, Baloo Ibiza, Bambuku Ibiza, Playa Soleil, Teatro Pereyra**.
+- **NO duplicadas**: las que ya existían por FourVenues (Eden, Es Paradís, Chinois, Ibiza Rocks, Lío, Swag) o nightleague (Ushuaïa, Hï) NO se re-crean.
+- **Verificado (testing backend 4/4 suites, 100%)**: feed Ibiza con 296 eventos clubtickets, todos con `aff=CT226` sin duplicar, ordenados primero; `is_affiliate` correcto (true clubtickets / false resto / null invitado); 7 venues activos; run manual OK; sin regresiones (Madrid ok, sin venues duplicados).
+- **Config**: `CLUBTICKETS_AFF` y `CLUBTICKETS_AFFILIATE_LINKS_URL` en env (con defaults en código). **PRODUCCIÓN**: requiere "Save to GitHub" → Render.
+- **PENDIENTE (decisión usuario)**: los 6 clubs que hoy van por FourVenues (Eden, Es Paradís, Chinois, Ibiza Rocks, Lío, Swag) NO ganan comisión ClubTickets. Cambiarlos a ClubTickets implicaría sustituir su fuente (perder precios/imágenes de FourVenues a cambio de tu comisión). A confirmar.

@@ -4,11 +4,13 @@ from .nextjs_html import NextJsHtmlScraper
 from .fourvenues_api import FourVenuesApiScraper, FourVenuesTokenError
 from .nightleague import NightLeagueScraper
 from .xceed import XceedScraper
+from .clubtickets import ClubTicketsScraper
 
 __all__ = [
     "ScrapedEvent", "ScraperResult", "Scraper",
     "FitzPublicAPIScraper", "NextJsHtmlScraper", "FourVenuesApiScraper",
-    "FourVenuesTokenError", "NightLeagueScraper", "XceedScraper", "build_scraper",
+    "FourVenuesTokenError", "NightLeagueScraper", "XceedScraper",
+    "ClubTicketsScraper", "build_scraper",
 ]
 
 
@@ -36,4 +38,8 @@ def build_scraper(adapter_type: str, url: str, **kwargs) -> Scraper:
         kwargs.pop("slug", None)
         kwargs.pop("guest_token", None)
         return XceedScraper(url, **kwargs)
+    if adapter_type == "clubtickets":
+        kwargs.pop("slug", None)
+        kwargs.pop("guest_token", None)
+        return ClubTicketsScraper(url, **kwargs)
     raise ValueError(f"Unknown scraper adapter_type: {adapter_type}")

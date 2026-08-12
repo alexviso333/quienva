@@ -116,7 +116,55 @@ user_problem_statement: |
   código único y puntos para ambas partes.
 
 backend:
-  - task: "Sitemap/robots/SEO routes: allow HEAD (was 405 -> GSC 'sitemap no válido')"
+  - task: "ClubTickets affiliate (aff=CT226) on all clubtickets.com ticket links + mark as 'mine' (rank first / admin flag)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added ClubTickets affiliate support. _commission_url_for now appends ?aff=CT226
+          (env CLUBTICKETS_AFF) to ANY clubtickets.com ticket link (idempotent, respects
+          existing query params, never double-adds). _event_is_mine now returns True for any
+          event whose commission_url is a clubtickets.com URL → those rank first in the feed
+          (tier 0) and expose is_affiliate=true to admins. FourVenues logic untouched; non-
+          clubtickets links returned unchanged. Verified locally: Ushuaïa links (previously
+          no aff) now served with aff=CT226; already-tagged links unchanged; Xceed/empty
+          untouched.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL CLUBTICKETS AFFILIATE FEATURES (4 test suites, 100% pass): ✅ (1) GUEST IBIZA EVENTS FEED: GET /api/events?city=Ibiza&date_filter=all → 200 with 381 events. Found 296 clubtickets.com events. EVERY clubtickets.com URL contains 'aff=CT226' with NO duplicate aff= params. Clubtickets events rank FIRST (indices 0-295, all before non-clubtickets events). is_affiliate field is null for ALL events (guest user). Sample: F*** Me I'm Famous! by David Guetta at Ushuaïa Ibiza with URL https://www.clubtickets.com/clubbing/ushuaia-ibiza/f-me-im-famous/2026-08-17?aff=CT226. ✅ (2) ADMIN is_affiliate FLAG: Admin login successful. GET /api/events?city=Ibiza with admin auth → 200 with 381 events. ALL 296 clubtickets events have is_affiliate=true. Non-clubtickets events (FourVenues, Xceed) have is_affiliate=false. Admin-only field correctly exposed. ✅ (3) ADMIN SCRAPERS - CLUBTICKETS: GET /admin/scrapers → 200 with 79 total scrapers. Found exactly 7 ClubTickets Ibiza venues: 528 Ibiza, Baloo Ibiza, Bambuku Ibiza, O Beach Ibiza, Playa Soleil, Teatro Pereyra, [UNVRS]. ALL have adapter_type='clubtickets', active=True, city='Ibiza'. Tested scraper run for 528 Ibiza: POST /admin/scrapers/{id}/run → 200 with ok=true, events=25. ✅ (4) REGRESSION TESTS: (4a) GET /api/events?city=Madrid → 200 with 43 events (non-Ibiza cities working). (4b) Non-clubtickets URLs unchanged - NO CT226 affiliate appended to FourVenues/Xceed URLs. (4c) NO duplicate venues found. Total 20 Ibiza scrapers, all unique. Existing venues (Eden Ibiza, Ushuaïa Ibiza, Hï Ibiza) exist exactly once (no duplication). 7 new ClubTickets venues are distinct. All ClubTickets affiliate requirements met perfectly.
+  - task: "ClubTickets scraper adapter + seed 7 new Ibiza venues (UNVRS, O Beach, 528, Baloo, Bambuku, Playa Soleil, Teatro Pereyra)"
+    implemented: true
+    working: true
+    file: "backend/scrapers/clubtickets.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New 'clubtickets' adapter reads OUR affiliate links panel
+          (admin.clubtickets.com/api/affiliate/<token>/links — plain HTML, not Cloudflare-
+          protected) and builds each carried club's dated events with buy links carrying
+          ?aff=CT226. Panel HTML cached in-process (600s TTL) so a full run downloads it once.
+          Registered in scrapers/__init__.build_scraper and _ALLOWED_ADAPTERS. Seeded 7 NEW
+          Ibiza venues (adapter_type=clubtickets). Overlap venues already in app (Ushuaïa/Hï via
+          nightleague; Eden/Es Paradís/Chinois/Ibiza Rocks/Lío/Swag via FourVenues) are NOT
+          duplicated. Verified locally: seed OK (7 venues), UNVRS run created 57 events, Teatro
+          Pereyra 22; GET /api/events?city=Ibiza returns 296 clubtickets events, all aff-tagged,
+          ordered first.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED CLUBTICKETS SCRAPER ADAPTER (included in test suite above): ✅ GET /admin/scrapers returns 79 total scrapers. Found exactly 7 ClubTickets Ibiza venues with adapter_type='clubtickets', active=True, city='Ibiza': 528 Ibiza, Baloo Ibiza, Bambuku Ibiza, O Beach Ibiza, Playa Soleil, Teatro Pereyra, [UNVRS] (note: UNVRS stored as [UNVRS] in database). ✅ Tested manual scraper run for 528 Ibiza: POST /admin/scrapers/{id}/run → 200 with ok=true, events=25 (scraper successfully fetches and creates events). ✅ GET /api/events?city=Ibiza returns 381 total events including 296 clubtickets.com events (from 7 new venues + existing Ushuaïa Ibiza). ✅ All clubtickets events have commission_url with aff=CT226 appended. ✅ NO duplicate venues - existing venues (Eden, Es Paradis, Ushuaïa, Hï) exist exactly once. 7 new ClubTickets venues are distinct and separate from existing scrapers. Scraper adapter working perfectly.
+
     implemented: true
     working: true
     file: "backend/server.py"
@@ -1159,12 +1207,80 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "ClubTickets affiliate (aff=CT226) on all clubtickets.com ticket links + mark as 'mine' (rank first / admin flag)"
+    - "ClubTickets scraper adapter + seed 7 new Ibiza venues (UNVRS, O Beach, 528, Baloo, Bambuku, Playa Soleil, Teatro Pereyra)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NEW WORK TO TEST — ClubTickets affiliate + new Ibiza venues (2026-08-12).
+      Local DB is quienva_local. Admin login: admin@quienva.app / admin123 (POST /api/auth/login).
+
+      Please test (backend only):
+      1) GET /api/events?city=Ibiza&date_filter=all (public):
+         - Returns clubtickets.com events (7 new venues: [UNVRS], O Beach Ibiza, 528 Ibiza,
+           Baloo Ibiza, Bambuku Ibiza, Playa Soleil, Teatro Pereyra) + Ushuaïa.
+         - EVERY event whose commission_url contains 'clubtickets.com' MUST include 'aff=CT226'
+           in commission_url and must NOT have a duplicated aff param.
+         - These affiliate events should appear FIRST in the feed (before non-clubtickets ones).
+      2) is_affiliate flag: log in as admin, GET /api/events?city=Ibiza — clubtickets events
+         must have is_affiliate=true; as a normal/guest user is_affiliate must be null.
+      3) Admin scrapers: GET /api/admin/scrapers should list the 7 clubtickets venues
+         (adapter_type='clubtickets', active). Optionally POST /api/admin/scrapers/{venue_id}/run
+         for a clubtickets venue and confirm ok=true with events>0.
+      4) Regression: ensure existing FourVenues venues/events are NOT duplicated and their
+         (non-clubtickets) links are unchanged; GET /api/events for other cities still works.
+
+      Do NOT modify Testing Protocol. Report pass/fail per item.
+  - agent: "testing"
+    message: |
+      🎉 CLUBTICKETS AFFILIATE TESTING COMPLETE - ALL TESTS PASSED (2026-08-12)
+      
+      Tested ClubTickets affiliate integration (aff=CT226) and 7 new Ibiza venues.
+      Test suite: 4 comprehensive test scenarios, 100% pass rate.
+      
+      ✅ TEST 1: Guest Ibiza Events Feed
+      - GET /api/events?city=Ibiza&date_filter=all → 200 with 381 events
+      - Found 296 clubtickets.com events (from 7 new venues + Ushuaïa)
+      - EVERY clubtickets.com URL contains 'aff=CT226' with NO duplicate aff= params
+      - Clubtickets events rank FIRST (indices 0-295, all before non-clubtickets)
+      - is_affiliate field is null for guest users (correct)
+      
+      ✅ TEST 2: Admin is_affiliate Flag
+      - Admin login successful (admin@quienva.app)
+      - GET /api/events?city=Ibiza with admin auth → 200
+      - ALL 296 clubtickets events have is_affiliate=true
+      - Non-clubtickets events (FourVenues, Xceed) have is_affiliate=false
+      - Admin-only field correctly exposed
+      
+      ✅ TEST 3: Admin Scrapers - ClubTickets
+      - GET /admin/scrapers → 200 with 79 total scrapers
+      - Found exactly 7 ClubTickets Ibiza venues with correct config:
+        * 528 Ibiza, Baloo Ibiza, Bambuku Ibiza, O Beach Ibiza
+        * Playa Soleil, Teatro Pereyra, [UNVRS]
+        * ALL have adapter_type='clubtickets', active=True, city='Ibiza'
+      - Tested manual scraper run (528 Ibiza): ok=true, events=25
+      
+      ✅ TEST 4: Regression Tests
+      - Madrid events working (43 events returned)
+      - Non-clubtickets URLs unchanged (no CT226 appended to FourVenues/Xceed)
+      - NO duplicate venues (20 Ibiza scrapers, all unique)
+      - Existing venues (Eden, Ushuaïa, Hï) exist exactly once
+      
+      SUMMARY: ClubTickets affiliate feature working perfectly. All requirements met:
+      - Affiliate code (aff=CT226) correctly appended to all clubtickets.com URLs
+      - No duplicate affiliate params
+      - Clubtickets events rank first in feed
+      - Admin is_affiliate flag working correctly
+      - 7 new venues seeded and operational
+      - No regressions in existing functionality
+      
+      RECOMMENDATION: Feature ready for production. Main agent can summarize and finish.
+
   - agent: "testing"
     message: |
       BACKEND TESTING COMPLETE - Feed Ordering + Venue Reorder + Affiliate Fix (2026-08-02k)
