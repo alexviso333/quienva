@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from PIL import Image
 
 # Base URL from frontend/.env
-BASE_URL = "https://seo-analytics-hub-11.preview.emergentagent.com/api"
+BASE_URL = "https://clubticket-affiliate.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"
