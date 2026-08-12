@@ -6,7 +6,7 @@ Check actual history entry structure
 import requests
 import json
 
-BASE_URL = "https://vercel-render-stack.preview.emergentagent.com/api"
+BASE_URL = "https://ticket-matcher-5.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

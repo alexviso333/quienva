@@ -215,6 +215,25 @@ def _ct_name_match(a: str, b: str) -> bool:
     return bool(inter) and (len(inter) / min(len(ta), len(tb))) >= 0.5
 
 
+def _ct_night_date(date_str: str, time_str: str) -> str:
+    """The 'night-label' date used to line up a primary-source party with the
+    ClubTickets affiliate panel. A party whose start time is midnight (00:00)
+    really belongs to the PREVIOUS night, so its night-label date is the day
+    before — exactly the same normalization `_apply_scraped_event` applies before
+    storing (00:00 -> 23:59 of the prior day). ClubTickets panel dates are already
+    night-labels (Bubbles = the night of Aug 13), so normalizing the primary date
+    the same way is what makes the two sources line up. Without this, a FourVenues
+    party that starts at midnight carries the NEXT calendar day and wrongly matches
+    the next night's ClubTickets party (e.g. 'The Most Beautiful Party' grabbing
+    'Bubbles')."""
+    if (time_str or "").strip() in ("00:00", "0:00", "00:00:00"):
+        try:
+            return (date.fromisoformat(str(date_str)) - timedelta(days=1)).isoformat()
+        except Exception:
+            return str(date_str or "")
+    return str(date_str or "")
+
+
 def _event_is_mine(ev: dict) -> bool:
     """True if this event earns us commission: either a FourVenues party we carry
     in our promoter profile, OR a party whose ticket link goes through ClubTickets
@@ -10424,9 +10443,15 @@ def _affiliate_ct_slug_for_name(name: str):
 async def _ct_affiliate_url_for(ct_slug: str, date_str: str, name: str):
     """Return OUR ClubTickets ?aff link for a party ONLY if that exact party is in
     our affiliate panel, else None. Match is PER PARTY (never per venue): the panel
-    party must be on the SAME date; when a night has a single carried party we take
-    it, when it has several we disambiguate by fuzzy name match. None → the caller
-    keeps the party's normal direct link (no ?aff)."""
+    party must be on the SAME night-label date AND its name must match (fuzzy). We
+    do NOT blindly take a single same-date candidate anymore: a club can run more
+    than one party a night (e.g. Lío's early 'The Halftime Show' + late 'Tiempo'),
+    so a same-date-but-different-name party must NOT inherit another party's link.
+    None → the caller keeps the party's normal direct link (no ?aff).
+
+    `date_str` is expected to already be the night-label date (this is called from
+    _apply_scraped_event AFTER midnight normalization); we normalize once more
+    defensively so a raw midnight date still lines up with the panel."""
     if not ct_slug or not date_str:
         return None
     try:
@@ -10434,11 +10459,10 @@ async def _ct_affiliate_url_for(ct_slug: str, date_str: str, name: str):
         idx = await get_panel_index(CLUBTICKETS_LINKS_URL)
     except Exception:
         return None
-    same_date = [p for p in (idx.get(ct_slug) or []) if p.get("date") == date_str]
-    if not same_date:
+    parties = idx.get(ct_slug) or []
+    if not parties:
         return None
-    if len(same_date) == 1:
-        return same_date[0].get("url") or None
+    same_date = [p for p in parties if p.get("date") == date_str]
     for p in same_date:
         if _ct_name_match(name, p.get("name", "")):
             return p.get("url") or None
@@ -10668,23 +10692,38 @@ async def _enforce_clubtickets_affiliate(venue: dict, primary: list) -> list:
     by_date: dict = {}
     for ce in ct_events:
         by_date.setdefault(ce.date, []).append(ce)
-    matched_ext: set = set()
+    # Group the primary events by their NIGHT-LABEL date (midnight starts belong to
+    # the previous night — same rule the store uses) so both sources line up, and
+    # so we know how many primary parties share a night (needed for the safe
+    # single-candidate fallback below).
+    prim_by_nd: dict = {}
     for pe in primary:
-        cands = by_date.get(pe.date) or []
-        chosen = None
-        if len(cands) == 1:
-            # One carried party that night at this club → it's this night's party.
-            chosen = cands[0]
-        elif cands:
-            # Several carried parties that night → disambiguate by name.
+        nd = _ct_night_date(pe.date, getattr(pe, "time", ""))
+        prim_by_nd.setdefault(nd, []).append(pe)
+    matched_ext: set = set()
+    for nd, pes in prim_by_nd.items():
+        cands = by_date.get(nd) or []
+        if not cands:
+            continue  # nothing carried that night → keep every primary link as-is
+        for pe in pes:
+            chosen = None
+            # 1) Name match FIRST — the only reliable signal when a club runs
+            #    several parties a night (e.g. Lío's 'The Halftime Show' 21:00 and
+            #    'Tiempo' 23:45 both on the same date, but only 'Tiempo' is ours).
             for ce in cands:
                 if _ct_name_match(pe.name, ce.name):
                     chosen = ce
                     break
-        if chosen is not None:
-            pe.ticket_url = chosen.ticket_url        # our ?aff link — party is ours
-            matched_ext.add(chosen.external_id)
-        # else: NOT in our panel → keep pe.ticket_url (primary's own direct link)
+            # 2) Fallback: take the single carried party ONLY when it is truly
+            #    unambiguous — exactly one carried party AND exactly one primary
+            #    party that night — so a same-date-but-different-name sibling can
+            #    never inherit another party's link.
+            if chosen is None and len(cands) == 1 and len(pes) == 1:
+                chosen = cands[0]
+            if chosen is not None:
+                pe.ticket_url = chosen.ticket_url    # our ?aff link — party is ours
+                matched_ext.add(chosen.external_id)
+            # else: NOT in our panel → keep pe.ticket_url (primary's own direct link)
     extra = [ce for ce in ct_events if ce.external_id not in matched_ext]
     return primary + extra
 

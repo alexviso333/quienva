@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://vercel-render-stack.preview.emergentagent.com"
+BACKEND_URL = "https://ticket-matcher-5.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

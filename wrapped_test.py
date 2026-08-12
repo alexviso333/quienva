@@ -12,7 +12,7 @@ import io
 from datetime import datetime
 
 # Backend URL from frontend/.env
-BASE_URL = "https://vercel-render-stack.preview.emergentagent.com/api"
+BASE_URL = "https://ticket-matcher-5.preview.emergentagent.com/api"
 
 def log(msg):
     print(f"[TEST] {msg}")

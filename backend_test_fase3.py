@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://vercel-render-stack.preview.emergentagent.com/api"
+BASE_URL = "https://ticket-matcher-5.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

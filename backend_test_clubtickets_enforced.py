@@ -17,7 +17,7 @@ import sys
 from collections import defaultdict
 
 # Backend URL from frontend/.env
-BASE_URL = "https://vercel-render-stack.preview.emergentagent.com/api"
+BASE_URL = "https://ticket-matcher-5.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

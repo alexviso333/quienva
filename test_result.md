@@ -124,6 +124,35 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          FIX MATCHEO FECHA/NOMBRE (2026-08, reportado por usuario): eventos matcheaban con la
+          fiesta EQUIVOCADA de ClubTickets. Ejemplos reales verificados:
+          - Es Paradis "The Most Beautiful Party" (noche 12-ago, FourVenues start a medianoche =>
+            fecha cruda 13-ago 00:00) matcheaba con "Bubbles" (13-ago en CT).
+          - Lío "The Halftime Show" (13-ago 21:00) matcheaba con "TIEMPO by Nomis" (única fiesta CT
+            del 13-ago), robándole el link a "Tiempo" (13-ago 23:45), que es la que sí llevamos.
+          CAUSA RAÍZ (2 fallos combinados en _enforce_clubtickets_affiliate y _ct_affiliate_url_for):
+          1) El matcheo usaba la fecha CRUDA del scraper (antes de normalizar medianoche 00:00 ->
+             23:59 del día anterior), mientras que las fechas del panel CT son "night-label". Esto
+             causaba un off-by-one (+1 día) sistemático en fiestas que empiezan a medianoche.
+          2) Regla "si solo hay 1 candidato esa noche, tómalo SIN comprobar el nombre": asignaba a
+             ciegas cuando un club tiene varias fiestas por noche o cuando la única fiesta CT de esa
+             noche es otra distinta.
+          SOLUCIÓN:
+          - Nuevo helper _ct_night_date(date,time): normaliza medianoche a la fecha "night-label"
+            ANTES de matchear (misma regla que usa el guardado), alineando FourVenues<->ClubTickets.
+          - Matcheo ahora exige coincidencia de nombre (fuzzy _ct_name_match) PRIMERO. El fallback
+            "candidato único" solo se aplica cuando es inequívoco: exactamente 1 fiesta CT Y 1 fiesta
+            primaria esa noche.
+          - _ct_affiliate_url_for (ruta source-agnostic, p.ej. Xceed) ahora también exige nombre.
+          VERIFICADO con las funciones REALES de server.py contra el panel de afiliado en vivo +
+          calendario real de FourVenues (site.fourvenues.com/es/es-paradis-ibiza y /lio-ibiza):
+          MBP->DIRECT, Bubbles->CT-aff, Halftime->DIRECT, Tiempo->CT-aff, Vintage->CT-aff. Todas OK.
+          Fiestas nuevas del panel siguen apareciendo/matcheando solas via scheduler (cada 20 min) +
+          append de "extra". NOTA: el fix está en el código; producción (Render) lo aplicará al
+          desplegar (Save to GitHub -> redeploy).
       - working: "NA"
         agent: "main"
         comment: |
@@ -1589,7 +1618,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -1703,7 +1732,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -4066,7 +4095,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+        Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -4131,7 +4160,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -4239,7 +4268,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -4366,7 +4395,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -4782,7 +4811,7 @@ agent_communication:
         No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
         
         Test file: /app/backend_test.py
-        Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+        Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
 
 test_focus_2026_08_06_notif_and_cityalerts:
   goal: "Verificar 2 cambios de backend SIN romper nada. Entorno LOCAL nuevo: la BD arranca vacía y NO hay token de FourVenues (no probar scrapers/afiliado aquí)."
@@ -4856,7 +4885,7 @@ agent_communication:
         Both bug fixes working perfectly. No regressions detected. All endpoints returning correct values with proper persistence.
         
         Test file: /app/backend_test.py
-        Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+        Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
 
 
@@ -5339,7 +5368,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
       Admin: admin@quienva.app / admin123
       Test user: u1test1786031593@test.com
 
@@ -5476,7 +5505,7 @@ return 401 for guests.
         NO ISSUES FOUND. All requirements from review request satisfied.
         
         Test file: /app/backend_test.py
-        Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+        Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
 
 
 #====================================================================================================
@@ -5713,7 +5742,7 @@ agent_communication:
         - Own username update allowed (no-op, no clash)
         
         Test file: /app/backend_test.py
-        Backend URL: https://vercel-render-stack.preview.emergentagent.com/api
+        Backend URL: https://ticket-matcher-5.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
         
         NO ISSUES FOUND. All 3 tasks working perfectly.
@@ -5810,7 +5839,7 @@ agent_communication:
       TESTED: New SSR homepage, venue pages, and sitemap features for SEO optimization.
       
       TEST ENVIRONMENT:
-      - Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+      - Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
       - Test data: Venue "Olivia Valere" (slug: olivia-valere) in Marbella with events t1 (Gims Live), t2 (House Night)
       - Canonical URLs use preview domain (expected behavior for preview environment)
       
@@ -5962,7 +5991,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://vercel-render-stack.preview.emergentagent.com/api
+      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
       Total tests: 24 passed, 0 failed
 
 backend:
