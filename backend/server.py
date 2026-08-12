@@ -10054,20 +10054,25 @@ _SEED_VENUES = [
     # ---- IBIZA (FourVenues, verified live) ----
     {"name": "Pacha Ibiza", "slug": "pacha-ibiza", "city": "Ibiza",
      "url": "https://site.fourvenues.com/es/pacha-ibiza"},
+    # These Ibiza clubs use FourVenues as primary source (real per-event prices),
+    # but we're ALSO ClubTickets affiliates for them: if FourVenues returns no
+    # events (e.g. guest-token expired), run_scraper_for_venue falls back to the
+    # ClubTickets affiliate panel (ct_fallback_slug) so the club always shows its
+    # calendar with our ?aff=CT226 link.
     {"name": "Lío Ibiza", "slug": "lio-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/lio-ibiza"},
+     "url": "https://site.fourvenues.com/es/lio-ibiza", "ct_fallback_slug": "lio"},
     {"name": "Es Paradis Ibiza", "slug": "es-paradis-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/es-paradis-ibiza"},
+     "url": "https://site.fourvenues.com/es/es-paradis-ibiza", "ct_fallback_slug": "es-paradis"},
     {"name": "Eden Ibiza", "slug": "eden-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/eden-ibiza"},
+     "url": "https://site.fourvenues.com/es/eden-ibiza", "ct_fallback_slug": "eden-ibiza"},
     {"name": "Pikes Ibiza", "slug": "pikes-ibiza", "city": "Ibiza",
      "url": "https://site.fourvenues.com/es/pikes-ibiza"},
     {"name": "Chinois Ibiza", "slug": "chinois-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/chinois-ibiza"},
+     "url": "https://site.fourvenues.com/es/chinois-ibiza", "ct_fallback_slug": "club-chinois-ibiza"},
     {"name": "Swag Ibiza", "slug": "swag-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/swag-ibiza"},
+     "url": "https://site.fourvenues.com/es/swag-ibiza", "ct_fallback_slug": "swag"},
     {"name": "Ibiza Rocks", "slug": "ibiza-rocks", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/ibiza-rocks"},
+     "url": "https://site.fourvenues.com/es/ibiza-rocks", "ct_fallback_slug": "ibiza-rocks"},
     {"name": "Bora Bora Ibiza", "slug": "bora-bora-ibiza", "city": "Ibiza",
      "url": "https://site.fourvenues.com/es/bora-bora-ibiza"},
     {"name": "Cova Santa Ibiza", "slug": "cova-santa", "city": "Ibiza",
@@ -10160,10 +10165,10 @@ _SEED_VENUES = [
     # embedded ClubTickets/JSON-LD availability — no FourVenues, no auth).
     {"name": "Ushuaïa Ibiza", "slug": "ushuaia-ibiza", "city": "Ibiza",
      "adapter_type": "nightleague",
-     "url": "https://www.theushuaiaexperience.com/club/en"},
+     "url": "https://www.theushuaiaexperience.com/club/en", "ct_fallback_slug": "ushuaia-ibiza"},
     {"name": "Hï Ibiza", "slug": "hi-ibiza", "city": "Ibiza",
      "adapter_type": "nightleague",
-     "url": "https://www.hiibiza.com/es"},
+     "url": "https://www.hiibiza.com/es", "ct_fallback_slug": "hi-ibiza"},
     # Xceed city listings — real club events with prices via schema.org JSON-LD.
     # No slug (they aggregate many real venues) so they don't create a directory
     # locale; per-event venue name is set from each event's JSON-LD location.
@@ -10229,15 +10234,24 @@ async def seed_scraped_venues():
                 if not existing.get("slug") and v.get("slug"):
                     await db.scraped_venues.update_one(
                         {"id": existing.get("id")}, {"$set": {"slug": v["slug"]}})
+                # Backfill ClubTickets fallback slug on existing docs so already
+                # seeded FourVenues clubs (Lío, Eden, Es Paradís, Chinois, Swag,
+                # Ibiza Rocks) gain the affiliate-panel fallback without a reseed.
+                if v.get("ct_fallback_slug") and existing.get("ct_fallback_slug") != v["ct_fallback_slug"]:
+                    await db.scraped_venues.update_one(
+                        {"id": existing.get("id")},
+                        {"$set": {"ct_fallback_slug": v["ct_fallback_slug"]}})
                 continue
             doc = {**v, "id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat(),
                    "last_run_at": None, "last_run_ok": None, "last_run_events": 0,
                    "last_run_new": 0, "last_run_updated": 0, "last_run_error": None}
             await db.scraped_venues.insert_one(doc)
         logger.info(f"Seeded scraped_venues: {len(_SEED_VENUES)} venues (fourvenues_api)")
-        # Link curated Ibiza directory entries to their new Night League scrapers
-        # so sync_scraper_venues_to_directory dedups them (no duplicate locales).
-        for nm, slug in (("Ushuaïa Ibiza", "ushuaia-ibiza"), ("Hï Ibiza", "hi-ibiza")):
+        # Link curated Ibiza directory entries to their new scrapers so
+        # sync_scraper_venues_to_directory dedups them (no duplicate locales).
+        # Ushuaïa/Hï → Night League; [UNVRS] → ClubTickets affiliate panel.
+        for nm, slug in (("Ushuaïa Ibiza", "ushuaia-ibiza"), ("Hï Ibiza", "hi-ibiza"),
+                         ("[UNVRS]", "unvrs-ibiza")):
             await db.venues.update_many(
                 {"name": nm, "scraper_slug": {"$in": ["", None]}},
                 {"$set": {"scraper_slug": slug}})
@@ -10482,7 +10496,45 @@ async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
             _kwargs["panel_url"] = CLUBTICKETS_LINKS_URL
             _kwargs["aff_code"] = CLUBTICKETS_AFF
         scraper = _build_scraper(venue["adapter_type"], venue["url"], **_kwargs)
-        events = await scraper.fetch()
+        # Run the primary scraper. If it raises (e.g. FourVenues guest-token
+        # expired) but we have a ClubTickets fallback for this club, don't fail —
+        # fall through to the affiliate panel below so the club still shows.
+        _primary_err = None
+        try:
+            events = await scraper.fetch()
+        except Exception as _e:
+            if not venue.get("ct_fallback_slug"):
+                raise
+            _primary_err = _e
+            events = []
+        # ClubTickets fallback: if the primary source (usually FourVenues) returned
+        # no events (or errored) but we're a ClubTickets affiliate for this club,
+        # build its calendar from the affiliate panel so the venue ALWAYS shows its
+        # events (monetized with our ?aff=<code>). No prices — the panel only lists
+        # dates + ticket links — but the club appears just like the rest.
+        if not events and venue.get("ct_fallback_slug"):
+            try:
+                from scrapers.clubtickets import ClubTicketsScraper
+                _ct = ClubTicketsScraper(
+                    url=f"https://www.clubtickets.com/clubbing/{venue['ct_fallback_slug']}",
+                    venue_name=venue.get("name", ""),
+                    city=venue.get("city", "Ibiza"),
+                    panel_url=CLUBTICKETS_LINKS_URL,
+                    aff_code=CLUBTICKETS_AFF,
+                    venue_slug=venue["ct_fallback_slug"],
+                )
+                events = await _ct.fetch()
+                if events:
+                    summary["source"] = "clubtickets_fallback"
+                    logger.info(f"[scraper] {venue.get('name')}: primary empty"
+                                f"{' (error)' if _primary_err else ''} → "
+                                f"ClubTickets fallback ({len(events)} events)")
+            except Exception as e:
+                logger.warning(f"[scraper] {venue.get('name')} clubtickets fallback failed: {e}")
+        # If the primary errored AND the fallback produced nothing, surface the
+        # original error so the admin panel still flags the broken venue.
+        if _primary_err is not None and not events:
+            raise _primary_err
         summary["events"] = len(events)
         for se in events:
             try:
@@ -11182,7 +11234,7 @@ _SEED_DIRECTORY = [
      "scraper_slug": "ushuaia-ibiza", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "ushuaiaibiza",
      "buy_url": "https://www.theushuaiaexperience.com/", "address": "Platja d'en Bossa 10, Sant Josep"},
     {"name": "[UNVRS]", "zone": "Ibiza", "city": "Ibiza", "type": "discoteca",
-     "scraper_slug": "", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "unvrs",
+     "scraper_slug": "unvrs-ibiza", "free_entry": False, "open_days": [0, 1, 2, 3, 4, 5, 6], "instagram": "unvrs",
      "buy_url": "https://unvrs.com/", "address": "Ctra. Sant Josep, Ibiza"},
     {"name": "DC10", "zone": "Platja d'en Bossa", "city": "Ibiza", "type": "discoteca",
      "scraper_slug": "", "free_entry": False, "open_days": [0, 1], "instagram": "dc10ibiza",
