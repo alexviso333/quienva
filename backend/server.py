@@ -4602,6 +4602,31 @@ async def list_events(user: dict = Depends(get_optional_user),
             continue
         filtered_events.append(ev)
 
+    # Merge cross-provider duplicates: the SAME night can arrive from two ticket
+    # sources (e.g. a 528/Es Paradís party via both ClubTickets and Xceed). Collapse
+    # events that share (venue, date, name) into ONE, preferring OUR affiliate
+    # (ClubTickets) copy so the buy link earns commission; otherwise keep the copy
+    # that carries a price. Events without a name are never merged (too ambiguous).
+    if filtered_events:
+        _merged: dict = {}
+        _passthrough = []
+        for ev in filtered_events:
+            nm = _norm_name(ev.get("name", ""))
+            if not nm:
+                _passthrough.append(ev)
+                continue
+            key = (_norm_name(ev.get("venue", "")), ev.get("date", ""), nm)
+            cur = _merged.get(key)
+            if cur is None:
+                _merged[key] = ev
+                continue
+            _mine_new, _mine_cur = _event_is_mine(ev), _event_is_mine(cur)
+            if _mine_new and not _mine_cur:
+                _merged[key] = ev
+            elif _mine_new == _mine_cur and _current_price(cur) is None and _current_price(ev) is not None:
+                _merged[key] = ev
+        filtered_events = list(_merged.values()) + _passthrough
+
     # BULK LOAD all interests for these events in ONE query (avoid N+1). Loaded
     # BEFORE sorting so the feed can rank by real engagement (popularity).
     event_ids = [ev["id"] for ev in filtered_events]
@@ -10055,24 +10080,24 @@ _SEED_VENUES = [
     {"name": "Pacha Ibiza", "slug": "pacha-ibiza", "city": "Ibiza",
      "url": "https://site.fourvenues.com/es/pacha-ibiza"},
     # These Ibiza clubs use FourVenues as primary source (real per-event prices),
-    # but we're ALSO ClubTickets affiliates for them: if FourVenues returns no
-    # events (e.g. guest-token expired), run_scraper_for_venue falls back to the
-    # ClubTickets affiliate panel (ct_fallback_slug) so the club always shows its
-    # calendar with our ?aff=CT226 link.
+    # but we're ALSO ClubTickets affiliates for them (ct_slug). run_scraper_for_venue
+    # ALWAYS rewrites their ticket links to our clubtickets.com link (?aff=CT226) —
+    # keeping FourVenues prices when available — and falls back to the full
+    # ClubTickets calendar when FourVenues returns nothing (e.g. token expired).
     {"name": "Lío Ibiza", "slug": "lio-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/lio-ibiza", "ct_fallback_slug": "lio"},
+     "url": "https://site.fourvenues.com/es/lio-ibiza", "ct_slug": "lio"},
     {"name": "Es Paradis Ibiza", "slug": "es-paradis-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/es-paradis-ibiza", "ct_fallback_slug": "es-paradis"},
+     "url": "https://site.fourvenues.com/es/es-paradis-ibiza", "ct_slug": "es-paradis"},
     {"name": "Eden Ibiza", "slug": "eden-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/eden-ibiza", "ct_fallback_slug": "eden-ibiza"},
+     "url": "https://site.fourvenues.com/es/eden-ibiza", "ct_slug": "eden-ibiza"},
     {"name": "Pikes Ibiza", "slug": "pikes-ibiza", "city": "Ibiza",
      "url": "https://site.fourvenues.com/es/pikes-ibiza"},
     {"name": "Chinois Ibiza", "slug": "chinois-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/chinois-ibiza", "ct_fallback_slug": "club-chinois-ibiza"},
+     "url": "https://site.fourvenues.com/es/chinois-ibiza", "ct_slug": "club-chinois-ibiza"},
     {"name": "Swag Ibiza", "slug": "swag-ibiza", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/swag-ibiza", "ct_fallback_slug": "swag"},
+     "url": "https://site.fourvenues.com/es/swag-ibiza", "ct_slug": "swag"},
     {"name": "Ibiza Rocks", "slug": "ibiza-rocks", "city": "Ibiza",
-     "url": "https://site.fourvenues.com/es/ibiza-rocks", "ct_fallback_slug": "ibiza-rocks"},
+     "url": "https://site.fourvenues.com/es/ibiza-rocks", "ct_slug": "ibiza-rocks"},
     {"name": "Bora Bora Ibiza", "slug": "bora-bora-ibiza", "city": "Ibiza",
      "url": "https://site.fourvenues.com/es/bora-bora-ibiza"},
     {"name": "Cova Santa Ibiza", "slug": "cova-santa", "city": "Ibiza",
@@ -10165,10 +10190,10 @@ _SEED_VENUES = [
     # embedded ClubTickets/JSON-LD availability — no FourVenues, no auth).
     {"name": "Ushuaïa Ibiza", "slug": "ushuaia-ibiza", "city": "Ibiza",
      "adapter_type": "nightleague",
-     "url": "https://www.theushuaiaexperience.com/club/en", "ct_fallback_slug": "ushuaia-ibiza"},
+     "url": "https://www.theushuaiaexperience.com/club/en", "ct_slug": "ushuaia-ibiza"},
     {"name": "Hï Ibiza", "slug": "hi-ibiza", "city": "Ibiza",
      "adapter_type": "nightleague",
-     "url": "https://www.hiibiza.com/es", "ct_fallback_slug": "hi-ibiza"},
+     "url": "https://www.hiibiza.com/es", "ct_slug": "hi-ibiza"},
     # Xceed city listings — real club events with prices via schema.org JSON-LD.
     # No slug (they aggregate many real venues) so they don't create a directory
     # locale; per-event venue name is set from each event's JSON-LD location.
@@ -10182,13 +10207,13 @@ _SEED_VENUES = [
      "url": "https://xceed.me/es/marbella/events"},
     {"name": "Xceed · Palma", "slug": "", "city": "Palma de Mallorca", "adapter_type": "xceed",
      "url": "https://xceed.me/es/palma-de-mallorca/events"},
-    # ---- IBIZA · ClubTickets affiliate clubs (NEW venues not covered elsewhere).
+    # ---- IBIZA · ClubTickets affiliate clubs.
     # Data comes from our affiliate links panel; ticket links carry ?aff=CT226 so
-    # every sale is attributed to us. (Ushuaïa/Hï already exist via nightleague
-    # and Eden/Es Paradís/Chinois/Ibiza Rocks/Lío/Swag via FourVenues; those keep
-    # their scrapers and are monetized separately, so they're NOT duplicated here.)
-    {"name": "[UNVRS]", "slug": "unvrs-ibiza", "city": "Ibiza", "adapter_type": "clubtickets",
-     "url": "https://www.clubtickets.com/clubbing/unvrs-ibiza"},
+    # every sale is attributed to us. [UNVRS] uses its OWN Night League site as
+    # primary (real per-event prices) + ct_slug so its buy links still go through
+    # ClubTickets. The rest below are ClubTickets-only clubs (no other price source).
+    {"name": "[UNVRS]", "slug": "unvrs-ibiza", "city": "Ibiza", "adapter_type": "nightleague",
+     "url": "https://www.unvrs.com/", "ct_slug": "unvrs-ibiza"},
     {"name": "O Beach Ibiza", "slug": "o-beach-ibiza", "city": "Ibiza", "adapter_type": "clubtickets",
      "url": "https://www.clubtickets.com/clubbing/o-beach-ibiza"},
     {"name": "528 Ibiza", "slug": "528-ibiza", "city": "Ibiza", "adapter_type": "clubtickets",
@@ -10227,6 +10252,24 @@ async def seed_scraped_venues():
                 {"name": nm},
                 {"$set": {"adapter_type": "fourvenues_api", **patch}},
             )
+        # Migrate [UNVRS] from the ClubTickets-only adapter to its own Night League
+        # site (real per-event prices) while keeping ct_slug so buy links still go
+        # through ClubTickets (?aff). Also drop the now-stale ClubTickets-sourced
+        # future events so they get recreated with prices on the next run.
+        _unvrs = await db.scraped_venues.find_one({"slug": "unvrs-ibiza"})
+        if _unvrs and _unvrs.get("adapter_type") != "nightleague":
+            await db.scraped_venues.update_one(
+                {"id": _unvrs["id"]},
+                {"$set": {"adapter_type": "nightleague",
+                          "url": "https://www.unvrs.com/", "ct_slug": "unvrs-ibiza"}},
+            )
+            try:
+                await db.events.delete_many({
+                    "scraper_venue_id": _unvrs["id"], "source": "scraper",
+                    "date": {"$gte": date.today().isoformat()},
+                })
+            except Exception:
+                pass
         for v in _SEED_VENUES:
             existing = await db.scraped_venues.find_one({"name": v["name"]})
             if existing:
@@ -10234,13 +10277,15 @@ async def seed_scraped_venues():
                 if not existing.get("slug") and v.get("slug"):
                     await db.scraped_venues.update_one(
                         {"id": existing.get("id")}, {"$set": {"slug": v["slug"]}})
-                # Backfill ClubTickets fallback slug on existing docs so already
-                # seeded FourVenues clubs (Lío, Eden, Es Paradís, Chinois, Swag,
-                # Ibiza Rocks) gain the affiliate-panel fallback without a reseed.
-                if v.get("ct_fallback_slug") and existing.get("ct_fallback_slug") != v["ct_fallback_slug"]:
+                # Backfill the ClubTickets affiliate slug on existing docs so the
+                # already-seeded clubs (Lío, Eden, Es Paradís, Chinois, Swag, Ibiza
+                # Rocks, Ushuaïa, Hï) enforce our ?aff link + panel calendar without
+                # a reseed. Also drop the legacy ct_fallback_slug field if present.
+                if v.get("ct_slug") and existing.get("ct_slug") != v["ct_slug"]:
                     await db.scraped_venues.update_one(
                         {"id": existing.get("id")},
-                        {"$set": {"ct_fallback_slug": v["ct_fallback_slug"]}})
+                        {"$set": {"ct_slug": v["ct_slug"]},
+                         "$unset": {"ct_fallback_slug": ""}})
                 continue
             doc = {**v, "id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat(),
                    "last_run_at": None, "last_run_ok": None, "last_run_events": 0,
@@ -10311,6 +10356,27 @@ def _significant_rename(old: str, new: str) -> bool:
     return True
 
 
+_CT_AFFILIATE_MAP = None
+
+
+def _affiliate_ct_slug_for_name(name: str):
+    """Return the ClubTickets slug for a venue NAME if it's one of our affiliate
+    clubs (built once from _SEED_VENUES: ct_slug, or the slug of clubtickets-native
+    venues). Lets us enforce our ?aff link on events created by ANY scraper."""
+    global _CT_AFFILIATE_MAP
+    if _CT_AFFILIATE_MAP is None:
+        m = {}
+        try:
+            for v in _SEED_VENUES:
+                ct = v.get("ct_slug") or (v.get("slug") if v.get("adapter_type") == "clubtickets" else None)
+                if ct:
+                    m[_norm_name(v.get("name", ""))] = ct
+        except Exception:
+            pass
+        _CT_AFFILIATE_MAP = m
+    return _CT_AFFILIATE_MAP.get(_norm_name(name or ""))
+
+
 async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "") -> str:
     """Diff a single scraped event against the DB and apply changes:
     - CREATE if not found → fires "new event" push to city.
@@ -10329,6 +10395,26 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
             se.time = "23:59"
         except Exception:
             pass
+    # Affiliate-link enforcement (source-agnostic): if this event happens at one of
+    # OUR ClubTickets clubs — no matter which scraper produced it (e.g. the city-wide
+    # Xceed feed dropping a Pikes party at 528) — force its buy link to our
+    # clubtickets.com link (?aff) so the sale is always attributed to us. Use the
+    # exact ClubTickets event link for that night when we already have one, else the
+    # club's ClubTickets landing page.
+    _ct_slug = _affiliate_ct_slug_for_name(se.venue or venue_name)
+    if _ct_slug and (not se.ticket_url or not _is_clubtickets_url(se.ticket_url)):
+        try:
+            _m = await db.events.find_one(
+                {"date": se.date,
+                 "venue": {"$regex": f"^{re.escape(se.venue or venue_name)}$", "$options": "i"},
+                 "commission_url": {"$regex": r"clubtickets\.com"}},
+                {"_id": 0, "commission_url": 1})
+        except Exception:
+            _m = None
+        if _m and _m.get("commission_url"):
+            se.ticket_url = _m["commission_url"]
+        else:
+            se.ticket_url = _clubtickets_affiliate_url(f"https://www.clubtickets.com/clubbing/{_ct_slug}")
     # 1) Lookup by external_id (most reliable)
     existing = await db.events.find_one({"external_id": se.external_id}, {"_id": 0})
     # 2) Fallback: venue + date (user might have created it manually). Only match
@@ -10419,6 +10505,15 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
     if se.ticket_url and not existing.get("commission_url"):
         patch["commission_url"] = se.ticket_url
         patch["has_commission"] = True
+    # Repoint existing scraped events to our ClubTickets affiliate link when the
+    # scraper now provides one (e.g. we became affiliates, or the primary source
+    # changed). Only overwrites when the NEW link is a clubtickets.com URL, so
+    # non-affiliate links (FourVenues checkout, etc.) are never disturbed.
+    elif (existing.get("source") == "scraper" and se.ticket_url
+          and _is_clubtickets_url(se.ticket_url)
+          and se.ticket_url != existing.get("commission_url")):
+        patch["commission_url"] = se.ticket_url
+        patch["has_commission"] = True
     if se.genre and not existing.get("genre"):
         patch["genre"] = se.genre.split(",")[0].strip()[:40]
     # Pricing
@@ -10475,6 +10570,51 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
     return "updated"
 
 
+async def _enforce_clubtickets_affiliate(venue: dict, primary: list) -> list:
+    """For a club we carry on ClubTickets (venue['ct_slug']), guarantee that EVERY
+    event is bought through OUR clubtickets.com link (?aff=<code>) so the sale is
+    attributed to us — no matter what the primary source (FourVenues / the club's
+    own site) returned.
+
+    - Keeps the primary source's richer data (real prices, poster, artist names)
+      but rewrites each event's ticket URL to the matching ClubTickets link
+      (matched by date; falls back to the club landing page + aff when there's no
+      exact per-date link).
+    - Appends any ClubTickets panel dates the primary source didn't have, so the
+      calendar is complete.
+    - If the primary produced nothing (e.g. FourVenues token expired), the whole
+      calendar comes straight from ClubTickets.
+    """
+    ct_slug = venue.get("ct_slug")
+    if not ct_slug:
+        return primary
+    from scrapers.clubtickets import ClubTicketsScraper
+    ct = ClubTicketsScraper(
+        url=f"https://www.clubtickets.com/clubbing/{ct_slug}",
+        venue_name=venue.get("name", ""),
+        city=venue.get("city", "Ibiza"),
+        panel_url=CLUBTICKETS_LINKS_URL,
+        aff_code=CLUBTICKETS_AFF,
+        venue_slug=ct_slug,
+    )
+    ct_events = await ct.fetch()
+    if not ct_events:
+        return primary          # panel unreachable → leave primary untouched
+    if not primary:
+        return ct_events        # primary empty → full ClubTickets calendar
+    by_date = {}
+    for ce in ct_events:
+        by_date.setdefault(ce.date, ce)
+    club_url = _clubtickets_affiliate_url(f"https://www.clubtickets.com/clubbing/{ct_slug}")
+    for pe in primary:
+        ce = by_date.get(pe.date)
+        pe.ticket_url = ce.ticket_url if ce else club_url
+    have = {pe.date for pe in primary}
+    extra = [ce for ce in ct_events if ce.date not in have]
+    return primary + extra
+
+
+
 async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
     """Run one venue's scraper and apply diffs. Returns a summary."""
     if not batch_id:
@@ -10496,53 +10636,61 @@ async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
             _kwargs["panel_url"] = CLUBTICKETS_LINKS_URL
             _kwargs["aff_code"] = CLUBTICKETS_AFF
         scraper = _build_scraper(venue["adapter_type"], venue["url"], **_kwargs)
-        # Run the primary scraper. If it raises (e.g. FourVenues guest-token
-        # expired) but we have a ClubTickets fallback for this club, don't fail —
-        # fall through to the affiliate panel below so the club still shows.
+        # Run the primary scraper. If it raises (e.g. FourVenues guest-token expired)
+        # but this club is one of our ClubTickets affiliate venues (ct_slug), don't
+        # fail — we still build/repair its calendar from the affiliate panel below.
         _primary_err = None
         try:
             events = await scraper.fetch()
         except Exception as _e:
-            if not venue.get("ct_fallback_slug"):
+            if not venue.get("ct_slug"):
                 raise
             _primary_err = _e
             events = []
-        # ClubTickets fallback: if the primary source (usually FourVenues) returned
-        # no events (or errored) but we're a ClubTickets affiliate for this club,
-        # build its calendar from the affiliate panel so the venue ALWAYS shows its
-        # events (monetized with our ?aff=<code>). No prices — the panel only lists
-        # dates + ticket links — but the club appears just like the rest.
-        if not events and venue.get("ct_fallback_slug"):
+        # ClubTickets affiliate enforcement: for every club we carry on ClubTickets
+        # make sure EVERY ticket link is our clubtickets.com link with ?aff=<code>,
+        # keeping the primary's prices/poster where available (see helper docstring).
+        if venue.get("ct_slug"):
             try:
-                from scrapers.clubtickets import ClubTicketsScraper
-                _ct = ClubTicketsScraper(
-                    url=f"https://www.clubtickets.com/clubbing/{venue['ct_fallback_slug']}",
-                    venue_name=venue.get("name", ""),
-                    city=venue.get("city", "Ibiza"),
-                    panel_url=CLUBTICKETS_LINKS_URL,
-                    aff_code=CLUBTICKETS_AFF,
-                    venue_slug=venue["ct_fallback_slug"],
-                )
-                events = await _ct.fetch()
-                if events:
-                    summary["source"] = "clubtickets_fallback"
-                    logger.info(f"[scraper] {venue.get('name')}: primary empty"
-                                f"{' (error)' if _primary_err else ''} → "
-                                f"ClubTickets fallback ({len(events)} events)")
+                _before = len(events)
+                events = await _enforce_clubtickets_affiliate(venue, events)
+                if _primary_err is not None or _before == 0:
+                    summary["source"] = "clubtickets"
+                elif len(events) != _before:
+                    summary["source"] = "primary+clubtickets"
+                else:
+                    summary["source"] = "primary(clubtickets links)"
             except Exception as e:
-                logger.warning(f"[scraper] {venue.get('name')} clubtickets fallback failed: {e}")
-        # If the primary errored AND the fallback produced nothing, surface the
-        # original error so the admin panel still flags the broken venue.
+                logger.warning(f"[scraper] {venue.get('name')} clubtickets enforce failed: {e}")
+        # If the primary errored AND we still have nothing, surface the original
+        # error so the admin panel flags the broken venue.
         if _primary_err is not None and not events:
             raise _primary_err
         summary["events"] = len(events)
+        _seen_ext: set = set()
         for se in events:
             try:
+                _seen_ext.add(se.external_id)
                 r = await _apply_scraped_event(venue, se, batch_id)
                 if r in summary:
                     summary[r] += 1
             except Exception as e:
                 logger.warning(f"[scraper {venue.get('name')}] apply failed for {se.external_id}: {e}")
+        # Reconcile: for ClubTickets-affiliate clubs, drop FUTURE scraped events of
+        # this venue that were NOT in this run (e.g. old FourVenues-sourced events
+        # replaced by ClubTickets, or vice-versa) so the same night never shows
+        # twice from two providers. Only future, only this venue, only scraped.
+        if venue.get("ct_slug") and _seen_ext:
+            try:
+                _today = date.today().isoformat()
+                await db.events.delete_many({
+                    "scraper_venue_id": venue.get("id"),
+                    "source": "scraper",
+                    "date": {"$gte": _today},
+                    "external_id": {"$nin": list(_seen_ext)},
+                })
+            except Exception as e:
+                logger.warning(f"[scraper {venue.get('name')}] reconcile failed: {e}")
         summary["ok"] = True
     except Exception as e:
         summary["error"] = str(e)[:400]

@@ -159,6 +159,11 @@ class NightLeagueScraper(Scraper):
         if prefix:
             for slug in re.findall(r"events/20\d{2}/([a-z0-9\-]+)", html or ""):
                 urls.add(f"{self.origin}{prefix}/{slug}")
+        # Fallback for sites (e.g. UNVRS) that embed bare '/events/YYYY/slug' paths
+        # with neither an <a href> nor a discoverable prefix: build them directly.
+        if not urls:
+            for full in re.findall(r"(events/20\d{2}/[a-z0-9\-]+)", html or ""):
+                urls.add(f"{self.origin}/{full}")
         return urls
 
     async def _get(self, client: httpx.AsyncClient, url: str) -> str:
@@ -258,9 +263,6 @@ class NightLeagueScraper(Scraper):
     # ---- Shape B: Hï schema.org JSON-LD ----
 
     def _parse_jsonld(self, html: str, slug: str) -> List[ScrapedEvent]:
-        root = self._root(html)
-        if root is None:
-            return []
         og = self._og_image(html)
         events = []
 
@@ -274,7 +276,17 @@ class NightLeagueScraper(Scraper):
                 for v in o:
                     walk(v)
 
-        walk(root)
+        # (a) Standard schema.org blocks in <script type="application/ld+json">
+        # (UNVRS serves prices here rather than inside __NUXT_DATA__).
+        for m in re.finditer(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html or "", re.S):
+            try:
+                walk(json.loads(m.group(1)))
+            except Exception:
+                continue
+        # (b) Nuxt payload (Ushuaïa/Hï embed the Event objects in __NUXT_DATA__).
+        root = self._root(html)
+        if root is not None:
+            walk(root)
         out, seen = [], set()
         for e in events:
             dm = re.match(r"(20\d{2}-\d{2}-\d{2})(?:T(\d{2}:\d{2}))?", str(e.get("startDate") or ""))

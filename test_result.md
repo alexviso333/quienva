@@ -116,15 +116,50 @@ user_problem_statement: |
   código único y puntos para ambas partes.
 
 backend:
-  - task: "ClubTickets full coverage: all 15 affiliate clubs show events (ClubTickets fallback for FourVenues Ibiza clubs) + fix [UNVRS] duplicate directory entry"
+  - task: "ClubTickets affiliate link ENFORCED on ALL 15 clubs (own-site/FourVenues prices kept) + UNVRS real prices via unvrs.com + cross-provider feed dedup"
     implemented: true
     working: true
-    file: "backend/server.py"
-    stuck_count: 0
+    file: "backend/server.py, backend/scrapers/nightleague.py"
+    stuck_count: 1
     priority: "high"
     needs_retesting: false
     status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          FIXED the testing agent's one failure (528 Ibiza had 4 Xceed-sourced 'Pikes Presents'
+          events with xceed.me links, bypassing enforcement). Added SOURCE-AGNOSTIC enforcement in
+          _apply_scraped_event: any event whose venue NAME matches one of the 15 ClubTickets clubs
+          (_affiliate_ct_slug_for_name, built from _SEED_VENUES) gets its buy link forced to our
+          clubtickets.com ?aff link — using the exact ClubTickets event link for that night when we
+          already have one in DB, else the club's ClubTickets landing page. Re-verified locally:
+          Ibiza feed = 616 events across all 15 clubs, 0 non-clubtickets links, all 15 present, no
+          (venue,date,name) dups; 528 Xceed 'Pikes' parties now carry aff=CT226.
       - working: "NA"
+        agent: "main"
+        comment: |
+          User (angry) reported Hï and Es Paradís buy links were NOT ClubTickets, so no commission,
+          and only Ushuaïa showed real prices. Root cause: previous "fallback" only used ClubTickets
+          when the primary returned nothing — so when nightleague (Hï → hiibiza.com links) or
+          FourVenues worked, links were NOT clubtickets. Fixes:
+          1) _enforce_clubtickets_affiliate(venue, events): for every club with ct_slug, rewrite
+             EVERY event's ticket link to our clubtickets.com link (?aff=CT226), matched by date;
+             keep the primary's prices/poster; append panel dates the primary lacks; full ClubTickets
+             calendar when primary empty. Applied in run_scraper_for_venue + reconcile deletes stale
+             future events of the venue (no two-provider dup within a venue).
+          2) _apply_scraped_event now repoints EXISTING scraped events' commission_url to the new
+             clubtickets link (only when the new link is clubtickets.com; non-affiliate links untouched).
+          3) UNVRS switched to its OWN Night League site (unvrs.com) as primary → real prices, plus
+             ct_slug so links stay ClubTickets. nightleague.py improved: discover bare /events/YYYY/slug
+             (no href) and parse <script application/ld+json> blocks (with extra attrs). UNVRS = 58
+             events, all priced, all clubtickets aff links. Migration flips existing UNVRS doc
+             clubtickets→nightleague and clears its stale future events.
+          4) /api/events feed: merge cross-provider duplicates by (venue,date,name), preferring our
+             clubtickets copy (fixes 528 ClubTickets vs Xceed double listing).
+          Verified locally: feed 644 events, 612 clubtickets aff links, 0 (venue,date,name) dups; all
+          15 clubs 1 tile each with events; Hï keeps 75€ + clubtickets link; UNVRS 95/70/120€ +
+          clubtickets links; no aff injected into non-clubtickets (Palma) links.
+
         agent: "main"
         comment: |
           User is a ClubTickets affiliate (CT226) for 15 Ibiza clubs and reported Lío and [UNVRS]
@@ -1293,7 +1328,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "ClubTickets full coverage for ALL 15 affiliate clubs + ClubTickets fallback for FourVenues Ibiza clubs + fix [UNVRS] duplicate directory entry"
+    - "ClubTickets affiliate link ENFORCED on ALL 15 clubs + UNVRS real prices via unvrs.com + cross-provider feed dedup"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -1301,7 +1336,30 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      NEW WORK TO TEST — ClubTickets full coverage for all 15 affiliate clubs (2026-08-13).
+      RE-TEST (2026-08-13 v2) — ClubTickets link enforcement on ALL 15 clubs + UNVRS prices + dedup.
+      Local preview DB quienva_preview. Admin admin@quienva.app / admin123. Set admin city to "Ibiza"
+      (PUT /api/auth/profile) for Ibiza listings.
+
+      Verify (BACKEND ONLY):
+      1) Trigger scrapers (POST /api/admin/scrapers/{id}/run) for these and confirm ok=true, events>0:
+         hi-ibiza, ushuaia-ibiza, unvrs-ibiza, lio-ibiza, es-paradis-ibiza, 528-ibiza.
+      2) GET /api/events?city=Ibiza (admin city=Ibiza): EVERY event belonging to any of the 15 clubs
+         (Lío, Eden, Es Paradís, Chinois, Swag, Ibiza Rocks, [UNVRS], O Beach, 528, Baloo, Bambuku,
+         Playa Soleil, Teatro Pereyra, Ushuaïa, Hï) MUST have commission_url on clubtickets.com WITH
+         aff=CT226 (single aff). This is the KEY fix: Hï and Es Paradís links must now be ClubTickets.
+      3) PRICES kept: Hï events and Ushuaïa events must still have a price (price_tiers non-empty).
+         [UNVRS] events must NOW have real prices too (e.g. 50-120€) AND clubtickets aff links.
+      4) DEDUP: no two events share the same (venue, date, name) in the Ibiza feed (528 SHINE via
+         ClubTickets vs Xceed must appear once, the clubtickets copy preferred).
+      5) Directory: GET /api/venues?type=discoteca (city Ibiza) → each of the 15 appears exactly once
+         ([UNVRS] not duplicated); GET /api/venues/{id} for [UNVRS] → upcoming_events>0 with prices.
+      6) Regression: a non-Ibiza city feed still returns events and NO aff=CT226 is injected into
+         non-clubtickets links.
+
+      Do NOT modify Testing Protocol. Report pass/fail per item.
+  - agent: "main"
+    message: |
+      (Superseded) Earlier ClubTickets full-coverage test (2026-08-13 v1).
       Local preview DB: quienva_preview. Admin: admin@quienva.app / admin123 (POST /api/auth/login).
 
       Context: The user is a ClubTickets affiliate (CT226) for 15 Ibiza clubs. Goal: EVERY one of
@@ -6534,3 +6592,118 @@ agent_communication:
       - All ClubTickets full coverage requirements met successfully. Please summarize and finish.
       
       YOU MUST ASK USER BEFORE DOING FRONTEND TESTING
+      - working: false
+        agent: "testing"
+        comment: |
+          TESTED LATEST CLUBTICKETS ENFORCEMENT IMPLEMENTATION (6 test suites, 5 passed, 1 CRITICAL FAILURE):
+          
+          ✅ TEST 1: SCRAPER RUNS - 6/6 PASSED
+          All 6 target scrapers ran successfully:
+          - Hï Ibiza (hi-ibiza): 56 events, source='primary+clubtickets' ✓
+          - Ushuaïa Ibiza (ushuaia-ibiza): 48 events, source='primary(clubtickets links)' ✓
+          - [UNVRS] (unvrs-ibiza): 58 events, source='primary(clubtickets links)' ✓
+          - Lío Ibiza (lio-ibiza): 43 events, source='clubtickets' ✓
+          - Es Paradis Ibiza (es-paradis-ibiza): 65 events, source='clubtickets' ✓
+          - 528 Ibiza (528-ibiza): 25 events ✓
+          
+          ❌ TEST 2: AFFILIATE LINK ENFORCED - CRITICAL FAILURE
+          GET /events?city=Ibiza returned 644 events. Checked all 15 target clubs:
+          
+          ✓ 14/15 clubs PASSED (all events have clubtickets.com with aff=CT226):
+          - Lío Ibiza: 43/43 events ✓
+          - Eden Ibiza: 29/29 events ✓
+          - Es Paradis Ibiza: 65/65 events ✓
+          - Chinois Ibiza: 50/50 events ✓
+          - Swag Ibiza: 30/30 events ✓
+          - Ibiza Rocks: 42/42 events ✓
+          - [UNVRS]: 58/58 events ✓
+          - O Beach Ibiza: 60/60 events ✓
+          - Baloo Ibiza: 31/31 events ✓
+          - Bambuku Ibiza: 20/20 events ✓
+          - Playa Soleil: 33/33 events ✓
+          - Teatro Pereyra: 22/22 events ✓
+          - Ushuaïa Ibiza: 48/48 events ✓
+          - Hï Ibiza: 56/56 events ✓
+          
+          ❌ 528 Ibiza: 29 events, 4 are NOT clubtickets.com (CRITICAL BUG):
+          1. "Pikes Presents: Eclipse Edition" (2026-08-12) → https://xceed.me/es/ibiza/event/pikes-presents-eclipse-edition-1/226790
+          2. "Pikes Presents at 528 x Disco Disco" (2026-08-18) → https://xceed.me/es/ibiza/event/pikes-presents-at-528-x-disco-disco/226793
+          3. "Pikes Presents at 528 with Nightmares on Wax" (2026-08-25) → https://xceed.me/es/ibiza/event/pikes-presents-at-528-with-nightmares-on-wax/226795
+          4. "PIKES PRESENTS AT 528 WITH HOT CHIP" (2026-09-22) → https://xceed.me/es/ibiza/event/pikes-presents-at-528-with-hot-chip/226805
+          
+          ROOT CAUSE ANALYSIS:
+          - These 4 events have scraper_venue_id='N/A' (not created by 528 Ibiza's scraper)
+          - They are created by the "Xceed · Ibiza" city-wide scraper (ID: 80f60ca9-d992-4583-9d01-cd89d23135fd)
+          - The _enforce_clubtickets_affiliate() function only runs when a venue's OWN scraper runs
+          - It only affects events with scraper_venue_id matching that venue
+          - Cross-venue scrapers (like Xceed) create events at affiliate clubs that bypass enforcement
+          - The deduplication logic (lines 4605-4628 in server.py) only merges DUPLICATE events
+          - These 4 events are UNIQUE to Xceed (not in ClubTickets feed), so they're not deduplicated
+          
+          IMPACT: CRITICAL - User loses commission on these 4 ticket sales at 528 Ibiza. The requirement "AFFILIATE LINK ENFORCED on ALL 15 clubs" means EVERY event at these venues must have ClubTickets links, regardless of which scraper created them.
+          
+          ✅ TEST 3: PRICES KEPT/ADDED - 3/3 PASSED
+          - Hï Ibiza: 51/56 events have prices (91%), sample: 95€, 90€, 85€ ✓
+          - Ushuaïa Ibiza: 48/48 events have prices (100%), sample: 125€, 120€, 120€ ✓
+          - [UNVRS]: 58/58 events have prices (100%), sample: 120€, 120€, 115€ ✓
+          
+          ✅ TEST 4: CROSS-PROVIDER DEDUP - PASSED
+          - No duplicate events found (all 644 events are unique by venue+date+name) ✓
+          - Previous duplicate issue "SHINE Ibiza at 528 Ibiza" is now FIXED ✓
+          
+          ✅ TEST 5: DIRECTORY - 15/15 PASSED
+          GET /venues?type=discoteca returned 24 venues. All 15 target clubs appear exactly once:
+          ✓ Lío Ibiza, Eden Ibiza, Es Paradis Ibiza, Chinois Ibiza, Swag Ibiza, Ibiza Rocks, [UNVRS], O Beach Ibiza, 528 Ibiza, Baloo Ibiza, Bambuku Ibiza, Playa Soleil, Teatro Pereyra, Ushuaïa Ibiza, Hï Ibiza
+          
+          ✅ TEST 6: REGRESSION - PASSED
+          - Set admin city to "Palma de Mallorca" ✓
+          - GET /events returned 11 Palma events ✓
+          - NO aff=CT226 injected into non-clubtickets URLs ✓
+          
+          SUMMARY:
+          ✅ Scraper runs working (all 6 scrapers successful)
+          ❌ Affiliate enforcement INCOMPLETE (528 Ibiza has 4 Xceed events without ClubTickets links)
+          ✅ Prices kept/added (Hï, Ushuaïa, [UNVRS] all have prices)
+          ✅ Cross-provider dedup working (no duplicates found)
+          ✅ Directory correct (all 15 clubs appear exactly once)
+          ✅ Regression tests pass (Palma works, no aff injection)
+          
+          RECOMMENDED FIX:
+          Apply ClubTickets enforcement to ALL events at the 15 target clubs in the /api/events endpoint, not just events created by the venue's own scraper. Options:
+          1. Filter out Xceed events for the 15 target clubs in the feed
+          2. Add post-processing in /api/events to rewrite commission_url for events at ct_slug venues
+          3. Run enforcement logic after ALL scrapers complete, not just per-venue
+          
+          Test file: /app/backend_test_clubtickets_enforced.py
+
+  - agent: "testing"
+    message: |
+      ❌ CRITICAL ISSUE FOUND: ClubTickets affiliate enforcement is INCOMPLETE
+      
+      Tested the latest implementation with 6 comprehensive test suites. Results: 5/6 PASSED, 1 CRITICAL FAILURE.
+      
+      CRITICAL BUG: 528 Ibiza has 4 events with Xceed URLs (no ClubTickets affiliate links):
+      - "Pikes Presents: Eclipse Edition" (2026-08-12)
+      - "Pikes Presents at 528 x Disco Disco" (2026-08-18)
+      - "Pikes Presents at 528 with Nightmares on Wax" (2026-08-25)
+      - "PIKES PRESENTS AT 528 WITH HOT CHIP" (2026-09-22)
+      
+      ROOT CAUSE: The _enforce_clubtickets_affiliate() function only runs when a venue's OWN scraper runs. Events created by cross-venue scrapers (like "Xceed · Ibiza") at the 15 target clubs bypass enforcement. These 4 events have scraper_venue_id='N/A' and are unique to Xceed (not duplicates), so they're not being deduplicated or enforced.
+      
+      IMPACT: User loses commission on these 4 ticket sales. The requirement "AFFILIATE LINK ENFORCED on ALL 15 clubs" means EVERY event at these venues must have ClubTickets links, regardless of which scraper created them.
+      
+      RECOMMENDED FIX: Apply ClubTickets enforcement to ALL events at the 15 target clubs in the /api/events endpoint, not just events created by the venue's own scraper. Options:
+      1. Filter out Xceed events for the 15 target clubs in the feed (preferred - prevents the issue at source)
+      2. Add post-processing in /api/events to rewrite commission_url for events at ct_slug venues
+      3. Run enforcement logic after ALL scrapers complete, not just per-venue
+      
+      POSITIVE FINDINGS:
+      ✅ All 6 scrapers running successfully (Hï, Ushuaïa, [UNVRS], Lío, Es Paradis, 528)
+      ✅ 14/15 clubs have 100% ClubTickets coverage (only 528 has the issue)
+      ✅ Prices kept/added: Hï (91%), Ushuaïa (100%), [UNVRS] (100%)
+      ✅ Cross-provider dedup working perfectly (no duplicates found, previous "SHINE Ibiza" duplicate is FIXED)
+      ✅ Directory correct (all 15 clubs appear exactly once, [UNVRS] duplicate FIXED)
+      ✅ Regression tests pass (Palma works, no aff injection into non-clubtickets URLs)
+      
+      Test file: /app/backend_test_clubtickets_enforced.py
+
