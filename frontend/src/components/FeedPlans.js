@@ -155,7 +155,7 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
             <span className="text-white/30 text-xs">{g.items.length} {g.items.length === 1 ? "plan" : "planes"}</span>
             <div className="flex-1 h-px bg-white/10" />
           </div>
-          {compact ? <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">{g.items.map(renderCard)}</div> : <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">{g.items.map(renderCard)}</div>}
+          {compact ? <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">{g.items.map(renderCard)}</div> : <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4 xl:grid-cols-3 lg:items-start">{g.items.map(renderCard)}</div>}
         </div>
       ))}
 
@@ -181,14 +181,14 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
               <div className="flex-1 h-px bg-white/10" />
             </div>
           )}
-          {compact ? <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">{g.items.map(renderCard)}</div> : <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">{g.items.map(renderCard)}</div>}
+          {compact ? <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">{g.items.map(renderCard)}</div> : <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4 xl:grid-cols-3 lg:items-start">{g.items.map(renderCard)}</div>}
         </div>
       ))}
 
       {/* CALENDARIO */}
       {view === "calendario" && (
-        <div className="flex flex-col gap-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] lg:gap-6 lg:items-start">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 lg:sticky lg:top-4">
             <div className="flex items-center justify-between mb-2">
               <button onClick={() => setMonthCursor((c) => { const m = c.m - 1; return m < 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m }; })} className="p-1.5 rounded-lg bg-white/10 active:scale-95"><ChevronLeft className="w-4 h-4 text-white" /></button>
             <span className="font-display font-bold text-white capitalize">{getMonths()[monthCursor.m]} {monthCursor.y}</span>
@@ -219,7 +219,9 @@ export default function FeedPlans({ events, compact, onSetStatus, pending, highl
                 <span className="text-qv-primary font-display font-black text-lg">{dayLabel(selDay)}</span>
                 <div className="flex-1 h-px bg-white/10" />
               </div>
-              {selDayEvents.map(renderCard)}
+              <div className={compact ? "grid grid-cols-2 gap-3 xl:grid-cols-3" : "flex flex-col gap-3 xl:grid xl:grid-cols-2 xl:gap-4 xl:items-start"}>
+                {selDayEvents.map(renderCard)}
+              </div>
             </div>
           ) : (
             <p className="text-white/40 text-sm text-center py-4">Toca un día con fiestas para verlas.</p>
@@ -241,7 +243,7 @@ export function FeedPlansControls({ view, setView, sale, setSale, genres = [], g
   const [open, setOpen] = useState(false);
   const activeCount = (sale !== "all" ? 1 : 0) + (genre !== "all" ? 1 : 0);
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 lg:max-w-2xl">
       <div className="flex items-center gap-2">
         <div className="flex-1 grid grid-cols-3 gap-1.5 bg-white/[0.04] border border-white/10 rounded-2xl p-1" data-testid="feed-view-selector">
           {VIEWS.map((v) => {

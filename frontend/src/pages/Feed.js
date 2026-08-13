@@ -209,7 +209,7 @@ export default function Feed() {
             <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold truncate">
               {user ? (user.city || "Palma de Mallorca") : ((cities.find((c) => c.id === guestCity) || {}).label || guestCity)}
             </p>
-            <h1 className="font-display text-4xl font-black tracking-tighter mt-1">
+            <h1 className="font-display text-4xl lg:text-5xl font-black tracking-tighter mt-1">
               {t("feed.title")}<span className="text-qv-primary">.</span>
             </h1>
           </div>
@@ -396,7 +396,7 @@ export default function Feed() {
           <button
             data-testid="top-weekend-banner"
             onClick={() => navigate(`/event/${topEvent.id}`)}
-            className="relative w-full text-left rounded-2xl overflow-hidden border border-qv-primary/40 bg-[#1a0a12] active:scale-[0.99] transition-transform"
+            className="relative w-full lg:max-w-3xl text-left rounded-2xl overflow-hidden border border-qv-primary/40 bg-[#1a0a12] active:scale-[0.99] transition-transform"
           >
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,_rgba(255,0,85,0.25),transparent_60%)]" />
             <div className="relative flex items-center gap-3 p-3">

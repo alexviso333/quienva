@@ -144,7 +144,7 @@ export function DesktopSidebar() {
 
   return (
     <aside
-      className="hidden lg:flex fixed left-0 top-0 h-screen w-64 flex-col qv-glass border-r border-white/10 z-40 px-4 py-6"
+      className="hidden lg:flex sticky top-0 h-screen w-64 shrink-0 flex-col qv-glass border-r border-white/10 z-40 px-4 py-6"
       data-testid="desktop-sidebar"
     >
       <button
@@ -194,15 +194,18 @@ export function AppShell({ children, showNav = true, wide = false }) {
   useNavigate();
   return (
     <div className="min-h-screen qv-app-bg">
-      {showNav && <DesktopSidebar />}
-      <div className={showNav ? "lg:pl-64" : ""}>
-        <div
-          className={`relative mx-auto min-h-screen bg-transparent max-w-md ${
-            showNav && wide ? "lg:max-w-4xl" : ""
-          }`}
-        >
-          <div className={showNav ? "pb-28 lg:pb-12" : ""}>{children}</div>
-        </div>
+      {/* Desktop (≥lg): sidebar + content form ONE frame that is capped and
+          centered (mx-auto), so on wide monitors the app sits centered with even
+          margins instead of hugging the left edge. `main` is flex-1 so it fills
+          the frame next to the sidebar. On mobile the flex collapses to a normal
+          block and the phone column + bottom nav are untouched. */}
+      <div className={`lg:flex lg:mx-auto ${showNav && wide ? "lg:max-w-[1480px]" : "lg:max-w-4xl"}`}>
+        {showNav && <DesktopSidebar />}
+        <main className="flex-1 min-w-0">
+          <div className={`relative mx-auto min-h-screen bg-transparent max-w-md ${wide ? "lg:max-w-none" : ""}`}>
+            <div className={showNav ? "pb-28 lg:pb-12" : ""}>{children}</div>
+          </div>
+        </main>
       </div>
       {showNav && <BottomNav />}
     </div>
