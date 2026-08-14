@@ -9808,6 +9808,13 @@ async def on_startup():
     except Exception as _:
         pass
     await cleanup_demo_events()
+    # Seed the ClubTickets panel memory from events already stored with OUR ?aff
+    # link so the same-day link-drop fix also protects parties ClubTickets has
+    # ALREADY dropped from the panel today (idempotent, never raises).
+    try:
+        await _bootstrap_ct_memory_from_events()
+    except Exception as _:
+        pass
     # One-time migration: enable city-wide change alerts by default for everyone
     # (owner requested it ON by default). Idempotent via a settings flag so it
     # only runs once and never re-flips users who later opt out.
@@ -10807,6 +10814,153 @@ def _affiliate_ct_slug_for_name(name: str):
     return _CT_AFFILIATE_MAP.get(_norm_name(name or ""))
 
 
+# ---------------------------------------------------------------------------
+# ClubTickets affiliate-panel MEMORY (persistent) — fixes the "same-day link
+# drop". ClubTickets REMOVES a party from OUR affiliate links panel on its own
+# event day even though the party is still on sale, so our scraper used to lose
+# the ?aff link for TODAY's parties (elrow@UNVRS, ANTS@Ushuaïa, Kodo@Lío ...).
+# We snapshot every party the panel shows and, for parties whose date is TODAY
+# (Europe/Madrid), keep serving the remembered ?aff link even after the panel
+# drops them. FUTURE-dated parties that vanish are treated as genuinely removed
+# (NOT resurrected), so we never keep a cancelled/dropped night alive.
+# ---------------------------------------------------------------------------
+_CT_MEM_TTL = 300              # re-persist the live panel at most every 5 min
+_CT_MEM_LAST_WRITE = 0.0
+_CT_MEM_RESURRECT_DAYS = 5     # only resurrect parties last seen within N days
+
+
+async def _remember_panel(idx: dict) -> None:
+    """Persist every party in the live affiliate panel (idempotent upsert with a
+    fresh last_seen). Rate-limited to once per _CT_MEM_TTL so a full scraper
+    cycle (thousands of events) never hammers Mongo. Never raises."""
+    global _CT_MEM_LAST_WRITE
+    if not idx:
+        return
+    now = time.time()
+    if now - _CT_MEM_LAST_WRITE < _CT_MEM_TTL:
+        return
+    _CT_MEM_LAST_WRITE = now
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        from pymongo import UpdateOne
+    except Exception:
+        return
+    ops = []
+    for ct_slug, parties in idx.items():
+        for p in (parties or []):
+            eslug = p.get("event_slug") or ""
+            d = p.get("date") or ""
+            url = p.get("url") or ""
+            if not d or not url:
+                continue
+            _id = f"{ct_slug}|{eslug}|{d}"
+            ops.append(UpdateOne(
+                {"_id": _id},
+                {"$set": {"ct_slug": ct_slug, "event_slug": eslug, "date": d,
+                          "name": p.get("name", ""), "url": url,
+                          "last_seen": now_iso},
+                 "$setOnInsert": {"first_seen": now_iso}},
+                upsert=True,
+            ))
+    if not ops:
+        return
+    try:
+        await db.ct_panel_memory.bulk_write(ops, ordered=False)
+    except Exception as e:
+        logger.warning(f"[clubtickets] panel memory write failed: {e}")
+
+
+async def _merged_panel_index() -> dict:
+    """Live affiliate-panel index (per ct_slug party list) MERGED with remembered
+    parties whose date is TODAY (Europe/Madrid). Live entries always win. This is
+    what makes a party ClubTickets drops from the panel on its own event day keep
+    OUR ?aff link. Returns {} if the panel is unreachable AND memory is empty."""
+    try:
+        from scrapers.clubtickets import get_panel_index
+        live = await get_panel_index(CLUBTICKETS_LINKS_URL)
+    except Exception:
+        live = {}
+    live = live or {}
+    # Snapshot the live panel (future days) so we can resurrect them on their day.
+    try:
+        await _remember_panel(live)
+    except Exception:
+        pass
+    merged = {k: list(v) for k, v in live.items()}
+    # (ct_slug, event_slug, date) already present in the live panel.
+    present = {(k, (p.get("event_slug") or ""), p.get("date"))
+               for k, v in merged.items() for p in (v or [])}
+    today_str = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    cutoff = (datetime.now(timezone.utc)
+              - timedelta(days=_CT_MEM_RESURRECT_DAYS)).isoformat()
+    try:
+        cur = db.ct_panel_memory.find(
+            {"date": today_str, "last_seen": {"$gte": cutoff}}, {"_id": 0})
+        async for m in cur:
+            key = (m.get("ct_slug"), m.get("event_slug") or "", m.get("date"))
+            if key in present:
+                continue
+            merged.setdefault(m.get("ct_slug"), []).append({
+                "name": m.get("name", ""),
+                "event_slug": m.get("event_slug") or "",
+                "date": m.get("date"),
+                "url": m.get("url", ""),
+            })
+            present.add(key)
+    except Exception as e:
+        logger.warning(f"[clubtickets] panel memory read failed: {e}")
+    return merged
+
+
+async def _bootstrap_ct_memory_from_events() -> int:
+    """One-time-ish seed of the panel memory from events already stored with OUR
+    ClubTickets ?aff link (date >= today). Lets the same-day fix work on the very
+    first run too — for parties ClubTickets has ALREADY dropped today (so the
+    live panel can't teach us about them) but that are still in the DB from a
+    previous scrape. Idempotent; never raises."""
+    try:
+        from pymongo import UpdateOne
+    except Exception:
+        return 0
+    today_str = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ops = []
+    try:
+        cur = db.events.find(
+            {"date": {"$gte": today_str},
+             "commission_url": {"$regex": "clubtickets\\.com"}},
+            {"_id": 0, "name": 1, "date": 1, "commission_url": 1})
+        async for ev in cur:
+            url = ev.get("commission_url", "")
+            if not _is_our_clubtickets_url(url):
+                continue
+            k = _ct_url_key(url)
+            if not k:
+                continue
+            vslug, eslug, d = k
+            _id = f"{vslug}|{eslug}|{d}"
+            ops.append(UpdateOne(
+                {"_id": _id},
+                {"$set": {"ct_slug": vslug, "event_slug": eslug, "date": d,
+                          "name": ev.get("name", ""), "url": url},
+                 "$setOnInsert": {"first_seen": now_iso, "last_seen": now_iso}},
+                upsert=True,
+            ))
+    except Exception as e:
+        logger.warning(f"[clubtickets] memory bootstrap scan failed: {e}")
+        return 0
+    if not ops:
+        return 0
+    try:
+        await db.ct_panel_memory.bulk_write(ops, ordered=False)
+    except Exception as e:
+        logger.warning(f"[clubtickets] memory bootstrap write failed: {e}")
+        return 0
+    logger.info(f"[clubtickets] panel memory bootstrapped from {len(ops)} stored aff events")
+    return len(ops)
+
+
+
 async def _ct_affiliate_url_for(ct_slug: str, date_str: str, name: str):
     """Return OUR ClubTickets ?aff link for a party ONLY if that exact party is in
     our affiliate panel, else None. Match is PER PARTY (never per venue): the panel
@@ -10822,8 +10976,7 @@ async def _ct_affiliate_url_for(ct_slug: str, date_str: str, name: str):
     if not ct_slug or not date_str:
         return None
     try:
-        from scrapers.clubtickets import get_panel_index
-        idx = await get_panel_index(CLUBTICKETS_LINKS_URL)
+        idx = await _merged_panel_index()
     except Exception:
         return None
     parties = idx.get(ct_slug) or []
@@ -11062,18 +11215,41 @@ async def _enforce_clubtickets_affiliate(venue: dict, primary: list) -> list:
     ct_slug = venue.get("ct_slug")
     if not ct_slug:
         return primary
-    from scrapers.clubtickets import ClubTicketsScraper
-    ct = ClubTicketsScraper(
-        url=f"https://www.clubtickets.com/clubbing/{ct_slug}",
-        venue_name=venue.get("name", ""),
-        city=venue.get("city", "Ibiza"),
-        panel_url=CLUBTICKETS_LINKS_URL,
-        aff_code=CLUBTICKETS_AFF,
-        venue_slug=ct_slug,
-    )
-    ct_events = await ct.fetch()
+    # Build the ClubTickets calendar from the MEMORY-augmented panel index so
+    # parties ClubTickets dropped from the panel on their own event day (but which
+    # are still on sale) keep OUR ?aff link instead of falling back to a plain link.
+    from scrapers.clubtickets import _COORDS as _CT_COORDS
+    idx = await _merged_panel_index()
+    parties = idx.get(ct_slug) or []
+    _lat, _lng = _CT_COORDS.get(ct_slug, (None, None))
+    ct_events = []
+    _seen_ct: set = set()
+    for p in parties:
+        d = p.get("date") or ""
+        eslug = p.get("event_slug") or ""
+        url = p.get("url") or ""
+        if not d or not url:
+            continue
+        ext = f"ct:{ct_slug}:{eslug}:{d}"
+        if ext in _seen_ct:
+            continue
+        _seen_ct.add(ext)
+        _name = p.get("name") or (eslug or venue.get("name", "")).replace("-", " ").title()
+        ct_events.append(_ScrapedEvent(
+            external_id=ext,
+            name=_name[:120],
+            venue=venue.get("name", ""),
+            date=d,
+            time="",
+            image_url="",
+            ticket_url=_clubtickets_affiliate_url(url),
+            price_tiers=[],
+            sale_state="a_la_venta",
+            currency="EUR",
+            lat=_lat, lng=_lng,
+        ))
     if not ct_events:
-        return primary          # panel unreachable → leave primary untouched
+        return primary          # panel unreachable + no memory → leave primary untouched
     if not primary:
         return ct_events        # primary empty → full ClubTickets affiliate calendar
     by_date: dict = {}

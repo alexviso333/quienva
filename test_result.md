@@ -1859,7 +1859,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -1973,7 +1973,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -4336,7 +4336,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+        Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -4401,7 +4401,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -4509,7 +4509,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -4636,7 +4636,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -5052,7 +5052,7 @@ agent_communication:
         No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
         
         Test file: /app/backend_test.py
-        Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+        Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
 
 test_focus_2026_08_06_notif_and_cityalerts:
   goal: "Verificar 2 cambios de backend SIN romper nada. Entorno LOCAL nuevo: la BD arranca vacía y NO hay token de FourVenues (no probar scrapers/afiliado aquí)."
@@ -5126,7 +5126,7 @@ agent_communication:
         Both bug fixes working perfectly. No regressions detected. All endpoints returning correct values with proper persistence.
         
         Test file: /app/backend_test.py
-        Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+        Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
 
 
@@ -5609,7 +5609,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
       Admin: admin@quienva.app / admin123
       Test user: u1test1786031593@test.com
 
@@ -5746,7 +5746,7 @@ return 401 for guests.
         NO ISSUES FOUND. All requirements from review request satisfied.
         
         Test file: /app/backend_test.py
-        Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+        Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
 
 
 #====================================================================================================
@@ -5983,7 +5983,7 @@ agent_communication:
         - Own username update allowed (no-op, no clash)
         
         Test file: /app/backend_test.py
-        Backend URL: https://performance-analyzer-24.preview.emergentagent.com/api
+        Backend URL: https://ticket-scraper-fix.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
         
         NO ISSUES FOUND. All 3 tasks working perfectly.
@@ -6080,7 +6080,7 @@ agent_communication:
       TESTED: New SSR homepage, venue pages, and sitemap features for SEO optimization.
       
       TEST ENVIRONMENT:
-      - Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+      - Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
       - Test data: Venue "Olivia Valere" (slug: olivia-valere) in Marbella with events t1 (Gims Live), t2 (House Night)
       - Canonical URLs use preview domain (expected behavior for preview environment)
       
@@ -6232,7 +6232,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
+      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
       Total tests: 24 passed, 0 failed
 
 backend:
@@ -7153,3 +7153,116 @@ agent_communication:
       
       Test file: /app/backend_test_clubtickets_enforced.py
 
+
+
+backend:
+  - task: "ClubTickets 'same-day' affiliate link drop — persistent panel memory"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          ROOT CAUSE CONFIRMED against the LIVE affiliate panel: ClubTickets removes a party
+          from our affiliate links panel (admin.clubtickets.com/api/affiliate/<token>/links) on
+          its OWN event day, even though the party is still on sale. Verified today (2026-08-15):
+          the live panel returned 0 date-rows for 2026-08-15 but 13 for 2026-08-16. Because the
+          panel is the authoritative "what we carry" source, our scraper then lost the ?aff=CT226
+          link for TODAY's parties (elrow@UNVRS, ANTS@Ushuaïa, Black Coffee@Hï, Kodo@Lío,
+          Andy Manumission@528, etc.) and _apply_scraped_event even actively repointed the buy
+          link back to the plain direct link.
+          FIX (persistent panel memory): new collection db.ct_panel_memory snapshots every party
+          the panel shows (rate-limited, once/5min). New _merged_panel_index() = live panel UNION
+          remembered parties whose date == TODAY (Madrid) and last_seen within 5 days. Live entries
+          always win; FUTURE-dated parties that vanish are NOT resurrected (so cancelled nights die).
+          _ct_affiliate_url_for() (used by _apply_scraped_event for EVERY event from EVERY scraper)
+          and _enforce_clubtickets_affiliate() now use the merged index. Also bootstraps memory on
+          startup from already-stored ?aff events (date>=today) so it also protects parties CT has
+          ALREADY dropped today. NOTE: memory must be populated the day BEFORE (the panel still lists
+          tomorrow's parties today) — this is automatic since the panel is snapshotted every cycle.
+          VERIFIED via /app/ct_same_day_link_fix_test.py against the REAL live panel + real
+          _apply_scraped_event path: all 10 of the user's exact examples now keep ?aff=CT226 for
+          TODAY, the future-inexistent guardrail returns None, and an Xceed-scraped TODAY event at
+          528 (no aff) correctly receives our ClubTickets affiliate link.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL 3 VALIDATION CHECKS (100% PASS):
+          
+          ✅ CHECK 1: Backend Health
+          - GET http://localhost:8001/api/ → 200 with {"message":"¿Quién va? API"}
+          - Backend is running correctly with recreated .env (MONGO_URL=mongodb://localhost:27017, DB_NAME=quienva_db)
+          
+          ✅ CHECK 2: Authoritative Regression Script
+          - Executed: cd /app/backend && set -a && . ./.env && set +a && /root/.venv/bin/python /app/ct_same_day_link_fix_test.py
+          - Result: "RESULTADO: TODO OK" with exit code 0
+          - All 10 example parties keep ?aff=CT226 for TODAY (2026-08-15):
+            * elrow@unvrs-ibiza → https://www.clubtickets.com/clubbing/unvrs-ibiza/elrow/2026-08-15?aff=CT226
+            * ANTS@ushuaia-ibiza → https://www.clubtickets.com/clubbing/ushuaia-ibiza/ants/2026-08-15?aff=CT226
+            * Black Coffee@hi-ibiza → https://www.clubtickets.com/clubbing/hi-ibiza/black-coffee/2026-08-15?aff=CT226
+            * Ibiza Anthems@ibiza-rocks → https://www.clubtickets.com/clubbing/ibiza-rocks/ibiza-anthems/2026-08-15?aff=CT226
+            * GLOSS@swag → https://www.clubtickets.com/clubbing/swag/gloss/2026-08-15?aff=CT226
+            * The Masquerade@club-chinois-ibiza → https://www.clubtickets.com/clubbing/club-chinois-ibiza/the-masquerade/2026-08-15?aff=CT226
+            * Taconeo@eden-ibiza → https://www.clubtickets.com/clubbing/eden-ibiza/taconeo/2026-08-15?aff=CT226
+            * Fiesta del Agua@es-paradis → https://www.clubtickets.com/clubbing/es-paradis/fiesta-del-agua/2026-08-15?aff=CT226
+            * Kodo@lio → https://www.clubtickets.com/clubbing/lio/kodo/2026-08-15?aff=CT226
+            * Andy Manumission@528-ibiza → https://www.clubtickets.com/clubbing/528-ibiza/andy-manumission/2026-08-15?aff=CT226
+          - Nonexistent future date correctly returns None (no false link)
+          - Xceed-scraped TODAY event at 528 without aff correctly receives ClubTickets affiliate link
+          - Script confirms the panel memory resurrection mechanism is working correctly
+          
+          ✅ CHECK 3: Panel Snapshot Persistence
+          - Executed one-off Python check to verify db.ct_panel_memory persistence
+          - After clearing memory collection and forcing refresh via _merged_panel_index()
+          - Result: MEMORY_DOCS 574 (well above 100 minimum threshold)
+          - Confirms live panel's future parties are being correctly snapshotted to ct_panel_memory
+          - Snapshot mechanism working correctly to protect tomorrow's parties automatically
+          
+          CONCLUSION:
+          Bug fix working perfectly. The persistent panel memory successfully resurrects TODAY's parties
+          that ClubTickets removes from the live panel on their event day, preserving the ?aff=CT226
+          affiliate links. All 10 user-reported parties maintain their affiliate links for TODAY, and
+          the snapshot persistence ensures tomorrow's parties will be protected automatically.
+
+agent_communication:
+  - agent: "main"
+    message: |
+      FIX 'mismo día' ClubTickets (2026-08-15). Admin: admin@quienva.app / admin123.
+      NOTA IMPORTANTE PARA TESTING: este fix es DEPENDIENTE DEL TIEMPO. La memoria del panel se
+      llena el día ANTERIOR (el panel en vivo sí lista las fiestas de mañana hoy). Por eso un
+      arranque en frío HOY con BD vacía NO puede demostrar el enlace de HOY vía ClubTickets (la
+      memoria no tenía nada de ayer). La validación autoritativa es el script de regresión que
+      siembra la memoria "como si fuera ayer" y comprueba el flujo real.
+      EJECUTAR (bash) para verificar el fix:
+        cd /app/backend && set -a && . ./.env && set +a && /root/.venv/bin/python /app/ct_same_day_link_fix_test.py
+        (debe imprimir 'RESULTADO: TODO OK' y salir con código 0)
+      Además, comprobar que la persistencia del snapshot funciona:
+        - Tras un GET a cualquier endpoint que dispare scrapers, o llamando internamente a
+          _merged_panel_index(), la colección db.ct_panel_memory debe poblarse con las fiestas
+          FUTURAS del panel (>500 docs típicamente).
+      Regresión general: la app arranca sin errores (se recrearon backend/.env y frontend/.env
+      que faltaban en este fork); GET /api/ responde 200.
+  - agent: "testing"
+    message: |
+      VERIFICATION COMPLETE (2026-08-15): All 3 validation checks PASSED.
+      
+      ✅ Backend health confirmed (GET /api/ → 200)
+      ✅ Authoritative regression script passed with "RESULTADO: TODO OK" (exit code 0)
+         - All 10 example parties keep ?aff=CT226 for TODAY (2026-08-15)
+         - Nonexistent future date returns None (no false link)
+         - Xceed-scraped TODAY event correctly receives ClubTickets affiliate link
+      ✅ Panel snapshot persistence working (574 documents snapshotted, well above 100 minimum)
+      
+      The persistent panel memory fix is working correctly. TODAY's parties that ClubTickets
+      removes from the live panel are successfully resurrected via the ct_panel_memory collection,
+      preserving the ?aff=CT226 affiliate links. The snapshot mechanism ensures tomorrow's parties
+      will be protected automatically.
+      
+      NO CODE MODIFICATIONS MADE (as instructed). NO SCRAPER CYCLES RUN (as instructed).
+      
+      RECOMMENDATION: This bug fix is complete and working as designed. Main agent can summarize
+      and finish.
