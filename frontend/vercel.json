@@ -1,4 +1,12 @@
 {
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "quienva.me" }],
+      "destination": "https://www.quienva.me/$1",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     { "source": "/fiestas/:city/esta-noche", "destination": "https://quienva.onrender.com/api/ciudad/:city/esta-noche" },
     { "source": "/fiestas/:city/este-finde", "destination": "https://quienva.onrender.com/api/ciudad/:city/este-finde" },

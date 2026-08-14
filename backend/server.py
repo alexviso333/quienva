@@ -947,6 +947,40 @@ def _title_with_month(title: str, lang: str) -> str:
     return f"{title} \u2014 {fr}"
 
 
+def _event_seo_title(ev: dict, lang: str) -> str:
+    """Compact, truncation-safe event <title> (~55-60 chars, front-loaded):
+    '{name} — {venue}[, {city}] · {day mon} | ¿Quién va?'
+
+    Why this beats the old '{name} — {venue}, {city} | Entradas y horario |
+    ¿Quién va?':
+    - The old title ran ~80-95 chars, so on mobile (where 995 of our 1.3k
+      impressions come from) Google truncated everything after the venue —
+      'Entradas y horario' and the brand never rendered.
+    - It also produced redundancy like 'Fitz Marbella, Marbella' because the
+      venue name already carries the city.
+    - The specific day + short month is a far stronger CTR signal for event
+      queries ('gims marbella', 'aya nakamura fitz') than a generic keyword
+      that got cut off anyway. The 'Entradas'/ticket keywords already live in
+      the meta description and page body."""
+    name = (ev.get("name") or "Fiesta").strip()
+    venue = (ev.get("venue") or "").strip()
+    city = (ev.get("city") or "").strip()
+    place = venue
+    if city and city.lower() not in venue.lower():
+        place = f"{venue}, {city}" if venue else city
+    when = ""
+    try:
+        d = date.fromisoformat(ev.get("date", ""))
+        mon = _MON[lang][d.month - 1]
+        when = f"{d.day}. {mon}" if lang == "de" else f"{d.day} {mon}"
+    except Exception:
+        when = ""
+    head = f"{name} \u2014 {place}" if place else name
+    if when:
+        head = f"{head} \u00b7 {when}"
+    return f"{head} | \u00bfQui\u00e9n va?"
+
+
 
 
 def _canonicalize_base(base: str) -> str:
@@ -2039,7 +2073,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
     when = _seo_date(ev.get("date", ""), lang, ev.get("time", ""))
     pl = _seo_price_line(ev, lang)
     price_pref = (pl + ". ") if pl else ""
-    title = e(T["ev_title"].format(name=ev.get("name", ""), venue=ev.get("venue", ""), city=city))
+    title = e(_event_seo_title(ev, lang))
     desc = e(T["ev_desc"].format(name=ev.get("name", ""), venue=ev.get("venue", ""), city=city, date=when, price=price_pref))
     img = ev.get("image_url", "")
     if str(img).startswith("http"):
