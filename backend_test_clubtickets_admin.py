@@ -10,7 +10,7 @@ import sys
 import time
 
 # Base URL from frontend/.env
-BASE_URL = "https://65556339-a87f-4d29-95f4-053d1dd279e6.preview.emergentagent.com/api"
+BASE_URL = "https://performance-analyzer-24.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

@@ -1859,7 +1859,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -1973,7 +1973,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -4336,7 +4336,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+        Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -4401,7 +4401,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -4509,7 +4509,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -4636,7 +4636,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -5052,7 +5052,7 @@ agent_communication:
         No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
         
         Test file: /app/backend_test.py
-        Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+        Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
 
 test_focus_2026_08_06_notif_and_cityalerts:
   goal: "Verificar 2 cambios de backend SIN romper nada. Entorno LOCAL nuevo: la BD arranca vacía y NO hay token de FourVenues (no probar scrapers/afiliado aquí)."
@@ -5126,7 +5126,7 @@ agent_communication:
         Both bug fixes working perfectly. No regressions detected. All endpoints returning correct values with proper persistence.
         
         Test file: /app/backend_test.py
-        Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+        Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
 
 
@@ -5609,7 +5609,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
       Admin: admin@quienva.app / admin123
       Test user: u1test1786031593@test.com
 
@@ -5746,7 +5746,7 @@ return 401 for guests.
         NO ISSUES FOUND. All requirements from review request satisfied.
         
         Test file: /app/backend_test.py
-        Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+        Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
 
 
 #====================================================================================================
@@ -5983,7 +5983,7 @@ agent_communication:
         - Own username update allowed (no-op, no clash)
         
         Test file: /app/backend_test.py
-        Backend URL: https://ticket-matcher-5.preview.emergentagent.com/api
+        Backend URL: https://performance-analyzer-24.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
         
         NO ISSUES FOUND. All 3 tasks working perfectly.
@@ -6080,7 +6080,7 @@ agent_communication:
       TESTED: New SSR homepage, venue pages, and sitemap features for SEO optimization.
       
       TEST ENVIRONMENT:
-      - Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+      - Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
       - Test data: Venue "Olivia Valere" (slug: olivia-valere) in Marbella with events t1 (Gims Live), t2 (House Night)
       - Canonical URLs use preview domain (expected behavior for preview environment)
       
@@ -6232,7 +6232,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://ticket-matcher-5.preview.emergentagent.com/api
+      Base URL: https://performance-analyzer-24.preview.emergentagent.com/api
       Total tests: 24 passed, 0 failed
 
 backend:

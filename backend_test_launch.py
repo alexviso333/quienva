@@ -9,7 +9,7 @@ import time
 from datetime import datetime, date, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://ticket-matcher-5.preview.emergentagent.com/api"
+BASE_URL = "https://performance-analyzer-24.preview.emergentagent.com/api"
 
 # Test credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

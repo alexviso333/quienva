@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from PIL import Image
 
 # Base URL from frontend/.env
-BASE_URL = "https://ticket-matcher-5.preview.emergentagent.com/api"
+BASE_URL = "https://performance-analyzer-24.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"
