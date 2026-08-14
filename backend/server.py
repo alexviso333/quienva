@@ -2179,6 +2179,13 @@ async def _render_event(event_id: str, lang: str, request: Request):
                        f'<b>{e(pl or T["free"])}</b></div>'
                        f'{sticky_btn}</div>')
     ogloc = {'es': 'es_ES', 'en': 'en_US', 'de': 'de_DE'}[lang]
+    # Internal linking: turn the venue + city in the fact row into real links to
+    # their evergreen hub pages so Google understands the site structure.
+    _vn = ev.get("venue", "")
+    venue_link = (f'<a href="{e(_venue_paths(front, _slugify(_vn))[lang])}">{e(_vn)}</a>' if _vn else "")
+    city_link = e(city)
+    if city_id:
+        city_link = f'<a href="{e(_city_paths(front, _city_slug(city_id))[lang])}">{e(city)}</a>'
     html_out = f"""<!doctype html>
 <html lang="{T['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -2208,7 +2215,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
 </section>
 <div class="meta">
 <div><b>{e(T["ev_when"])}</b>{e(when)}</div>
-<div><b>{e(T["ev_where"])}</b>{e(ev.get("venue",""))}{addr}, {e(city)}</div>
+<div><b>{e(T["ev_where"])}</b>{venue_link}{addr}, {city_link}</div>
 {genre_row}
 <div><b>{e(T["ev_price"])}</b>{e(pl or T["free"])}</div>
 </div>
@@ -3330,29 +3337,50 @@ _VENUE_T = {
     "es": {
         "title": "{venue} ({city}): pr\u00f3ximas fiestas y entradas | \u00bfQui\u00e9n va?",
         "desc": "Agenda de {venue} en {city}: {n} fiestas con horarios, precios reales y qu\u00e9 amigos van. Consigue tus entradas en \u00bfQui\u00e9n va?",
+        "desc_past": "Agenda de {venue} en {city}: fiestas, horarios y precios reales. Descubre las pr\u00f3ximas fiestas y qui\u00e9n va en \u00bfQui\u00e9n va?",
         "h1": "Fiestas en {venue}",
         "sub": "Pr\u00f3ximas fiestas, horarios, precios y qui\u00e9n va \u00b7 {city}",
         "empty": "Pronto publicaremos las pr\u00f3ximas fiestas de esta discoteca.",
         "more_city": "M\u00e1s fiestas en {label}",
         "faq_title": "Preguntas frecuentes",
+        "past_h": "\u00daltimas fiestas en {venue}",
+        "past_note": "Ahora mismo no hay fiestas anunciadas en {venue}. Te avisamos en cuanto se publiquen \u2014 mientras, mira m\u00e1s planes en {city}.",
+        "upcoming_h": "Pr\u00f3ximas fiestas",
+        "other_h": "Otras discotecas en {label}",
+        "where": "D\u00f3nde",
+        "genres": "Estilos",
     },
     "en": {
         "title": "{venue} ({city}): upcoming parties & tickets | \u00bfQui\u00e9n va?",
         "desc": "{venue} in {city} agenda: {n} parties with times, real prices and which friends are going. Get your tickets on \u00bfQui\u00e9n va?",
+        "desc_past": "{venue} in {city} agenda: parties, times and real prices. Discover the upcoming parties and who's going on \u00bfQui\u00e9n va?",
         "h1": "Parties at {venue}",
         "sub": "Upcoming parties, times, prices and who's going \u00b7 {city}",
         "empty": "We'll publish this club's upcoming parties soon.",
         "more_city": "More parties in {label}",
         "faq_title": "FAQ",
+        "past_h": "Latest parties at {venue}",
+        "past_note": "There are no announced parties at {venue} right now. We'll let you know as soon as they're published \u2014 meanwhile, see more plans in {city}.",
+        "upcoming_h": "Upcoming parties",
+        "other_h": "Other clubs in {label}",
+        "where": "Where",
+        "genres": "Styles",
     },
     "de": {
         "title": "{venue} ({city}): kommende Partys & Tickets | \u00bfQui\u00e9n va?",
         "desc": "{venue} in {city} Programm: {n} Partys mit Zeiten, echten Preisen und welche Freunde hingehen. Hol dir deine Tickets bei \u00bfQui\u00e9n va?",
+        "desc_past": "{venue} in {city} Programm: Partys, Zeiten und echte Preise. Entdecke die kommenden Partys und wer hingeht bei \u00bfQui\u00e9n va?",
         "h1": "Partys im {venue}",
         "sub": "Kommende Partys, Zeiten, Preise und wer hingeht \u00b7 {city}",
         "empty": "Wir ver\u00f6ffentlichen bald die kommenden Partys dieses Clubs.",
         "more_city": "Mehr Partys in {label}",
         "faq_title": "H\u00e4ufige Fragen",
+        "past_h": "Letzte Partys im {venue}",
+        "past_note": "Aktuell sind keine Partys im {venue} angek\u00fcndigt. Wir sagen Bescheid, sobald sie ver\u00f6ffentlicht werden \u2014 sieh dir in der Zwischenzeit mehr Pl\u00e4ne in {city} an.",
+        "upcoming_h": "Kommende Partys",
+        "other_h": "Andere Clubs in {label}",
+        "where": "Wo",
+        "genres": "Stile",
     },
 }
 
@@ -3388,10 +3416,39 @@ async def _upcoming_venues_agg(limit: int = 3000) -> list:
     return out
 
 
+async def _all_venues_agg(limit: int = 6000) -> list:
+    """Every venue we've ever had an event for (upcoming OR past). Used so a
+    club's hub page stays alive (indexable, not a 404) even when all its parties
+    have already happened — the club is an evergreen entity that will get new
+    events. `city` is taken from its most recent event."""
+    pipeline = [
+        {"$match": {"venue": {"$nin": ["", None]}}},
+        {"$sort": {"date": -1}},
+        {"$group": {"_id": "$venue", "city": {"$first": "$city"},
+                    "count": {"$sum": 1}, "lastmod": {"$max": "$last_scraped_at"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": limit},
+    ]
+    out = []
+    async for r in db.events.aggregate(pipeline):
+        v = r.get("_id") or ""
+        if v:
+            out.append({"venue": v, "city": r.get("city", ""),
+                        "count": r.get("count", 0), "lastmod": r.get("lastmod")})
+    return out
+
+
 async def _venue_lookup(slug: str):
     slug = (slug or "").lower()
     best = None
     for r in await _upcoming_venues_agg():
+        if _slugify(r["venue"]) == slug and (best is None or r["count"] > best["count"]):
+            best = r
+    if best:
+        return best
+    # No upcoming parties -> fall back to any historical event so the hub page
+    # never 404s (evergreen SEO entity).
+    for r in await _all_venues_agg():
         if _slugify(r["venue"]) == slug and (best is None or r["count"] > best["count"]):
             best = r
     return best
@@ -3408,6 +3465,57 @@ async def _venue_events(venue: str, limit: int = 60) -> list:
     return [ev async for ev in cur]
 
 
+async def _venue_past_events(venue: str, limit: int = 12) -> list:
+    """Most recent PAST parties for a club, shown when it has nothing upcoming
+    so the hub page keeps real content instead of going empty."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    cur = db.events.find(
+        {"venue": venue, "date": {"$lt": today}},
+        {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
+         "genre": 1, "address": 1, "currency": 1, "last_scraped_at": 1, "created_at": 1,
+         "image_url": 1, "price_tiers": 1, "sale_state": 1},
+    ).sort("date", -1).limit(limit)
+    return [ev async for ev in cur]
+
+
+async def _venue_genres(venue: str) -> list:
+    """Top music genres for a club (for unique intro copy + keywords)."""
+    pipeline = [
+        {"$match": {"venue": venue, "genre": {"$nin": ["", None]}}},
+        {"$group": {"_id": "$genre", "c": {"$sum": 1}}},
+        {"$sort": {"c": -1}},
+        {"$limit": 4},
+    ]
+    out = []
+    async for r in db.events.aggregate(pipeline):
+        if r.get("_id"):
+            out.append(r["_id"])
+    return out
+
+
+def _venue_intro_text(venue: str, city: str, genres: list, lang: str) -> str:
+    """Unique, dynamic descriptive paragraph per club (thin-content fix)."""
+    g = ""
+    if genres:
+        gl = ", ".join(genres[:3])
+        g = {"es": f" Aqu\u00ed suena sobre todo {gl}.",
+             "en": f" Expect mostly {gl}.",
+             "de": f" Musikalisch vor allem {gl}."}[lang]
+    if lang == "en":
+        return (f"{venue} is one of the go-to nightclubs in {city}. On \u00bfQui\u00e9n va? you'll find its "
+                f"full agenda \u2014 upcoming parties, line-ups, start times, real ticket prices and which of "
+                f"your friends are going.{g} Check what's on at {venue} tonight and this weekend and grab your "
+                f"tickets before they sell out.")
+    if lang == "de":
+        return (f"{venue} geh\u00f6rt zu den angesagtesten Clubs in {city}. Auf \u00bfQui\u00e9n va? findest du das "
+                f"komplette Programm \u2014 kommende Partys, Line-ups, Startzeiten, echte Ticketpreise und welche "
+                f"Freunde hingehen.{g} Sieh, was heute Abend und am Wochenende im {venue} l\u00e4uft, und sichere dir "
+                f"Tickets, bevor sie ausverkauft sind.")
+    return (f"{venue} es una de las discotecas de referencia en {city}. En \u00bfQui\u00e9n va? encuentras su agenda "
+            f"completa \u2014 pr\u00f3ximas fiestas, cartel, horarios, precios reales de entrada y qu\u00e9 amigos van.{g} "
+            f"Mira qu\u00e9 hay en {venue} esta noche y este finde y consigue tus entradas antes de que se agoten.")
+
+
 async def _render_venue(slug: str, lang: str, request: Request):
     import html as _html
     e = _html.escape
@@ -3422,24 +3530,34 @@ async def _render_venue(slug: str, lang: str, request: Request):
     venue = look["venue"]
     city = look.get("city", "")
     events = await _venue_events(venue)
+    only_past = False
+    if not events:
+        # Evergreen hub: keep the page alive with recent past parties instead of
+        # letting it go empty / 404 when everything has already happened.
+        events = await _venue_past_events(venue)
+        only_past = True
     vpaths = _venue_paths(front, slug)
     canonical = vpaths[lang]
-    n = len(events)
+    n = 0 if only_past else len(events)
     title = e(T["title"].format(venue=venue, city=city))
-    desc = e(T["desc"].format(venue=venue, city=city, n=n))
+    desc = e((T["desc_past"] if only_past else T["desc"]).format(venue=venue, city=city, n=n))
 
     og_img = ""
     items_html, jsonld = [], []
     for ev in events[:24]:
         eu = _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang]
         items_html.append(f'<li>{_seo_card(ev, eu, lang, e)}</li>')
-        jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, eu, front, lang=lang)}</script>')
+        # Only advertise structured Event/offers for upcoming parties.
+        if not only_past:
+            jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, eu, front, lang=lang)}</script>')
         if not og_img and str(ev.get("image_url", "")).startswith("http"):
             og_img = e(ev["image_url"])
     if not items_html:
         items_html.append(f'<li class="empty">{e(T["empty"])}</li>')
 
     city_id = _seo_city_id_for(city)
+    clabel = city
+    cp = ""
     bc_items = [(ST["bc_home"], f"{front}/")]
     city_cta = ""
     if city_id:
@@ -3450,9 +3568,43 @@ async def _render_venue(slug: str, lang: str, request: Request):
     bc_items.append((venue, canonical))
     bc_html = _breadcrumb_html(bc_items, e)
 
+    # Unique intro paragraph (thin-content fix) + music styles from real events.
+    genres = await _venue_genres(venue)
+    intro_html = f'<div class="intro"><p>{e(_venue_intro_text(venue, clabel or city, genres, lang))}</p></div>'
+
+    # Address / location + styles chips (unique on-page facts).
+    addr0 = next((ev.get("address") for ev in events if ev.get("address")), "")
+    facts = []
+    if addr0:
+        facts.append(f'<div><b>{e(T["where"])}</b> {e(addr0)}</div>')
+    if genres:
+        facts.append(f'<div><b>{e(T["genres"])}</b> {e(", ".join(genres[:3]))}</div>')
+    facts_html = f'<div class="meta">{"".join(facts)}</div>' if facts else ""
+
+    # "No upcoming right now" note when we only have past parties.
+    past_note_html = (f'<p class="sub" style="color:#f5a524;font-weight:600">'
+                      f'{e(T["past_note"].format(venue=venue, city=clabel or city))}</p>') if only_past else ""
+    list_h = e((T["past_h"] if only_past else T["upcoming_h"]).format(venue=venue))
+    list_head = f'<h2 class="sectitle">{list_h}</h2>'
+
+    # Internal linking: sibling clubs in the same city (keeps the hub rich and
+    # spreads crawl/authority across venue pages).
+    other_html = ""
+    if city_id:
+        siblings = [v for v in await _city_venues(city_id) if v["slug"] != slug][:8]
+        if siblings:
+            cards = []
+            for v in siblings:
+                thumb = (f'<span class="vthumb"><img src="{e(v["image"])}" alt="{e(v["venue"])}" loading="lazy"></span>'
+                         if v["image"] else f'<span class="vthumb">{e((v["venue"][:1] or "?").upper())}</span>')
+                cards.append(
+                    f'<a class="vcard glow-card reveal" href="{e(_venue_paths(front, v["slug"])[lang])}">{thumb}'
+                    f'<span class="vmeta"><b>{e(v["venue"])}</b></span></a>')
+            other_html = (f'<div class="sech"><h2>{e(T["other_h"].format(label=clabel or city))}</h2></div>'
+                          f'<div class="venues">{"".join(cards)}</div>')
+
     nc = {"@context": "https://schema.org", "@type": "NightClub",
           "name": venue, "url": canonical}
-    addr0 = next((ev.get("address") for ev in events if ev.get("address")), "")
     addr = {"@type": "PostalAddress", "addressCountry": "ES"}
     if city:
         addr["addressLocality"] = city
@@ -3461,13 +3613,31 @@ async def _render_venue(slug: str, lang: str, request: Request):
     nc["address"] = addr
     if og_img:
         nc["image"] = og_img
-    faq_pairs = [
-        (f"\u00bfQu\u00e9 fiestas hay en {venue}?" if lang == "es" else
-         (f"What parties are on at {venue}?" if lang == "en" else f"Welche Partys gibt es im {venue}?"),
-         (f"Ahora mismo {n} pr\u00f3ximas fiestas en {venue} ({city}). Mira horarios, precios y qui\u00e9n va en \u00bfQui\u00e9n va?" if lang == "es" else
-          (f"Right now {n} upcoming parties at {venue} ({city}). See times, prices and who's going on \u00bfQui\u00e9n va?" if lang == "en" else
-           f"Aktuell {n} kommende Partys im {venue} ({city}). Sieh Zeiten, Preise und wer hingeht bei \u00bfQui\u00e9n va?"))),
-    ]
+
+    # 3 FAQs (was 1) — richer FAQ rich-result + on-page content.
+    q_when = (f"\u00bfQu\u00e9 fiestas hay en {venue}?" if lang == "es" else
+              (f"What parties are on at {venue}?" if lang == "en" else f"Welche Partys gibt es im {venue}?"))
+    if only_past:
+        a_when = (f"En este momento no hay fiestas anunciadas en {venue} ({city}). Publicamos su agenda en cuanto se confirma \u2014 mira las \u00faltimas fiestas y m\u00e1s planes en {clabel or city} en \u00bfQui\u00e9n va?" if lang == "es" else
+                  (f"There are no announced parties at {venue} ({city}) right now. We publish its agenda as soon as it's confirmed \u2014 see the latest parties and more plans in {clabel or city} on \u00bfQui\u00e9n va?" if lang == "en" else
+                   f"Aktuell sind keine Partys im {venue} ({city}) angek\u00fcndigt. Wir ver\u00f6ffentlichen das Programm, sobald es best\u00e4tigt ist \u2014 sieh die letzten Partys und mehr Pl\u00e4ne in {clabel or city} bei \u00bfQui\u00e9n va?"))
+    else:
+        a_when = (f"Ahora mismo {n} pr\u00f3ximas fiestas en {venue} ({city}). Mira horarios, precios reales y qui\u00e9n va en \u00bfQui\u00e9n va?" if lang == "es" else
+                  (f"Right now {n} upcoming parties at {venue} ({city}). See times, real prices and who's going on \u00bfQui\u00e9n va?" if lang == "en" else
+                   f"Aktuell {n} kommende Partys im {venue} ({city}). Sieh Zeiten, echte Preise und wer hingeht bei \u00bfQui\u00e9n va?"))
+    q_where = (f"\u00bfD\u00f3nde est\u00e1 {venue}?" if lang == "es" else
+               (f"Where is {venue}?" if lang == "en" else f"Wo ist {venue}?"))
+    loc = addr0 or city
+    a_where = (f"{venue} est\u00e1 en {loc}. En \u00bfQui\u00e9n va? tienes la ubicaci\u00f3n, los horarios y c\u00f3mo llegar a cada fiesta." if lang == "es" else
+               (f"{venue} is in {loc}. On \u00bfQui\u00e9n va? you get the location, times and how to get to each party." if lang == "en" else
+                f"{venue} befindet sich in {loc}. Auf \u00bfQui\u00e9n va? findest du Standort, Zeiten und Anfahrt zu jeder Party."))
+    q_tix = (f"\u00bfC\u00f3mo consigo entradas para {venue}?" if lang == "es" else
+             (f"How do I get tickets for {venue}?" if lang == "en" else f"Wie bekomme ich Tickets f\u00fcr {venue}?"))
+    a_tix = (f"Abre la fiesta que te interese de {venue} en \u00bfQui\u00e9n va? y toca en conseguir entrada para comprar al precio actual, sin sorpresas." if lang == "es" else
+             (f"Open the party you want at {venue} on \u00bfQui\u00e9n va? and tap get ticket to buy at the current price, no surprises." if lang == "en" else
+              f"\u00d6ffne die gew\u00fcnschte Party im {venue} auf \u00bfQui\u00e9n va? und tippe auf Ticket sichern, um zum aktuellen Preis zu kaufen."))
+    faq_pairs = [(q_when, a_when), (q_where, a_where), (q_tix, a_tix)]
+
     hreflang = _hreflang_links(vpaths, e)
     langsw = _lang_switch(vpaths, lang, e(ST["other_langs"]), e)
     topbar = _seo_topbar(front, lang, e)
@@ -3481,7 +3651,7 @@ async def _render_venue(slug: str, lang: str, request: Request):
     ogimg_tag = f'<meta property="og:image" content="{og_img}">' if og_img else ''
     ogloc = {'es': 'es_ES', 'en': 'en_US', 'de': 'de_DE'}[lang]
     stats_html = (f'<div class="stats"><span class="stat"><b>{n}</b> '
-                  f'{e(_HOME_T[lang]["n_plans"])}</span></div>')
+                  f'{e(_HOME_T[lang]["n_plans"])}</span></div>') if not only_past else ""
     html_out = f"""<!doctype html>
 <html lang="{ST['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -3507,10 +3677,15 @@ async def _render_venue(slug: str, lang: str, request: Request):
 <h1>{e(T["h1"].format(venue=venue))}<span class="dot">.</span></h1>
 <p class="sub">{e(T["sub"].format(city=city))}</p>
 {stats_html}
+{past_note_html}
 <div class="ctarow"><a class="cta" href="{front}/feed">{e(_SEO_UI[lang]["open"])}</a></div>
 </section>
+{intro_html}
+{facts_html}
+{list_head}
 <ul class="grid">{''.join(items_html)}</ul>
 {city_cta}
+{other_html}
 {benefits}
 {joinband}
 {faq_html}
