@@ -1333,6 +1333,133 @@ _CITY_INTRO_DATA = {
 }
 
 
+# Unique per-city "best zones & nights" content (durable SEO for generic
+# high-volume queries like "fiestas marbella", "discotecas mallorca"). ES/EN/DE.
+_CITY_GUIDE_DATA = {
+    "Marbella": {
+        "zones": [
+            {"name": "Puerto Ban\u00fas",
+             "es": "La milla del lujo: discotecas como Tibu, Olivia Valere y Aqwa Mist, yates y fiesta hasta el amanecer.",
+             "en": "The luxury strip: clubs like Tibu, Olivia Valere and Aqwa Mist, yachts and partying until dawn.",
+             "de": "Die Luxusmeile: Clubs wie Tibu, Olivia Valere und Aqwa Mist, Yachten und Party bis zum Morgengrauen."},
+            {"name": "Milla de Oro y beach clubs",
+             "es": "Beach clubs de d\u00eda como Nikki Beach y Ocean Club que se convierten en fiest\u00f3n al atardecer.",
+             "en": "Daytime beach clubs like Nikki Beach and Ocean Club that turn into a party at sunset.",
+             "de": "Beachclubs am Tag wie Nikki Beach und Ocean Club, die bei Sonnenuntergang zur Party werden."},
+            {"name": "Casco antiguo de Marbella",
+             "es": "Ambiente m\u00e1s relajado de bares y terrazas para empezar la noche antes de subir a las discotecas.",
+             "en": "A more relaxed scene of bars and terraces to start the night before heading to the clubs.",
+             "de": "Entspanntere Bars und Terrassen, um den Abend zu beginnen, bevor es in die Clubs geht."},
+        ],
+        "nights": {
+            "es": "En Marbella el finde arranca el jueves. Viernes y s\u00e1bado son las noches fuertes en Puerto Ban\u00fas, con las sesiones y conciertos m\u00e1s potentes, mientras que los domingos brillan los beach clubs con sus pool parties. En pleno verano hay planazo casi cada noche.",
+            "en": "In Marbella the weekend kicks off on Thursday. Friday and Saturday are the big nights in Puerto Ban\u00fas, with the strongest DJ sets and concerts, while Sundays belong to the beach clubs and their pool parties. In peak summer there's something on almost every night.",
+            "de": "In Marbella beginnt das Wochenende am Donnerstag. Freitag und Samstag sind die gro\u00dfen N\u00e4chte in Puerto Ban\u00fas mit den st\u00e4rksten DJ-Sets und Konzerten, w\u00e4hrend sonntags die Beachclubs mit ihren Pool-Partys gl\u00e4nzen. Im Hochsommer ist fast jede Nacht etwas los."},
+    },
+    "Palma de Mallorca": {
+        "zones": [
+            {"name": "Paseo Mar\u00edtimo de Palma",
+             "es": "El coraz\u00f3n de la noche en Palma: clubs como Tito's y Social Club junto al puerto.",
+             "en": "The heart of Palma's nightlife: clubs like Tito's and Social Club by the marina.",
+             "de": "Das Herz von Palmas Nachtleben: Clubs wie Tito's und Social Club am Hafen."},
+            {"name": "Magaluf",
+             "es": "La zona m\u00e1s salvaje de la isla, con BCM Planet Dance y la fiesta joven internacional.",
+             "en": "The wildest area on the island, with BCM Planet Dance and the young international party crowd.",
+             "de": "Die wildeste Gegend der Insel, mit BCM Planet Dance und der jungen internationalen Partyszene."},
+            {"name": "La Lonja y centro",
+             "es": "Bares de copas y buen ambiente en el casco antiguo para empezar la noche.",
+             "en": "Cocktail bars and a great buzz in the old town to start the night.",
+             "de": "Cocktailbars und gute Stimmung in der Altstadt f\u00fcr den Auftakt."},
+        ],
+        "nights": {
+            "es": "En Mallorca las noches fuertes son viernes y s\u00e1bado, pero en verano Magaluf no para ni un d\u00eda. El Paseo Mar\u00edtimo de Palma funciona todo el a\u00f1o y muchas discotecas programan conciertos y sesiones especiales entre semana en temporada alta.",
+            "en": "In Mallorca the big nights are Friday and Saturday, but in summer Magaluf never stops. Palma's Paseo Mar\u00edtimo runs all year and many clubs schedule midweek concerts and special sessions in high season.",
+            "de": "Auf Mallorca sind Freitag und Samstag die gro\u00dfen N\u00e4chte, aber im Sommer h\u00f6rt Magaluf nie auf. Palmas Paseo Mar\u00edtimo l\u00e4uft das ganze Jahr, und viele Clubs bieten in der Hochsaison auch unter der Woche Konzerte und Specials."},
+    },
+    "Ibiza": {
+        "zones": [
+            {"name": "Playa d'en Bossa",
+             "es": "El epicentro del clubbing con Ushua\u00efa y H\u00ef Ibiza, donde pinchan los DJs m\u00e1s grandes del mundo.",
+             "en": "The epicentre of clubbing with Ushua\u00efa and H\u00ef Ibiza, where the world's biggest DJs play.",
+             "de": "Das Epizentrum des Clubbings mit Ushua\u00efa und H\u00ef Ibiza, wo die gr\u00f6\u00dften DJs der Welt auflegen."},
+            {"name": "San Antonio",
+             "es": "Los atardeceres m\u00e1s famosos (Caf\u00e9 del Mar) y clubs como Eden y Es Parad\u00eds.",
+             "en": "The most famous sunsets (Caf\u00e9 del Mar) and clubs like Eden and Es Parad\u00eds.",
+             "de": "Die ber\u00fchmtesten Sonnenunterg\u00e4nge (Caf\u00e9 del Mar) und Clubs wie Eden und Es Parad\u00eds."},
+            {"name": "Ibiza ciudad y Dalt Vila",
+             "es": "Glamour y noche sofisticada con Pacha y L\u00edo junto al puerto.",
+             "en": "Glamour and a sophisticated night out with Pacha and L\u00edo by the port.",
+             "de": "Glamour und ein anspruchsvoller Abend mit Pacha und L\u00edo am Hafen."},
+        ],
+        "nights": {
+            "es": "En Ibiza cada club tiene su noche residente a lo largo de la semana, as\u00ed que de mayo a octubre hay fiesta grande literalmente todos los d\u00edas. Los atardeceres en San Antonio y las pool parties de d\u00eda completan el plan.",
+            "en": "In Ibiza each club has its resident night across the week, so from May to October there's a huge party literally every day. Sunsets in San Antonio and daytime pool parties round out the plan.",
+            "de": "Auf Ibiza hat jeder Club seine Resident-Nacht \u00fcber die Woche verteilt, sodass von Mai bis Oktober buchst\u00e4blich jeden Tag gro\u00dfe Party ist. Sonnenunterg\u00e4nge in San Antonio und Pool-Partys am Tag runden das Ganze ab."},
+    },
+    "Madrid": {
+        "zones": [
+            {"name": "Gran V\u00eda y centro",
+             "es": "Discotecas ic\u00f3nicas como Teatro Barcel\u00f3, Joy Eslava y Kapital, a un paso de Sol.",
+             "en": "Iconic clubs like Teatro Barcel\u00f3, Joy Eslava and Kapital, steps from Sol.",
+             "de": "Legend\u00e4re Clubs wie Teatro Barcel\u00f3, Joy Eslava und Kapital, nur wenige Schritte von Sol."},
+            {"name": "Malasa\u00f1a",
+             "es": "El barrio alternativo, de bares con m\u00fasica indie y electr\u00f3nica hasta tarde.",
+             "en": "The alternative neighbourhood, full of bars with indie and electronic music until late.",
+             "de": "Das alternative Viertel voller Bars mit Indie- und Elektromusik bis sp\u00e4t."},
+            {"name": "Chueca",
+             "es": "El ambiente m\u00e1s diverso y las noches LGTBI+ de la ciudad.",
+             "en": "The most diverse scene and the city's LGBTQ+ nights.",
+             "de": "Die vielf\u00e4ltigste Szene und die LGBTQ+-N\u00e4chte der Stadt."},
+        ],
+        "nights": {
+            "es": "En Madrid la noche empieza tarde y termina m\u00e1s tarde a\u00fan. El jueves ya se llena de universitarios, viernes y s\u00e1bado son las grandes noches, y los domingos hay afters que enlazan con la ma\u00f1ana. Fabrik, a las afueras, es la meca del techno los fines de semana.",
+            "en": "In Madrid the night starts late and ends even later. Thursday fills up with students, Friday and Saturday are the big nights, and Sundays bring afterparties that run into the morning. Fabrik, on the outskirts, is the techno mecca on weekends.",
+            "de": "In Madrid beginnt die Nacht sp\u00e4t und endet noch sp\u00e4ter. Donnerstags f\u00fcllt es sich mit Studenten, Freitag und Samstag sind die gro\u00dfen N\u00e4chte, und sonntags gibt es Afterpartys bis in den Morgen. Fabrik am Stadtrand ist am Wochenende das Techno-Mekka."},
+    },
+    "Barcelona": {
+        "zones": [
+            {"name": "Port Ol\u00edmpic",
+             "es": "La fiesta junto al mar con Opium, Sh\u00f4ko y Pacha Barcelona.",
+             "en": "Partying by the sea with Opium, Sh\u00f4ko and Pacha Barcelona.",
+             "de": "Party am Meer mit Opium, Sh\u00f4ko und Pacha Barcelona."},
+            {"name": "Poblenou y Raval",
+             "es": "Salas de referencia como Razzmatazz y Apolo para conciertos y electr\u00f3nica.",
+             "en": "Landmark venues like Razzmatazz and Apolo for concerts and electronic music.",
+             "de": "Legend\u00e4re Locations wie Razzmatazz und Apolo f\u00fcr Konzerte und Elektro."},
+            {"name": "Eixample",
+             "es": "C\u00f3cteles y locales con estilo para calentar antes de salir.",
+             "en": "Cocktails and stylish spots to warm up before going out.",
+             "de": "Cocktails und stilvolle Lokale zum Aufw\u00e4rmen vor dem Ausgehen."},
+        ],
+        "nights": {
+            "es": "En Barcelona viernes y s\u00e1bado son las noches fuertes, con las salas del Port Ol\u00edmpic a pleno rendimiento hasta el amanecer. En verano los beach clubs y las terrazas amplían la fiesta casi cada d\u00eda, y siempre hay conciertos entre semana en Razzmatazz o Apolo.",
+            "en": "In Barcelona Friday and Saturday are the big nights, with the Port Ol\u00edmpic venues in full swing until dawn. In summer the beach clubs and rooftops stretch the party across almost every day, and there are always midweek concerts at Razzmatazz or Apolo.",
+            "de": "In Barcelona sind Freitag und Samstag die gro\u00dfen N\u00e4chte, wenn die Locations am Port Ol\u00edmpic bis zum Morgengrauen laufen. Im Sommer verl\u00e4ngern Beachclubs und Dachterrassen die Party auf fast jeden Tag, und unter der Woche gibt es immer Konzerte im Razzmatazz oder Apolo."},
+    },
+}
+
+
+def _city_guide_content(city_id, label, lang, e):
+    """Unique 'best zones + which night to go out' section per city. Durable,
+    keyword-rich content that helps city hubs rank for generic queries."""
+    d = _CITY_GUIDE_DATA.get(city_id)
+    if not d:
+        return ""
+    titles = {
+        "es": ("Las mejores zonas para salir en {l}", "\u00bfQu\u00e9 noche salir en {l}?"),
+        "en": ("The best areas to go out in {l}", "Which night to go out in {l}?"),
+        "de": ("Die besten Ausgehviertel in {l}", "An welchem Abend ausgehen in {l}?"),
+    }
+    zt, nt = titles.get(lang, titles["es"])
+    rows = "".join(
+        f'<div><b>{e(z["name"])}</b> {e(z.get(lang, z["es"]))}</div>' for z in d["zones"])
+    nights = e(d["nights"].get(lang, d["nights"]["es"]))
+    return (f'<h2 class="sectitle">{e(zt.format(l=label))}</h2>'
+            f'<div class="meta">{rows}</div>'
+            f'<h2 class="sectitle">{e(nt.format(l=label))}</h2>'
+            f'<div class="intro"><p>{nights}</p></div>')
+
+
 def _city_intro(city_id, label, n, lang, e):
     d = _CITY_INTRO_DATA.get(city_id)
     if not d:
@@ -1951,6 +2078,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
         (T["faq_c_q3"], T["faq_c_a3"]),
     ]
     intro_html = _city_intro(city_id, label, n, lang, e) if timeframe == "all" else ""
+    cityguide_html = _city_guide_content(city_id, label, lang, e) if timeframe == "all" else ""
     faq_html = _faq_html(T["faq_title"], faq_pairs, e)
     guides_html = _city_guides_block(front, slug_l, label, lang, e)
     extra_jsonld = (_org_website_jsonld(front)
@@ -1989,6 +2117,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 {finder_html}
 <ul class="grid">{''.join(items_html)}<li class="nores" id="qvnores">{e(L2["nores"])}</li></ul>
 {venues_html}
+{cityguide_html}
 {benefits}
 {joinband}
 {guides_html}
