@@ -7266,3 +7266,29 @@ agent_communication:
       
       RECOMMENDATION: This bug fix is complete and working as designed. Main agent can summarize
       and finish.
+
+backend:
+  - task: "City-wide CHANGE alerts OFF by default at signup (new events still reach everyone)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Owner request: on signup, users should NOT get all the city change notifications by
+          default (it was flooding them), but NEW events should still reach EVERYONE in that city.
+          Changes: (1) registration (email + Google) now sets city_change_alerts=False; (2)
+          public_user() defaults city_change_alerts to False when unset; (3) replaced the old
+          one-time "default ON" migration with a one-time "default OFF" migration
+          (city_alerts_default_off_v1) that sets city_change_alerts=False for all users once.
+          _notify_new_event_city stays UNGATED (sends "new_event" to every user in the region,
+          respecting only per-user notif_prefs.new_event which defaults True), so new events keep
+          reaching everyone. The city_change_alerts flag only affects the opt-in price/sale-state
+          "cualquier cambio en mi ciudad" alerts for events the user doesn't follow.
+          VERIFIED via curl: POST /api/auth/register returns user.city_change_alerts=false; the
+          off-migration flag city_alerts_default_off_v1 is recorded on startup.
+

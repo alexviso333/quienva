@@ -686,7 +686,7 @@ def public_user(u: dict) -> dict:
         "auth_provider": u.get("auth_provider"),
         "attendance_privacy": u.get("attendance_privacy", "amigos"),
         "moment_privacy": u.get("moment_privacy", "amigos"),
-        "city_change_alerts": bool(u.get("city_change_alerts", True)),
+        "city_change_alerts": bool(u.get("city_change_alerts", False)),
         "has_phone": bool(u.get("phone_hash")),
         "needs_birthdate": not bool(u.get("birthdate")),
     }
@@ -4325,7 +4325,7 @@ async def register(inp: RegisterInput, response: Response):
         "attendance_privacy": "amigos",
         "moment_privacy": "amigos",
         "blocked_users": [],
-        "city_change_alerts": True,
+        "city_change_alerts": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     ph = phone_hash(inp.phone) if inp.phone else None
@@ -4447,7 +4447,7 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
             "attendance_privacy": "amigos",
             "moment_privacy": "amigos",
             "blocked_users": [],
-            "city_change_alerts": True,
+            "city_change_alerts": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user)
@@ -9815,24 +9815,27 @@ async def on_startup():
         await _bootstrap_ct_memory_from_events()
     except Exception as _:
         pass
-    # One-time migration: enable city-wide change alerts by default for everyone
-    # (owner requested it ON by default). Idempotent via a settings flag so it
-    # only runs once and never re-flips users who later opt out.
+    # One-time migration: turn city-wide CHANGE alerts OFF by default for everyone
+    # (owner reversed the earlier ON default — it was flooding users). New events
+    # still reach EVERYONE in the city (see _notify_new_event_city, ungated); this
+    # flag only affects the opt-in price/sale-state "cualquier cambio en mi ciudad"
+    # alerts. Idempotent via a settings flag so it only runs once and never
+    # re-flips users who later opt back in.
     try:
-        _flag = await db.app_settings.find_one({"key": "city_alerts_default_on_v1"}, {"_id": 0})
+        _flag = await db.app_settings.find_one({"key": "city_alerts_default_off_v1"}, {"_id": 0})
         if not _flag:
             res = await db.users.update_many(
-                {"city_change_alerts": {"$ne": True}},
-                {"$set": {"city_change_alerts": True}},
+                {"city_change_alerts": {"$ne": False}},
+                {"$set": {"city_change_alerts": False}},
             )
             await db.app_settings.update_one(
-                {"key": "city_alerts_default_on_v1"},
-                {"$set": {"key": "city_alerts_default_on_v1", "value": True,
+                {"key": "city_alerts_default_off_v1"},
+                {"$set": {"key": "city_alerts_default_off_v1", "value": True,
                           "migrated": getattr(res, "modified_count", 0),
                           "at": datetime.now(timezone.utc).isoformat()}},
                 upsert=True,
             )
-            logger.info(f"[migration] city_change_alerts default ON → {getattr(res,'modified_count',0)} users updated")
+            logger.info(f"[migration] city_change_alerts default OFF → {getattr(res,'modified_count',0)} users updated")
     except Exception as e:
         logger.warning(f"[migration] city_alerts default failed: {e}")
     global scheduler
