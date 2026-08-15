@@ -7333,6 +7333,21 @@ backend:
           Pacha/Pikes/BoraBora/CovaSanta(FV)->all embeds. INVARIANT "embed only if FourVenues buy
           link" = 0 violations. Live API: Ushuaia event fv_embed_url="", Pacha event fv_embed_url set.
           Nothing that used ClubTickets/own-page was changed.
+      - working: true
+        agent: "main"
+        comment: |
+          OWNER CORRECTION (critical): the real FourVenues 'quienva' feed (verified with the
+          owner's token) is almost ALL non-Ibiza clubs (Tiffany's, Saint Club, Fitz Madrid/
+          Mallorca/Marbella, etc.); the ONLY Ibiza club he carries on FourVenues is "Baloo Ibiza"
+          (4 "Mentiroso" events). The previous _affiliate_match fuzzy venue-alias fallback was
+          FALSE-POSITIVE matching Lío/Pacha/Pikes/etc via same date+name → would have shown the
+          iframe on clubs he does NOT carry on FourVenues. FIX: _fv_embed_url now requires an
+          EXACT (venue,date,name) match in _AFFILIATE_MAP (no fuzzy fallback). Result on real
+          data: ONLY the 4 genuine Baloo "Mentiroso" events get the iframe; Lío/Ushuaïa/Hï/
+          [UNVRS]/Pacha/Pikes/528/etc → 0 iframes, buy links unchanged (ClubTickets ?aff=CT226
+          or direct). Did NOT touch _commission_url_for / _affiliate_match / buy-link behavior.
+          Live API confirmed: Baloo "Mentiroso" → fv_embed_url set (FourVenues microsite buy link);
+          Lío/Ushuaïa → fv_embed_url="" + ClubTickets ?aff buy link (as before).
 
 agent_communication:
   - agent: "main"

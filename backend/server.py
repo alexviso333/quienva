@@ -332,20 +332,23 @@ def _commission_url_for(ev: dict) -> str:
 
 
 def _fv_embed_url(ev: dict) -> str:
-    """OFFICIAL FourVenues embeddable-widget URL for THIS event, with OUR RRPP slug
-    baked into the path so the sale is attributed to us server-side (no third-party
-    cookies needed → survives Safari/Chrome cookie blocking inside an iframe).
+    """OFFICIAL FourVenues embeddable-widget URL for THIS event, with OUR RRPP slug.
 
-    STRICT RULE: only return a URL when the ACTUAL buy link served to the user
-    (_commission_url_for) is a FourVenues link. Events whose buy flow is ClubTickets
-    or the club's own page get "" → the frontend keeps their existing button exactly
-    as before (we never embed a FourVenues widget for a non-FourVenues buy link)."""
-    if not AFFILIATE_SLUG:
+    STRICT (owner): show the iframe ONLY for events that are LITERALLY in our
+    FourVenues 'quienva' feed — an EXACT (venue, date, name) match in _AFFILIATE_MAP.
+    We deliberately do NOT use the fuzzy venue-alias fallback here (it over-matches
+    clubs we don't actually carry on FourVenues, e.g. Lío/Pacha, via same date+name).
+    Everything else gets "" → the frontend keeps its existing buy button UNCHANGED
+    (ClubTickets ?aff or direct scraped link). This does NOT change how buy links are
+    decided anywhere; it only decides where the FourVenues iframe appears."""
+    if not AFFILIATE_SLUG or not _AFFILIATE_MAP:
         return ""
-    buy = _commission_url_for(ev)
-    if not buy or "fourvenues.com" not in buy:
-        return ""  # buy link is ClubTickets / own page → NO embed, keep as-is
-    code = _fv_event_code(buy) or _fv_event_code(ev.get("commission_url", ""))
+    key = (_norm_name(ev.get("venue", "")), str(ev.get("date") or ""),
+           _norm_name(ev.get("name", "")))
+    feed_code = _AFFILIATE_MAP.get(key)
+    if not feed_code:
+        return ""  # not literally in our quienva RRPP feed → no iframe
+    code = _fv_event_code(ev.get("commission_url", "")) or feed_code
     if not code:
         return ""
     return f"https://www.fourvenues.com/iframe/{AFFILIATE_SLUG}/events/{code}"
