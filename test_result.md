@@ -7321,6 +7321,18 @@ backend:
           (//iframe/...) to our datacenter IP, so the iframe errors here; likely works on the real
           domain (quienva.me) and/or may need FourVenues to whitelist the domain for embedding.
           The always-present official button guarantees the flow regardless.
+      - working: true
+        agent: "main"
+        comment: |
+          STRICT FIX + REAL-DATA VERIFICATION (user was worried it showed on ClubTickets venues
+          like Ushuaïa). _fv_embed_url now returns a URL ONLY when the ACTUAL served buy link
+          (_commission_url_for) contains 'fourvenues.com'; ClubTickets and own-page events get "".
+          Verified with the user's real FourVenues token across all Ibiza venues: Ushuaïa (44 CT
+          events)->0 embeds, Hi(52 CT)->0, [UNVRS](54 CT)->0, 528/OBeach/Bambuku/PlayaSoleil/Teatro->0,
+          IbizaRocksHotel/Tantra/LasDalias(own page)->0; Lio(42 FV+40 CT)->42 embeds (only FV ones),
+          Pacha/Pikes/BoraBora/CovaSanta(FV)->all embeds. INVARIANT "embed only if FourVenues buy
+          link" = 0 violations. Live API: Ushuaia event fv_embed_url="", Pacha event fv_embed_url set.
+          Nothing that used ClubTickets/own-page was changed.
 
 agent_communication:
   - agent: "main"

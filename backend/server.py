@@ -334,16 +334,18 @@ def _commission_url_for(ev: dict) -> str:
 def _fv_embed_url(ev: dict) -> str:
     """OFFICIAL FourVenues embeddable-widget URL for THIS event, with OUR RRPP slug
     baked into the path so the sale is attributed to us server-side (no third-party
-    cookies needed → survives Safari/Chrome cookie blocking inside an iframe). Only
-    returned for events we carry in our FourVenues affiliate profile; "" otherwise
-    (e.g. ClubTickets-only parties, which have no FourVenues widget). The frontend
-    embeds this and always keeps the 'Comprar en FourVenues ↗' button as a fallback."""
+    cookies needed → survives Safari/Chrome cookie blocking inside an iframe).
+
+    STRICT RULE: only return a URL when the ACTUAL buy link served to the user
+    (_commission_url_for) is a FourVenues link. Events whose buy flow is ClubTickets
+    or the club's own page get "" → the frontend keeps their existing button exactly
+    as before (we never embed a FourVenues widget for a non-FourVenues buy link)."""
     if not AFFILIATE_SLUG:
         return ""
-    m = _affiliate_match(ev)
-    if not m:
-        return ""
-    code = _fv_event_code(ev.get("commission_url", "")) or (m[0] or "")
+    buy = _commission_url_for(ev)
+    if not buy or "fourvenues.com" not in buy:
+        return ""  # buy link is ClubTickets / own page → NO embed, keep as-is
+    code = _fv_event_code(buy) or _fv_event_code(ev.get("commission_url", ""))
     if not code:
         return ""
     return f"https://www.fourvenues.com/iframe/{AFFILIATE_SLUG}/events/{code}"
