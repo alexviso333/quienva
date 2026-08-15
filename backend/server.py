@@ -331,6 +331,24 @@ def _commission_url_for(ev: dict) -> str:
     return ev.get("commission_url", "") or ""
 
 
+def _fv_embed_url(ev: dict) -> str:
+    """OFFICIAL FourVenues embeddable-widget URL for THIS event, with OUR RRPP slug
+    baked into the path so the sale is attributed to us server-side (no third-party
+    cookies needed → survives Safari/Chrome cookie blocking inside an iframe). Only
+    returned for events we carry in our FourVenues affiliate profile; "" otherwise
+    (e.g. ClubTickets-only parties, which have no FourVenues widget). The frontend
+    embeds this and always keeps the 'Comprar en FourVenues ↗' button as a fallback."""
+    if not AFFILIATE_SLUG:
+        return ""
+    m = _affiliate_match(ev)
+    if not m:
+        return ""
+    code = _fv_event_code(ev.get("commission_url", "")) or (m[0] or "")
+    if not code:
+        return ""
+    return f"https://www.fourvenues.com/iframe/{AFFILIATE_SLUG}/events/{code}"
+
+
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:hola@quienva.app")
@@ -4922,6 +4940,10 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "city": ev.get("city", ""),
         "has_commission": ev.get("has_commission", False),
         "commission_url": _commission_url_for(ev),
+        # Official FourVenues embeddable widget (with our RRPP slug) for events we
+        # carry on FourVenues; "" for ClubTickets-only parties. Frontend embeds it
+        # to build trust, always keeping the "Comprar en FourVenues ↗" button too.
+        "fv_embed_url": _fv_embed_url(ev),
         # Admin-only flag so the owner can spot their affiliate events in the feed.
         # Sent as null to everyone else → no marker, no info leak.
         "is_affiliate": (_event_is_mine(ev) if (user or {}).get("role") == "admin" else None),

@@ -7292,3 +7292,45 @@ backend:
           VERIFIED via curl: POST /api/auth/register returns user.city_change_alerts=false; the
           off-migration flag city_alerts_default_off_v1 is recorded on startup.
 
+
+backend:
+  - task: "FourVenues official embeddable widget on event detail (fv_embed_url)"
+    implemented: true
+    working: true
+    file: "backend/server.py, frontend/src/components/FourvenuesEmbed.js, frontend/src/pages/EventDetail.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Owner wants ticket purchase embedded in-app (trust) with a fallback "Comprar en
+          FourVenues ↗" button. Implemented FourVenues' OFFICIAL embeddable widget: backend adds
+          _fv_embed_url(ev) → https://www.fourvenues.com/iframe/{AFFILIATE_SLUG}/events/{code} for
+          events we carry on FourVenues (empty for ClubTickets-only parties). Our RRPP slug is in
+          the URL so attribution is server-side (survives Safari/Chrome 3rd-party-cookie blocking).
+          Serialized as event.fv_embed_url. Frontend FourvenuesEmbed component embeds the iframe
+          with a watchdog: if no fourvenues postMessage arrives in 8s (blocked/not loading), it
+          replaces the iframe with a clean "compra segura" card so it NEVER shows a blank box; the
+          "Comprar en FourVenues ↗" official button is ALWAYS visible (guaranteed purchase + trust).
+          VERIFIED: backend returns correct URL for FV events and "" for ClubTickets; non-FV event
+          detail still shows the normal buy button (no regression); FourvenuesEmbed loading state
+          and watchdog-fallback state both render correctly (screenshots). NOTE: could not verify
+          the iframe RENDERS in-sandbox — FourVenues serves a broken protocol-relative redirect
+          (//iframe/...) to our datacenter IP, so the iframe errors here; likely works on the real
+          domain (quienva.me) and/or may need FourVenues to whitelist the domain for embedding.
+          The always-present official button guarantees the flow regardless.
+
+agent_communication:
+  - agent: "main"
+    message: |
+      NUEVO (2026-08-15): widget de compra FourVenues embebido en la ficha de evento + botón de
+      respaldo. Solo aplica a eventos que llevamos en FourVenues (event.fv_embed_url no vacío);
+      los de ClubTickets mantienen su botón normal. El componente tiene watchdog anti-recuadro-en-
+      blanco. En este entorno NO hay token FourVenues ni eventos FV reales, así que el iframe no
+      puede renderizar aquí (además FourVenues redirige mal a IPs de datacenter). Verificación
+      hecha con evento demo forzado (backend fv_embed_url OK; estados loading y fallback OK; sin
+      regresión en el botón normal). Verificación en vivo del render del iframe queda para prod
+      (quienva.me) con datos FourVenues reales.
+

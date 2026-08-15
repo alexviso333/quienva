@@ -7,6 +7,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
+import FourvenuesEmbed from "@/components/FourvenuesEmbed";
 import { NightRecapCard } from "@/components/NightRecapCard";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
@@ -293,6 +294,15 @@ export default function EventDetail() {
           )}
 
           {!isPast && (event.has_commission && event.commission_url ? (
+            event.fv_embed_url ? (
+              <FourvenuesEmbed
+                embedUrl={event.fv_embed_url}
+                fallbackUrl={event.commission_url}
+                price={price}
+                saleState={event.sale_state}
+                onBuyClick={onTicketClick}
+              />
+            ) : (
             <div className="flex flex-col gap-2">
               <a
                 data-testid="detail-ticket-btn"
@@ -320,6 +330,7 @@ export default function EventDetail() {
                 </p>
               )}
             </div>
+            )
           ) : event.more_info_url ? (
             <a
               data-testid="detail-info-btn"
