@@ -7361,3 +7361,74 @@ agent_communication:
       regresión en el botón normal). Verificación en vivo del render del iframe queda para prod
       (quienva.me) con datos FourVenues reales.
 
+
+backend:
+  - task: "Backend serves brand icons/favicon/manifest (site logo for Google)"
+    implemented: true
+    working: true
+    file: "backend/server.py, backend/static/*"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          User: site logo not appearing in Google Search Console. Investigation: in PRODUCTION the
+          logo/favicon are actually reachable (200) via the frontend host and JSON-LD/robots are
+          correct, so GSC-not-showing is largely Google's slow favicon update for a new domain
+          (not a code bug). BUT found a real robustness defect: the BACKEND (the host that serves
+          the SSR pages Googlebot crawls) returned 404 for /favicon.ico, /icons/icon-512.png,
+          /apple-touch-icon.png, /manifest.json — despite the code comment promising Googlebot
+          always finds a valid /favicon.ico. FIX: copied the icons into backend/static and added
+          routes serving favicon.ico, favicon-16/32/96, apple-touch-icon.png, icons/icon-192.png,
+          icons/icon-512.png, manifest.json at BOTH root paths and /api mirrors, with correct
+          content-types + 7-day cache. Local curl: all now 200 with right content-type. NEEDS the
+          testing agent to verify via the preview backend (/api/...).
+        needs_retesting: true
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL 7 BRAND ASSET ENDPOINTS (100% pass):
+          ✅ (1) GET /api/favicon.ico → 200 with Content-Type: image/x-icon, 7185 bytes (~7KB as expected)
+          ✅ (2) GET /api/icons/icon-512.png → 200 with Content-Type: image/png, 34149 bytes (~34KB as expected)
+          ✅ (3) GET /api/icons/icon-192.png → 200 with Content-Type: image/png, 10262 bytes
+          ✅ (4) GET /api/apple-touch-icon.png → 200 with Content-Type: image/png, 9720 bytes
+          ✅ (5) GET /api/favicon-96x96.png → 200 with Content-Type: image/png, 5185 bytes
+          ✅ (6) GET /api/manifest.json → 200 with Content-Type: application/manifest+json, 960 bytes, valid JSON with correct structure (name: "¿Quién va? — Fiestas y discotecas", icons array with 192x192 and 512x512 entries)
+          ✅ (7) REGRESSION CHECK: GET /api/ → 200 with Content-Type: application/json, valid JSON: {"message":"¿Quién va? API"} (no routing regression)
+          
+          All brand assets are now correctly served by the backend with proper HTTP status codes, 
+          Content-Type headers, and non-empty bodies. Googlebot crawling the SSR pages will now be 
+          able to pick up the site logo/favicon. Fix verified successfully.
+          
+          Test file: /app/backend_test_brand_assets.py
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Please verify (backend, via the preview URL, using the REACT_APP_BACKEND_URL base):
+      GET /api/favicon.ico -> 200 and content-type image/x-icon (or image/vnd.microsoft.icon)
+      GET /api/icons/icon-512.png -> 200 image/png (size ~34KB)
+      GET /api/icons/icon-192.png -> 200 image/png
+      GET /api/apple-touch-icon.png -> 200 image/png
+      GET /api/manifest.json -> 200 application/manifest+json (valid JSON)
+      GET /api/favicon-96x96.png -> 200 image/png
+      Also confirm a normal endpoint still works (GET /api/ -> 200 JSON) i.e. no route regression.
+      Do NOT test Google/Search Console (out of scope). Do NOT run scrapers.
+  - agent: "testing"
+    message: |
+      ✅ BRAND ASSET SERVING VERIFICATION COMPLETE (7/7 tests passed)
+      
+      All brand icon/favicon/manifest files are now correctly served by the backend:
+      - favicon.ico: 200, image/x-icon, 7.2KB ✓
+      - icons/icon-512.png: 200, image/png, 34.1KB ✓
+      - icons/icon-192.png: 200, image/png, 10.3KB ✓
+      - apple-touch-icon.png: 200, image/png, 9.7KB ✓
+      - favicon-96x96.png: 200, image/png, 5.2KB ✓
+      - manifest.json: 200, application/manifest+json, valid JSON ✓
+      - API root regression check: 200, {"message":"¿Quién va? API"} ✓
+      
+      The fix is working perfectly. Googlebot crawling the SSR pages served by this backend 
+      will now be able to pick up the site logo/favicon. No routing regressions detected.
+

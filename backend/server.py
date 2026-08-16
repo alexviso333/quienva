@@ -4000,6 +4000,59 @@ async def seo_robots(request: Request):
                              headers={"Cache-Control": "public, max-age=3600"})
 
 
+# ---------------------------------------------------------------------------
+# Brand icons / favicon / manifest served BY THE BACKEND too.
+# The SSR pages that Googlebot crawls are served by this backend, and the code
+# promises "Googlebot always finds a valid /favicon.ico" — but the backend used
+# to 404 these, so if the icon requests ever hit the backend host the site
+# logo/favicon could not be picked up by Google. We now serve them from
+# backend/static at BOTH the root paths (favicon.ico, /icons/…) and their /api
+# equivalents, with long cache + correct content types.
+# ---------------------------------------------------------------------------
+_STATIC_DIR = ROOT_DIR / "static"
+_ICON_FILES = {
+    "favicon.ico": "image/x-icon",
+    "favicon-16x16.png": "image/png",
+    "favicon-32x32.png": "image/png",
+    "favicon-96x96.png": "image/png",
+    "apple-touch-icon.png": "image/png",
+    "manifest.json": "application/manifest+json",
+    "icons/icon-192.png": "image/png",
+    "icons/icon-512.png": "image/png",
+}
+
+
+def _serve_static_icon(rel: str) -> StarletteResponse:
+    media = _ICON_FILES.get(rel)
+    fp = (_STATIC_DIR / rel)
+    if not media or not fp.is_file():
+        return StarletteResponse(content="not found", status_code=404, media_type="text/plain")
+    try:
+        data = fp.read_bytes()
+    except Exception:
+        return StarletteResponse(content="error", status_code=500, media_type="text/plain")
+    return StarletteResponse(
+        content=data, media_type=media,
+        headers={"Cache-Control": "public, max-age=604800, immutable"},
+    )
+
+
+def _register_icon_routes():
+    for rel in _ICON_FILES:
+        def _make(_rel):
+            async def _handler(request: Request):
+                return _serve_static_icon(_rel)
+            return _handler
+        h = _make(rel)
+        # Root path (production host may serve these directly) + /api mirror.
+        app.add_api_route(f"/{rel}", h, methods=["GET", "HEAD"], include_in_schema=False)
+        api_router.add_api_route(f"/{rel}", h, methods=["GET", "HEAD"], include_in_schema=False)
+
+
+_register_icon_routes()
+
+
+
 @api_router.get("/story-image/{event_id}")
 async def story_image(event_id: str, request: Request):
     """A ready-to-post 1080x1920 Instagram-Story image for a party: blurred poster
