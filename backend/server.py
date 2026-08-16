@@ -3951,9 +3951,33 @@ async def _sitemap_events_xml(front: str, today: str, city: str) -> str:
     return _sitemap_urlset(parts)
 
 
+async def _seo_venues_agg(limit: int = 3000) -> list:
+    """Venues for the SITEMAP: not just those with an upcoming party but any club
+    with activity in the last ~6 months. The /discoteca/{slug} pages are EVERGREEN
+    (they stay alive with recent past parties), so keeping these permanent hubs in
+    the sitemap year-round — instead of dropping them the moment they have no future
+    event — protects their crawling/indexing and long-term ranking."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    since = (today - timedelta(days=180)).isoformat()
+    pipeline = [
+        {"$match": {"date": {"$gte": since}, "venue": {"$nin": ["", None]}}},
+        {"$group": {"_id": "$venue", "city": {"$first": "$city"},
+                    "count": {"$sum": 1}, "lastmod": {"$max": "$last_scraped_at"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": limit},
+    ]
+    out = []
+    async for r in db.events.aggregate(pipeline):
+        v = r.get("_id") or ""
+        if v:
+            out.append({"venue": v, "city": r.get("city", ""),
+                        "count": r.get("count", 0), "lastmod": r.get("lastmod")})
+    return out
+
+
 async def _sitemap_venues_xml(front: str, today: str) -> str:
     parts, seen = [], set()
-    for r in await _upcoming_venues_agg():
+    for r in await _seo_venues_agg():
         slug = _slugify(r["venue"])
         if not slug or slug in seen:
             continue

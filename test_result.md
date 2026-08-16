@@ -7432,3 +7432,20 @@ agent_communication:
       The fix is working perfectly. Googlebot crawling the SSR pages served by this backend 
       will now be able to pick up the site logo/favicon. No routing regressions detected.
 
+
+  - task: "SEO: keep evergreen club hub pages in the sitemap (sitemap-venues)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          /discoteca/{slug} pages are evergreen (stay alive with recent past parties) but the
+          venues sitemap used _upcoming_venues_agg (date>=today) so a club with no upcoming event
+          fell OUT of the sitemap → lost crawling/indexing of a permanent page. Added _seo_venues_agg
+          (activity in last 180 days) and switched _sitemap_venues_xml to it. Verified via curl: 
+          sitemap-venues.xml renders; venue count 129 -> 137 in the (small) dev DB. Read-only query
+          change, no regression. NOTE: could not pinpoint the 3 GSC "Error de redirección" URLs — 
+          need the user to export those 3 URLs from Search Console to fix precisely; main redirect
+          chains (apex->www, http->https, non-www->www) verified healthy in production.
