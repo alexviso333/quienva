@@ -1882,7 +1882,17 @@ def _event_jsonld(ev: dict, url: str, front: str, include_offers: bool = True, l
         valid_from = str(ev.get("created_at") or ev.get("last_scraped_at") or "")[:10]
         if not valid_from or (event_day and valid_from > event_day):
             valid_from = event_day
-        offer = {"@type": "Offer", "availability": avail, "url": url}
+        # offers.url should be the page where you can actually BUY the ticket
+        # (Google's guideline for event ticket offers) — use our affiliate buy link
+        # when we have one, otherwise fall back to the event page URL.
+        buy_url = url
+        try:
+            _c = _commission_url_for(ev)
+            if ev.get("has_commission") and _c:
+                buy_url = _c
+        except Exception:
+            pass
+        offer = {"@type": "Offer", "availability": avail, "url": buy_url}
         if valid_from:
             offer["validFrom"] = valid_from
         # Price is only asserted when we actually know it (scraped tiers). For
@@ -2203,7 +2213,8 @@ async def _get_event_seo(event_id: str):
         {"id": event_id},
         {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
          "genre": 1, "address": 1, "currency": 1, "last_scraped_at": 1, "created_at": 1,
-         "image_url": 1, "price_tiers": 1, "sale_state": 1, "commission_url": 1})
+         "image_url": 1, "price_tiers": 1, "sale_state": 1, "commission_url": 1,
+         "has_commission": 1})
 
 
 async def _render_event(event_id: str, lang: str, request: Request):

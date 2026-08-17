@@ -7431,6 +7431,86 @@ agent_communication:
       
       The fix is working perfectly. Googlebot crawling the SSR pages served by this backend 
       will now be able to pick up the site logo/favicon. No routing regressions detected.
+  - agent: "main"
+    message: |
+      Verify SEO server-rendered (SSR) pages of the "¿Quién va?" FastAPI backend still work 
+      after two changes: (1) Event JSON-LD offers.url now points to the ticket buy link, 
+      (2) added has_commission to the SEO event projection. Use the backend base from 
+      frontend/.env REACT_APP_BACKEND_URL; all routes are under /api. Send a Googlebot 
+      User-Agent header for the SSR pages.
+
+      Tests:
+      1. Get a valid event id: GET {BASE}/api/events (returns a list of events); pick one id 
+         (prefer one where has_commission is true if visible, else any).
+      2. GET {BASE}/api/fiesta/{id}/x with header User-Agent: Googlebot -> expect HTTP 200, 
+         HTML containing a <script type="application/ld+json"> block with "@type":"Event" and 
+         an "offers" object that has "availability" and a "url" (the url should be an absolute 
+         http(s) URL). Confirm the JSON inside the ld+json script is VALID JSON (parse it).
+      3. GET {BASE}/api/sitemap-venues.xml -> expect 200, valid XML with <urlset> and at least 
+         one <url><loc> containing /discoteca/.
+      4. GET {BASE}/api/sitemap.xml -> expect 200 valid XML.
+      5. Regression: GET {BASE}/api/ -> 200 JSON {"message":"¿Quién va? API"}.
+
+      PASS = all return expected status, the event page's ld+json is valid JSON with an Event + 
+      offers.url, and sitemaps are valid XML. Report the actual offers object you find. Do NOT 
+      run scrapers. Do NOT modify code.
+  - agent: "testing"
+    message: |
+      ✅ SEO SSR PAGES VERIFICATION COMPLETE (5/5 tests passed)
+      
+      All SEO server-rendered page requirements verified successfully:
+      
+      TEST 1: GET /api/events
+      - Status: 200 ✓
+      - Retrieved 182 events
+      - Selected event with has_commission=true: 91008412-73c8-4b36-8f5a-ef8d1a439619
+      - Event: "MENTIROSO - AISSA **"
+      
+      TEST 2: GET /api/fiesta/{id}/x with Googlebot User-Agent
+      - Status: 200, Content-Type: text/html ✓
+      - Found 5 JSON-LD scripts in page ✓
+      - Event schema (@type: "Event") present ✓
+      - offers object complete with all required fields ✓
+      - offers.url is absolute http(s) URL: https://site.fourvenues.com/es/quienva/events/1QFK ✓
+      - offers.availability: https://schema.org/InStock ✓
+      - JSON-LD is VALID JSON (successfully parsed) ✓
+      
+      ACTUAL OFFERS OBJECT FOUND:
+      {
+        "@type": "Offer",
+        "availability": "https://schema.org/InStock",
+        "url": "https://site.fourvenues.com/es/quienva/events/1QFK",
+        "validFrom": "2026-08-15",
+        "price": 15,
+        "priceCurrency": "EUR",
+        "priceValidUntil": "2026-08-18"
+      }
+      
+      TEST 3: GET /api/sitemap-venues.xml
+      - Status: 200, Content-Type: application/xml ✓
+      - Valid XML with <urlset> element ✓
+      - Found 136 venue URLs containing /discoteca/ ✓
+      
+      TEST 4: GET /api/sitemap.xml
+      - Status: 200, Content-Type: application/xml ✓
+      - Valid XML with sitemapindex structure ✓
+      - Contains 8 child sitemaps ✓
+      
+      TEST 5: GET /api/ (regression)
+      - Status: 200, Content-Type: application/json ✓
+      - Response: {"message": "¿Quién va? API"} ✓
+      
+      CONCLUSION:
+      ✅ Event JSON-LD offers.url now correctly points to the real ticket buy link (not internal page)
+      ✅ has_commission field properly included in SEO projection
+      ✅ All sitemaps render valid XML
+      ✅ No regressions detected
+      
+      The implementation is working perfectly. Googlebot will now see the correct ticket purchase 
+      URLs in the Event schema, which should improve 'buy tickets' rich results and reinforce 
+      affiliate links.
+
+
 
 
   - task: "SEO: keep evergreen club hub pages in the sitemap (sitemap-venues)"
@@ -7449,3 +7529,67 @@ agent_communication:
           change, no regression. NOTE: could not pinpoint the 3 GSC "Error de redirección" URLs — 
           need the user to export those 3 URLs from Search Console to fix precisely; main redirect
           chains (apex->www, http->https, non-www->www) verified healthy in production.
+
+  - task: "SEO: Event schema offers.url -> real ticket buy link + has_commission in SEO projection"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    needs_retesting: false
+    stuck_count: 0
+    priority: "high"
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Improved Event JSON-LD so offers.url points to the actual ticket purchase URL
+          (_commission_url_for, i.e. the affiliate buy link) instead of the internal page, per
+          Google's event-offer guidance (better 'buy tickets' rich result + reinforces affiliate).
+          Fixed _get_event_seo projection to include has_commission (was missing → offer fell back
+          to page URL). Curl-verified on SSR /api/fiesta/{id}: offers.url now = clubtickets ?aff=CT226.
+          Needs testing agent to confirm SSR event pages render 200 with valid JSON-LD and no regression.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL SEO SSR PAGE REQUIREMENTS (5 tests, 100% pass):
+          
+          ✅ TEST 1: GET /api/events → 200 with 182 events
+          - Successfully retrieved event list
+          - Found event with has_commission=true: 91008412-73c8-4b36-8f5a-ef8d1a439619
+          - Event name: "MENTIROSO - AISSA **"
+          
+          ✅ TEST 2: GET /api/fiesta/{id}/x with Googlebot User-Agent → 200 HTML
+          - Status: 200 with Content-Type: text/html; charset=utf-8
+          - Found 5 JSON-LD scripts in the page
+          - Event schema (@type: "Event") present with all required fields
+          - offers object verified with:
+            * availability: "https://schema.org/InStock" ✓
+            * url: "https://site.fourvenues.com/es/quienva/events/1QFK" (absolute http(s) URL) ✓
+            * validFrom: "2026-08-15" ✓
+            * price: 15 ✓
+            * priceCurrency: "EUR" ✓
+            * priceValidUntil: "2026-08-18" ✓
+          - JSON-LD is VALID JSON (successfully parsed) ✓
+          - offers.url points to the actual ticket buy link (not internal page) ✓
+          
+          ✅ TEST 3: GET /api/sitemap-venues.xml → 200 XML
+          - Status: 200 with Content-Type: application/xml
+          - Valid XML with <urlset> element
+          - Found 136 venue URLs containing /discoteca/
+          - Sample URLs verified (tiffany-s-the-club, opium-barcelona, marina-beach-club)
+          
+          ✅ TEST 4: GET /api/sitemap.xml → 200 XML
+          - Status: 200 with Content-Type: application/xml
+          - Valid XML with proper sitemap structure
+          - Contains 8 child sitemaps (sitemapindex structure)
+          
+          ✅ TEST 5: GET /api/ → 200 JSON (regression test)
+          - Status: 200 with Content-Type: application/json
+          - Response: {"message": "¿Quién va? API"} ✓
+          
+          CONCLUSION:
+          All SEO SSR page requirements met perfectly. The Event JSON-LD schema now correctly 
+          includes offers.url pointing to the real ticket purchase URL (affiliate buy link), 
+          not the internal event page. The has_commission field is properly included in the 
+          SEO projection. All sitemaps render valid XML. No regressions detected.
+          
+          Test file: /app/backend_test_seo_ssr.py
