@@ -3912,6 +3912,195 @@ async def seo_sitemap_venues(request: Request):
     return _sitemap_response(await _sitemap_venues_xml(front, today))
 
 
+# ===========================================================================
+# Artist / DJ SEO hub pages (programmatic, CURATED whitelist -> no junk pages).
+# Captures high-volume searches lastnight.es doesn't cover well, e.g.
+# "david guetta ibiza entradas", "carl cox fechas". Native SSR, same shell/CSS,
+# hreflang es/en/de, Event JSON-LD (rich results with price), sitemap.
+# ===========================================================================
+_ARTISTS = [
+    ("david-guetta", "David Guetta", ["david guetta"]),
+    ("carl-cox", "Carl Cox", ["carl cox"]),
+    ("tiesto", "Ti\u00ebsto", ["tiesto", "ti\u00ebsto"]),
+    ("calvin-harris", "Calvin Harris", ["calvin harris"]),
+    ("solomun", "Solomun", ["solomun"]),
+    ("black-coffee", "Black Coffee", ["black coffee"]),
+    ("marco-carola", "Marco Carola", ["marco carola"]),
+    ("dom-dolla", "Dom Dolla", ["dom dolla"]),
+    ("fisher", "FISHER", ["fisher"]),
+    ("peggy-gou", "Peggy Gou", ["peggy gou"]),
+    ("camelphat", "CamelPhat", ["camelphat"]),
+    ("adam-beyer", "Adam Beyer", ["adam beyer"]),
+    ("charlotte-de-witte", "Charlotte de Witte", ["charlotte de witte"]),
+    ("amelie-lens", "Amelie Lens", ["amelie lens"]),
+    ("boris-brejcha", "Boris Brejcha", ["boris brejcha"]),
+    ("martin-garrix", "Martin Garrix", ["martin garrix"]),
+    ("john-summit", "John Summit", ["john summit"]),
+    ("anyma", "Anyma", ["anyma"]),
+    ("bizarrap", "Bizarrap", ["bizarrap", "bzrp"]),
+    ("keinemusik", "Keinemusik", ["keinemusik"]),
+    ("vintage-culture", "Vintage Culture", ["vintage culture"]),
+    ("hot-since-82", "Hot Since 82", ["hot since 82"]),
+    ("loco-dice", "Loco Dice", ["loco dice"]),
+    ("michael-bibi", "Michael Bibi", ["michael bibi"]),
+    ("jamie-jones", "Jamie Jones", ["jamie jones"]),
+    ("paco-osuna", "Paco Osuna", ["paco osuna"]),
+    ("chris-stussy", "Chris Stussy", ["chris stussy"]),
+    ("sven-vath", "Sven V\u00e4th", ["sven vath", "sven v\u00e4th"]),
+    ("luciano", "Luciano", ["luciano"]),
+    ("the-martinez-brothers", "The Martinez Brothers", ["martinez brothers"]),
+]
+_ARTIST_BY_SLUG = {a[0]: a for a in _ARTISTS}
+
+
+def _artist_paths(front: str, slug: str) -> dict:
+    return {"es": f"{front}/artista/{slug}", "en": f"{front}/en/artist/{slug}",
+            "de": f"{front}/de/artist/{slug}"}
+
+
+async def _artist_events(aliases: list) -> list:
+    import re
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    pat = "|".join(re.escape(x) for x in aliases)
+    cur = db.events.find(
+        {"name": {"$regex": pat, "$options": "i"}, "date": {"$gte": today}},
+        {"_id": 0}).sort("date", 1).limit(60)
+    return [ev async for ev in cur]
+
+
+async def _render_artist(slug: str, lang: str, request: Request) -> StarletteResponse:
+    import html as _htmlmod
+    e = _htmlmod.escape
+    front = _frontend_base(request)
+    a = _ARTIST_BY_SLUG.get(slug)
+    if not a:
+        return StarletteResponse(
+            content=f"<!doctype html><meta http-equiv=refresh content='0;url={front}/feed'>",
+            media_type="text/html; charset=utf-8", status_code=404)
+    _slug, name, aliases = a
+    evs = await _artist_events(aliases)
+    if not evs:
+        return StarletteResponse(
+            content=f"<!doctype html><meta http-equiv=refresh content='0;url={front}/feed'>",
+            media_type="text/html; charset=utf-8", status_code=404)
+
+    paths = _artist_paths(front, _slug)
+    canonical = paths[lang]
+    hl = {"es": "es", "en": "en", "de": "de"}[lang]
+    open_app = {"es": "Abrir la app", "en": "Open the app", "de": "App \u00f6ffnen"}[lang]
+    kicker = {"es": "DJ / Artista", "en": "DJ / Artist", "de": "DJ / K\u00fcnstler"}[lang]
+    n = len(evs)
+    title = {
+        "es": f"{name}: pr\u00f3ximas fiestas y entradas | \u00bfQui\u00e9n va?",
+        "en": f"{name}: upcoming parties & tickets | \u00bfQui\u00e9n va?",
+        "de": f"{name}: kommende Partys & Tickets | \u00bfQui\u00e9n va?",
+    }[lang]
+    desc = {
+        "es": f"Todas las fechas de {name}: {n} fiestas con club, precio y entradas oficiales. Descubre d\u00f3nde pincha {name} y compra tus entradas.",
+        "en": f"All {name} dates: {n} parties with venue, price and official tickets. Find where {name} plays next and buy tickets.",
+        "de": f"Alle {name}-Termine: {n} Partys mit Club, Preis und offiziellen Tickets.",
+    }[lang]
+    intro = {
+        "es": f"Consulta las pr\u00f3ximas fiestas de <b>{e(name)}</b>: fecha, club, precio y enlace oficial de entradas. Actualizado a diario.",
+        "en": f"Upcoming parties of <b>{e(name)}</b>: date, venue, price and official ticket link. Updated daily.",
+        "de": f"Kommende Partys von <b>{e(name)}</b>: Datum, Club, Preis und offizieller Ticket-Link.",
+    }[lang]
+
+    more_djs = {"es": "M\u00e1s DJs", "en": "More DJs", "de": "Mehr DJs"}[lang]
+    tagline = {"es": "Tu gu\u00eda de fiestas", "en": "Your party guide", "de": "Dein Party-Guide"}[lang]
+
+    ecards = "".join(
+        f'<li>{_seo_card(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], lang, e)}</li>'
+        for ev in evs)
+
+    # Related artists (internal linking)
+    import random as _r
+    others = [x for x in _ARTISTS if x[0] != _slug]
+    _r.shuffle(others)
+    related = "".join(
+        f'<a class="chip" href="{e(_artist_paths(front, o[0])[lang])}">{e(o[1])}</a>'
+        for o in others[:8])
+
+    hreflang = _hreflang_links(paths, e)
+    topbar = _seo_topbar(front, lang, e)
+
+    # JSON-LD: breadcrumb + org + Event for each listed party (rich results)
+    bc = ('{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":['
+          f'{{"@type":"ListItem","position":1,"name":"{e(name)}","item":"{e(canonical)}"}}]}}')
+    events_ld = "".join(
+        f'<script type="application/ld+json">{_event_jsonld(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], front, True, lang)}</script>'
+        for ev in evs[:20])
+    extra_ld = (_org_website_jsonld(front)
+                + f'<script type="application/ld+json">{bc}</script>' + events_ld)
+
+    html_out = f"""<!doctype html>
+<html lang="{hl}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<title>{e(title)}</title>
+<meta name="description" content="{e(desc)}">
+<link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
+{hreflang}
+<meta property="og:type" content="website"><meta property="og:site_name" content="\u00bfQui\u00e9n va?">
+<meta property="og:title" content="{e(title)}"><meta property="og:description" content="{e(desc)}">
+<meta property="og:url" content="{e(canonical)}">
+<meta name="twitter:card" content="summary_large_image">
+{extra_ld}
+{_SEO_FONTS}
+<style>{_SEO_CSS}</style></head>
+<body><div class="bgfx"></div>
+{topbar}
+<div class="wrap">
+<section class="hero-sec">
+<span class="kicker">{e(kicker)}</span>
+<h1>{e(name)}<span class="dot">.</span></h1>
+<p class="sub">{intro}</p>
+<div class="ctarow"><a class="cta" href="{front}/feed">{e(open_app)}</a></div>
+</section>
+<ul class="grid">{ecards}<li class="nores" id="qvnores"></li></ul>
+<div class="cities"><b>{e(more_djs)}</b>{related}</div>
+<footer>\u00a9 \u00bfQui\u00e9n va? \u2014 {e(tagline)}</footer>
+</div></body></html>"""
+    return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
+                             headers={"Cache-Control": "public, max-age=1800"})
+
+
+@api_router.api_route("/artista/{slug}", methods=["GET", "HEAD"])
+async def seo_artist_es(slug: str, request: Request):
+    return await _render_artist(slug, "es", request)
+
+
+@api_router.api_route("/en/artist/{slug}", methods=["GET", "HEAD"])
+async def seo_artist_en(slug: str, request: Request):
+    return await _render_artist(slug, "en", request)
+
+
+@api_router.api_route("/de/artist/{slug}", methods=["GET", "HEAD"])
+async def seo_artist_de(slug: str, request: Request):
+    return await _render_artist(slug, "de", request)
+
+
+async def _sitemap_artists_xml(front: str, today: str) -> str:
+    import re
+    names = []
+    async for ev in db.events.find({"date": {"$gte": today}}, {"_id": 0, "name": 1}):
+        names.append((ev.get("name") or "").lower())
+    parts = []
+    for _slug, _name, aliases in _ARTISTS:
+        pat = re.compile("|".join(re.escape(x.lower()) for x in aliases))
+        if any(pat.search(nm) for nm in names):
+            parts.append(_sitemap_url(_artist_paths(front, _slug), "es", today, "daily"))
+    return _sitemap_urlset(parts)
+
+
+@api_router.api_route("/sitemap-artists.xml", methods=["GET", "HEAD"])
+async def seo_sitemap_artists(request: Request):
+    front = _frontend_base(request)
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    return _sitemap_response(await _sitemap_artists_xml(front, today))
+
+
+
 
 def _sitemap_response(xml: str) -> StarletteResponse:
     return StarletteResponse(content=xml, media_type="application/xml",
@@ -4016,6 +4205,7 @@ async def _sitemap_index_xml(front: str, today: str) -> str:
     static_lm = {
         f"{front}/sitemap-cities.xml": today,
         f"{front}/sitemap-venues.xml": fresh,
+        f"{front}/sitemap-artists.xml": fresh,
         f"{front}/sitemap-blog.xml": today,
     }
     children = list(static_lm.keys())

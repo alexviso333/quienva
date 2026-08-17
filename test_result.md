@@ -7593,3 +7593,73 @@ agent_communication:
           SEO projection. All sitemaps render valid XML. No regressions detected.
           
           Test file: /app/backend_test_seo_ssr.py
+
+  - task: "SEO: Artist/DJ hub pages (/artista/{slug}) + sitemap-artists"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New programmatic SSR artist/DJ pages from a CURATED whitelist (~30 top DJs) to capture
+          high-volume searches (david guetta ibiza, carl cox fechas). Routes /artista/{slug},
+          /en/artist/{slug}, /de/artist/{slug}; matches events whose name contains the DJ (regex,
+          upcoming only); 404-redirects to /feed if no upcoming events (no empty/junk pages). Reuses
+          the SEO shell/CSS, hreflang es/en/de, Event JSON-LD (offers with buy link), related-artist
+          internal links. Added /sitemap-artists.xml (only artists with upcoming events) + registered
+          in sitemap index. Curl OK: carl-cox/david-guetta/anyma -> 200 with h1 + Event JSON-LD.
+          Needs testing agent: verify 200 + valid JSON-LD for an artist with events, 404-redirect for
+          an artist slug with no events, sitemap-artists.xml valid XML, and no regression on /api/.
+        needs_retesting: true
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL ARTIST/DJ SEO PAGE REQUIREMENTS (6 tests, 100% pass):
+          
+          ✅ TEST 1: Artist page with events (carl-cox)
+          - GET /api/artista/carl-cox with User-Agent: Googlebot → 200 ✓
+          - <h1> contains "Carl Cox" ✓
+          - Canonical link present: https://ticket-scraper-fix.preview.emergentagent.com/artista/carl-cox ✓
+          - 4 hreflang links present (es/en/de/x-default) ✓
+          - 10 JSON-LD script tags found ✓
+          - 7 valid Event JSON-LD structures with complete data:
+            * @context: https://schema.org ✓
+            * @type: Event ✓
+            * name, startDate, location (Place with address) ✓
+            * offers object with @type: Offer ✓
+            * offers.url (buy link) ✓
+            * offers.price, priceCurrency (EUR), availability (InStock) ✓
+          - Sample events: Carl Cox at [UNVRS] (multiple dates, prices 50-75 EUR) ✓
+          
+          ✅ TEST 2: English artist page
+          - GET /api/en/artist/carl-cox → 200 ✓
+          - html lang="en" confirmed ✓
+          
+          ✅ TEST 3: Non-existent artist (404 guard)
+          - GET /api/artista/no-existe-dj-xyz → 404 ✓
+          - Correctly returns 404 for artists with no upcoming events ✓
+          
+          ✅ TEST 4: Artist sitemap
+          - GET /api/sitemap-artists.xml → 200 ✓
+          - Valid XML parsed ✓
+          - 14 URL entries found ✓
+          - All URLs contain /artista/ path ✓
+          - Sample artists: david-guetta, carl-cox, tiesto, calvin-harris, solomun ✓
+          
+          ✅ TEST 5: Main sitemap references artist sitemap
+          - GET /api/sitemap.xml → 200 ✓
+          - sitemap-artists.xml is referenced ✓
+          - Valid XML structure ✓
+          
+          ✅ TEST 6: Regression - API root
+          - GET /api/ → 200 JSON {"message":"¿Quién va? API"} ✓
+          
+          CONCLUSION:
+          All Artist/DJ SEO page requirements met perfectly. Pages render correctly with Googlebot UA,
+          JSON-LD is valid and complete with all required Event schema fields including offers with
+          buy links and pricing. Hreflang implementation correct for multilingual SEO. Sitemap properly
+          configured and referenced. 404 guard working for artists without events. No regressions.
+          
+          Test files: /app/backend_test_artist_seo.py, /app/backend_test_artist_seo_detailed.py
