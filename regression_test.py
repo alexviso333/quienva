@@ -9,7 +9,7 @@ import json
 import gzip
 from io import BytesIO
 
-BASE_URL = "https://ticket-scraper-fix.preview.emergentagent.com/api"
+BASE_URL = "https://cloud-integrated.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
@@ -519,7 +519,7 @@ def test_health_endpoints():
     # Test 2: GET /health (without /api prefix)
     print("\n2. Testing GET /health...")
     try:
-        resp = requests.get("https://ticket-scraper-fix.preview.emergentagent.com/health")
+        resp = requests.get("https://cloud-integrated.preview.emergentagent.com/health")
         if resp.status_code == 200:
             try:
                 data = resp.json()

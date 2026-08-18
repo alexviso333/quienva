@@ -6,7 +6,7 @@ Additional verification for pricing history details
 import requests
 import json
 
-BASE_URL = "https://ticket-scraper-fix.preview.emergentagent.com/api"
+BASE_URL = "https://cloud-integrated.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

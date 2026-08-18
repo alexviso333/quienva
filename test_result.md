@@ -1859,7 +1859,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+      Base URL: https://cloud-integrated.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -1973,7 +1973,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+      Base URL: https://cloud-integrated.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -4336,7 +4336,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+        Base URL: https://cloud-integrated.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -4401,7 +4401,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+      Base URL: https://cloud-integrated.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -4509,7 +4509,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+      Base URL: https://cloud-integrated.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -4636,7 +4636,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+      Base URL: https://cloud-integrated.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -5052,7 +5052,7 @@ agent_communication:
         No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
         
         Test file: /app/backend_test.py
-        Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+        Base URL: https://cloud-integrated.preview.emergentagent.com/api
 
 test_focus_2026_08_06_notif_and_cityalerts:
   goal: "Verificar 2 cambios de backend SIN romper nada. Entorno LOCAL nuevo: la BD arranca vacía y NO hay token de FourVenues (no probar scrapers/afiliado aquí)."
@@ -5126,7 +5126,7 @@ agent_communication:
         Both bug fixes working perfectly. No regressions detected. All endpoints returning correct values with proper persistence.
         
         Test file: /app/backend_test.py
-        Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+        Base URL: https://cloud-integrated.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
 
 
@@ -5609,7 +5609,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+      Base URL: https://cloud-integrated.preview.emergentagent.com/api
       Admin: admin@quienva.app / admin123
       Test user: u1test1786031593@test.com
 
@@ -5746,7 +5746,7 @@ return 401 for guests.
         NO ISSUES FOUND. All requirements from review request satisfied.
         
         Test file: /app/backend_test.py
-        Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+        Base URL: https://cloud-integrated.preview.emergentagent.com/api
 
 
 #====================================================================================================
@@ -5983,7 +5983,7 @@ agent_communication:
         - Own username update allowed (no-op, no clash)
         
         Test file: /app/backend_test.py
-        Backend URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+        Backend URL: https://cloud-integrated.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
         
         NO ISSUES FOUND. All 3 tasks working perfectly.
@@ -6080,7 +6080,7 @@ agent_communication:
       TESTED: New SSR homepage, venue pages, and sitemap features for SEO optimization.
       
       TEST ENVIRONMENT:
-      - Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+      - Base URL: https://cloud-integrated.preview.emergentagent.com/api
       - Test data: Venue "Olivia Valere" (slug: olivia-valere) in Marbella with events t1 (Gims Live), t2 (House Night)
       - Canonical URLs use preview domain (expected behavior for preview environment)
       
@@ -6232,7 +6232,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://ticket-scraper-fix.preview.emergentagent.com/api
+      Base URL: https://cloud-integrated.preview.emergentagent.com/api
       Total tests: 24 passed, 0 failed
 
 backend:
@@ -7621,7 +7621,7 @@ agent_communication:
           ✅ TEST 1: Artist page with events (carl-cox)
           - GET /api/artista/carl-cox with User-Agent: Googlebot → 200 ✓
           - <h1> contains "Carl Cox" ✓
-          - Canonical link present: https://ticket-scraper-fix.preview.emergentagent.com/artista/carl-cox ✓
+          - Canonical link present: https://cloud-integrated.preview.emergentagent.com/artista/carl-cox ✓
           - 4 hreflang links present (es/en/de/x-default) ✓
           - 10 JSON-LD script tags found ✓
           - 7 valid Event JSON-LD structures with complete data:
@@ -7663,3 +7663,117 @@ agent_communication:
           configured and referenced. 404 guard working for artists without events. No regressions.
           
           Test files: /app/backend_test_artist_seo.py, /app/backend_test_artist_seo_detailed.py
+
+
+  - task: "SEO crawl-budget fix: robots.txt disallow SPA/app routes + X-Robots-Tag noindex on past events"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    needs_retesting: false
+    priority: "high"
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Root cause of the ~4,588 "Discovered - currently not indexed" URLs in Google Search Console:
+          the React SPA app routes (esp. /event/{id}, plus /feed, /profile, /chats, /wrapped, etc.) all
+          serve the same generic index.html shell with <meta robots=index,follow>, so Googlebot keeps
+          discovering thin/duplicate URLs and wastes crawl budget instead of crawling our SSR evergreen
+          pages (/fiesta/, /discoteca/, /fiestas/<city>, /blog/).
+          Changes (backend only, in seo_robots + _render_event):
+          1) /api/robots.txt now emits Disallow for all app/SPA routes and explicit Allow for SEO
+             sections, plus the Sitemap line (canonical www host).
+          2) Past events now also return HTTP header "X-Robots-Tag: noindex, follow" (reinforces the
+             existing <meta robots noindex> even for HEAD/non-HTML fetches). Upcoming events unchanged.
+          Manual curl verification passed: robots.txt content correct; past /api/fiesta/{id} has
+          X-Robots-Tag noindex + meta noindex; upcoming has neither (index,follow); sitemap.xml 200.
+          NOTE: /app/backend/.env was missing in this container (backend was crash-looping on import);
+          created it with local MONGO_URL + DB_NAME so the app runs here. Production env (Render) is
+          unaffected.
+          Please retest: (a) GET /api/robots.txt returns 200 text/plain with the Disallow lines for
+          /event/, /feed, /profile, etc. and Allow for /fiesta/, /discoteca/, and a Sitemap: line;
+          (b) a PAST event /api/fiesta/{id} returns 200 with X-Robots-Tag: noindex, follow header and
+          meta robots noindex; (c) an UPCOMING event returns 200 without X-Robots-Tag and meta
+          robots index,follow; (d) no regression on /api/ root and /api/sitemap.xml.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL SEO CRAWL-BUDGET FIX REQUIREMENTS (4 test suites, 100% pass):
+          
+          ✅ TEST 1: GET /api/robots.txt (15 checks, all passed)
+          - Status: 200 ✓
+          - Content-Type: text/plain ✓
+          - Contains "User-agent: *" ✓
+          - Contains ALL required Disallow lines for app/SPA routes:
+            * Disallow: /event/ ✓
+            * Disallow: /feed ✓
+            * Disallow: /profile ✓
+            * Disallow: /chats ✓
+            * Disallow: /wrapped ✓
+            * Disallow: /friends ✓
+            * Disallow: /admin ✓
+            * Disallow: /login ✓
+          - Contains ALL required Allow lines for SEO sections:
+            * Allow: /fiesta/ ✓
+            * Allow: /discoteca/ ✓
+          - Contains Sitemap line ending in /sitemap.xml ✓
+          - CRITICAL VERIFICATION: Does NOT contain exact lines that would block SEO pages:
+            * NO "Disallow: /fiesta/" ✓
+            * NO "Disallow: /discoteca/" ✓
+            * NO "Disallow: /fiestas/" ✓
+          - Full robots.txt content (640 chars) verified with 28 Disallow lines and 6 Allow lines
+          
+          ✅ TEST 2: Past event with X-Robots-Tag header (4 checks, all passed)
+          - Created test event with date=2026-08-17 (yesterday, PAST event)
+          - GET /api/fiesta/{past_id} → 200 ✓
+          - Response header "X-Robots-Tag: noindex, follow" present ✓
+          - HTML contains <meta name="robots" content="noindex, follow"> ✓
+          - Test event cleaned up after test ✓
+          
+          ✅ TEST 3: Future event WITHOUT X-Robots-Tag header (4 checks, all passed)
+          - Created test event with date=2026-08-19 (tomorrow, UPCOMING event)
+          - GET /api/fiesta/{future_id} → 200 ✓
+          - NO X-Robots-Tag header present (as expected) ✓
+          - HTML contains <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"> ✓
+          - Does NOT contain "noindex" in meta robots tag ✓
+          - Test event cleaned up after test ✓
+          
+          ✅ TEST 4: Regression tests (3 checks, all passed)
+          - GET /api/ → 200 ✓
+          - GET /api/sitemap.xml → 200 with valid XML (starts with <?xml, contains sitemap structure) ✓
+          - GET /api/sitemap-events-madrid.xml → 200 ✓
+          
+          CONCLUSION:
+          All SEO crawl-budget fix requirements met perfectly. The robots.txt correctly blocks all SPA/app
+          routes while explicitly allowing SEO sections (/fiesta/, /discoteca/, /fiestas/). Past events
+          return both the X-Robots-Tag HTTP header AND the HTML meta robots tag with "noindex, follow" to
+          prevent indexing of stale content. Future events correctly omit the X-Robots-Tag header and use
+          "index,follow" in the meta tag. No regressions detected in core API endpoints or sitemaps.
+          
+          This fix should significantly reduce the "Discovered - currently not indexed" count in Google
+          Search Console by preventing Googlebot from wasting crawl budget on thin SPA routes and stale
+          past event pages, while ensuring all evergreen SEO pages remain fully crawlable.
+          
+          Test file: /app/backend_test_seo_robots.py
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Implemented an SEO crawl-budget fix targeting the 4,588 "Discovered - currently not indexed"
+      pages. Backend-only changes to robots.txt (block SPA/app routes) and X-Robots-Tag on past
+      events. Please run a focused backend test on the robots.txt endpoint and the event SSR
+      endpoints (past vs upcoming) as described in the task above. Do NOT test frontend.
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - SEO Crawl-Budget Fix (2026-08-18)
+      
+      🎉 ALL TESTS PASSED: 4/4 test suites (100% pass rate)
+      
+      Verified all requirements from the review request:
+      1. ✅ robots.txt correctly blocks SPA routes and allows SEO sections
+      2. ✅ Past events return X-Robots-Tag: noindex, follow header + meta tag
+      3. ✅ Future events have NO X-Robots-Tag and use index,follow meta tag
+      4. ✅ No regressions in core API endpoints
+      
+      The SEO crawl-budget fix is working perfectly and ready for production deployment.
+

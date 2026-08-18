@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://ticket-scraper-fix.preview.emergentagent.com"
+BACKEND_URL = "https://cloud-integrated.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

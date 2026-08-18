@@ -2392,8 +2392,13 @@ async def _render_event(event_id: str, lang: str, request: Request):
 </div>
 {sticky_html}
 </body></html>"""
+    _headers = {"Cache-Control": "public, max-age=1800"}
+    if is_past:
+        # Reinforce the <meta robots> so past parties are dropped even when a
+        # crawler only reads response headers (HEAD / non-HTML fetch).
+        _headers["X-Robots-Tag"] = "noindex, follow"
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
-                             headers={"Cache-Control": "public, max-age=1800"})
+                             headers=_headers)
 
 
 @api_router.api_route("/fiesta/{event_id}", methods=["GET", "HEAD"])
@@ -4217,10 +4222,33 @@ async def _sitemap_index_xml(front: str, today: str) -> str:
             '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + body + "</sitemapindex>")
 
 
+# App/SPA routes that serve the generic React shell (no unique SEO content).
+# Letting Googlebot crawl them wastes crawl budget and creates thin/duplicate
+# pages -> the root cause of thousands of "Discovered - currently not indexed"
+# URLs. We block them so Google focuses its budget on our server-rendered,
+# evergreen pages (/fiesta/, /discoteca/, /fiestas/<city>, /blog/).
+_ROBOTS_DISALLOW = [
+    "/event/",          # in-app event detail (SSR SEO version lives at /fiesta/)
+    "/feed", "/friends", "/notifications", "/novedades",
+    "/profile", "/users/", "/chats", "/top",
+    "/recuerdos", "/memories", "/fiestas-pasadas",
+    "/ajustes", "/momento", "/momentos", "/descubrir", "/wrapped",
+    "/admin", "/onboarding", "/login", "/auth/",
+    "/r/", "/ig", "/tt", "/mapa", "/locales",
+]
+# Server-rendered, indexable sections — spelled out for clarity (they are
+# already allowed by default, but this documents intent for anyone reading it).
+_ROBOTS_ALLOW = ["/fiesta/", "/fiestas/", "/discoteca/", "/blog", "/en/", "/de/"]
+
+
 @api_router.api_route("/robots.txt", methods=["GET", "HEAD"])
 async def seo_robots(request: Request):
     front = _frontend_base(request)
-    txt = f"User-agent: *\nAllow: /\nSitemap: {front}/sitemap.xml\n"
+    lines = ["User-agent: *", "Allow: /"]
+    lines += [f"Disallow: {p}" for p in _ROBOTS_DISALLOW]
+    lines += [f"Allow: {p}" for p in _ROBOTS_ALLOW]
+    lines += ["", f"Sitemap: {front}/sitemap.xml", ""]
+    txt = "\n".join(lines)
     return StarletteResponse(content=txt, media_type="text/plain",
                              headers={"Cache-Control": "public, max-age=3600"})
 

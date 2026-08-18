@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://ticket-scraper-fix.preview.emergentagent.com/api"
+BASE_URL = "https://cloud-integrated.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

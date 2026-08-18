@@ -9,7 +9,7 @@ import json
 from datetime import datetime, timedelta
 
 # Use the production backend URL from frontend/.env
-BASE_URL = "https://ticket-scraper-fix.preview.emergentagent.com/api"
+BASE_URL = "https://cloud-integrated.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
