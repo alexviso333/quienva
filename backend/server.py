@@ -1751,8 +1751,12 @@ def _seo_sale_badge(ev: dict, lang: str):
     return mp.get(st, mp["no_a_la_venta"])
 
 
-def _seo_card(ev, ev_url, lang, e) -> str:
-    """App-style poster card for SEO listings."""
+def _seo_card(ev, ev_url, lang, e, nofollow: bool = False) -> str:
+    """App-style poster card for SEO listings.
+
+    nofollow=True is used for links to PAST parties (which are noindex): it stops
+    Googlebot from spending crawl budget following into pages it will drop anyway.
+    """
     pl = _seo_price_line(ev, lang)
     when = _seo_date(ev.get("date", ""), lang, ev.get("time", ""))
     venue = e(ev.get("venue", ""))
@@ -1771,8 +1775,9 @@ def _seo_card(ev, ev_url, lang, e) -> str:
     blabel, bcls = _seo_sale_badge(ev, lang)
     badge = f'<span class="sb {bcls}">{e(blabel)}</span>'
     price = f'<span class="pp">{e(pl)}</span>' if pl else ''
+    rel_attr = ' rel="nofollow"' if nofollow else ''
     return (
-        f'<a class="card glow-card reveal" data-testid="seo-event-card" data-s="{e((str(ev.get("name","")) + " " + str(ev.get("venue","")) ).lower())}" href="{e(ev_url)}">'
+        f'<a class="card glow-card reveal" data-testid="seo-event-card" data-s="{e((str(ev.get("name","")) + " " + str(ev.get("venue","")) ).lower())}" href="{e(ev_url)}"{rel_attr}>'
         f'<div class="poster">{poster}<div class="badges">{badge}{price}</div></div>'
         f'<div class="body"><span class="n">{e(ev.get("name","Fiesta"))}</span>'
         f'<span class="m">{meta}</span></div></a>')
@@ -3714,7 +3719,7 @@ async def _render_venue(slug: str, lang: str, request: Request):
     items_html, jsonld = [], []
     for ev in events[:24]:
         eu = _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang]
-        items_html.append(f'<li>{_seo_card(ev, eu, lang, e)}</li>')
+        items_html.append(f'<li>{_seo_card(ev, eu, lang, e, nofollow=only_past)}</li>')
         # Only advertise structured Event/offers for upcoming parties.
         if not only_past:
             jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, eu, front, lang=lang)}</script>')
@@ -4130,13 +4135,36 @@ def _sitemap_urlset(parts: list) -> str:
             + "".join(parts) + "</urlset>")
 
 
+async def _city_lastmods(today: str) -> dict:
+    """Freshest real content date per city (max last_scraped_at of its events,
+    never in the future). Honest <lastmod> for the city pages so Google trusts
+    the recency signal instead of seeing 'today' on every URL every day."""
+    out = {}
+    for c in SUPPORTED_CITIES:
+        lm = today
+        try:
+            doc = await db.events.find_one(
+                {"city": city_query_value(c["id"])},
+                {"_id": 0, "last_scraped_at": 1},
+                sort=[("last_scraped_at", -1)])
+            raw = str((doc or {}).get("last_scraped_at") or "")[:10]
+            if len(raw) == 10 and raw <= today:
+                lm = raw
+        except Exception:
+            pass
+        out[c["id"]] = lm
+    return out
+
+
 async def _sitemap_cities_xml(front: str, today: str) -> str:
+    lastmods = await _city_lastmods(today)
     parts = [f"<url><loc>{front}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>"]
     for c in SUPPORTED_CITIES:
+        lm = lastmods.get(c["id"], today)
         for tf in ("all", "tonight", "weekend"):
             cp = _city_tf_paths(front, _city_slug(c["id"]), tf)
             for lang in SEO_LANGS:
-                parts.append(_sitemap_url(cp, lang, today, "daily"))
+                parts.append(_sitemap_url(cp, lang, lm, "daily"))
     return _sitemap_urlset(parts)
 
 
