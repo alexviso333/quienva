@@ -2272,16 +2272,38 @@ async def _get_event_seo(event_id: str):
          "has_commission": 1})
 
 
-async def _render_event(event_id: str, lang: str, request: Request):
+async def _render_event(event_id: str, lang: str, request: Request, slug: str = ""):
     import html as _html
     e = _html.escape
     T = SEO_T[lang]
     front = _frontend_base(request)
     ev = await _get_event_seo(event_id)
     if not ev:
-        return StarletteResponse(
-            content=f"<!doctype html><meta http-equiv=refresh content='0;url={front}/feed'>",
-            media_type="text/html", status_code=404)
+        # The party was removed from the DB (past/cancelled parties get purged to
+        # keep storage low). Instead of a soft-404 that Google keeps recrawling,
+        # try to 301 to the party's CITY hub (city is the tail of the URL slug),
+        # preserving link equity and giving the user a useful landing. If the city
+        # can't be inferred, return a real 410 Gone so Google drops it fast/clean.
+        city_id = None
+        s = (slug or "").lower()
+        if s:
+            for cslug in sorted(_CITY_SLUGS.keys(), key=len, reverse=True):
+                if s == cslug or s.endswith("-" + cslug):
+                    city_id = _CITY_SLUGS[cslug]
+                    break
+        if city_id:
+            seo_slug = CITY_SEO_SLUG.get(city_id, _city_slug(city_id))
+            target = _city_paths(front, seo_slug)[lang]
+            return StarletteResponse(status_code=301, headers={"Location": target},
+                                     content=f"<!doctype html><meta http-equiv=refresh content='0;url={target}'>",
+                                     media_type="text/html")
+        gone_html = (f"<!doctype html><html lang='{lang}'><head><meta charset='utf-8'>"
+                     f"<meta name='robots' content='noindex'>"
+                     f"<title>{e(T.get('ev_ended', 'Fiesta finalizada'))}</title></head>"
+                     f"<body><p>{e(T.get('ev_ended', 'Esta fiesta ya no está disponible.'))}</p>"
+                     f"<p><a href='{front}/feed'>¿Quién va?</a></p></body></html>")
+        return StarletteResponse(content=gone_html, media_type="text/html", status_code=410,
+                                 headers={"X-Robots-Tag": "noindex"})
     slug = _event_slug(ev)
     paths = _event_paths(front, event_id, slug)
     canonical = paths[lang]
@@ -2464,19 +2486,19 @@ async def _render_event(event_id: str, lang: str, request: Request):
 @api_router.api_route("/fiesta/{event_id}", methods=["GET", "HEAD"])
 @api_router.api_route("/fiesta/{event_id}/{slug}", methods=["GET", "HEAD"])
 async def seo_event_es(event_id: str, request: Request, slug: str = ""):
-    return await _render_event(event_id, "es", request)
+    return await _render_event(event_id, "es", request, slug)
 
 
 @api_router.api_route("/en/party/{event_id}", methods=["GET", "HEAD"])
 @api_router.api_route("/en/party/{event_id}/{slug}", methods=["GET", "HEAD"])
 async def seo_event_en(event_id: str, request: Request, slug: str = ""):
-    return await _render_event(event_id, "en", request)
+    return await _render_event(event_id, "en", request, slug)
 
 
 @api_router.api_route("/de/party/{event_id}", methods=["GET", "HEAD"])
 @api_router.api_route("/de/party/{event_id}/{slug}", methods=["GET", "HEAD"])
 async def seo_event_de(event_id: str, request: Request, slug: str = ""):
-    return await _render_event(event_id, "de", request)
+    return await _render_event(event_id, "de", request, slug)
 
 
 # ---------------------------------------------------------------------------
