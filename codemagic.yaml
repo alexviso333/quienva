@@ -1,0 +1,73 @@
+# Codemagic CI/CD — compila "¿Quién va?" para iOS en un Mac en la nube y la sube
+# a App Store Connect SIN que tengas un Mac.
+#
+# QUÉ TIENES QUE HACER EN CODEMAGIC (una vez), ver pasos detallados en APP_STORE_GUIDE.md:
+#   1) Conecta tu repo de GitHub.
+#   2) Ajustes → Integrations → App Store Connect: sube tu API Key (.p8 + Key ID + Issuer ID).
+#      Guarda esa integración con el nombre:  quienva_appstore
+#   3) Lanza el workflow "ios-quienva".
+#
+# La primera vez, Codemagic crea el certificado y el perfil automáticamente con tu API Key.
+
+workflows:
+  ios-quienva:
+    name: "¿Quién va? iOS (App Store)"
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: quienva_appstore   # <-- nombre de la integración que creas en el paso 2
+    environment:
+      vars:
+        BUNDLE_ID: "me.quienva.app"
+        XCODE_WORKSPACE: "frontend/ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        APP_STORE_APPLE_ID: 0000000000        # <-- pon el "Apple ID" numérico de tu app (App Store Connect → App Information)
+      node: 20
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Instalar dependencias web
+        script: |
+          cd frontend
+          yarn install --frozen-lockfile
+      - name: Compilar la web (build/)
+        script: |
+          cd frontend
+          yarn build
+      - name: Añadir y sincronizar iOS
+        script: |
+          cd frontend
+          npx cap add ios || true
+          npx cap sync ios
+      - name: Iconos y splash (si existen los assets)
+        script: |
+          cd frontend
+          if [ -f assets/icon.png ]; then \
+            npx capacitor-assets generate --ios \
+              --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C' || true; \
+          fi
+          npx cap sync ios
+      - name: Preparar firma (automática con tu API Key)
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Número de build automático
+        script: |
+          cd frontend/ios/App
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          agvtool new-version -all $(($LATEST + 1))
+      - name: Compilar IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true       # sube a TestFlight (pruebas)
+        # submit_to_app_store: false     # cámbialo a true cuando quieras enviar a revisión
