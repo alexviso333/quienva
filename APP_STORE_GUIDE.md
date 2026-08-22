@@ -46,10 +46,17 @@ npx cap sync
 
 ## 3) Iconos y splash automáticos
 
-Coloca un icono cuadrado de **1024×1024** en `frontend/assets/icon.png` y un splash de
-**2732×2732** en `frontend/assets/splash.png`, y ejecuta:
+Ya te he dejado los **assets listos** en `frontend/mobile/assets/`:
+- `icon.png` (1024×1024) — icono de la app.
+- `splash.png` (2732×2732) — pantalla de carga con tu logo centrado sobre fondo `#0A0A0C`.
+
+> (Están generados a partir de tu icono actual. Si tienes el logo original en vector, exporta
+> un `icon.png` a 1024×1024 nítido y sustitúyelo para máxima calidad.)
+
+Cópialos a `frontend/assets/` y genera todos los tamaños:
 
 ```bash
+mkdir -p assets && cp mobile/assets/icon.png mobile/assets/splash.png assets/
 yarn add -D @capacitor/assets
 npx capacitor-assets generate --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C'
 npx cap sync
@@ -142,3 +149,34 @@ solo las notis push nativas quedarían pendientes.
 3. **Pide valoraciones en el momento bueno** (justo después de que el usuario ve “Momentos” o marca “Voy”).
 4. **Deep links**: comparte enlaces `quienva.me/event/...` que abran la app si está instalada.
 5. **Notificaciones con criterio** (ya es opt-in): avisa de fiestas nuevas de su ciudad y de tus amigos.
+
+---
+
+## 📣 Tu estrategia de TikTok → App (embudo recomendado)
+
+Publicitarte como “app” convierte más que un link a la web. Para exprimirlo:
+
+1. **En el vídeo**: llamada clara — “Descárgate ¿Quién va? para ver quién va esta noche · link en bio”.
+2. **En la bio**: en vez de la home, enlaza a la **fiesta concreta del vídeo**
+   (`quienva.me/fiesta/<id>/<slug>`). Con los **deep links** activados (ver
+   `frontend/mobile/DEEP_LINKS.md`), al tocarlo:
+   - Si tienen la app → se abre **en esa fiesta**.
+   - Si no → web optimizada + banner “Descargar app”.
+   - Al instalar → vuelven a **esa** fiesta (no a una home vacía) → mucha más activación.
+3. **In-App Events (App Store)**: publica los eventos gordos (un cabeza de cartel) como *In-App
+   Events*; salen en la ficha de la App Store y en búsquedas → descargas extra “gratis”.
+4. **Custom Product Pages**: crea una página de App Store por ciudad (Palma/Ibiza/Marbella) y usa
+   cada una como destino de las campañas/vídeos de esa ciudad → mejor conversión y métricas.
+5. **Mide el embudo**: descarga → primer evento visto → clic en entrada → compra. Es la métrica que
+   te dice si la inversión en la app rinde (más que el nº de descargas).
+
+---
+
+## 🙋 Qué necesito de TI para dejarlo 100% (cuando tengas la cuenta Apple)
+1. **Apple Team ID** (10 caracteres) → para los deep links (Universal Links) y la firma.
+2. **Bundle ID** confirmado: `me.quienva.app` (o el que prefieras).
+3. **APNs Auth Key** (.p8) + Key ID → para implementarte las **push nativas** dentro de la app.
+4. (Opcional Android) **SHA-256** de la firma de la app → para los App Links de Android.
+
+Con esos datos yo te dejo: los ficheros `.well-known` finales, el listener de deep links y el push
+nativo. El resto (crear cuenta, Xcode/archive, ficha y envío) es tuyo siguiendo esta guía.
