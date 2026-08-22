@@ -31,7 +31,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
 _HEADERS = {"User-Agent": UA, "Accept": "text/html", "Accept-Language": "es,en;q=0.8"}
 
-MAX_PAGES = 30
+MAX_PAGES = 16
 CONCURRENCY = 5
 _TAGS = {"Reactive", "ShallowReactive", "Ref", "ShallowRef",
          "EmptyRef", "EmptyShallowRef", "NuxtError"}

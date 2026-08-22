@@ -25,6 +25,9 @@ class ScrapedEvent:
     lat: Optional[float] = None      # venue latitude (from source geo)
     lng: Optional[float] = None      # venue longitude
     venue_image: str = ""            # organization/venue cover image
+    pricing_known: bool = True       # False => ticket detail was NOT fetched this
+                                     # run (e.g. far-future event on a "light" run);
+                                     # the DB price/sale_state must be PRESERVED.
 
     def to_dict(self) -> dict:
         return asdict(self)

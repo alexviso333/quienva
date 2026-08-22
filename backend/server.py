@@ -430,6 +430,23 @@ _CAROUSELS_TTL = 20  # seconds
 
 scheduler = None
 
+# --- Scraper bandwidth schedule (env-tunable) -------------------------------
+# The scrapers are the app's biggest outbound-bandwidth ("service-initiated")
+# consumer on Render. A two-tier schedule keeps freshness high where it matters
+# (new parties, poster/name changes, near-term ticket states) while slashing
+# egress: light runs refresh only near-term ticket details; full runs (a few
+# times a day) refresh everything including far-future prices.
+try:
+    SCRAPER_LIGHT_INTERVAL_MIN = int(os.environ.get("SCRAPER_LIGHT_INTERVAL_MIN", "45"))
+except Exception:
+    SCRAPER_LIGHT_INTERVAL_MIN = 45
+try:
+    SCRAPER_LIGHT_WINDOW_DAYS = int(os.environ.get("SCRAPER_LIGHT_WINDOW_DAYS", "16"))
+except Exception:
+    SCRAPER_LIGHT_WINDOW_DAYS = 16
+# Comma-separated hours (Europe/Madrid) for the full sweep. Default 3x/day.
+SCRAPER_FULL_HOURS = os.environ.get("SCRAPER_FULL_HOURS", "7,15,22").strip() or "7,15,22"
+
 # ---------------------------------------------------------------------------
 # Local file storage (no external dependency, free, fully portable)
 # ---------------------------------------------------------------------------
@@ -7124,18 +7141,24 @@ async def _notify_event_audience(event_id: str, kind: str, title: str, body: str
 
 
 async def _notify_new_event_city(event: dict):
-    """When a new event is created, notify all users in the same app-city
-    (region-aware: e.g. a Magaluf event notifies Palma de Mallorca users)."""
+    """When a new event is created, notify users in the same app-city (region-aware:
+    e.g. a Magaluf event notifies Palma de Mallorca users) who OPTED IN to new-party
+    alerts (notif_prefs.new_event == True). This is opt-in: users who never enabled
+    it get nothing, so the city is no longer auto-broadcast to everyone."""
     region = region_for_city(event.get("city") or "Palma de Mallorca")
     body = f"🆕 Nueva fiesta: {event['name']} · {event.get('venue', '')} ({event['date']})"
     count = 0
-    async for u in db.users.find({"city": region}, {"_id": 0, "user_id": 1}):
+    # Only users who explicitly enabled new-party alerts for their city.
+    async for u in db.users.find(
+        {"city": region, "notif_prefs.new_event": True},
+        {"_id": 0, "user_id": 1},
+    ):
         await create_notification(
             u["user_id"], "new_event", body,
             {"event_id": event["id"], "type": "new_event"},
         )
         count += 1
-    logger.info(f"[notify] new_event {event['id']} → {count} users in {region}")
+    logger.info(f"[notify] new_event {event['id']} → {count} opted-in users in {region}")
     return count
 
 
@@ -8058,7 +8081,14 @@ _NOTIF_PREF_KEYS = [
     "new_event", "tickets_on_sale", "tickets_low_stock", "tickets_sold_out",
     "tickets_price_down", "tickets_price_up", "friend_going",
 ]
-DEFAULT_NOTIF_PREFS = {k: True for k in _NOTIF_PREF_KEYS}
+# Opt-IN categories: OFF by default; only delivered if the user explicitly turned
+# them ON in Settings. "new_event" (new parties in your city) was previously a
+# blanket auto-broadcast to everyone in the city — now it's opt-in so users only
+# get city-wide new-party alerts if they choose to. Everything else stays opt-OUT
+# (on by default). Ticket-state changes for events the user follows/marked are
+# unaffected (they go through _notify_event_audience, not the city broadcast).
+_OPT_IN_PREF_KEYS = {"new_event"}
+DEFAULT_NOTIF_PREFS = {k: (k not in _OPT_IN_PREF_KEYS) for k in _NOTIF_PREF_KEYS}
 
 
 async def create_notification(user_id: str, ntype: str, message: str, data: dict):
@@ -8066,7 +8096,13 @@ async def create_notification(user_id: str, ntype: str, message: str, data: dict
     if ntype in _NOTIF_PREF_KEYS:
         u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "notif_prefs": 1})
         prefs = (u or {}).get("notif_prefs") or {}
-        if prefs.get(ntype) is False:
+        val = prefs.get(ntype)
+        if ntype in _OPT_IN_PREF_KEYS:
+            # Opt-in: deliver ONLY when explicitly enabled (True).
+            if val is not True:
+                return
+        elif val is False:
+            # Opt-out: deliver unless explicitly disabled.
             return
     await db.notifications.insert_one({
         "id": str(uuid.uuid4()),
@@ -10225,18 +10261,25 @@ async def on_startup():
         # Annual Wrapped: every Jan 1 at 12:10 notify users about last year's recap.
         scheduler.add_job(notify_annual_wrapped, "cron", month=1, day=1, hour=12, minute=10,
                           id="annual_wrapped", replace_existing=True)
-        # Scrapers — refresh all active venues every 30 min. First run 60s after
-        # startup so a fresh deploy warms up the events feed quickly.
-        scheduler.add_job(run_all_scrapers, "interval", minutes=20,
-                          id="scrapers_all", replace_existing=True,
+        # Scrapers — bandwidth-aware two-tier schedule (keeps Render egress under
+        # the free-tier cap without losing freshness):
+        #   * LIGHT run every SCRAPER_LIGHT_INTERVAL_MIN: FourVenues + ClubTickets
+        #     only. Full LISTING for all events (new parties + poster/name changes
+        #     detected fast), but ticket DETAILS only for events within
+        #     SCRAPER_LIGHT_WINDOW_DAYS. Heavy HTML adapters (xceed/nightleague)
+        #     are skipped.
+        #   * FULL run at SCRAPER_FULL_HOURS (a few times/day): every adapter, full
+        #     ticket-detail sweep for all future events. Far-future prices refresh
+        #     here. First light run 60s after startup warms the feed.
+        scheduler.add_job(run_scrapers_light, "interval", minutes=SCRAPER_LIGHT_INTERVAL_MIN,
+                          id="scrapers_light", replace_existing=True,
                           max_instances=1, coalesce=True, misfire_grace_time=300,
                           next_run_time=datetime.now(timezone.utc) + timedelta(seconds=60))
-        scheduler.add_job(refresh_affiliate_events, "interval", minutes=20,
-                          id="affiliate_refresh", replace_existing=True,
-                          max_instances=1, coalesce=True, misfire_grace_time=300,
-                          next_run_time=datetime.now(timezone.utc) + timedelta(seconds=25))
+        scheduler.add_job(run_scrapers_full, "cron", hour=SCRAPER_FULL_HOURS, minute=15,
+                          id="scrapers_full", replace_existing=True,
+                          max_instances=1, coalesce=True, misfire_grace_time=600)
         scheduler.start()
-        logger.info("Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00 + scrapers cada 20min)")
+        logger.info(f"Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00 + scrapers LIGHT c/{SCRAPER_LIGHT_INTERVAL_MIN}min ventana {SCRAPER_LIGHT_WINDOW_DAYS}d + FULL a las {SCRAPER_FULL_HOURS}h)")
     except Exception as e:
         logger.error(f"Scheduler init falló: {e}")
 
@@ -11487,11 +11530,14 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
         patch["has_commission"] = True
     if se.genre and not existing.get("genre"):
         patch["genre"] = se.genre.split(",")[0].strip()[:40]
-    # Pricing
-    if se.price_tiers != old_tiers:
-        patch["price_tiers"] = se.price_tiers
-    if se.sale_state and se.sale_state != old_state:
-        patch["sale_state"] = se.sale_state
+    # Pricing — but ONLY when this run actually fetched the ticket detail. On a
+    # "light" run far-future events arrive with pricing_known=False; we must keep
+    # the DB's last known price/state instead of clobbering it with empty values.
+    if getattr(se, "pricing_known", True):
+        if se.price_tiers != old_tiers:
+            patch["price_tiers"] = se.price_tiers
+        if se.sale_state and se.sale_state != old_state:
+            patch["sale_state"] = se.sale_state
     if len(patch) == 2:  # only meta fields (last_scraped_at, external_id)
         await db.events.update_one({"id": existing["id"]}, {"$set": patch})
         return "unchanged"
@@ -11656,8 +11702,13 @@ async def _enforce_clubtickets_affiliate(venue: dict, primary: list) -> list:
 
 
 
-async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
-    """Run one venue's scraper and apply diffs. Returns a summary."""
+async def run_scraper_for_venue(venue: dict, batch_id: str = "",
+                                detail_window_days: Optional[int] = None) -> dict:
+    """Run one venue's scraper and apply diffs. Returns a summary.
+
+    detail_window_days: when set (a "light" run), FourVenues venues only fetch
+    ticket details for events starting within that many days (far events keep
+    their last known price/state). None => full detail sweep."""
     _standalone = not batch_id
     if not batch_id:
         batch_id = uuid.uuid4().hex
@@ -11673,6 +11724,8 @@ async def run_scraper_for_venue(venue: dict, batch_id: str = "") -> dict:
         if venue.get("adapter_type") == "fourvenues_api":
             _kwargs["slug"] = venue.get("slug") or ""
             _kwargs["guest_token"] = await _get_fourvenues_token()
+            if detail_window_days is not None:
+                _kwargs["detail_window_days"] = detail_window_days
         if venue.get("adapter_type") == "clubtickets":
             _kwargs["venue_slug"] = venue.get("slug") or ""
             _kwargs["panel_url"] = CLUBTICKETS_LINKS_URL
@@ -11804,12 +11857,30 @@ async def _notify_admins_affiliate_flips(batch_id: str, venue_name: str = None):
         logger.warning(f"[affiliate-flip-alert] failed: {e}")
 
 
-async def run_all_scrapers():
+async def run_all_scrapers(mode: str = "full"):
     """Run active venues with a bounded concurrency (protects Render free tier
     and avoids hammering FourVenues when many venues are configured). Called by
-    scheduler + admin trigger."""
+    scheduler + admin trigger.
+
+    mode="full"  -> every adapter, full ticket-detail sweep (all future events).
+    mode="light" -> ONLY the cheap/high-value adapters (FourVenues + ClubTickets),
+                    and FourVenues fetches ticket details ONLY for events within
+                    SCRAPER_LIGHT_WINDOW_DAYS. New parties + poster/name changes
+                    are still picked up for ALL FourVenues events (the listing is
+                    one cheap request); only far-future price/sale-state refreshes
+                    are deferred to the next full run. This is the main lever that
+                    keeps Render egress bandwidth well under the free-tier cap.
+    """
+    light = (mode == "light")
+    light_window = SCRAPER_LIGHT_WINDOW_DAYS if light else None
+    # Heavy HTML adapters (xceed, nightleague) fetch one page per event, so we
+    # only run them on full sweeps. FourVenues + ClubTickets are cheap enough to
+    # run every light cycle (fast new-party / cartel-change detection).
+    _light_adapters = {"fourvenues_api", "clubtickets"}
     venues = []
     async for v in db.scraped_venues.find({"active": True}, {"_id": 0}):
+        if light and v.get("adapter_type") not in _light_adapters:
+            continue
         venues.append(v)
     if not venues:
         return []
@@ -11821,12 +11892,12 @@ async def run_all_scrapers():
 
     async def _run_one(v):
         async with _sem:
-            return await run_scraper_for_venue(v, batch_id)
+            return await run_scraper_for_venue(v, batch_id, detail_window_days=light_window)
 
     results = await asyncio.gather(*(_run_one(v) for v in venues), return_exceptions=False)
     total_new = sum(r["created"] for r in results)
     total_upd = sum(r["updated"] for r in results)
-    logger.info(f"[scrapers] Completed: {len(results)} venues, {total_new} new events, {total_upd} updated")
+    logger.info(f"[scrapers] Completed ({mode}): {len(results)} venues, {total_new} new events, {total_upd} updated")
     # If any FourVenues venue is configured, verify the guest token is still
     # valid; if it expired, alert ONLY the admin (throttled) so parties keep flowing.
     try:
@@ -11879,6 +11950,17 @@ async def run_all_scrapers():
     except Exception:
         pass
     return results
+
+
+async def run_scrapers_light():
+    """Scheduler entrypoint: frequent, low-bandwidth refresh (see run_all_scrapers)."""
+    return await run_all_scrapers(mode="light")
+
+
+async def run_scrapers_full():
+    """Scheduler entrypoint: full refresh of every adapter, a few times per day."""
+    return await run_all_scrapers(mode="full")
+
 
 
 # ---- Admin endpoints for scraper management ----

@@ -392,3 +392,15 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Verificado (testing backend 4/4 suites, 100%)**: feed Ibiza con 296 eventos clubtickets, todos con `aff=CT226` sin duplicar, ordenados primero; `is_affiliate` correcto (true clubtickets / false resto / null invitado); 7 venues activos; run manual OK; sin regresiones (Madrid ok, sin venues duplicados).
 - **Config**: `CLUBTICKETS_AFF` y `CLUBTICKETS_AFFILIATE_LINKS_URL` en env (con defaults en código). **PRODUCCIÓN**: requiere "Save to GitHub" → Render.
 - **PENDIENTE (decisión usuario)**: los 6 clubs que hoy van por FourVenues (Eden, Es Paradís, Chinois, Ibiza Rocks, Lío, Swag) NO ganan comisión ClubTickets. Cambiarlos a ClubTickets implicaría sustituir su fuente (perder precios/imágenes de FourVenues a cambio de tu comisión). A confirmar.
+
+## 2026-08-22 — Reducción de ancho de banda de Render (Service-Initiated) [DEPLOY PENDIENTE]
+- **Problema del usuario**: Render Included Bandwidth 7.45GB/5GB; el grueso era **Service-Initiated 7.13GB** (egress de peticiones salientes del backend). Objetivo: <5GB (free tier) sin perder funcionamiento.
+- **Causa raíz (verificada)**: los scrapers corrían **cada 20 min** (72×/día). Cada discoteca FourVenues hace 1 lista + **hasta 120 peticiones de detalle de tickets** (precio/estado) mirando 120 días vista → miles de peticiones/hora × 72. xceed (5 ciudades × 45 páginas HTML) y nightleague (30 páginas HTML) también pesaban.
+- **Fix (schedule de dos niveles, env-tunable)** en `server.py` + `scrapers/`:
+  - `run_all_scrapers(mode)`: **light** = solo FourVenues + ClubTickets, y FourVenues consulta DETALLES solo de eventos dentro de `SCRAPER_LIGHT_WINDOW_DAYS` (16 por defecto); la LISTA completa se sigue leyendo (fiestas nuevas + cambios de cartel/nombre detectados igual de rápido, 1 petición barata). **full** = todos los adapters, barrido completo.
+  - Scheduler: LIGHT cada `SCRAPER_LIGHT_INTERVAL_MIN` (45min) + FULL en `SCRAPER_FULL_HOURS` (7,15,22). Eliminados los jobs antiguos `scrapers_all`/`affiliate_refresh` de 20min (refresh afiliado va dentro de run_all_scrapers).
+  - `ScrapedEvent.pricing_known` (base.py): FourVenues marca **False** en eventos lejanos no consultados; `_apply_scraped_event` entonces **NO sobrescribe** `price_tiers`/`sale_state` (conserva el último precio conocido). Verificado con test DB: light/lejano conserva 25€, full actualiza a 30€+pocas.
+  - `fourvenues_api.py`: nuevo `detail_window_days` + centinela `__skip__`. `xceed.py` MAX_EVENTS 45→22. `nightleague.py` MAX_PAGES 30→16.
+- **Impacto estimado**: de ~7GB a ~2GB/mes (reducción ~4-6×). Fiestas nuevas y cambios de cartel siguen rápidos (LISTA cada 45min); solo el refresco de precio/estado de eventos >16 días se difiere al barrido completo (3×/día), exactamente lo pedido por el usuario.
+- **PENDIENTE deploy**: requiere "Save to GitHub" → Render. Env opcionales en Render para afinar: `SCRAPER_LIGHT_INTERVAL_MIN`, `SCRAPER_LIGHT_WINDOW_DAYS`, `SCRAPER_FULL_HOURS`.
+- Nota entorno: `backend/.env` local faltaba; recreado (MONGO_URL local + DB_NAME=quienva_db). Producción usa su config en Render.

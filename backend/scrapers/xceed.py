@@ -34,7 +34,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
 _HEADERS = {"User-Agent": UA, "Accept": "text/html", "Accept-Language": "es,en;q=0.8"}
 
-MAX_EVENTS = 45
+MAX_EVENTS = 22
 CONCURRENCY = 6
 # Only real clubs/venues (drops boats, brunches, restaurants…).
 _CLUB_TYPES = {"NightClub", "MusicVenue"}

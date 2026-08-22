@@ -66,10 +66,17 @@ class FourVenuesApiScraper(Scraper):
     adapter_type = "fourvenues_api"
 
     def __init__(self, url: str, venue_name: str = "", city: str = "Palma de Mallorca",
-                 slug: Optional[str] = None, guest_token: Optional[str] = None, **_):
+                 slug: Optional[str] = None, guest_token: Optional[str] = None,
+                 detail_window_days: Optional[int] = None, **_):
         super().__init__(url, venue_name, city)
         self.slug = (slug or self._slug_from_url(url) or "").strip().strip("/")
         self.guest_token = (guest_token or "").strip()
+        # When set, only fetch ticket DETAILS (price/sale_state) for events whose
+        # start date is within this many days. Far-future events are still LISTED
+        # (name/poster/date/genre stay fresh — cheap, one request) but keep their
+        # last known price/state in the DB (pricing_known=False). None => full
+        # detail sweep. This is the main lever to cut Render egress bandwidth.
+        self.detail_window_days = detail_window_days
 
     @staticmethod
     def _slug_from_url(url: str) -> str:
@@ -122,7 +129,27 @@ class FourVenuesApiScraper(Scraper):
             items = items[:MAX_DETAIL_FETCHES]
             sem = asyncio.Semaphore(DETAIL_CONCURRENCY)
 
-            async def _tickets(code: str):
+            # Decide, per event, whether to fetch its ticket detail this run. On a
+            # "light" run (detail_window_days set) we only fetch details for events
+            # starting within the window; the rest keep their last known price.
+            cutoff_ts = None
+            if self.detail_window_days is not None:
+                cutoff_ts = (datetime.now(timezone.utc)
+                             + timedelta(days=int(self.detail_window_days))).timestamp()
+
+            def _needs_detail(it: dict) -> bool:
+                if cutoff_ts is None:
+                    return True
+                dates = it.get("dates") or {}
+                st = dates.get("start") or dates.get("date")
+                try:
+                    return float(st) <= cutoff_ts
+                except Exception:
+                    return True  # unknown date -> fetch to be safe
+
+            async def _tickets(code: str, do: bool):
+                if not do:
+                    return "__skip__"   # intentionally not fetched -> preserve DB price
                 if not code:
                     return None
                 async with sem:
@@ -153,8 +180,11 @@ class FourVenuesApiScraper(Scraper):
                         logger.warning(f"[fourvenues {self.slug}] tickets {code} failed: {e}")
                         return None
 
+            need = [_needs_detail(it) for it in items]
             codes = [str(it.get("code") or "") for it in items]
-            tickets_lists = await asyncio.gather(*(_tickets(c) for c in codes))
+            tickets_lists = await asyncio.gather(
+                *(_tickets(c, nd) for c, nd in zip(codes, need))
+            )
 
         out: List[ScrapedEvent] = []
         for it, tickets in zip(items, tickets_lists):
@@ -221,7 +251,13 @@ class FourVenuesApiScraper(Scraper):
 
         ticket_url = f"{SITE_BASE}/{self.slug}/events/{code}" if code else self.url
 
-        price_tiers, sale_state = self._pricing(tickets)
+        if tickets == "__skip__":
+            # Detail intentionally not fetched this run: keep whatever price/state
+            # the DB already has (pricing_known=False signals the caller to skip).
+            price_tiers, sale_state, pricing_known = [], "", False
+        else:
+            price_tiers, sale_state = self._pricing(tickets)
+            pricing_known = True
 
         return ScrapedEvent(
             external_id=f"fv:{ev_id}",
@@ -239,6 +275,7 @@ class FourVenuesApiScraper(Scraper):
             lat=lat,
             lng=lng,
             venue_image=venue_image,
+            pricing_known=pricing_known,
         )
 
     def _pricing(self, tickets: Optional[list]) -> tuple[list, str]:
