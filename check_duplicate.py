@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://app-store-ready-81.preview.emergentagent.com"
+BACKEND_URL = "https://party-optimization.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

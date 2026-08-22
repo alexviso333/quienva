@@ -1021,6 +1021,39 @@ def _event_seo_title(ev: dict, lang: str) -> str:
     return f"{head} | \u00bfQui\u00e9n va?"
 
 
+# Generic, recurring "placeholder" party names that carry no real lineup yet
+# (e.g. "Jueves Fitz", "Sábado Amok", "Noche de fiesta"). These get a real
+# artist/party name + poster later; until then their SEO page is thin.
+_GENERIC_NAME_RE = re.compile(
+    r"^(jueves|viernes|s[\u00e1a]bado|domingo|lunes|martes|mi[\u00e9e]rcoles|"
+    r"noche|noches|fiesta|fiestas|party|parties|weekend|finde|fin de semana|"
+    r"club\s?night|especial|open|apertura|clausura|closing|opening)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_thin_event(ev: dict) -> bool:
+    """A 'thin/placeholder' event has no indexable content yet: no real poster
+    AND no price/ticket, or a generic recurring name with no poster (the classic
+    "Jueves Fitz" that later becomes a top artist). We keep these OUT of the index
+    and the sitemap until they get a real poster / price / specific name, which is
+    the single biggest fix for Search Console's thousands of 'Discovered - currently
+    not indexed' URLs. It never noindexes an event that already has real content."""
+    img = str(ev.get("image_url") or "")
+    has_poster = img.startswith("http")
+    tiers = ev.get("price_tiers") or []
+    has_price = bool(tiers) or bool(ev.get("commission_url")) or bool(ev.get("has_commission"))
+    if has_poster or has_price:
+        # Has real, indexable content -> never thin.
+        # (a generic name is fine once there is a poster/price to show)
+        name = (ev.get("name") or "").strip()
+        if has_poster:
+            return False
+        # has_price but no poster: only thin if the name is also totally generic
+        return bool(_GENERIC_NAME_RE.match(name)) and len(name) < 12
+    # No poster AND no price -> nothing to index.
+    return True
+
 
 
 def _canonicalize_base(base: str) -> str:
@@ -1053,7 +1086,7 @@ async def _upcoming_for_city(city_id: str, limit: int = 60) -> list:
         {"city": city_query_value(city_id), "date": {"$gte": today}},
         {"_id": 0, "id": 1, "name": 1, "venue": 1, "date": 1, "time": 1, "city": 1,
          "genre": 1, "address": 1, "currency": 1, "last_scraped_at": 1, "created_at": 1,
-         "image_url": 1, "price_tiers": 1, "sale_state": 1},
+         "image_url": 1, "price_tiers": 1, "sale_state": 1, "commission_url": 1, "has_commission": 1},
     ).sort("date", 1).limit(limit)
     return [e async for e in cur]
 
@@ -2254,6 +2287,9 @@ async def _render_event(event_id: str, lang: str, request: Request):
     canonical = paths[lang]
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
     is_past = bool(ev.get("date", "")) and ev.get("date", "") < today
+    # Upcoming but with no real content yet (placeholder/thin) -> keep out of index
+    # until it gets a poster/price/specific name. Past events are handled separately.
+    is_thin = (not is_past) and _is_thin_event(ev)
     city = ev.get("city", "")
     when = _seo_date(ev.get("date", ""), lang, ev.get("time", ""))
     pl = _seo_price_line(ev, lang)
@@ -2284,6 +2320,8 @@ async def _render_event(event_id: str, lang: str, request: Request):
         lis = []
         for r in rel:
             if r.get("id") == event_id:
+                continue
+            if _is_thin_event(r):
                 continue
             ru = _event_paths(front, r.get("id", ""), _event_slug(r))[lang]
             lis.append(f'<li>{_seo_card(r, ru, lang, e)}</li>')
@@ -2331,7 +2369,7 @@ async def _render_event(event_id: str, lang: str, request: Request):
     # Freshness / churn handling: past parties are noindex,follow (Google drops the
     # stale page but still follows links to upcoming events), no misleading offers,
     # and the primary CTA funnels to the city's upcoming parties instead of tickets.
-    robots_meta = ('<meta name="robots" content="noindex, follow">' if is_past
+    robots_meta = ('<meta name="robots" content="noindex, follow">' if (is_past or is_thin)
                    else '<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">')
     ended_html = f'<p class="sub" style="color:#f5a524;font-weight:700">{e(T["ev_ended"])}</p>' if is_past else ''
     ui = _SEO_UI.get(lang, _SEO_UI["es"])
@@ -2415,9 +2453,9 @@ async def _render_event(event_id: str, lang: str, request: Request):
 {sticky_html}
 </body></html>"""
     _headers = {"Cache-Control": "public, max-age=1800"}
-    if is_past:
-        # Reinforce the <meta robots> so past parties are dropped even when a
-        # crawler only reads response headers (HEAD / non-HTML fetch).
+    if is_past or is_thin:
+        # Reinforce the <meta robots> so past/placeholder parties are dropped even
+        # when a crawler only reads response headers (HEAD / non-HTML fetch).
         _headers["X-Robots-Tag"] = "noindex, follow"
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
                              headers=_headers)
@@ -4193,6 +4231,10 @@ async def _sitemap_events_xml(front: str, today: str, city: str) -> str:
             eid = ev.get("id")
             if not eid:
                 continue
+            # Skip thin/placeholder parties (no poster/price/real name yet): keeping
+            # them out of the sitemap concentrates crawl budget on indexable pages.
+            if _is_thin_event(ev):
+                continue
             ep = _event_paths(front, eid, _event_slug(ev))
             lm = _ev_lastmod(ev, today)
             img = ev.get("image_url", "")
@@ -5376,6 +5418,7 @@ async def _venue_priority_maps(city):
 async def list_events(user: dict = Depends(get_optional_user),
                       date_filter: str = Query("all"),
                       genre: str = Query("all"),
+                      q: str = Query(None),
                       city: str = Query(None)):
     friend_ids = await accepted_friend_ids(user["user_id"])
     query = {"city": city_query_value(_effective_city(user, city))}
@@ -5399,12 +5442,25 @@ async def list_events(user: dict = Depends(get_optional_user),
             users_map[u["user_id"]] = u
 
     # First pass: load & filter events
+    _q_tokens = [t for t in (_norm_name(w) for w in (q or "").split()) if t]
     filtered_events = []
     async for ev in db.events.find(query, {"_id": 0}).sort("date", sort_dir):
         if not date_in_filter(ev["date"], date_filter):
             continue
         if genre != "all" and ev.get("genre") != genre:
             continue
+        # Free-text search across party name, venue/club and genre (accent- and
+        # case-insensitive via _norm_name). ALL typed terms must match. Powers the
+        # feed search bar.
+        if _q_tokens:
+            _hay = "".join([
+                _norm_name(ev.get("name", "")),
+                _norm_name(ev.get("venue", "")),
+                _norm_name(ev.get("genre", "")),
+                _norm_name(ev.get("address", "")),
+            ])
+            if not all(t in _hay for t in _q_tokens):
+                continue
         filtered_events.append(ev)
 
     # Merge cross-provider duplicates: the SAME night can arrive from two ticket

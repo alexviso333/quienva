@@ -61,6 +61,9 @@
   },
   "feed": {
     "title": "Die Pläne",
+    "search_placeholder": "Party, Club oder Genre suchen\u2026",
+    "search_empty_title": "Keine Ergebnisse f\u00fcr \u201e{{q}}\u201c",
+    "search_empty_body": "Versuch eine andere Party, einen Club oder ein Genre.",
     "locales": "Locations",
     "hidden_mode_title": "Du bist im versteckten Modus",
     "hidden_mode_body": "Niemand sieht, auf welche Partys du gehst. Du kannst es jederzeit ändern.",
@@ -590,6 +593,8 @@
     "highlight": "R\u00fcckblick"
   },
   "eventcard": {
+    "starts_in": "Beginnt in",
+    "friends_fomo": "gehen hin und du nicht. Willst du das verpassen?",
     "follow_on": "Wir sagen dir Bescheid, wenn sie verfügbar sind 🔔",
     "follow_off": "Benachrichtigungen aus",
     "toast_error": "Fehler",

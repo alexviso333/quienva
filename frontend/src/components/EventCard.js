@@ -41,6 +41,26 @@ const todayStr = () => {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 };
 
+// FOMO countdown: returns a short "starts in X" label only when the party is
+// imminent (< 12h), so the urgency is real and not spammy. Uses the event start
+// time when available, otherwise assumes a night-time (23:00) start.
+function startCountdown(dateStr, timeStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  let hh = 23, mm = 0;
+  const tm = (timeStr || "").match(/(\d{1,2}):(\d{2})/);
+  if (tm) { hh = +tm[1]; mm = +tm[2]; }
+  const start = new Date(y, m - 1, d, hh, mm);
+  const diffMs = start.getTime() - Date.now();
+  if (diffMs <= 0) return null;
+  const totalMin = Math.floor(diffMs / 60000);
+  if (totalMin > 12 * 60) return null; // only surface urgency within 12h
+  const h = Math.floor(totalMin / 60);
+  const mnt = totalMin % 60;
+  return h >= 1 ? `${h}h ${mnt}m` : `${mnt}m`;
+}
+
 const SALE_STATE_META = {
   no_a_la_venta: { cls: "bg-white/10 text-white/70", icon: Clock },
   a_la_venta:    { cls: "bg-emerald-400/20 text-emerald-300", icon: Ticket },
@@ -78,6 +98,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
   const attended = event.friends_attended || [];
+  const countdown = !isPast ? startCountdown(event.date, event.time) : null;
 
   const isVoy = event.my_status === "voy";
   const isInteresa = event.my_status === "me_interesa";
@@ -171,6 +192,14 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
               </span>
             )}
             <PriceBadge event={event} />
+            {countdown && (
+              <span
+                data-testid={`event-countdown-${event.id}`}
+                className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-qv-primary/90 text-white shadow-[0_0_14px_rgba(255,0,85,0.55)] animate-pulse"
+              >
+                <Clock className="w-3 h-3" /> {t("eventcard.starts_in", "Empieza en")} {countdown}
+              </span>
+            )}
         </div>
 
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
@@ -268,6 +297,20 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
             </p>
           )}
         </div>
+
+        {/* FOMO: friends are going and you are not (only when there's real social pressure) */}
+        {!isPast && !isVoy && going.length >= 2 && (
+          <button
+            data-testid={`event-friends-fomo-${event.id}`}
+            onClick={() => { if (!requireAuth(t("eventcard.reason_going"))) return; toggle("voy"); }}
+            className="w-full text-left rounded-xl border border-qv-primary/40 bg-gradient-to-r from-qv-primary/15 to-transparent px-3 py-2 flex items-center gap-2 active:scale-[0.99] transition-transform"
+          >
+            <Flame className="w-4 h-4 text-qv-primary shrink-0" />
+            <span className="text-xs text-white leading-tight">
+              <b>{namesList(t, going)}</b> {t("eventcard.friends_fomo", "van y t\u00fa no. \u00bfTe lo vas a perder?")}
+            </span>
+          </button>
+        )}
 
         {/* Actions */}
         {isPast ? (

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaThumb } from "@/lib/api";
@@ -15,7 +15,7 @@ import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
-import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Camera } from "lucide-react";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Camera, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -29,6 +29,7 @@ export default function Feed() {
   const [genre, setGenre] = useState("all");
   const [view, setView] = useState("dia");
   const [sale, setSale] = useState("all");
+  const [q, setQ] = useState("");
   const [highlightId, setHighlightId] = useState(null);
   const [inviteFrom, setInviteFrom] = useState(null);
   const [showPrivacyReminder, setShowPrivacyReminder] = useState(false);
@@ -100,6 +101,21 @@ export default function Feed() {
     queryFn: async () => (await api.get("/events", { params: { date_filter: "all", genre, city: cityParam } })).data,
     staleTime: 30_000,
   });
+
+  // Client-side search over the already-loaded events (party name, venue/club,
+  // genre). Filtering locally keeps it instant AND avoids extra backend requests
+  // (every network call counts toward Render's bandwidth budget).
+  const qNorm = (s) => (s || "").toString().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const isSearching = q.trim().length > 0;
+  const filteredEvents = useMemo(() => {
+    if (!events) return events;
+    const tokens = qNorm(q).split(/\s+/).filter(Boolean);
+    if (!tokens.length) return events;
+    return events.filter((ev) => {
+      const hay = qNorm(`${ev.name || ""} ${ev.venue || ""} ${ev.genre || ""} ${ev.address || ""}`);
+      return tokens.every((tk) => hay.includes(tk));
+    });
+  }, [events, q]);
 
   // Newcomers with no friends yet: gently push them to Descubrir once, and keep
   // a persistent banner so "guiris" can find people/plans without any friends.
@@ -380,6 +396,27 @@ export default function Feed() {
       {user && <RecapCard />}
 
       <div className="px-4 pb-3">
+        <div className="relative mb-3">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+          <input
+            data-testid="feed-search-input"
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("feed.search_placeholder", "Busca fiesta, discoteca o estilo\u2026")}
+            className="w-full h-11 rounded-2xl bg-white/5 border border-white/12 pl-10 pr-10 text-sm text-white placeholder-white/40 focus:outline-none focus:border-qv-primary/50 focus:bg-white/[0.07]"
+          />
+          {isSearching && (
+            <button
+              data-testid="feed-search-clear"
+              onClick={() => setQ("")}
+              aria-label={t("common.clear", "Borrar")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/70 active:scale-90"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
         <FeedPlansControls
           view={view}
           setView={setView}
@@ -439,9 +476,9 @@ export default function Feed() {
               </div>
             ))}
           </div>
-        ) : events && events.length > 0 ? (
+        ) : events && filteredEvents && filteredEvents.length > 0 ? (
           <FeedPlans
-            events={events}
+            events={filteredEvents}
             compact={compact}
             highlightId={highlightId}
             cardRefs={cardRefs}
@@ -453,6 +490,12 @@ export default function Feed() {
             view={view}
             sale={sale}
           />
+        ) : isSearching ? (
+          <div className="text-center py-16 px-6" data-testid="feed-search-empty">
+            <Search className="w-12 h-12 text-white/30 mx-auto mb-4" />
+            <p className="text-white/60">{t("feed.search_empty_title", "Sin resultados para \u201c{{q}}\u201d", { q })}</p>
+            <p className="text-white/40 text-sm mt-1">{t("feed.search_empty_body", "Prueba con otro nombre de fiesta, discoteca o estilo.")}</p>
+          </div>
         ) : (
           <div className="text-center py-20 px-6" data-testid="feed-empty">
             <PartyPopper className="w-12 h-12 text-white/30 mx-auto mb-4" />
@@ -462,12 +505,14 @@ export default function Feed() {
         )}
 
         {/* Recurring free / non-ticketed plans open tonight — separate but visible */}
+        {!isSearching && (
         <div className="-mx-4">
           <FeedVenuesTonight />
         </div>
+        )}
 
         {/* Curated carousels — below the main list so the parties come first */}
-        {isDefaultView && carousels && (
+        {isDefaultView && !isSearching && carousels && (
           <div className="-mx-4 pt-2">
             <EventCarousel
               testId="carousel-top-weekend"
