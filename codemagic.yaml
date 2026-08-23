@@ -33,7 +33,7 @@ workflows:
       - name: Compilar la web (build/)
         script: |
           cd frontend
-          yarn build
+          CI=false GENERATE_SOURCEMAP=false yarn build
       - name: Añadir y sincronizar iOS
         script: |
           cd frontend
