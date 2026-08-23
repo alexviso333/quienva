@@ -410,3 +410,9 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Created MANDATORY legal pages: `frontend/public/privacidad.html` and `soporte.html` (Apple requires working privacy + support URLs). Added clean-URL rewrites `/privacidad` and `/soporte` in `frontend/vercel.json` (before SPA catch-all). Contact email placeholder: hola@quienva.me (user to confirm inbox).
 - Filled `codemagic.yaml` APP_STORE_APPLE_ID with the app's numeric Apple ID 6804396475 (from user). Codemagic builds IPA on mac_mini + uploads to TestFlight; set submit_to_app_store:true when ready.
 - ACTION REQUIRED BY USER: click "Save to GitHub" so Vercel redeploys → then screenshot/legal URLs go live. Screenshot slot on ASC is iPhone 6.5" (1242x2688) — our files match.
+
+## Update 2026-08-23 (b) — Marketing-style App Store screenshots
+- User shared an old social-media kit (Instagram 2160x2700 / stories 2160x3840) — NOT valid for App Store (wrong aspect/size).
+- Built 5 branded App Store screenshots at EXACT 1242x2688 via HTML+Playwright render (real Unbounded/Outfit fonts, brand gradient, device frame + glow, floating pill badge). Files m1..m5.png in frontend/public/appstore/. Supersampled 2x->1x for crispness.
+- Gallery index.html now offers two sets: "Con estilo" (m1..m5, recommended) + "Sencillas" (1..5). Two ZIPs: capturas-appstore.zip (marketing) + capturas-sencillas.zip.
+- Scripts: scripts/market_shots.py (marketing), scripts/appstore_shots*.py (raw capture from live www.quienva.me).
