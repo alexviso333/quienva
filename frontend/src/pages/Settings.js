@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, LogOut, Camera, Share2, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, Copy, Eye, Users2, EyeOff, Ban, Zap, Globe2 } from "lucide-react";
+import { ArrowLeft, LogOut, Camera, Share2, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, Copy, Eye, Users2, EyeOff, Ban, Zap, Globe2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
@@ -20,6 +20,22 @@ export default function Settings() {
   const { user, setUser, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const deleteAccount = async () => {
+    if (!confirmDel) { setConfirmDel(true); return; }
+    setDeleting(true);
+    try {
+      await api.delete("/me");
+      toast.success(t("settings.account_deleted", "Tu cuenta se ha eliminado"));
+      await logout();
+      navigate("/login");
+    } catch (e) {
+      setDeleting(false);
+      toast.error(formatApiErrorDetail(e) || t("settings.delete_error", "No se pudo eliminar la cuenta"));
+    }
+  };
   const fileRef = useRef(null);
   const [name, setName] = useState(user?.name || "");
   const [username, setUsername] = useState(user?.username || "");
@@ -383,6 +399,21 @@ export default function Settings() {
         <button data-testid="logout-btn" onClick={async () => { await logout(); navigate("/login"); }} className="h-12 rounded-2xl bg-transparent border border-white/10 text-white/60 font-semibold flex items-center justify-center gap-2 active:scale-95 mt-3">
           <LogOut className="w-4 h-4" /> Cerrar sesión
         </button>
+
+        <button
+          data-testid="delete-account-btn"
+          onClick={deleteAccount}
+          disabled={deleting}
+          className={`h-12 rounded-2xl bg-transparent border font-semibold flex items-center justify-center gap-2 active:scale-95 mt-2 disabled:opacity-60 ${confirmDel ? "border-red-500 text-red-400 bg-red-500/10" : "border-white/10 text-white/40"}`}
+        >
+          {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          {confirmDel ? "Pulsa otra vez para eliminar tu cuenta" : "Eliminar cuenta"}
+        </button>
+        {confirmDel && !deleting && (
+          <p className="text-white/40 text-[11px] text-center mt-1.5">
+            Se borrarán tu perfil, tus datos y tu contenido de forma permanente. <button onClick={() => setConfirmDel(false)} className="underline">Cancelar</button>
+          </p>
+        )}
       </div>
     </AppShell>
   );

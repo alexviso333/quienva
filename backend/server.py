@@ -5266,6 +5266,44 @@ async def match_contacts(inp: MatchContactsInput, user: dict = Depends(get_curre
 
 
 
+@api_router.delete("/me")
+async def delete_my_account(user: dict = Depends(get_current_user)):
+    """Permanently delete the signed-in user's account and personal data.
+    Required by App Store Guideline 5.1.1(v): account deletion from within the app."""
+    uid = user["user_id"]
+
+    async def _wipe(coll, q):
+        try:
+            await coll.delete_many(q)
+        except Exception as e:
+            logger.warning(f"[delete-account] {coll.name}: {e}")
+
+    # The user's own records across collections (best-effort; missing ones no-op).
+    await _wipe(db.sessions, {"user_id": uid})
+    await _wipe(db.interests, {"user_id": uid})
+    await _wipe(db.push_subscriptions, {"user_id": uid})
+    await _wipe(db.notifications, {"user_id": uid})
+    await _wipe(db.moments, {"user_id": uid})
+    await _wipe(db.tickets, {"user_id": uid})
+    await _wipe(db.messages, {"sender_id": uid})
+    await _wipe(db.reports, {"reporter_id": uid})
+    await _wipe(db.friend_requests, {"$or": [{"from_user_id": uid}, {"to_user_id": uid},
+                                             {"from_user": uid}, {"to_user": uid},
+                                             {"requester_id": uid}, {"target_id": uid},
+                                             {"user_id": uid}]})
+    await _wipe(db.friendships, {"$or": [{"user_a": uid}, {"user_b": uid},
+                                         {"user_id": uid}, {"friend_id": uid}]})
+    # Remove me from anyone else's blocked / friends arrays.
+    for field in ("blocked_users", "friends"):
+        try:
+            await db.users.update_many({field: uid}, {"$pull": {field: uid}})
+        except Exception as e:
+            logger.warning(f"[delete-account] pull {field}: {e}")
+    # Finally, the account itself.
+    await _wipe(db.users, {"user_id": uid})
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # Events
 # ---------------------------------------------------------------------------
