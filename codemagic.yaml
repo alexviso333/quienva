@@ -17,6 +17,8 @@ workflows:
     integrations:
       app_store_connect: quienva_appstore   # <-- nombre de la integración que creas en el paso 2
     environment:
+      groups:
+        - signing            # <-- grupo con la variable CERTIFICATE_PRIVATE_KEY (ver pasos)
       vars:
         BUNDLE_ID: "me.quienva.app"
         XCODE_WORKSPACE: "frontend/ios/App/App.xcworkspace"
@@ -51,7 +53,7 @@ workflows:
       - name: Preparar firma (automática con tu API Key)
         script: |
           keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --certificate-key @env:CERTIFICATE_PRIVATE_KEY --create
           keychain add-certificates
           # Apuntar SOLO al proyecto de la app (evita el conflicto con Pods.xcodeproj)
           xcode-project use-profiles --project "$XCODE_PROJECT"
