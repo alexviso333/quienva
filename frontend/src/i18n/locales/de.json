@@ -931,6 +931,9 @@
     "already_here": "Schon hier ({{count}})",
     "friends": "Freunde",
     "pending": "Ausstehend",
-    "add": "Hinzufügen"
+    "add": "Hinzufügen",
+    "invite": "Einladen",
+    "invite_rest_title": "Lade die anderen ein",
+    "toast_denied": "Wir brauchen deine Erlaubnis für die Kontakte"
   }
 }

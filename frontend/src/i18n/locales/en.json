@@ -931,6 +931,9 @@
     "already_here": "Already here ({{count}})",
     "friends": "Friends",
     "pending": "Pending",
-    "add": "Add"
+    "add": "Add",
+    "invite": "Invite",
+    "invite_rest_title": "Invite the rest",
+    "toast_denied": "We need your permission to access contacts"
   }
 }

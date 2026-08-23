@@ -5239,10 +5239,12 @@ async def match_contacts(inp: MatchContactsInput, user: dict = Depends(get_curre
     """Given a list of raw phone numbers from the device, return the users who
     are already on ¿Quién va?. We hash numbers and never store the raw list."""
     hashes = set()
+    phone_by_hash = {}
     for raw in inp.phones[:2000]:
         h = phone_hash(raw)
         if h:
             hashes.add(h)
+            phone_by_hash.setdefault(h, raw)  # remember which raw phone gave this hash
     if not hashes:
         return []
     fmap = await friendship_status_map(user["user_id"])
@@ -5258,6 +5260,9 @@ async def match_contacts(inp: MatchContactsInput, user: dict = Depends(get_curre
         pu = public_other_user(u)
         pu["relationship"] = rel or {"status": "none"}
         pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
+        # Echo back the caller's own contact phone that matched, so the app can
+        # exclude it from the "invite the rest" list. It's the user's own contact.
+        pu["matched_phone"] = phone_by_hash.get(u.get("phone_hash"))
         out.append(pu)
     return out
 

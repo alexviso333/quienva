@@ -50,11 +50,14 @@ workflows:
               --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C' || true; \
           fi
           npx cap sync ios
-      - name: Declarar sin encriptación (evita la pregunta de exportación)
+      - name: Ajustes Info.plist (encriptación + permiso de contactos)
         script: |
           PLIST="frontend/ios/App/App/Info.plist"
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool NO" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption NO" "$PLIST"
+          CONTACTS_MSG="Usamos tus contactos solo para ayudarte a encontrar amigos que ya usan ¿Quién va? e invitar a los que no. Nunca guardamos tu agenda."
+          /usr/libexec/PlistBuddy -c "Add :NSContactsUsageDescription string $CONTACTS_MSG" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSContactsUsageDescription $CONTACTS_MSG" "$PLIST"
       - name: Preparar firma (automática con tu API Key)
         script: |
           keychain initialize

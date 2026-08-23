@@ -416,3 +416,11 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - Built 5 branded App Store screenshots at EXACT 1242x2688 via HTML+Playwright render (real Unbounded/Outfit fonts, brand gradient, device frame + glow, floating pill badge). Files m1..m5.png in frontend/public/appstore/. Supersampled 2x->1x for crispness.
 - Gallery index.html now offers two sets: "Con estilo" (m1..m5, recommended) + "Sencillas" (1..5). Two ZIPs: capturas-appstore.zip (marketing) + capturas-sencillas.zip.
 - Scripts: scripts/market_shots.py (marketing), scripts/appstore_shots*.py (raw capture from live www.quienva.me).
+
+## Update 2026-08-23 (c) — Contactos nativos (iOS) + invitar
+- Añadido plugin @capacitor-community/contacts@7.2.0 (Capacitor 7). lib/contacts.js: getContacts() usa el plugin NATIVO en la app (isNativePlatform) y el Contact Picker en web; nuevo inviteSms(number,code) abre Mensajes prerellenado. FindFriends.js: lee agenda nativa, muestra "ya están aquí" (add) + "invita a los que faltan" (SMS por contacto).
+- Backend /me/match-contacts ahora devuelve matched_phone (eco del teléfono propio que coincidió) para calcular los no-registrados. Verificado local: match OK, matched_phone OK, no-registrados excluidos.
+- codemagic.yaml: paso Info.plist ahora añade NSContactsUsageDescription (permiso de contactos) además de ITSAppUsesNonExemptEncryption=NO.
+- i18n es/en/de: findfriends.invite, invite_rest_title, toast_denied.
+- REQUIERE nuevo build (build 3) para entrar en la app. La agenda nativa SOLO se puede probar en el dispositivo/TestFlight (no en web ni con agente).
+- App Privacy: ahora marcar SÍ "Contactos" en el cuestionario.

@@ -1,20 +1,22 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { contactsSupported, pickContactPhones, inviteWhatsApp, shareInvite } from "@/lib/contacts";
-import { Contact, Share2, UserPlus, Check, Loader2, Sparkles } from "lucide-react";
+import { getContacts, contactsSupported, inviteWhatsApp, shareInvite, inviteSms } from "@/lib/contacts";
+import { Contact, Share2, UserPlus, Check, Loader2, Sparkles, Send } from "lucide-react";
 import { toast } from "sonner";
 
 /**
- * Cold-start friend finder: connect phone contacts (where supported) to find
- * people already on ¿Quién va?, plus invite links via WhatsApp / share sheet.
+ * Cold-start friend finder: connect phone contacts (NATIVE on iPhone/Android,
+ * Contact Picker on supported browsers) to find people already on ¿Quién va?,
+ * invite the ones who aren't yet, plus WhatsApp / share links.
  */
 export default function FindFriends() {
   const qc = useQueryClient();
   const { t } = useTranslation();
   const [matches, setMatches] = useState(null); // null = not run yet
+  const [deviceContacts, setDeviceContacts] = useState([]); // [{name, phones[]}]
   const [scanning, setScanning] = useState(false);
 
   const { data: referral } = useQuery({
@@ -43,12 +45,15 @@ export default function FindFriends() {
   const connectContacts = async () => {
     setScanning(true);
     try {
-      const phones = await pickContactPhones();
+      const { phones, contacts } = await getContacts();
       if (!phones.length) { toast(t("findfriends.toast_no_contact_selected")); return; }
+      setDeviceContacts(contacts);
       matchMut.mutate(phones);
     } catch (err) {
       if (err.code === "unsupported") {
         toast(t("findfriends.toast_unsupported"), { icon: "📵" });
+      } else if (err.code === "denied") {
+        toast(t("findfriends.toast_denied"), { icon: "🔒" });
       } else {
         toast(t("findfriends.toast_contacts_error"));
       }
@@ -61,6 +66,22 @@ export default function FindFriends() {
     const res = await shareInvite(code);
     if (res === "copied") toast.success(t("findfriends.toast_link_copied"));
   };
+
+  // Contacts NOT yet on ¿Quién va? → offer to invite them one by one.
+  const toInvite = useMemo(() => {
+    if (matches === null || !deviceContacts.length) return [];
+    const matchedPhones = new Set((matches || []).map((u) => u.matched_phone).filter(Boolean));
+    const seen = new Set();
+    return deviceContacts
+      .filter((c) => !c.phones.some((p) => matchedPhones.has(p)))
+      .filter((c) => {
+        const key = (c.phones[0] || c.name || "").trim();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 50);
+  }, [matches, deviceContacts]);
 
   return (
     <section className="px-5 mt-4" data-testid="find-friends">
@@ -144,6 +165,31 @@ export default function FindFriends() {
                 })}
               </div>
             </>
+          )}
+
+          {toInvite.length > 0 && (
+            <div className="mt-4" data-testid="contacts-to-invite">
+              <p className="text-xs uppercase tracking-widest text-white/50 font-bold mb-2">
+                {t("findfriends.invite_rest_title")}
+              </p>
+              <div className="flex flex-col gap-2">
+                {toInvite.map((c, i) => (
+                  <div key={(c.phones[0] || c.name) + i} className="flex items-center gap-3 bg-white/[0.03] border border-white/10 rounded-2xl p-3" data-testid="invite-contact-row">
+                    <AvatarCircle name={c.name} picture="" size={40} ring={false} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">{c.name}</p>
+                      <p className="text-white/35 text-xs truncate">{c.phones[0]}</p>
+                    </div>
+                    <button
+                      onClick={() => inviteSms(c.phones[0], code)}
+                      className="h-9 px-4 rounded-full bg-qv-secondary/20 border border-qv-secondary/40 text-qv-secondary text-sm font-semibold flex items-center gap-1.5 active:scale-95"
+                    >
+                      <Send className="w-4 h-4" /> {t("findfriends.invite")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}

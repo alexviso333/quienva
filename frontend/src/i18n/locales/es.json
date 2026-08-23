@@ -931,6 +931,9 @@
     "already_here": "Ya están aquí ({{count}})",
     "friends": "Amigos",
     "pending": "Pendiente",
-    "add": "Añadir"
+    "add": "Añadir",
+    "invite": "Invitar",
+    "invite_rest_title": "Invita a los que faltan",
+    "toast_denied": "Necesitamos tu permiso para acceder a los contactos"
   }
 }

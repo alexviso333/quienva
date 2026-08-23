@@ -1,8 +1,23 @@
-// Cold-start helpers: read device contacts (where the browser allows it) and
-// share invites. The Contact Picker API only exists on Chromium/Android over
-// HTTPS; iOS Safari does NOT support it, so callers must handle the fallback.
+// Cold-start helpers: read device contacts and share invites.
+// - On the NATIVE app (Capacitor iOS/Android) we use the native Contacts plugin
+//   so iPhone users CAN read their address book (the web Contact Picker API does
+//   NOT exist in iOS WebView/Safari).
+// - On the web we fall back to the Contact Picker API (Chromium/Android only);
+//   elsewhere callers handle the "unsupported" case (invite via WhatsApp/share).
 
-export function contactsSupported() {
+import { Capacitor } from "@capacitor/core";
+
+// True when running inside the native app AND the Contacts plugin is available.
+export function isNativeContacts() {
+  try {
+    return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("Contacts");
+  } catch {
+    return false;
+  }
+}
+
+// True when the browser exposes the Contact Picker API (Chromium/Android, HTTPS).
+function webPickerSupported() {
   return (
     typeof navigator !== "undefined" &&
     "contacts" in navigator &&
@@ -12,35 +27,71 @@ export function contactsSupported() {
   );
 }
 
-export async function pickContactPhones() {
-  if (!contactsSupported()) {
+// Can this device import contacts at all (native OR web picker)?
+export function contactsSupported() {
+  return isNativeContacts() || webPickerSupported();
+}
+
+// Read contacts and return { phones: [raw...], contacts: [{ name, phones:[raw...] }] }.
+// Throws Error with .code = "unsupported" | "denied" when it can't proceed.
+export async function getContacts() {
+  // ---- Native (iOS / Android via Capacitor) ----
+  if (isNativeContacts()) {
+    const { Contacts } = await import("@capacitor-community/contacts");
+    const perm = await Contacts.requestPermissions();
+    if (perm?.contacts !== "granted") {
+      const err = new Error("denied");
+      err.code = "denied";
+      throw err;
+    }
+    const res = await Contacts.getContacts({ projection: { name: true, phones: true } });
+    const contacts = [];
+    const phones = [];
+    (res?.contacts || []).forEach((c) => {
+      const nums = (c.phones || []).map((p) => p.number).filter(Boolean);
+      if (!nums.length) return;
+      const name = c.name?.display || [c.name?.given, c.name?.family].filter(Boolean).join(" ") || nums[0];
+      contacts.push({ name, phones: nums });
+      nums.forEach((n) => phones.push(n));
+    });
+    return { phones, contacts };
+  }
+
+  // ---- Web Contact Picker (Chromium / Android) ----
+  if (!webPickerSupported()) {
     const err = new Error("unsupported");
     err.code = "unsupported";
     throw err;
   }
-  const contacts = await navigator.contacts.select(["tel"], { multiple: true });
+  const picked = await navigator.contacts.select(["name", "tel"], { multiple: true });
+  const contacts = [];
   const phones = [];
-  (contacts || []).forEach((c) => (c.tel || []).forEach((t) => t && phones.push(t)));
+  (picked || []).forEach((c) => {
+    const nums = (c.tel || []).filter(Boolean);
+    if (!nums.length) return;
+    const name = (c.name && c.name[0]) || nums[0];
+    contacts.push({ name, phones: nums });
+    nums.forEach((n) => phones.push(n));
+  });
+  return { phones, contacts };
+}
+
+// Backward-compatible: just the phone numbers.
+export async function pickContactPhones() {
+  const { phones } = await getContacts();
   return phones;
 }
 
 // Public canonical domain used for shareable / invite links so the URL is
-// always the short, on-brand one (quienva.me) instead of the underlying
-// Vercel preview host the sender happens to be on.
+// always the short, on-brand one (quienva.me).
 const PUBLIC_BASE = "https://quienva.me";
 
 export function inviteUrl(code) {
-  // NOTE: We link to the app ROOT (preview, guest-read-only feed) instead of
-  // /login so that people opening a shared / referral link first EXPERIENCE
-  // the app before hitting the registration wall. The ?ref= code is captured
-  // globally and applied on eventual sign-up.
   return code ? `${PUBLIC_BASE}/?ref=${code}` : `${PUBLIC_BASE}/`;
 }
 
 export function inviteText(code) {
   const url = inviteUrl(code);
-  // Warm, personal, benefit-led invite — reads like a friend recommending an
-  // app, not like spam. No city name (the app is multi-city).
   const lines = [
     "¡Hola! 👋 Estoy usando *¿Quién va?* para descubrir las mejores fiestas y ver a qué van mis amigos.",
     "",
@@ -55,6 +106,21 @@ export function inviteText(code) {
 
 export function inviteWhatsApp(code) {
   window.open(`https://wa.me/?text=${encodeURIComponent(inviteText(code))}`, "_blank", "noopener,noreferrer");
+}
+
+// Invite ONE contact by opening the SMS composer pre-filled with the invite.
+// iOS uses `sms:<number>&body=`, Android uses `sms:<number>?body=`.
+export function inviteSms(number, code) {
+  const text = inviteText(code);
+  const num = (number || "").replace(/\s+/g, "");
+  const isApple = typeof navigator !== "undefined" && /iphone|ipad|ipod|mac os/i.test(navigator.userAgent || "");
+  const sep = isApple ? "&" : "?";
+  const href = `sms:${num}${num ? sep : ""}body=${encodeURIComponent(text)}`;
+  try {
+    window.location.href = href;
+  } catch {
+    inviteWhatsApp(code);
+  }
 }
 
 export async function shareInvite(code) {
