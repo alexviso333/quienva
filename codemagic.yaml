@@ -50,6 +50,11 @@ workflows:
               --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C' || true; \
           fi
           npx cap sync ios
+      - name: Declarar sin encriptación (evita la pregunta de exportación)
+        script: |
+          PLIST="frontend/ios/App/App/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool NO" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption NO" "$PLIST"
       - name: Preparar firma (automática con tu API Key)
         script: |
           keychain initialize
