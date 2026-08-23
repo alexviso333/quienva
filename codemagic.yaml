@@ -50,7 +50,7 @@ workflows:
               --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C' || true; \
           fi
           npx cap sync ios
-      - name: Ajustes Info.plist (encriptación + permiso de contactos)
+      - name: Ajustes Info.plist (encriptación + permiso de contactos) y solo-iPhone
         script: |
           PLIST="frontend/ios/App/App/Info.plist"
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool NO" "$PLIST" \
@@ -58,6 +58,8 @@ workflows:
           CONTACTS_MSG="Usamos tus contactos solo para ayudarte a encontrar amigos que ya usan ¿Quién va? e invitar a los que no. Nunca guardamos tu agenda."
           /usr/libexec/PlistBuddy -c "Add :NSContactsUsageDescription string $CONTACTS_MSG" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Set :NSContactsUsageDescription $CONTACTS_MSG" "$PLIST"
+          # App SOLO para iPhone (evita tener que subir capturas de iPad)
+          sed -i '' -E 's/TARGETED_DEVICE_FAMILY = "?1,2"?/TARGETED_DEVICE_FAMILY = "1"/g' frontend/ios/App/App.xcodeproj/project.pbxproj
       - name: Preparar firma (automática con tu API Key)
         script: |
           keychain initialize
