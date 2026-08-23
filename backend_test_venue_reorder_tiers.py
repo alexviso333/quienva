@@ -14,7 +14,7 @@ from datetime import datetime
 from collections import defaultdict
 
 # Configuration
-BASE_URL = "https://party-optimization.preview.emergentagent.com/api"
+BASE_URL = "https://fullstack-chat-app-1.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

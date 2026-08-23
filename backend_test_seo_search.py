@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timedelta
 
 # Backend URL from frontend/.env
-BASE_URL = "https://587a7653-21de-4944-abbe-046a0ce18fee.preview.emergentagent.com/api"
+BASE_URL = "https://fullstack-chat-app-1.preview.emergentagent.com/api"
 
 # Admin credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

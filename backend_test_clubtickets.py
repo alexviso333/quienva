@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, List
 
 # Configuration
-BACKEND_URL = "https://party-optimization.preview.emergentagent.com"
+BACKEND_URL = "https://fullstack-chat-app-1.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Admin credentials from /app/memory/test_credentials.md

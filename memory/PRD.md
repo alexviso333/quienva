@@ -404,3 +404,9 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Impacto estimado**: de ~7GB a ~2GB/mes (reducción ~4-6×). Fiestas nuevas y cambios de cartel siguen rápidos (LISTA cada 45min); solo el refresco de precio/estado de eventos >16 días se difiere al barrido completo (3×/día), exactamente lo pedido por el usuario.
 - **PENDIENTE deploy**: requiere "Save to GitHub" → Render. Env opcionales en Render para afinar: `SCRAPER_LIGHT_INTERVAL_MIN`, `SCRAPER_LIGHT_WINDOW_DAYS`, `SCRAPER_FULL_HOURS`.
 - Nota entorno: `backend/.env` local faltaba; recreado (MONGO_URL local + DB_NAME=quienva_db). Producción usa su config en Render.
+
+## Update 2026-08-23 — App Store submission assets prepared (continuation)
+- Generated 5 App Store screenshots (mobile, ES, exactly 1242x2688) captured from live www.quienva.me public pages via Playwright: feed, event(entradas), event(quién va + mapa), locales, mapa. Saved to `frontend/public/appstore/` (1-feed..5-mapa.png) + `capturas-appstore.zip` + gallery `index.html`. Download after deploy at https://www.quienva.me/appstore/.
+- Created MANDATORY legal pages: `frontend/public/privacidad.html` and `soporte.html` (Apple requires working privacy + support URLs). Added clean-URL rewrites `/privacidad` and `/soporte` in `frontend/vercel.json` (before SPA catch-all). Contact email placeholder: hola@quienva.me (user to confirm inbox).
+- Filled `codemagic.yaml` APP_STORE_APPLE_ID with the app's numeric Apple ID 6804396475 (from user). Codemagic builds IPA on mac_mini + uploads to TestFlight; set submit_to_app_store:true when ready.
+- ACTION REQUIRED BY USER: click "Save to GitHub" so Vercel redeploys → then screenshot/legal URLs go live. Screenshot slot on ASC is iPhone 6.5" (1242x2688) — our files match.
