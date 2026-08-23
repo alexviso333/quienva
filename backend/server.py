@@ -5251,17 +5251,15 @@ async def match_contacts(inp: MatchContactsInput, user: dict = Depends(get_curre
     my_friends = await accepted_friend_ids(user["user_id"])
     blocked = await blocked_relation_ids(user["user_id"])
     out = []
-    async for u in db.users.find({"phone_hash": {"$in": list(hashes)}}, {"_id": 0}).limit(100):
+    async for u in db.users.find({"phone_hash": {"$in": list(hashes)}}, {"_id": 0}).limit(200):
         if u["user_id"] == user["user_id"] or u["user_id"] in blocked:
             continue
         rel = fmap.get(u["user_id"])
-        if rel and rel.get("status") == "accepted":
-            continue  # already friends
         pu = public_other_user(u)
         pu["relationship"] = rel or {"status": "none"}
         pu["mutual_count"] = await mutual_friends_count(my_friends, u["user_id"])
         # Echo back the caller's own contact phone that matched, so the app can
-        # exclude it from the "invite the rest" list. It's the user's own contact.
+        # line each contact up with its status. It's the user's own contact.
         pu["matched_phone"] = phone_by_hash.get(u.get("phone_hash"))
         out.append(pu)
     return out
