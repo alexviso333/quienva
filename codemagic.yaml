@@ -70,8 +70,13 @@ workflows:
       - name: Número de build automático
         script: |
           cd frontend/ios/App
-          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
-          agvtool new-version -all $(($LATEST + 1))
+          # Número de build = hora Unix (segundos). Siempre creciente y único,
+          # así nunca colisiona con un build ya subido (evita el error 409
+          # "bundle version must be higher"). Cabe de sobra bajo el límite de
+          # Apple (< 4.294.967.295) hasta el año 2106.
+          BUILD_NO=$(date +%s)
+          echo "Usando número de build: $BUILD_NO"
+          agvtool new-version -all "$BUILD_NO"
       - name: Compilar IPA
         script: |
           xcode-project build-ipa \
