@@ -7,7 +7,7 @@
   "ios": {
     "contentInset": "always",
     "backgroundColor": "#0A0A0C",
-    "limitsNavigationsToAppBoundDomains": true
+    "limitsNavigationsToAppBoundDomains": false
   },
   "android": {
     "backgroundColor": "#0A0A0C"

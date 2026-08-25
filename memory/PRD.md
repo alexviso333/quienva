@@ -424,3 +424,14 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - i18n es/en/de: findfriends.invite, invite_rest_title, toast_denied.
 - REQUIERE nuevo build (build 3) para entrar en la app. La agenda nativa SOLO se puede probar en el dispositivo/TestFlight (no en web ni con agente).
 - App Privacy: ahora marcar SÍ "Contactos" en el cuestionario.
+
+---
+## 2026-08-25 — Fix rechazo Apple Guideline 2.1(a) (app se congela al arrancar en iPad)
+- **Causa raíz:** (1) `capacitor.config.json` tenía `limitsNavigationsToAppBoundDomains: true` → el WKWebView bloqueaba TODAS las llamadas al backend (dominio externo) al no existir `WKAppBoundDomains` en Info.plist. (2) `AuthContext.checkAuth` esperaba `/auth/me` sin timeout → `loading` se quedaba en `true` para siempre = spinner infinito a pantalla completa = "freeze".
+- **Fix aplicado:**
+  - `frontend/capacitor.config.json`: `limitsNavigationsToAppBoundDomains` → `false`.
+  - `frontend/src/context/AuthContext.js`: `api.get('/auth/me', { timeout: 15000 })` (timeout SOLO en la comprobación de auth; NO global, para no romper subidas de media).
+- **Verificación:** testing_agent iteration_9.json — 100% frontend, 4/4 flujos OK, sin regresiones (arranque sin spinner infinito, navegado invitado, login, navegación entre secciones). El cambio nativo de Capacitor no es testeable en navegador; requiere rebuild en Codemagic + prueba en dispositivo/iPad.
+- **Pendiente de usuario:** Save to GitHub → lanzar nuevo build en Codemagic → subir a App Store Connect → reenviar a revisión con nota al revisor.
+- **Nota:** creada cuenta de test LOCAL qa.local@quienva.me para el preview (ver test_credentials.md). NO afecta a producción.
+- **Backlog:** placeholder para pósters de eventos scrapeados (Guideline 5.2) — pospuesto por decisión del usuario. SEO: esperar fluctuación de algoritmo antes de tocar indexación.

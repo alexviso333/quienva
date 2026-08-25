@@ -21,7 +21,10 @@ export function AuthProvider({ children }) {
       }
     } catch (e) { /* ignore */ }
     try {
-      const { data } = await api.get("/auth/me");
+      // Per-request timeout so a hung /auth/me (cold backend or a WebView that
+      // silently drops the request) can never freeze the app on launch — the
+      // check resolves and the UI proceeds instead of an infinite spinner.
+      const { data } = await api.get("/auth/me", { timeout: 15000 });
       setUser(data);
       try { localStorage.setItem("qv_user", JSON.stringify(data)); } catch (e) { /* ignore */ }
     } catch (e) {

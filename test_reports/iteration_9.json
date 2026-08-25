@@ -1,0 +1,26 @@
+{
+  "summary": "Regression test after the two fixes for Apple Guideline 2.1(a) freeze (capacitor limitsNavigationsToAppBoundDomains -> false + 15s timeout on /auth/me). Focus was WEB-only (native Capacitor config change not testable in browser). All four requested flows PASS: (1) On '/' the app loads, the data-testid='loading-screen' spinner appears briefly and then disappears — no infinite spinner — resolving into '/feed' showing the 'The plans.' brand, city selector (Palma/Ibiza/Madrid/Barcelona/Marbella), language switcher (ES/EN/DE) and the 'You're browsing without an account' guest banner. (2) Guest navigation works: city buttons for Palma, Ibiza, Madrid, Barcelona all visible and clicking Ibiza switches the feed with no error. (3) Login at /login with qa.local@quienva.me / QaLocal2026! succeeds — JWT stored in localStorage (qv_token) and app redirects to /onboarding without any infinite spinner. (4) Post-login navigation to /feed (redirects to /descubrir), /friends, /chats, /notifications, /profile all render (loading-screen not visible on any of them). Console shows only expected 401s from /auth/me while guest and one preload warning for /icons/icon-512.png (non-blocking).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "index.html preload", "issues": ["/icons/icon-512.png is <link rel=preload> but not used within a few seconds of load — browser warning. Either drop the preload or add correct 'as' value / usage."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AuthContext.checkAuth timeout is only on /auth/me. The base axios instance in /app/frontend/src/lib/api.js has NO default timeout — any other endpoint that hangs on cold start (feed, ciudades, moments) could still freeze a screen indefinitely. Consider setting a sane default (e.g. 20000ms) on the axios.create() and overriding per-request where longer is needed.",
+    "In AuthContext.checkAuth, on non-401/403 errors WITHOUT cached session the code sets user=null, but on non-401/403 errors WITH cached session it silently keeps the stale cached user. That is fine offline, but it means an expired token that returns a 500/network error keeps the user 'logged in' visually until the next API call fails. Consider a short retry or explicit check.",
+    "Root '/' route is Navigate to '/feed'. LoadingScreen renders both inside PublicRoute *and* as Suspense fallback — during first paint both can stack. Not visible in this run but worth simplifying."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only per request)", "frontend": "100% (4/4 requested flows pass)"},
+  "test_credentials": "qa.local@quienva.me / QaLocal2026! (from /app/memory/test_credentials.md) — login OK, token issued.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The two Apple 2.1(a) freeze fixes hold up in the browser: no infinite loading-screen. /login redirects freshly-logged-in users to /onboarding (not /feed) — this is existing behavior, not a regression. When testing /feed while logged in as qa.local, the app redirects to /descubrir because that account is configured for the 'Descubrir' variant. Guest state produces expected 401s on /auth/me — ignore. capacitor.config.json change is native-only and cannot be validated in browser.",
+  "rca of the issue": "N/A — verifying prior fix, no bug found."
+}
