@@ -13371,6 +13371,10 @@ async def security_middleware(request: Request, call_next):
 
 
 _cors_env = os.environ.get('CORS_ORIGINS', '*').strip()
+# Native app shells (Capacitor iOS/Android WebView) load from these origins and
+# must ALWAYS be allowed, regardless of the CORS_ORIGINS allowlist — otherwise
+# the mobile app's API calls are blocked by CORS. (iosScheme "https" → https://localhost)
+_NATIVE_APP_ORIGINS = ["https://localhost", "capacitor://localhost", "ionic://localhost"]
 if _cors_env == '*':
     # Wildcard + credentials is invalid per spec — use regex to echo the origin back.
     app.add_middleware(
@@ -13381,10 +13385,11 @@ if _cors_env == '*':
         allow_headers=["*"],
     )
 else:
+    _origins = [o.strip() for o in _cors_env.split(',') if o.strip()] + _NATIVE_APP_ORIGINS
     app.add_middleware(
         CORSMiddleware,
         allow_credentials=True,
-        allow_origins=[o.strip() for o in _cors_env.split(',') if o.strip()],
+        allow_origins=_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )

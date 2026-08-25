@@ -25,6 +25,9 @@ workflows:
         XCODE_PROJECT: "frontend/ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APP_STORE_APPLE_ID: 6804396475        # Apple ID numérico de la app (App Store Connect → Información de la app)
+        # URL del backend de producción. SIN esto la app iOS se compila sin saber
+        # dónde está el servidor (en Vercel la inyecta Vercel; aquí hay que darla).
+        REACT_APP_BACKEND_URL: "https://quienva.onrender.com"
       node: 20
       xcode: latest
       cocoapods: default
@@ -36,7 +39,9 @@ workflows:
       - name: Compilar la web (build/)
         script: |
           cd frontend
-          CI=false GENERATE_SOURCEMAP=false yarn build
+          echo "Compilando con REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL"
+          if [ -z "$REACT_APP_BACKEND_URL" ]; then echo "ERROR: falta REACT_APP_BACKEND_URL"; exit 1; fi
+          REACT_APP_BACKEND_URL="$REACT_APP_BACKEND_URL" CI=false GENERATE_SOURCEMAP=false yarn build
       - name: Añadir y sincronizar iOS
         script: |
           cd frontend
@@ -48,6 +53,15 @@ workflows:
           if [ -f assets/icon.png ]; then \
             npx capacitor-assets generate --ios \
               --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C' || true; \
+          fi
+          # El splash 2732x2732 decodificado pesa ~29.9MB y supera el límite de
+          # iOS para launch images (25MB) → iOS lo rechaza y la pantalla de
+          # arranque falla. Lo reducimos a máx 2000px (≈16MB decodificado).
+          SPLASH_DIR="ios/App/App/Assets.xcassets/Splash.imageset"
+          if [ -d "$SPLASH_DIR" ]; then \
+            for f in "$SPLASH_DIR"/*.png; do \
+              [ -f "$f" ] && sips -Z 2000 "$f" || true; \
+            done; \
           fi
           npx cap sync ios
       - name: Ajustes Info.plist (encriptación + permiso de contactos) y solo-iPhone

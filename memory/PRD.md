@@ -435,3 +435,12 @@ App is env-driven and portable. To host fully independent of Emergent later, rep
 - **Pendiente de usuario:** Save to GitHub → lanzar nuevo build en Codemagic → subir a App Store Connect → reenviar a revisión con nota al revisor.
 - **Nota:** creada cuenta de test LOCAL qa.local@quienva.me para el preview (ver test_credentials.md). NO afecta a producción.
 - **Backlog:** placeholder para pósters de eventos scrapeados (Guideline 5.2) — pospuesto por decisión del usuario. SEO: esperar fluctuación de algoritmo antes de tocar indexación.
+
+## 2026-08-25 (tarde) — RCA del "app no carga / pantalla negra" en el .ipa nativo (BrowserStack)
+Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserStack (pantalla negra + errores TLS -1202). RCA encontró TRES problemas reales que hacían la app nativa no funcional:
+1. **REACT_APP_BACKEND_URL ausente en el build de Codemagic.** No hay .env versionado y codemagic.yaml no la definía → `yarn build` compilaba la app iOS SIN URL de backend (API="undefined/api"). En Vercel funciona porque Vercel la inyecta. FIX: añadida `REACT_APP_BACKEND_URL: "https://quienva.onrender.com"` a codemagic.yaml vars + validación en el paso de build.
+2. **CORS del backend bloquea el origen del WebView.** El backend de producción (Render) tiene CORS_ORIGINS con allowlist específica; devuelve ACAO para https://www.quienva.me pero NO para https://localhost (origen del WebView Capacitor con iosScheme https). FIX: backend/server.py ahora SIEMPRE permite orígenes nativos (_NATIVE_APP_ORIGINS = https://localhost, capacitor://localhost, ionic://localhost) además de CORS_ORIGINS. ⚠️ Requiere REDESPLEGAR el backend en Render.
+3. **Launch image demasiado grande.** El splash 2732x2732 decodificado = 29.9MB > límite iOS de 25MB (XBLaunchImageError code 6). FIX: codemagic.yaml reduce el splash a máx 2000px con `sips -Z 2000` tras generar los assets.
+- Bonus fix ya hecho antes: número de build automático con `date +%s` para evitar el 409 "bundle version must be higher".
+- **Nota TLS -1202 en BrowserStack:** probablemente artefacto de la red de BrowserStack; quienva.onrender.com tiene cert válido → en dispositivo real no debería ocurrir.
+- **Pasos usuario:** Save to GitHub → REDESPLEGAR backend en Render (para el CORS) → nuevo build en Codemagic → probar .ipa. 
