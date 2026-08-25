@@ -468,3 +468,13 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
 - FIX: storyboard propio frontend/native/LaunchScreen.storyboard (fondo #0A0A0C + imagen Splash a 4 bordes)
   copiado en codemagic.yaml sobre el generado (fallback sed). + index.html <style> inline fondo #0a0a0c.
 - Verificado web por testing agent (5/5). Nativo pendiente de validar en dispositivo tras build Codemagic.
+
+## 2026-08-25 (cont. 4) — Icono con bordes/esquinas blancas
+- CAUSA: assets/icon.png estaba diseñado como rect. redondeado con las esquinas del cuadrado en
+  blanco + fino marco claro en el borde exterior (~10px). En la home iOS lo enmascara y no se ve,
+  pero en cuadrado completo (al abrir la app) se ven los triángulos blancos.
+- FIX: aplanado a RGB (sin canal alfa, requisito de Apple) + repintado del borde exterior 50px en
+  negro. Logo intacto (a >=80px del borde). Aplicado a assets/icon.png y mobile/assets/icon.png.
+- Verificado por testing agent (canvas pixel-check): 4 esquinas negras, 0 px claros en anillo 40px,
+  logo blanco+rosa presente. Nativo: capacitor-assets generará el AppIcon desde este icono limpio.
+- PENDIENTE (usuario): Save to GitHub -> rebuild Codemagic.
