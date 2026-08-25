@@ -100,6 +100,15 @@ workflows:
             || /usr/libexec/PlistBuddy -c "Set :NSContactsUsageDescription $CONTACTS_MSG" "$PLIST"
           # App SOLO para iPhone (evita tener que subir capturas de iPad)
           sed -i '' -E 's/TARGETED_DEVICE_FAMILY = "?1,2"?/TARGETED_DEVICE_FAMILY = "1"/g' frontend/ios/App/App.xcodeproj/project.pbxproj
+          # Subir el iOS minimo a 15.0 (Apple exige >=15.0 a partir de 2027; aviso ITMS-90068).
+          # Reemplaza CUALQUIER valor actual (p.ej. 14.0) por 15.0 en el proyecto...
+          sed -i '' -E 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' frontend/ios/App/App.xcodeproj/project.pbxproj
+          # ...y en el Podfile (para que los Pods se compilen tambien contra iOS 15).
+          if [ -f frontend/ios/App/Podfile ]; then
+            sed -i '' -E "s/platform :ios, *'[0-9.]+'/platform :ios, '15.0'/g" frontend/ios/App/Podfile
+          fi
+          echo "== Deployment target tras el parche ==" 
+          grep -n "IPHONEOS_DEPLOYMENT_TARGET" frontend/ios/App/App.xcodeproj/project.pbxproj | head -5 || true
       - name: Preparar firma (automática con tu API Key)
         script: |
           keychain initialize

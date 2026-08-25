@@ -478,3 +478,10 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
 - Verificado por testing agent (canvas pixel-check): 4 esquinas negras, 0 px claros en anillo 40px,
   logo blanco+rosa presente. Nativo: capacitor-assets generará el AppIcon desde este icono limpio.
 - PENDIENTE (usuario): Save to GitHub -> rebuild Codemagic.
+
+## 2026-08-25 (cont. 5) — ITMS-90068 MinimumOSVersion demasiado bajo (14.0)
+- Apple avisa: a partir de 2027 el iOS minimo debe ser >=15.0. El build tenia 14.0 (default Capacitor).
+- FIX (codemagic.yaml, paso Info.plist, antes de compilar): sed que pone
+  IPHONEOS_DEPLOYMENT_TARGET = 15.0 en project.pbxproj (Debug+Release) y platform :ios, '15.0' en Podfile.
+- Verificado por testing agent sobre fixture Capacitor 7: 15.0 en ambos configs y Podfile, sin 14.0, YAML valido.
+- PENDIENTE (usuario): Save to GitHub -> rebuild Codemagic (el nuevo build tendra MinimumOSVersion 15.0).
