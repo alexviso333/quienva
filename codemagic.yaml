@@ -76,6 +76,20 @@ workflows:
             done
           fi
           npx cap sync ios
+          # 3) FONDO DEL SPLASH SIN BORDES BLANCOS:
+          #    La plantilla por defecto de Capacitor pone el fondo del
+          #    LaunchScreen.storyboard como "systemBackgroundColor" (BLANCO en modo
+          #    claro) -> se ven esquinas/bordes blancos durante el arranque.
+          #    Sobrescribimos el storyboard con uno de fondo #0A0A0C explicito y la
+          #    imagen Splash anclada a los 4 bordes (scaleAspectFill).
+          SB="ios/App/App/Base.lproj/LaunchScreen.storyboard"
+          if [ -f "native/LaunchScreen.storyboard" ] && [ -d "ios/App/App/Base.lproj" ]; then
+            cp native/LaunchScreen.storyboard "$SB"
+            echo "LaunchScreen.storyboard reemplazado por el de fondo oscuro."
+          elif [ -f "$SB" ]; then
+            # Fallback: forzar el color de fondo a #0A0A0C si no se pudo copiar.
+            sed -i '' -E 's#<color key="backgroundColor"[^>]*systemColor="systemBackgroundColor"[^>]*/>#<color key="backgroundColor" red="0.0392156862745098" green="0.0392156862745098" blue="0.047058823529411764" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>#g' "$SB" || true
+          fi
       - name: Ajustes Info.plist (encriptación + permiso de contactos) y solo-iPhone
         script: |
           PLIST="frontend/ios/App/App/Info.plist"

@@ -462,3 +462,9 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
   ganador correcto ev-42, sin regresiones. Resto de llamadas a serialize_event ya usaban bulk (OK).
 - Factor 2 de la "lentitud": AppLive/device-cloud añade latencia por proxy (no es la app real).
 - PENDIENTE (usuario): Save to GitHub -> Render redepliega backend con el fix.
+
+## 2026-08-25 (cont. 3) — Bordes/parpadeo blanco en el arranque iOS
+- CAUSA: LaunchScreen.storyboard de Capacitor usa systemBackgroundColor (blanco en modo claro).
+- FIX: storyboard propio frontend/native/LaunchScreen.storyboard (fondo #0A0A0C + imagen Splash a 4 bordes)
+  copiado en codemagic.yaml sobre el generado (fallback sed). + index.html <style> inline fondo #0a0a0c.
+- Verificado web por testing agent (5/5). Nativo pendiente de validar en dispositivo tras build Codemagic.

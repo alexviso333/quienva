@@ -4,6 +4,11 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#0a0a0c" />
+        <!-- Paint a dark background from the very first frame (before the CSS bundle
+             loads) so there is no white flash when the native splash hides. -->
+        <style>
+            html, body, #root { background-color: #0a0a0c; }
+        </style>
         <meta name="google-site-verification" content="RY9g-R-obFFpBLEoUMwkIzVS0sRN-BZhqCPffc297QA" />
 
         <!-- Faster image loads: pre-establish the TLS connection to Cloudinary -->
