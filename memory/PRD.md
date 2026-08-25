@@ -450,3 +450,15 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
 - FIX codemagic.yaml: el paso de splash ahora recorre TODO `ios/App/App/Assets.xcassets`, y redimensiona a 2000px (16MB) CUALQUIER png cuyo tamaño decodificado (W*H*4) supere 24MB. Cubre el output de capacitor-assets Y el splash de la plantilla por defecto de Capacitor (ambos 2732²). Ya no depende de una ruta fija.
 - Ya estaban aplicados (verificados): REACT_APP_BACKEND_URL inyectado en el build de Codemagic; CORS del backend permite orígenes nativos del WebView (https://localhost, capacitor://localhost, ionic://localhost).
 - PENDIENTE (acción del usuario): Save to GitHub -> Render redepliega backend (CORS) + re-lanzar workflow Codemagic ios-quienva para generar .ipa nuevo.
+
+## 2026-08-25 (cont. 2) — App lenta en iOS: fix de rendimiento backend
+- SÍNTOMA: la app iOS abre (splash arreglado) pero va muy lenta.
+- MEDIDO en producción (Render): GET /api/events/top-weekend = ~19s consistente; resto de la Feed <1s.
+- CAUSA: top_weekend recorría TODOS los eventos de la ciudad y llamaba serialize_event por cada uno
+  sin datos precargados -> N+1 (interests+users+tickets por evento) = cientos de round-trips a Atlas.
+- FIX (backend/server.py, endpoint top_weekend): filtro de ventana del finde en la query por rango de
+  fecha ISO + carga bulk de interests en 1 query + ranking en memoria + serializar solo el ganador.
+- VERIFICADO por testing agent en local (160 eventos, 358 interests, 40 amigos): 6.9ms (antes ~19s),
+  ganador correcto ev-42, sin regresiones. Resto de llamadas a serialize_event ya usaban bulk (OK).
+- Factor 2 de la "lentitud": AppLive/device-cloud añade latencia por proxy (no es la app real).
+- PENDIENTE (usuario): Save to GitHub -> Render redepliega backend con el fix.

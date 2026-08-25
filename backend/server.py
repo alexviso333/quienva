@@ -5639,25 +5639,88 @@ async def list_genres(user: dict = Depends(get_optional_user), city: str = Query
 
 @api_router.get("/events/top-weekend")
 async def top_weekend(user: dict = Depends(get_optional_user), city: str = Query(None)):
-    """The upcoming event (next 7 days) where the most of your friends are going."""
+    """The upcoming event (next 7 days) where the most of your friends are going.
+
+    Perf: dates are stored as ISO 'YYYY-MM-DD' strings, so we can filter the
+    weekend window straight in the query (instead of scanning every event in the
+    city). Interests are loaded in ONE bulk query (no per-event N+1), the ranking
+    is done in memory, and only the winning event is serialized. This turns what
+    used to be hundreds of sequential DB round-trips (~19s) into a couple.
+    """
     friend_ids = await accepted_friend_ids(user["user_id"])
+    # No friends → there is no "friends going" ranking to compute.
+    if not friend_ids:
+        return None
+
     today = datetime.now(ZoneInfo("Europe/Madrid")).date()
     week_end = today + timedelta(days=7)
-    best = None
-    best_count = 0
-    async for ev in db.events.find({"city": city_query_value(_effective_city(user, city))}, {"_id": 0}).sort("date", 1):
+    city_val = city_query_value(_effective_city(user, city))
+
+    # Query only events inside the weekend window. Widen the upper bound by one day
+    # so events stored with a time suffix on week_end are not missed; the exact
+    # window is re-checked in Python below.
+    weekend_events = []
+    async for ev in db.events.find(
+        {
+            "city": city_val,
+            "date": {"$gte": today.isoformat(), "$lte": (week_end + timedelta(days=1)).isoformat()},
+        },
+        {"_id": 0},
+    ).sort("date", 1):
         try:
-            d = date.fromisoformat(ev["date"])
+            d = date.fromisoformat(str(ev.get("date", ""))[:10])
         except Exception:
             continue
-        if not (today <= d <= week_end):
-            continue
-        se = await serialize_event(ev, user, friend_ids)
-        c = len(se["friends_going"])
-        if c > best_count:
-            best_count = c
-            best = se
-    return best
+        if today <= d <= week_end:
+            weekend_events.append(ev)
+
+    if not weekend_events:
+        return None
+
+    event_ids = [ev["id"] for ev in weekend_events]
+
+    # BULK: load every interest for these events in a single query (avoids N+1).
+    interests_by_event: dict = {eid: [] for eid in event_ids}
+    async for it in db.interests.find({"event_id": {"$in": event_ids}}):
+        interests_by_event.setdefault(it["event_id"], []).append(it)
+
+    # Rank in memory: pick the event with the most friends going ("voy"),
+    # respecting ghost ("nadie") attendance privacy.
+    best_ev = None
+    best_count = 0
+    for ev in weekend_events:
+        cnt = 0
+        for it in interests_by_event.get(ev["id"], []):
+            if (
+                it.get("user_id") in friend_ids
+                and it.get("status") == "voy"
+                and it.get("privacy", "todos") != "nadie"
+            ):
+                cnt += 1
+        if cnt > best_count:
+            best_count = cnt
+            best_ev = ev
+
+    if best_ev is None:
+        return None
+
+    # Serialize ONLY the winner. interests_by_event + users_map avoid extra queries;
+    # tickets for a single event are cheap (one query), preserving the exact shape.
+    needed = list(
+        {
+            it["user_id"]
+            for it in interests_by_event.get(best_ev["id"], [])
+            if it.get("user_id") in friend_ids
+        }
+    )
+    users_map: dict = {}
+    if needed:
+        async for u in db.users.find({"user_id": {"$in": needed}}, {"_id": 0}):
+            users_map[u["user_id"]] = u
+
+    return await serialize_event(
+        best_ev, user, friend_ids, users_map=users_map, interests_by_event=interests_by_event
+    )
 
 
 @api_router.get("/events/carousels")

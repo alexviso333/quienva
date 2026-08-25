@@ -8044,3 +8044,109 @@ agent_communication:
          - q vacío/ausente → comportamiento normal (todos los eventos de la ciudad).
          - q sin coincidencias → lista vacía [].
          Nota: no rompe date_filter/genre/city existentes.
+
+
+backend:
+  - task: "PERF: /events/top-weekend N+1 removal (app running very slow on iOS)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          BUG (usuario): la app iOS abre pero va MUY lenta. Medido en producción (Render):
+          GET /api/events/top-weekend tardaba ~19s de forma consistente (el resto de endpoints
+          de la Feed responden <1s). CAUSA: top_weekend recorría TODOS los eventos de la ciudad
+          y llamaba serialize_event por cada uno SIN datos precargados -> patrón N+1 (interests +
+          users + tickets por evento) = cientos de round-trips secuenciales a Mongo Atlas.
+          FIX: (1) filtrar la ventana del finde directamente en la query por rango de fecha ISO,
+          (2) cargar todos los interests en UNA query bulk, (3) rankear en memoria y (4) serializar
+          SOLO el evento ganador (pasando interests_by_event + users_map para evitar N+1).
+          Verificado en local (Mongo del sandbox, DB quienva_local_test, 160 eventos + 358 interests):
+          responde en 8-17ms y devuelve el ganador correcto (ev-42, 40 amigos "voy").
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL TOP-WEEKEND PERFORMANCE FIX REQUIREMENTS (5 tests, 100% pass):
+          
+          ✅ TEST 1: CORRECTNESS (authenticated with ?city=Madrid)
+          - GET /api/events/top-weekend?city=Madrid with auth header → 200
+          - Event ID: ev-42 ✓
+          - Event Name: Fiesta 42 ✓
+          - Friends going: 40 ✓
+          - Total going: 40 ✓
+          - Returns the correct event where ALL 40 friends are going
+          
+          ✅ TEST 2: PERFORMANCE (N+1 query optimization verified)
+          - Response time: 0.007 seconds (6.9 ms) ✓
+          - Well under 2 second threshold ✓
+          - N+1 query problem FIXED (was ~19s in production, now milliseconds)
+          - Bulk loading of interests working correctly
+          - With 160 events and 358 interests, response is instant
+          
+          ✅ TEST 3: GUEST (unauthenticated, no Authorization header)
+          - GET /api/events/top-weekend?city=Madrid without auth → 200
+          - Response body: null ✓
+          - Correctly returns null when no friends (no ranking possible)
+          
+          ✅ TEST 4a: REGRESSION - Events list
+          - GET /api/events?city=Madrid&date_filter=all → 200
+          - Returns 160 events ✓
+          - No regression in events listing
+          
+          ✅ TEST 4b: REGRESSION - Carousels
+          - GET /api/events/carousels?city=Madrid with auth → 200
+          - Response keys: top_weekend, friends_going, discover_new ✓
+          - No error, carousels working correctly
+          
+          CONCLUSION:
+          Performance fix working perfectly. The N+1 query optimization successfully reduced
+          response time from ~19 seconds (production) to ~7 milliseconds (local). The endpoint
+          now uses bulk loading of interests in a single query instead of per-event queries,
+          eliminating hundreds of sequential database round-trips. Correctness verified: returns
+          the correct event (ev-42) with 40 friends going. Guest access working (returns null).
+          No regressions in related endpoints.
+          
+          Test file: /app/backend_test_top_weekend.py
+
+agent_communication:
+  - agent: "main"
+    message: |
+      PROBAR SOLO BACKEND, NO frontend. Entorno de prueba = BACKEND LOCAL en http://localhost:8001
+      (NO producción). Ya está arrancado contra Mongo local (DB quienva_local_test) con datos sembrados
+      por scripts/seed_perf_test.py.
+
+      AUTENTICACIÓN: usar cabecera  Authorization: Bearer perftest-session-token-me
+      (sesión sembrada para el usuario "me-uid", ciudad Madrid, con 40 amigos aceptados).
+
+      VERIFICAR el endpoint optimizado GET /api/events/top-weekend:
+      1) CORRECTITUD (con auth + ?city=Madrid): responde 200 y devuelve un objeto de evento cuyo
+         id == "ev-42" y name == "Fiesta 42", con friends_going de longitud 40 y total_going 40
+         (es el evento donde van TODOS los amigos; el resto tiene 0-4).
+      2) RENDIMIENTO: la respuesta debe ser rápida (< 2s; en local ~milisegundos). NO debe tardar
+         ~19s. Con 160 eventos + 358 interests, si tardara segundos indicaría que el N+1 sigue.
+      3) SIN AUTH (guest, sin cabecera): debe responder 200 con null (sin amigos no hay ranking).
+      4) REGRESIÓN: GET /api/events?city=Madrid&date_filter=all responde 200 con lista de 160 eventos;
+         GET /api/events/carousels?city=Madrid con auth responde 200 sin error.
+      No cambies datos de producción. No toques el frontend.
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE - ALL TESTS PASSED (5/5)
+      
+      Tested GET /api/events/top-weekend performance fix against LOCAL backend (http://localhost:8001)
+      with seeded test data (160 events, 358 interests, user with 40 friends).
+      
+      ✅ CORRECTNESS: Returns correct event (ev-42 "Fiesta 42") with 40 friends going
+      ✅ PERFORMANCE: Response time 6.9ms (was ~19s in production) - N+1 query fix VERIFIED
+      ✅ GUEST ACCESS: Returns null for unauthenticated users (expected behavior)
+      ✅ REGRESSION: Events list and carousels endpoints working correctly
+      
+      The N+1 query optimization is working perfectly. The endpoint now uses bulk loading of
+      interests in a single query instead of per-event queries, eliminating the performance
+      bottleneck. Ready for production deployment.
+      
+      Test file: /app/backend_test_top_weekend.py
