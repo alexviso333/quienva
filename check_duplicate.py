@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://fullstack-chat-app-1.preview.emergentagent.com"
+BACKEND_URL = "https://production-deploy-26.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

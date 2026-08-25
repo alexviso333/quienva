@@ -12,7 +12,7 @@ from datetime import datetime
 import io
 
 # Backend URL from frontend/.env
-BASE_URL = "https://fullstack-chat-app-1.preview.emergentagent.com/api"
+BASE_URL = "https://production-deploy-26.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"

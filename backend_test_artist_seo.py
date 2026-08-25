@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 
 # Backend base URL from frontend/.env
-BASE_URL = "https://fullstack-chat-app-1.preview.emergentagent.com/api"
+BASE_URL = "https://production-deploy-26.preview.emergentagent.com/api"
 
 # Googlebot User-Agent for SSR pages
 GOOGLEBOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"

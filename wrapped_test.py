@@ -12,7 +12,7 @@ import io
 from datetime import datetime
 
 # Backend URL from frontend/.env
-BASE_URL = "https://fullstack-chat-app-1.preview.emergentagent.com/api"
+BASE_URL = "https://production-deploy-26.preview.emergentagent.com/api"
 
 def log(msg):
     print(f"[TEST] {msg}")

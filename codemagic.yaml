@@ -47,21 +47,33 @@ workflows:
           cd frontend
           npx cap add ios || true
           npx cap sync ios
-      - name: Iconos y splash (si existen los assets)
+      - name: Iconos y splash + garantizar limite de 25MB en launch images
         script: |
           cd frontend
-          if [ -f assets/icon.png ]; then \
+          # 1) Generar iconos y splash a partir de assets/ (si existen).
+          if [ -f assets/icon.png ]; then
             npx capacitor-assets generate --ios \
-              --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C' || true; \
+              --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C' || true
           fi
-          # El splash 2732x2732 decodificado pesa ~29.9MB y supera el límite de
-          # iOS para launch images (25MB) → iOS lo rechaza y la pantalla de
-          # arranque falla. Lo reducimos a máx 2000px (≈16MB decodificado).
-          SPLASH_DIR="ios/App/App/Assets.xcassets/Splash.imageset"
-          if [ -d "$SPLASH_DIR" ]; then \
-            for f in "$SPLASH_DIR"/*.png; do \
-              [ -f "$f" ] && sips -Z 2000 "$f" || true; \
-            done; \
+          # 2) CRITICO (motivo del rechazo de App Store / pantalla negra):
+          #    iOS rechaza cualquier "launch image" cuyo tamano DECODIFICADO
+          #    (ancho*alto*4 bytes) supere 25MB. El splash 2732x2732 = 29.9MB.
+          #    Reducimos a 2000px (2000*2000*4 = 16MB) CUALQUIER png grande dentro
+          #    de Assets.xcassets, venga de capacitor-assets o de la plantilla por
+          #    defecto de Capacitor. Asi NUNCA queda un launch image sobre el limite.
+          XC="ios/App/App/Assets.xcassets"
+          if [ -d "$XC" ]; then
+            find "$XC" -type f -iname "*.png" | while read -r f; do
+              W=$(sips -g pixelWidth  "$f" 2>/dev/null | awk '/pixelWidth/{print $2}')
+              H=$(sips -g pixelHeight "$f" 2>/dev/null | awk '/pixelHeight/{print $2}')
+              if [ -n "$W" ] && [ -n "$H" ]; then
+                BYTES=$(( W * H * 4 ))
+                if [ "$BYTES" -gt 24000000 ]; then
+                  echo "Reduciendo launch image demasiado grande: $f (${W}x${H}, $((BYTES/1000000))MB)"
+                  sips -Z 2000 "$f" >/dev/null 2>&1 || true
+                fi
+              fi
+            done
           fi
           npx cap sync ios
       - name: Ajustes Info.plist (encriptación + permiso de contactos) y solo-iPhone

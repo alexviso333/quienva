@@ -444,3 +444,9 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
 - Bonus fix ya hecho antes: número de build automático con `date +%s` para evitar el 409 "bundle version must be higher".
 - **Nota TLS -1202 en BrowserStack:** probablemente artefacto de la red de BrowserStack; quienva.onrender.com tiene cert válido → en dispositivo real no debería ocurrir.
 - **Pasos usuario:** Save to GitHub → REDESPLEGAR backend en Render (para el CORS) → nuevo build en Codemagic → probar .ipa. 
+
+## 2026-08-25 (cont.) — Fix definitivo rechazo App Store (pantalla negra)
+- CAUSA CONFIRMADA en el log de dispositivo (.ipa): `XBLaunchStoryboardErrorDomain code 6 — Estimated size (29900800) is over limit (25000000)`. El splash 2732x2732 decodifica a 29.9MB y supera el límite de 25MB de iOS para launch images -> iOS rechaza la pantalla de arranque -> app congelada en negro.
+- FIX codemagic.yaml: el paso de splash ahora recorre TODO `ios/App/App/Assets.xcassets`, y redimensiona a 2000px (16MB) CUALQUIER png cuyo tamaño decodificado (W*H*4) supere 24MB. Cubre el output de capacitor-assets Y el splash de la plantilla por defecto de Capacitor (ambos 2732²). Ya no depende de una ruta fija.
+- Ya estaban aplicados (verificados): REACT_APP_BACKEND_URL inyectado en el build de Codemagic; CORS del backend permite orígenes nativos del WebView (https://localhost, capacitor://localhost, ionic://localhost).
+- PENDIENTE (acción del usuario): Save to GitHub -> Render redepliega backend (CORS) + re-lanzar workflow Codemagic ios-quienva para generar .ipa nuevo.
