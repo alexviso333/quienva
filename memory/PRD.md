@@ -485,3 +485,16 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
   IPHONEOS_DEPLOYMENT_TARGET = 15.0 en project.pbxproj (Debug+Release) y platform :ios, '15.0' en Podfile.
 - Verificado por testing agent sobre fixture Capacitor 7: 15.0 en ambos configs y Podfile, sin 14.0, YAML valido.
 - PENDIENTE (usuario): Save to GitHub -> rebuild Codemagic (el nuevo build tendra MinimumOSVersion 15.0).
+
+## 2026-08-27 — App Store 4.8: "Iniciar sesion con Apple" (conservando Google)
+- Backend: POST /api/auth/apple/callback verifica identity_token de Apple (PyJWKClient, kid, aud=me.quienva.app,
+  iss appleid, exp), crea/loguea usuario (auth_provider=apple, apple_sub estable), devuelve {user, token}.
+  import jwt anadido; rate-limit anadido. Verificado 14/14 in-process + testing agent 4/4.
+- Frontend: src/lib/appleAuth.js (plugin @capacitor-community/apple-sign-in 7.1.0, import diferido) +
+  boton en Login.js visible SOLO en iOS nativo (Capacitor.getPlatform()==='ios'). Guarda qv_token/qv_user
+  y navega a onboarding/feed. Google se mantiene (web + iOS).
+- Build (codemagic.yaml): nuevo paso copia frontend/native/App.entitlements (com.apple.developer.applesignin)
+  y setea CODE_SIGN_ENTITLEMENTS en el target App via gema xcodeproj (viene con CocoaPods).
+- ACCION USUARIO (imprescindible): activar capacidad "Sign in with Apple" en el App ID me.quienva.app en
+  Apple Developer ANTES de recompilar (si no, la firma no incluye el entitlement). Luego Save to GitHub +
+  rebuild Codemagic. E2E real solo verificable en dispositivo/TestFlight.

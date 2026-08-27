@@ -20,6 +20,7 @@ import bcrypt
 from urllib.parse import urlparse
 import secrets
 import requests
+import jwt
 import re
 import unicodedata
 import json
@@ -4882,6 +4883,92 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
             "city": "Palma de Mallorca",
             "role": "user",
             "auth_provider": "google",
+            "attendance_privacy": "amigos",
+            "moment_privacy": "amigos",
+            "blocked_users": [],
+            "city_change_alerts": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(user)
+        await _notify_admins_new_signup(user)
+
+    token = await create_session(user["user_id"])
+    set_session_cookie(response, token)
+    return {"user": public_user(user), "token": token}
+
+
+class AppleCallbackInput(BaseModel):
+    identity_token: str
+    code: Optional[str] = None
+    # Apple only sends the name on the FIRST authorization; it is a hint, never
+    # proof of identity (the verified JWT claims are authoritative).
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
+APPLE_BUNDLE_ID = os.environ.get("APPLE_BUNDLE_ID", "me.quienva.app")
+APPLE_ISSUER = "https://appleid.apple.com"
+# PyJWKClient fetches + caches Apple's rotating public keys and selects the right
+# one by the JWT 'kid' header automatically.
+_APPLE_JWK_CLIENT = jwt.PyJWKClient("https://appleid.apple.com/auth/keys")
+
+
+@api_router.post("/auth/apple/callback")
+async def apple_callback(inp: AppleCallbackInput, response: Response):
+    """Native 'Sign in with Apple' (iOS). Verifies the identity token (JWT)
+    against Apple's public keys, validates audience (our bundle id) + issuer,
+    then creates/logs in a user and issues our own session token — same
+    response shape as the Google callback."""
+    try:
+        signing_key = _APPLE_JWK_CLIENT.get_signing_key_from_jwt(inp.identity_token)
+        claims = jwt.decode(
+            inp.identity_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=APPLE_BUNDLE_ID,
+            issuer=APPLE_ISSUER,
+            options={"require": ["iss", "aud", "sub", "exp", "iat"]},
+        )
+    except Exception as e:
+        logger.error(f"Apple Sign In verify error: {e}")
+        raise HTTPException(status_code=401, detail="No se pudo validar el login de Apple")
+
+    apple_sub = claims.get("sub")
+    if not apple_sub:
+        raise HTTPException(status_code=401, detail="Apple no devolvió identificador")
+    # Apple's email can be a private relay address (…@privaterelay.appleid.com) or
+    # absent on later logins; tolerate both. Client-supplied email is only a hint.
+    token_email = (claims.get("email") or inp.email or "").lower().strip()
+    email_verified = str(claims.get("email_verified")).lower() == "true"
+
+    # 1) Returning Apple user — identified by the stable 'sub' (the durable key).
+    user = await db.users.find_one({"apple_sub": apple_sub})
+    # 2) Else link to an existing account by VERIFIED email.
+    if not user and token_email and email_verified:
+        existing = await db.users.find_one({"email": token_email})
+        if existing:
+            await db.users.update_one({"user_id": existing["user_id"]}, {"$set": {"apple_sub": apple_sub}})
+            existing["apple_sub"] = apple_sub
+            user = existing
+    # 3) Else create a new account (mirrors the Google flow; birthdate is asked
+    #    later via the profile, same as Google users).
+    if not user:
+        name = (inp.name or "").strip() or (token_email.split("@")[0] if token_email else "Usuario")
+        base_username = ((token_email.split("@")[0] if token_email else f"apple{secrets.randbelow(999999)}")
+                         .lower().replace(".", "").replace("+", ""))[:20] or "user"
+        username = base_username
+        while await db.users.find_one({"username": username}):
+            username = f"{base_username}{secrets.randbelow(9999)}"
+        user = {
+            "user_id": f"user_{uuid.uuid4().hex[:12]}",
+            "email": token_email or None,
+            "username": username,
+            "name": name,
+            "picture": "",
+            "city": "Palma de Mallorca",
+            "role": "user",
+            "auth_provider": "apple",
+            "apple_sub": apple_sub,
             "attendance_privacy": "amigos",
             "moment_privacy": "amigos",
             "blocked_users": [],
@@ -13394,6 +13481,7 @@ _RATE_LIMITS = {                 # path suffix -> (max_hits, window_seconds)
     "/api/auth/login": (12, 60),
     "/api/auth/register": (8, 300),
     "/api/auth/google/callback": (20, 60),
+    "/api/auth/apple/callback": (20, 60),
 }
 
 

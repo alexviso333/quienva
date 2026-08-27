@@ -109,6 +109,24 @@ workflows:
           fi
           echo "== Deployment target tras el parche ==" 
           grep -n "IPHONEOS_DEPLOYMENT_TARGET" frontend/ios/App/App.xcodeproj/project.pbxproj | head -5 || true
+      - name: "Sign in with Apple (entitlement)"
+        script: |
+          cd frontend/ios/App
+          # 1) Copiar el archivo de entitlements con la capacidad com.apple.developer.applesignin
+          cp ../../native/App.entitlements App/App.entitlements
+          # 2) Referenciar el entitlements en el target de la app (Debug + Release)
+          #    con la gema xcodeproj (viene incluida con CocoaPods) -> fiable, sin sed fragil.
+          ruby -e '
+            require "xcodeproj"
+            project = Xcodeproj::Project.open("App.xcodeproj")
+            target = project.targets.find { |t| t.name == "App" }
+            raise "App target no encontrado" unless target
+            target.build_configurations.each do |c|
+              c.build_settings["CODE_SIGN_ENTITLEMENTS"] = "App/App.entitlements"
+            end
+            project.save
+            puts "CODE_SIGN_ENTITLEMENTS asignado al target App (Sign in with Apple)"
+          '
       - name: Preparar firma (automática con tu API Key)
         script: |
           keychain initialize

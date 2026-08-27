@@ -8366,3 +8366,127 @@ agent_communication:
       
       Test method: Downloaded image and performed comprehensive pixel analysis on all 1,048,576 
       pixels using Python PIL library.
+
+
+backend:
+  - task: "Sign in with Apple (App Store 4.8) — POST /auth/apple/callback"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          RECHAZO App Store 4.8: la app ofrece login de Google pero no una opcion equivalente que
+          respete la privacidad -> Apple exige "Sign in with Apple". Implementado endpoint nativo:
+          POST /api/auth/apple/callback recibe identity_token (JWT de Apple), lo verifica con
+          PyJWKClient (JWKS de Apple, seleccion por kid), valida audience=me.quienva.app + issuer
+          appleidapple.com + exp, y crea/loguea usuario (auth_provider="apple", apple_sub como clave
+          estable) devolviendo {user, token} igual que Google. Rate-limit anadido.
+          Verificado en proceso (apple_signin_test.py, 14/14) con clave RSA propia + JWKS monkeypatch:
+          camino feliz crea user+sesion, usuario recurrente NO duplica (por sub), funciona sin email
+          y con private-relay, y rechaza aud/iss/expiry/garbage con 401.
+          NOTA: el boton nativo iOS y el flujo E2E real solo se validan en dispositivo/TestFlight.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL SIGN IN WITH APPLE BACKEND REQUIREMENTS (4 test scenarios, 100% pass):
+          
+          ✅ TEST 1: IN-PROCESS TEST SCRIPT (14/14 checks PASSED)
+          - Executed: python3 /app/apple_signin_test.py
+          - Script printed: "ALL APPLE SIGN-IN BACKEND TESTS PASSED"
+          - Exit code: 0 (success)
+          - All 14 checks passed:
+            * Happy path: valid token creates user + session ✓
+            * User stored with apple_sub and auth_provider='apple' ✓
+            * Name captured from first auth ✓
+            * Returning user with same 'sub' does NOT create duplicate ✓
+            * Name preserved on returning login ✓
+            * Login works without email (sub is the identity key) ✓
+            * Login works with private-relay email ✓
+            * Wrong audience rejected with HTTP 401 ✓
+            * Wrong issuer rejected with HTTP 401 ✓
+            * Expired token rejected with HTTP 401 ✓
+            * Garbage token rejected with HTTP 401 ✓
+          
+          ✅ TEST 2: INVALID TOKEN HTTP CHECK
+          - POST /api/auth/apple/callback with {"identity_token":"not.a.valid.token"} → HTTP 401
+          - Response: {"detail":"No se pudo validar el login de Apple"}
+          - Correctly returns 401 (NOT 500) ✓
+          
+          ✅ TEST 3: EMPTY BODY VALIDATION CHECK
+          - POST /api/auth/apple/callback with empty body {} → HTTP 422
+          - Response: validation error with "Field required" for identity_token
+          - Correctly returns 422 (NOT 500) ✓
+          
+          ✅ TEST 4: REGRESSION CHECKS (existing auth still works)
+          - GET /api/auth/google/config → HTTP 200 with fields enabled=false and client_id="" ✓
+          - GET /api/cities → HTTP 200 with 5 cities and pending_city ✓
+          
+          CONCLUSION:
+          Sign in with Apple backend implementation is working perfectly. All verification logic,
+          user creation, deduplication, error handling, and validation are functioning correctly.
+          The endpoint properly:
+          - Verifies Apple JWT tokens with JWKS
+          - Validates audience (me.quienva.app), issuer (appleid.apple.com), and expiry
+          - Creates new users with auth_provider='apple' and apple_sub as stable identity key
+          - Handles returning users without creating duplicates (by sub)
+          - Works with private-relay emails and missing emails
+          - Rejects invalid tokens with appropriate HTTP status codes (401 for auth errors, 422 for validation)
+          - Does not break existing auth endpoints
+          
+          Ready for iOS native button integration and TestFlight testing.
+          Test files: /app/apple_signin_test.py
+
+agent_communication:
+  - agent: "main"
+    message: |
+      PROBAR SOLO BACKEND. Entorno = backend local http://localhost:8001 (Mongo local quienva_local_test).
+      1) Ejecuta el script /app/apple_signin_test.py con: python3 /app/apple_signin_test.py
+         Debe imprimir "ALL APPLE SIGN-IN BACKEND TESTS PASSED" y salir con codigo 0 (14/14).
+         (Genera su propia clave RSA y monkeypatchea el JWKS de Apple; prueba verificacion + creacion
+          de usuario + dedupe por 'sub' + rechazos aud/iss/exp/garbage.)
+      2) HTTP: POST /api/auth/apple/callback con {"identity_token":"not.a.valid.token"} debe devolver 401.
+      3) Regresion (no romper auth existente): GET /api/auth/google/config -> 200 (enabled/client_id);
+         POST /api/auth/apple/callback sin body valido (422) o token invalido (401) no debe dar 500.
+      No toques produccion. No pruebes frontend (el boton de Apple solo aparece en iOS nativo).
+  - agent: "testing"
+    message: |
+      SIGN IN WITH APPLE BACKEND TESTING COMPLETE (2026-08-27)
+      
+      🎉 ALL TESTS PASSED - BACKEND IMPLEMENTATION WORKING PERFECTLY
+      
+      Tested the new Sign in with Apple endpoint (POST /api/auth/apple/callback) against local 
+      backend at http://localhost:8001 with Mongo database quienva_local_test.
+      
+      ✅ TEST RESULTS (4/4 scenarios PASSED):
+      
+      1. IN-PROCESS TEST SCRIPT (14/14 checks PASSED):
+         - Script: python3 /app/apple_signin_test.py
+         - Output: "ALL APPLE SIGN-IN BACKEND TESTS PASSED"
+         - Exit code: 0
+         - Verified: token verification, user creation, deduplication by 'sub', name preservation,
+           private-relay email support, missing email support, and rejection of invalid tokens
+           (wrong audience, wrong issuer, expired, garbage) with HTTP 401
+      
+      2. INVALID TOKEN HTTP CHECK (PASSED):
+         - POST /api/auth/apple/callback with {"identity_token":"not.a.valid.token"} → HTTP 401
+         - Correctly returns 401 (NOT 500)
+      
+      3. EMPTY BODY VALIDATION CHECK (PASSED):
+         - POST /api/auth/apple/callback with empty body {} → HTTP 422
+         - Correctly returns validation error (NOT 500)
+      
+      4. REGRESSION CHECKS (PASSED):
+         - GET /api/auth/google/config → HTTP 200 with enabled and client_id fields
+         - GET /api/cities → HTTP 200
+      
+      CONCLUSION:
+      The Sign in with Apple backend endpoint is fully functional and ready for iOS native 
+      integration. All verification logic, user management, error handling, and validation 
+      are working correctly. No regressions detected in existing auth endpoints.
+      
+      Next step: iOS native button integration and TestFlight E2E testing.
