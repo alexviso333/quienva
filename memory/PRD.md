@@ -498,3 +498,13 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
 - ACCION USUARIO (imprescindible): activar capacidad "Sign in with Apple" en el App ID me.quienva.app en
   Apple Developer ANTES de recompilar (si no, la firma no incluye el entitlement). Luego Save to GitHub +
   rebuild Codemagic. E2E real solo verificable en dispositivo/TestFlight.
+
+## 2026-08-27 (cont.) — Auditoria pre-envio App Store
+- OK ya presente: borrado de cuenta in-app (5.1.1v, /me/delete + Ajustes), reportar contenido +
+  bloquear usuarios (1.2, ReportBlock/ReportFlag + /reports + admin), guest browsing.
+- FIX aplicado (riesgo real): faltaban textos de permiso en Info.plist. La app usa camara
+  (getUserMedia en Momento, capture en chats) y galeria. Anadidos en codemagic.yaml via PlistBuddy:
+  NSCameraUsageDescription, NSPhotoLibraryUsageDescription, NSPhotoLibraryAddUsageDescription,
+  NSMicrophoneUsageDescription (ademas del NSContacts ya existente). Sin ellos: rechazo + crash al abrir camara.
+- NO-codigo (recordar al usuario en App Store Connect): Privacy Policy URL (obligatoria), etiquetas de
+  privacidad (nutrition labels), cuenta demo para el revisor, capturas. Y activar capacidad Sign in with Apple.

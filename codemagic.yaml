@@ -98,6 +98,21 @@ workflows:
           CONTACTS_MSG="Usamos tus contactos solo para ayudarte a encontrar amigos que ya usan ¿Quién va? e invitar a los que no. Nunca guardamos tu agenda."
           /usr/libexec/PlistBuddy -c "Add :NSContactsUsageDescription string $CONTACTS_MSG" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Set :NSContactsUsageDescription $CONTACTS_MSG" "$PLIST"
+          # Permisos de camara / fotos / microfono. La app usa la camara (capturas del
+          # momento, fotos en chats) y la galeria (foto de perfil, albumes de evento).
+          # Sin estos textos iOS RECHAZA la app y ademas crashea al abrir la camara.
+          CAM_MSG="Usamos la camara para que puedas hacer fotos y capturas del momento en las fiestas y compartirlas con tus amigos."
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string $CAM_MSG" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription $CAM_MSG" "$PLIST"
+          PHOTO_MSG="Accedemos a tus fotos para que puedas subir tu foto de perfil y compartir fotos y videos en los albumes de eventos."
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string $PHOTO_MSG" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription $PHOTO_MSG" "$PLIST"
+          PHOTO_ADD_MSG="Guardamos en tu galeria las fotos y videos que descargues o compartas desde ¿Quién va?"
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string $PHOTO_ADD_MSG" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription $PHOTO_ADD_MSG" "$PLIST"
+          MIC_MSG="Usamos el microfono cuando grabas un video para compartirlo en los albumes de eventos."
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string $MIC_MSG" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription $MIC_MSG" "$PLIST"
           # App SOLO para iPhone (evita tener que subir capturas de iPad)
           sed -i '' -E 's/TARGETED_DEVICE_FAMILY = "?1,2"?/TARGETED_DEVICE_FAMILY = "1"/g' frontend/ios/App/App.xcodeproj/project.pbxproj
           # Subir el iOS minimo a 15.0 (Apple exige >=15.0 a partir de 2027; aviso ITMS-90068).
