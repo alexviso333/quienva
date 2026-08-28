@@ -389,6 +389,15 @@ export default function Admin() {
     queryFn: async () => (await api.get("/admin/events", { params: { city, scope } })).data,
   });
 
+  // Broken/at-risk buy links (surfaced in the "Enlaces" tab so the owner can fix
+  // them with the pencil before anyone clicks a dead link).
+  const { data: linkHealth } = useQuery({
+    queryKey: ["admin-link-health", city],
+    queryFn: async () => (await api.get("/admin/link-health", { params: { city } })).data,
+    refetchOnWindowFocus: false,
+  });
+  const brokenCount = linkHealth?.total || 0;
+
   const del = useMutation({
     mutationFn: async (id) => (await api.delete(`/admin/events/${id}`)).data,
     onSuccess: () => {
@@ -434,6 +443,7 @@ export default function Admin() {
   const TABS = [
     { value: "upcoming", label: "Próximas", icon: CalendarDays },
     { value: "momentos", label: "Momentos", icon: Zap },
+    { value: "enlaces", label: "Enlaces", icon: LinkIcon },
     { value: "past", label: "Pasadas", icon: History },
   ];
 
@@ -536,9 +546,14 @@ export default function Admin() {
                 key={t.value}
                 data-testid={`admin-tab-${t.value}`}
                 onClick={() => setTab(t.value)}
-                className={`flex-1 h-10 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${tab === t.value ? "bg-white/15 text-white" : "bg-white/5 text-white/50"}`}
+                className={`relative flex-1 h-10 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${tab === t.value ? "bg-white/15 text-white" : "bg-white/5 text-white/50"}`}
               >
                 <Icon className="w-4 h-4" /> {t.label}
+                {t.value === "enlaces" && brokenCount > 0 && (
+                  <span data-testid="admin-broken-badge" className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-qv-primary text-white text-[10px] font-black flex items-center justify-center">
+                    {brokenCount}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -560,7 +575,44 @@ export default function Admin() {
           </div>
         )}
 
-        {isLoading ? (
+        {tab === "enlaces" && (
+          <div className="px-5 flex flex-col gap-3" data-testid="admin-link-health">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-sm text-white/70">
+                Revisados <b className="text-white">{linkHealth?.checked ?? 0}</b> eventos próximos ·{" "}
+                <b className={brokenCount > 0 ? "text-qv-primary" : "text-emerald-400"}>{brokenCount}</b> con enlace en riesgo
+              </p>
+              <p className="text-[11px] text-white/40 mt-1 leading-snug">
+                Detectamos enlaces de afiliado que pueden estar rotos (código desincronizado) o vacíos. Ábrelo y pon el enlace correcto con el lápiz — tu enlace manual siempre manda.
+              </p>
+            </div>
+            {brokenCount === 0 ? (
+              <p className="py-8 text-center text-white/40 text-sm">Todo en orden. No hay enlaces en riesgo. ✅</p>
+            ) : (
+              (linkHealth?.events || []).map((e) => (
+                <div key={e.event_id} className="flex gap-3 bg-white/5 border border-qv-primary/30 rounded-2xl p-3" data-testid={`admin-broken-${e.event_id}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{e.name}</p>
+                    <p className="text-white/40 text-sm truncate">{e.venue} · {e.date}{e.time ? ` · ${e.time}` : ""}</p>
+                    <span className="inline-block text-[10px] font-bold uppercase tracking-wide mt-1 px-2 py-0.5 rounded-full bg-qv-primary/20 text-qv-primary">
+                      {e.reason === "empty" ? "Sin enlace" : "Código afiliado sin sincronizar"}
+                    </span>
+                    <p className="text-[11px] text-white/40 break-all mt-1">{e.commission_url || "(vacío)"}</p>
+                  </div>
+                  <button
+                    data-testid={`admin-fix-${e.event_id}`}
+                    onClick={() => navigate(`/event/${e.event_id}`)}
+                    className="self-center shrink-0 h-9 px-3 rounded-xl bg-qv-primary text-white text-xs font-bold flex items-center gap-1.5 active:scale-95"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Arreglar
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {tab !== "enlaces" && (isLoading ? (
           <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-qv-primary" /></div>
         ) : events.length === 0 ? (
           <p className="px-5 py-10 text-center text-white/40 text-sm">
@@ -581,7 +633,7 @@ export default function Admin() {
           <div className="px-5 flex flex-col gap-3">
             {events.map((ev) => <Row key={ev.id} ev={ev} showMoment={false} />)}
           </div>
-        )}
+        ))}
 
         <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
           <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[90vh] overflow-y-auto">

@@ -22,6 +22,18 @@ const todayStr = () => {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 };
 
+const FIELD_LABELS = {
+  name: "Nombre", venue: "Discoteca", address: "Dirección", date: "Fecha",
+  time: "Hora", image_url: "Foto", genre: "Género", city: "Ciudad",
+  sale_state: "Estado", price_tiers: "Precio", link_override: "Enlace manual",
+};
+const fmtEditVal = (v) => {
+  if (v === "" || v === null || v === undefined) return "(vacío)";
+  if (Array.isArray(v)) return v.map((t) => `${t.name || ""} ${t.price ?? ""}€`).join(", ") || "(vacío)";
+  const s = String(v);
+  return s.length > 44 ? s.slice(0, 44) + "…" : s;
+};
+
 function FriendRow({ title, color, friends }) {
   if (!friends || friends.length === 0) return null;
   return (
@@ -163,8 +175,26 @@ export default function EventDetail() {
       setEditOpen(false);
       qc.invalidateQueries({ queryKey: ["event", id] });
       qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["event-edit-history", id] });
     },
     onError: () => toast.error("No se pudo guardar"),
+  });
+
+  // Edit history (who/when changed what) + undo — loaded when the modal is open.
+  const { data: editHistory } = useQuery({
+    queryKey: ["event-edit-history", id],
+    queryFn: async () => (await api.get(`/admin/events/${id}/edit-history`)).data,
+    enabled: isAdmin && editOpen,
+  });
+  const undoEdit = useMutation({
+    mutationFn: async (editId) => (await api.post(`/admin/events/${id}/edit-history/${editId}/undo`)).data,
+    onSuccess: () => {
+      toast.success("Cambio deshecho");
+      qc.invalidateQueries({ queryKey: ["event", id] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["event-edit-history", id] });
+    },
+    onError: () => toast.error("No se pudo deshacer"),
   });
 
   const submitEdit = (e) => {
@@ -619,6 +649,41 @@ export default function EventDetail() {
                 </button>
               )}
             </div>
+
+            {/* Edit history + undo */}
+            {editHistory?.edits?.length > 0 && (
+              <div className="flex flex-col gap-2 pt-3 border-t border-white/10" data-testid="admin-edit-history">
+                <span className="text-[11px] uppercase tracking-widest font-bold text-white/50">Historial de ediciones</span>
+                <div className="flex flex-col gap-2 max-h-52 overflow-y-auto">
+                  {editHistory.edits.map((h) => (
+                    <div key={h.id} className="flex items-start gap-2 bg-white/5 border border-white/10 rounded-xl p-2.5" data-testid={`edit-log-${h.id}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-white/80">
+                          <b>{FIELD_LABELS[h.field] || h.field}</b>
+                          {h.note === "undo" && <span className="ml-1 text-[10px] text-qv-secondary">(deshecho)</span>}
+                        </p>
+                        <p className="text-[11px] text-white/40 break-all">
+                          {fmtEditVal(h.old_value)} <span className="text-white/30">→</span> {fmtEditVal(h.new_value)}
+                        </p>
+                        <p className="text-[10px] text-white/30 mt-0.5">
+                          {h.by_name} · {new Date(h.created_at).toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`edit-undo-${h.id}`}
+                        onClick={() => undoEdit.mutate(h.id)}
+                        disabled={undoEdit.isPending}
+                        title="Deshacer este cambio"
+                        className="shrink-0 h-8 px-2.5 rounded-lg bg-white/5 border border-white/15 text-white/80 text-[11px] font-semibold flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Deshacer
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"

@@ -7396,23 +7396,33 @@ async def admin_edit_event(
         raise HTTPException(status_code=404, detail="Evento no encontrado")
     set_fields: dict = {}
     unset_fields: dict = {}
+    changes: list = []  # (field, old, new) for the edit history
     for f in ("name", "venue", "address", "date", "time", "image_url",
               "genre", "city", "sale_state"):
         val = getattr(inp, f)
-        if val is not None:
+        if val is not None and val != ev.get(f, ""):
             set_fields[f] = val
+            changes.append((f, ev.get(f, ""), val))
     if inp.price_tiers is not None:
-        set_fields["price_tiers"] = [t.model_dump() for t in inp.price_tiers]
+        new_tiers = [t.model_dump() for t in inp.price_tiers]
+        if new_tiers != (ev.get("price_tiers") or []):
+            set_fields["price_tiers"] = new_tiers
+            changes.append(("price_tiers", ev.get("price_tiers") or [], new_tiers))
     # Sticky buy-link override.
+    old_override = str(ev.get("link_override") or "")
     if inp.clear_link_override:
-        unset_fields["link_override"] = ""
+        if old_override:
+            unset_fields["link_override"] = ""
+            changes.append(("link_override", old_override, ""))
     elif inp.link_override is not None:
         lo = inp.link_override.strip()
-        if lo:
+        if lo and lo != old_override:
             set_fields["link_override"] = lo
             set_fields["has_commission"] = True
-        else:
+            changes.append(("link_override", old_override, lo))
+        elif not lo and old_override:
             unset_fields["link_override"] = ""
+            changes.append(("link_override", old_override, ""))
     update: dict = {}
     if set_fields:
         update["$set"] = set_fields
@@ -7421,8 +7431,102 @@ async def admin_edit_event(
     if update:
         await db.events.update_one({"id": event_id}, update)
         _invalidate_stats_cache()
+        for (f, old, new) in changes:
+            await _record_admin_edit(event_id, f, old, new, admin)
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     return await serialize_event(ev, admin, [])
+
+
+@api_router.get("/admin/events/{event_id}/edit-history")
+async def admin_event_edit_history(event_id: str, admin: dict = Depends(require_admin)):
+    """The manual edit log for an event (newest first) for the 'Historial de
+    ediciones' panel."""
+    out = []
+    async for h in db.event_admin_edits.find(
+        {"event_id": event_id}, {"_id": 0}
+    ).sort("created_at", -1).limit(100):
+        out.append(h)
+    return {"edits": out}
+
+
+@api_router.post("/admin/events/{event_id}/edit-history/{edit_id}/undo")
+async def admin_undo_edit(event_id: str, edit_id: str, admin: dict = Depends(require_admin)):
+    """Revert a single manual edit: put the field back to the value it had BEFORE
+    that change. Records the revert as a new edit entry so the trail stays honest."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    rec = await db.event_admin_edits.find_one({"id": edit_id, "event_id": event_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Cambio no encontrado")
+    field = rec["field"]
+    old = rec.get("old_value")
+    current = ev.get(field, "")
+    if field == "link_override":
+        if old:
+            await db.events.update_one({"id": event_id}, {"$set": {"link_override": old, "has_commission": True}})
+        else:
+            await db.events.update_one({"id": event_id}, {"$unset": {"link_override": ""}})
+    else:
+        await db.events.update_one({"id": event_id}, {"$set": {field: old}})
+    await db.event_admin_edits.update_one({"id": edit_id}, {"$set": {"undone": True}})
+    await _record_admin_edit(event_id, field, current, old, admin, note="undo")
+    _invalidate_stats_cache()
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return await serialize_event(ev, admin, [])
+
+
+@api_router.get("/admin/link-health")
+async def admin_link_health(admin: dict = Depends(require_admin),
+                            days: int = Query(120), city: str = Query("")):
+    """Surface upcoming events whose BUY LINK is at risk of being broken, so the
+    owner can fix them (with the pencil) before anyone clicks. Detection is
+    deterministic (no live HTTP — FourVenues blocks datacenter IPs via Cloudflare,
+    which would give false positives):
+      - 'empty': the event says it has a ticket link but the served link is empty.
+      - 'affiliate_stale_risk': an affiliate (FourVenues) party whose served link
+        has NO code coming from the event's OWN live link, so it falls back to the
+        code from the affiliate panel feed — which desyncs when the club recreates
+        the event (the exact 'Fitz → .../events/H6LG' broken-redirect class). These
+        are the ones to double-check / pin a manual link.
+    Events with a manual link_override are considered fixed and never flagged."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    end = (date.fromisoformat(today) + timedelta(days=max(1, days))).isoformat()
+    q: dict = {"date": {"$gte": today, "$lte": end}}
+    if city and city in CITY_IDS:
+        q["city"] = city_query_value(city)
+    at_risk = []
+    checked = 0
+    async for ev in db.events.find(q, {"_id": 0}):
+        if ev.get("city") == PENDING_CITY:
+            continue
+        checked += 1
+        override = str(ev.get("link_override") or "").strip()
+        if override:
+            continue  # manually fixed
+        eff = _commission_url_for(ev)
+        reason = None
+        if not eff:
+            if ev.get("has_commission"):
+                reason = "empty"
+        else:
+            m = _affiliate_match(ev)
+            if m and not _fv_event_code(ev.get("commission_url", "")):
+                reason = "affiliate_stale_risk"
+        if reason:
+            at_risk.append({
+                "event_id": ev["id"],
+                "name": ev.get("name", ""),
+                "venue": ev.get("venue", ""),
+                "date": ev.get("date", ""),
+                "time": ev.get("time", ""),
+                "city": ev.get("city", ""),
+                "reason": reason,
+                "commission_url": eff,
+                "auto_commission_url": _auto_commission_url_for(ev),
+            })
+    at_risk.sort(key=lambda x: (x["date"], x["venue"]))
+    return {"total": len(at_risk), "checked": checked, "events": at_risk}
 
 
 @api_router.delete("/admin/events/{event_id}")
@@ -10528,6 +10632,7 @@ async def on_startup():
         await db.scraped_venues.create_index("active")
         await db.scrape_changelog.create_index([("batch_id", 1), ("created_at", -1)])
         await db.event_history.create_index([("event_id", 1), ("created_at", -1)])
+        await db.event_admin_edits.create_index([("event_id", 1), ("created_at", -1)])
         try:
             # auto-expire changelog after 30 days so it never bloats (also serves created_at sorts)
             await db.scrape_changelog.create_index("created_at", expireAfterSeconds=30 * 24 * 3600, name="cl_ttl")
@@ -11550,6 +11655,29 @@ async def _record_event_history(event_id: str, kind: str, source: str = "scraper
         await db.event_history.insert_one(doc)
     except Exception as e:
         logger.warning(f"event history insert failed: {e}")
+
+
+async def _record_admin_edit(event_id: str, field: str, old_value, new_value, admin: dict, note: str = ""):
+    """Per-field admin edit log (who/when/old/new) powering the 'Historial de
+    ediciones' + undo in the event edit panel. Separate from event_history so it
+    can carry the exact old value for a clean revert."""
+    try:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "event_id": event_id,
+            "field": field,
+            "old_value": old_value,
+            "new_value": new_value,
+            "by_user_id": admin.get("user_id"),
+            "by_email": admin.get("email"),
+            "by_name": admin.get("username") or admin.get("name") or "admin",
+            "note": note,
+            "undone": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.event_admin_edits.insert_one(doc)
+    except Exception as e:
+        logger.warning(f"admin edit log failed: {e}")
 
 
 def _significant_rename(old: str, new: str) -> bool:
