@@ -61,9 +61,12 @@ export default function EventDetail() {
   };
   const qc = useQueryClient();
 
-  const { data: event, isLoading } = useQuery({
+  const { data: event, isLoading, isError } = useQuery({
     queryKey: ["event", id],
     queryFn: async () => (await api.get(`/events/${id}`)).data,
+    // A genuine 404 (party removed/rescheduled) must NOT retry — show the
+    // friendly "no longer available" screen immediately instead of hanging.
+    retry: (count, err) => (err?.response?.status === 404 ? false : count < 2),
   });
 
   const setStatus = useMutation({
@@ -131,10 +134,32 @@ export default function EventDetail() {
     onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
   });
 
-  if (isLoading || !event) {
+  if (isLoading) {
     return (
       <div className="min-h-screen qv-app-bg flex items-center justify-center">
         <Loader2 className="w-7 h-7 text-qv-primary animate-spin" />
+      </div>
+    );
+  }
+
+  // The party is no longer available (removed, cancelled or rescheduled). NEVER
+  // show a raw 404 / stuck spinner: give the user a friendly screen + a way back
+  // to the feed so a shared link is never a dead end.
+  if (isError || !event) {
+    return (
+      <div className="min-h-screen qv-app-bg flex flex-col items-center justify-center text-center px-8">
+        <div className="text-5xl mb-4">🎉</div>
+        <h1 className="text-white text-xl font-bold mb-2">Esta fiesta ya no está disponible</h1>
+        <p className="text-white/60 text-sm mb-8 max-w-xs">
+          Puede que se haya cancelado o cambiado de fecha. ¡Descubre otros planes cerca de ti!
+        </p>
+        <button
+          data-testid="event-notfound-feed-btn"
+          onClick={() => navigate("/feed")}
+          className="h-12 px-8 rounded-2xl bg-qv-primary text-white font-bold text-base active:scale-95 transition-transform"
+        >
+          Ver otras fiestas
+        </button>
       </div>
     );
   }

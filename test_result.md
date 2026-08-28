@@ -8490,3 +8490,226 @@ agent_communication:
       are working correctly. No regressions detected in existing auth endpoints.
       
       Next step: iOS native button integration and TestFlight E2E testing.
+
+
+backend:
+  - task: "Enlaces de fiesta rompiendose con 404 (IDs de evento inestables entre scrapes)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          BUG (usuario): algunas fiestas (ej. "Jueves FITZ" 10-sep) daban 404; el enlace se rompia.
+          CAUSA: en clubs afiliados (ct_slug), el MISMO party vuelve con external_id distinto
+          (FourVenues da codigo nuevo por microsite / flip FourVenues<->ClubTickets). El dedup por
+          (venue+fecha) se saltaba eventos con external_id -> creaba un evento NUEVO (UUID nuevo) y el
+          paso "Reconcile" borraba el del run anterior -> el UUID del party cambiaba entre pasadas ->
+          cualquier enlace compartido antes -> 404.
+          FIX (_apply_scraped_event): tercer paso de matching por (scraper_venue_id + fecha + nombre
+          fuzzy _ct_name_match) que REUTILIZA el evento existente aunque cambie external_id -> UUID
+          ESTABLE, sin duplicados; solo actualiza external_id (asi Reconcile lo conserva). Un party
+          realmente distinto (otro nombre) NO se fusiona.
+          Verificado in-process (event_link_stability_test.py, 10/10): UUID estable entre runs con
+          external_id distinto, sin duplicados, party distinto crea evento aparte.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED EVENT LINK STABILITY FIX (3 test scenarios, 100% pass):
+          
+          ✅ TEST 1: IN-PROCESS TEST SCRIPT (10/10 checks PASSED)
+          - Script: python3 /app/event_link_stability_test.py
+          - Output: "ALL EVENT-LINK-STABILITY TESTS PASSED"
+          - Exit code: 0
+          - Verified all 10 checks:
+            * run1 creates the party ✓
+            * run1 stored one event ✓
+            * run2 does NOT create a duplicate ✓
+            * still exactly ONE event (no duplicate) ✓
+            * event id is STABLE across runs (link never breaks) ✓
+            * external_id updated to current run (reconcile keeps it) ✓
+            * different party same night creates a separate event ✓
+            * now two distinct events for that night ✓
+            * different party re-scrape reuses its id (no churn) ✓
+            * still two events total (no duplicates) ✓
+          
+          ✅ TEST 2: NONEXISTENT EVENT 404 CHECK (PASSED)
+          - GET /api/events/nonexistent-id-123 → HTTP 404
+          - Correctly returns 404 (NOT 500) for unknown event ID ✓
+          
+          ✅ TEST 3: REGRESSION CHECK (PASSED)
+          - GET /api/events?city=Madrid&date_filter=all → HTTP 200
+          - Returns valid JSON list with 112 events ✓
+          - Madrid events feed working correctly ✓
+          
+          CONCLUSION:
+          Event link stability fix is working perfectly. The core issue is resolved:
+          ✅ Same party with different external_id reuses the SAME event UUID (no duplicate created)
+          ✅ Event links remain stable across scraper runs (no more 404s on shared links)
+          ✅ Different parties on the same night are NOT merged (creates separate events)
+          ✅ Nonexistent event IDs return proper 404 (not 500)
+          ✅ No regressions in event feed endpoints
+          
+          The fix ensures that when a party returns with a different external_id (due to provider 
+          flips or FourVenues microsite changes), the system matches by (venue + date + fuzzy name) 
+          and reuses the existing event UUID instead of creating a new one. This prevents the 
+          "reconcile" step from deleting the old event and breaking shared links.
+          
+          Test files: /app/event_link_stability_test.py, /app/backend_test_event_link_stability.py
+
+frontend:
+  - task: "EventDetail: nunca mostrar 404/spinner infinito para fiesta no disponible"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/EventDetail.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Antes: si /events/{id} daba 404, EventDetail se quedaba en spinner infinito (!event).
+          FIX: useQuery no reintenta en 404; nuevo estado muestra pantalla amable "Esta fiesta ya no
+          esta disponible" + boton "Ver otras fiestas" (data-testid event-notfound-feed-btn) -> /feed.
+          Asi un enlace roto nunca es un callejon sin salida.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED EVENT DETAIL NON-EXISTENT PARTY FIX (4 test scenarios, 100% pass):
+          
+          ✅ TEST 1: NON-EXISTENT EVENT FRIENDLY SCREEN (4/4 checks PASSED)
+          - Navigated to http://localhost:3000/event/nonexistent-party-id-9999 (deliberately invalid event ID)
+          - Backend returns 404 for this event (expected)
+          - NO infinite loading spinner detected after 3 seconds wait ✓
+          - Friendly message "Esta fiesta ya no está disponible" displayed correctly ✓
+          - Button "Ver otras fiestas" with data-testid="event-notfound-feed-btn" found ✓
+          - Page has dark background rgb(5, 5, 6) - NOT blank/white/crashed ✓
+          - Screenshot captured: test1-friendly-error-screen.png
+          
+          ✅ TEST 2: NAVIGATION TO FEED (3/3 checks PASSED)
+          - Clicked "Ver otras fiestas" button (data-testid="event-notfound-feed-btn")
+          - Successfully navigated to /feed ✓
+          - City selector visible (Palma, Ibiza, Madrid, Barcelona, Marbella) ✓
+          - Feed loaded with event cards (208 elements found) ✓
+          - Screenshot captured: test2-feed-after-navigation.png
+          
+          ✅ TEST 3: REGRESSION - DIRECT /FEED NAVIGATION (4/4 checks PASSED)
+          - Navigated directly to http://localhost:3000/feed
+          - Dark background maintained: rgb(5, 5, 6) ✓
+          - City selector rendered correctly ✓
+          - Feed heading "The plans." displayed ✓
+          - Event cards rendering normally (208 elements) ✓
+          - Screenshot captured: test3-feed-regression.png
+          
+          ✅ TEST 4: CONSOLE ERRORS CHECK (2/2 checks PASSED)
+          - NO JavaScript exceptions detected ✓
+          - NO unexpected console errors (expected 404/401 network warnings ignored) ✓
+          
+          CONCLUSION:
+          The event detail page fix is working perfectly. All requirements met:
+          ✅ Non-existent event links NEVER show infinite loading spinner
+          ✅ Non-existent event links NEVER show blank/white/crash screen
+          ✅ Friendly "not available" screen displays with clear message and emoji
+          ✅ "Ver otras fiestas" button (data-testid="event-notfound-feed-btn") navigates to /feed
+          ✅ Feed loads normally after navigation with city selector and event cards
+          ✅ Regression test: direct /feed navigation still works correctly
+          ✅ No JavaScript exceptions or unexpected console errors
+          
+          The fix ensures that when a user clicks a link to a party that no longer exists 
+          (removed, cancelled, or rescheduled), they see a friendly message explaining the 
+          situation and can easily return to the feed to discover other parties. This prevents 
+          shared links from becoming dead ends and improves user experience.
+          
+          Test method: Playwright automation testing with console log monitoring and screenshot 
+          verification. All tests executed successfully with no failures.
+
+agent_communication:
+  - agent: "main"
+    message: |
+      PROBAR SOLO BACKEND primero. Entorno = backend local http://localhost:8001 (Mongo local).
+      1) Ejecuta: python3 /app/event_link_stability_test.py  -> debe imprimir
+         "ALL EVENT-LINK-STABILITY TESTS PASSED" y salir 0 (10/10). Verifica que el MISMO party con
+         external_id distinto reutiliza el UUID (sin duplicados) y que un party distinto no se fusiona.
+      2) HTTP: GET /api/events/inexistente-id-123 -> 404 (esperado, no 500).
+      3) Regresion: GET /api/events?city=Madrid&date_filter=all -> 200 con lista.
+      No toques produccion.
+  - agent: "testing"
+    message: |
+      EVENT LINK STABILITY FIX TESTING COMPLETE (2026-08-27)
+      
+      🎉 ALL BACKEND TESTS PASSED - FIX WORKING PERFECTLY
+      
+      Tested the event link stability fix against local backend at http://localhost:8001 with 
+      Mongo database quienva_local_test.
+      
+      ✅ TEST RESULTS (3/3 scenarios PASSED):
+      
+      1. IN-PROCESS TEST SCRIPT (10/10 checks PASSED):
+         - Script: python3 /app/event_link_stability_test.py
+         - Output: "ALL EVENT-LINK-STABILITY TESTS PASSED"
+         - Exit code: 0
+         - Core fix verified: Same party with different external_id reuses the SAME event UUID
+         - No duplicates created when external_id changes
+         - Different parties on same night correctly create separate events
+         - Event IDs remain stable across scraper runs (no more 404s on shared links)
+      
+      2. NONEXISTENT EVENT 404 CHECK (PASSED):
+         - GET /api/events/nonexistent-id-123 → HTTP 404
+         - Correctly returns 404 (NOT 500) for unknown event ID
+      
+      3. REGRESSION CHECK (PASSED):
+         - GET /api/events?city=Madrid&date_filter=all → HTTP 200 with 112 events
+         - Madrid events feed working correctly
+      
+      CONCLUSION:
+      The event link stability fix is fully functional and resolves the root cause of 404 errors 
+      on shared event links. The fuzzy name matching by (venue + date + name) ensures that when 
+      a party returns with a different external_id (due to provider flips or FourVenues microsite 
+      changes), the system reuses the existing event UUID instead of creating a duplicate. This 
+      prevents the reconcile step from deleting old events and breaking shared links.
+      
+      No regressions detected. All endpoints working correctly.
+  - agent: "testing"
+    message: |
+      EVENT DETAIL NON-EXISTENT PARTY FIX - FRONTEND TESTING COMPLETE (2026-08-28)
+      
+      🎉 ALL FRONTEND TESTS PASSED - FIX WORKING PERFECTLY
+      
+      Tested the EventDetail page fix for non-existent parties at http://localhost:3000.
+      
+      ✅ TEST RESULTS (4/4 scenarios PASSED):
+      
+      1. NON-EXISTENT EVENT FRIENDLY SCREEN:
+         - Navigated to /event/nonexistent-party-id-9999 (deliberately invalid event ID)
+         - NO infinite loading spinner detected ✓
+         - Friendly message "Esta fiesta ya no está disponible" displayed ✓
+         - Button "Ver otras fiestas" (data-testid="event-notfound-feed-btn") found ✓
+         - Dark background maintained (NOT blank/white/crashed) ✓
+      
+      2. NAVIGATION TO FEED:
+         - Clicked "Ver otras fiestas" button
+         - Successfully navigated to /feed ✓
+         - City selector visible with all cities ✓
+         - Event cards rendering correctly ✓
+      
+      3. REGRESSION - DIRECT /FEED NAVIGATION:
+         - Direct navigation to /feed works correctly ✓
+         - Dark background maintained ✓
+         - City selector and event cards render normally ✓
+      
+      4. CONSOLE ERRORS CHECK:
+         - NO JavaScript exceptions detected ✓
+         - NO unexpected console errors (expected 404/401 network warnings ignored) ✓
+      
+      CONCLUSION:
+      The frontend fix is working perfectly. Non-existent event links now show a friendly 
+      "not available" screen instead of infinite spinner or 404 error. Users can easily 
+      navigate back to the feed, preventing shared links from becoming dead ends. All 
+      regression tests passed with no issues.
+      
+      Ready for production deployment.

@@ -508,3 +508,15 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
   NSMicrophoneUsageDescription (ademas del NSContacts ya existente). Sin ellos: rechazo + crash al abrir camara.
 - NO-codigo (recordar al usuario en App Store Connect): Privacy Policy URL (obligatoria), etiquetas de
   privacidad (nutrition labels), cuenta demo para el revisor, capturas. Y activar capacidad Sign in with Apple.
+
+## 2026-08-27 (cont.) — Fiestas con 404 / enlaces que se rompen
+- CAUSA: en clubs afiliados (ct_slug) el mismo party volvia con external_id distinto (FourVenues codigo
+  por microsite / flip FV<->ClubTickets). Dedup por (venue+fecha) saltaba eventos con external_id ->
+  creaba UUID nuevo y el paso Reconcile borraba el anterior -> el UUID del party cambiaba entre pasadas
+  -> enlaces compartidos -> 404.
+- FIX backend (_apply_scraped_event): 3er match por (scraper_venue_id + fecha + nombre fuzzy) que
+  reutiliza el evento existente aunque cambie external_id -> UUID ESTABLE, sin duplicados. Verificado
+  event_link_stability_test.py 10/10 + testing agent.
+- FIX frontend (EventDetail.js): sin reintentos en 404 + pantalla "Esta fiesta ya no esta disponible"
+  con boton "Ver otras fiestas" -> /feed (no mas spinner infinito). Verificado frontend agent 4/4.
+- Nota: arregla roturas FUTURAS; enlaces ya rotos (UUID ya purgado) ahora caen en la pantalla amable.

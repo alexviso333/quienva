@@ -11711,6 +11711,24 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
             if _norm_venue(c.get("venue", "")) == norm:
                 existing = c
                 break
+    # 3) Robust re-match (prevents broken links / 404): the SAME real party can come
+    #    back with a DIFFERENT external_id — FourVenues issues a new code per
+    #    microsite, and a club can flip between FourVenues- and ClubTickets-sourced
+    #    feeds run to run. Matching ONLY by external_id would CREATE a new event
+    #    (new UUID) every time, and the reconcile step below would delete the
+    #    previous one -> every previously shared/opened link 404s. So also REUSE an
+    #    existing SCRAPED event for the SAME venue (scraper_venue_id) + date whose
+    #    NAME matches (fuzzy). This keeps the event id STABLE across runs so links
+    #    never break. The name check disambiguates two different parties on the same
+    #    night at the same venue (they won't fuzzy-match).
+    if not existing and venue.get("id"):
+        async for c in db.events.find(
+            {"date": se.date, "source": "scraper", "scraper_venue_id": venue.get("id")},
+            {"_id": 0},
+        ):
+            if _ct_name_match(se.name, c.get("name", "")):
+                existing = c
+                break
     now_iso = datetime.now(timezone.utc).isoformat()
     if not existing:
         # CREATE
