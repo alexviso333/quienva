@@ -323,27 +323,46 @@ def _fv_event_code(url: str) -> str:
     return m.group(1) if m else ""
 
 
+def _affiliate_map_is_fresh() -> bool:
+    """True if the quienva affiliate feed was refreshed successfully recently. When
+    the feed is stale (e.g. FourVenues token expired → refresh keeps the old map),
+    its event codes can be out of date, so we must NOT build affiliate links from
+    them; we fall back to the event's own fresh direct link instead."""
+    return bool(_AFFILIATE_TS) and (time.time() - _AFFILIATE_TS) < 6 * 3600
+
+
 def _auto_commission_url_for(ev: dict) -> str:
     """The AUTOMATIC ticket link (scraper/affiliate logic), ignoring any manual
-    admin override. OUR affiliate link ONLY for events we carry; otherwise the
-    original untouched link. We use the canonical code-based microsite URL
-    (site.fourvenues.com/es/<affiliate>/events/<code>) — the exact format the
-    affiliate microsite itself links to, so it resolves INSTANTLY. (The pretty
-    name-date-code URL is SSR-generated on demand and 404s for ~1 min until
-    FourVenues caches it.)"""
+    admin override.
+
+    Rule (matches the owner's model): parties that appear in OUR quienva affiliate
+    feed get the quienva RRPP link so the sale is attributed to us; everything else
+    keeps its own direct link, UNTOUCHED (never inject our slug).
+
+    Freshness (the whole point): FourVenues event codes are GLOBAL — the
+    /api/events/<code>/tickets-types endpoint takes the RRPP slug SEPARATELY, so
+    `site.fourvenues.com/es/<any-slug>/events/<code>` resolves with the SAME code.
+    Therefore the freshest, always-correct code is the one on the event's OWN
+    freshly-scraped direct link (re-synced every scrape run). We build the quienva
+    link from THAT code — so if the club recreates the party and its code changes,
+    our link changes too. The affiliate-feed code is only a last resort, and only
+    when the feed is FRESH (it desyncs when the club recreates the event — the exact
+    'Fitz 10-sep → .../quienva/events/H6LG' broken-redirect bug)."""
     m = _affiliate_match(ev)
+    direct = ev.get("commission_url", "") or ""
     if m:
-        # Prefer the code from the event's own (already-working) scraped ticket
-        # link; fall back to the code captured from the affiliate feed.
-        code = _fv_event_code(ev.get("commission_url", "")) or (m[0] or "")
+        code = _fv_event_code(direct)
+        if not code and _affiliate_map_is_fresh():
+            code = m[0] or ""
         if code:
             return f"https://site.fourvenues.com/es/{AFFILIATE_SLUG}/events/{code}"
-    # ClubTickets: the buy link is already stored in its FINAL form — it carries
-    # our ?aff code ONLY for the exact parties we carry in our affiliate panel
-    # (matched per party at scrape time). Parties we don't carry keep their normal
-    # direct link (no ?aff) so the party always resolves. So serve it AS-IS: never
-    # blanket-tag a clubtickets.com link here.
-    return ev.get("commission_url", "") or ""
+        # In our feed but no usable/fresh code → serve the direct link so it never
+        # 404s (we may miss commission on this one until the next fresh scrape).
+        return direct
+    # ClubTickets & everything else: the buy link is already stored in its FINAL
+    # form (ClubTickets ?aff only for parties we carry; direct otherwise). Never
+    # blanket-tag here — serve it AS-IS so checkout always resolves.
+    return direct
 
 
 def _commission_url_for(ev: dict) -> str:
