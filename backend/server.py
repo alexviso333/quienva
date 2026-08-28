@@ -339,29 +339,21 @@ def _auto_commission_url_for(ev: dict) -> str:
     feed get the quienva RRPP link so the sale is attributed to us; everything else
     keeps its own direct link, UNTOUCHED (never inject our slug).
 
-    Freshness (the whole point): FourVenues event codes are GLOBAL — the
-    /api/events/<code>/tickets-types endpoint takes the RRPP slug SEPARATELY, so
-    `site.fourvenues.com/es/<any-slug>/events/<code>` resolves with the SAME code.
-    Therefore the freshest, always-correct code is the one on the event's OWN
-    freshly-scraped direct link (re-synced every scrape run). We build the quienva
-    link from THAT code — so if the club recreates the party and its code changes,
-    our link changes too. The affiliate-feed code is only a last resort, and only
-    when the feed is FRESH (it desyncs when the club recreates the event — the exact
-    'Fitz 10-sep → .../quienva/events/H6LG' broken-redirect bug)."""
+    Freshness: FourVenues event codes are NOT shared across microsites — each RRPP
+    (quienva, the club's own site...) has its OWN code namespace, so the ONLY valid
+    quienva link is built from the code OUR quienva feed reports for that party
+    (m[0]). Using the club's own code under our slug points at a DIFFERENT party
+    (that was the 'Jueves FITZ → Mila X Golden Room' bug). The feed is re-scraped
+    every run, so m[0] tracks the current quienva code. If the feed is STALE (e.g.
+    token expired → refresh keeps the old map), we do NOT risk a wrong/404 quienva
+    link: we serve the event's own direct link instead (works, no commission until
+    the feed is fresh again)."""
     m = _affiliate_match(ev)
     direct = ev.get("commission_url", "") or ""
-    if m:
-        code = _fv_event_code(direct)
-        if not code and _affiliate_map_is_fresh():
-            code = m[0] or ""
-        if code:
-            return f"https://site.fourvenues.com/es/{AFFILIATE_SLUG}/events/{code}"
-        # In our feed but no usable/fresh code → serve the direct link so it never
-        # 404s (we may miss commission on this one until the next fresh scrape).
-        return direct
-    # ClubTickets & everything else: the buy link is already stored in its FINAL
-    # form (ClubTickets ?aff only for parties we carry; direct otherwise). Never
-    # blanket-tag here — serve it AS-IS so checkout always resolves.
+    if m and m[0] and _affiliate_map_is_fresh():
+        return f"https://site.fourvenues.com/es/{AFFILIATE_SLUG}/events/{m[0]}"
+    # Not ours, no fresh feed code → the event's own direct link, UNTOUCHED (never
+    # inject our slug into a party we don't carry, never serve a stale quienva code).
     return direct
 
 
@@ -392,10 +384,9 @@ def _fv_embed_url(ev: dict) -> str:
     feed_code = _AFFILIATE_MAP.get(key)
     if not feed_code:
         return ""  # not literally in our quienva RRPP feed → no iframe
-    code = _fv_event_code(ev.get("commission_url", "")) or feed_code
-    if not code:
-        return ""
-    return f"https://www.fourvenues.com/iframe/{AFFILIATE_SLUG}/events/{code}"
+    # Use OUR quienva feed's code (codes are per-microsite, not global — the club's
+    # own code would embed a DIFFERENT party under our slug).
+    return f"https://www.fourvenues.com/iframe/{AFFILIATE_SLUG}/events/{feed_code}"
 
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
@@ -7544,10 +7535,11 @@ async def _scan_broken_links(days: int = 120, city: str = ""):
         if not eff:
             if ev.get("has_commission"):
                 reason = "empty"
-        else:
-            m = _affiliate_match(ev)
-            if m and not _fv_event_code(ev.get("commission_url", "")):
-                reason = "affiliate_stale_risk"
+        elif _affiliate_match(ev) and not _affiliate_map_is_fresh():
+            # It's one of ours but the quienva feed is stale (e.g. token expired), so
+            # right now we're serving its direct link and losing the commission —
+            # worth flagging so the owner renews the FourVenues token.
+            reason = "affiliate_stale_feed"
         if reason:
             at_risk.append({
                 "event_id": ev["id"],

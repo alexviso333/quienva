@@ -643,7 +643,7 @@ export default function Admin() {
                     <p className="font-semibold truncate">{e.name}</p>
                     <p className="text-white/40 text-sm truncate">{e.venue} · {e.date}{e.time ? ` · ${e.time}` : ""}</p>
                     <span className="inline-block text-[10px] font-bold uppercase tracking-wide mt-1 px-2 py-0.5 rounded-full bg-qv-primary/20 text-qv-primary">
-                      {e.reason === "empty" ? "Sin enlace" : "Código afiliado sin sincronizar"}
+                      {e.reason === "empty" ? "Sin enlace" : "Feed afiliado caducado (revisa token)"}
                     </span>
                     <p className="text-[11px] text-white/40 break-all mt-1">{e.commission_url || "(vacío)"}</p>
                   </div>
