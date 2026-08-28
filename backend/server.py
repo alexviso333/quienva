@@ -7490,6 +7490,22 @@ async def admin_link_health(admin: dict = Depends(require_admin),
         the event (the exact 'Fitz → .../events/H6LG' broken-redirect class). These
         are the ones to double-check / pin a manual link.
     Events with a manual link_override are considered fixed and never flagged."""
+    checked, at_risk = await _scan_broken_links(days=days, city=city)
+    return {"total": len(at_risk), "checked": checked, "events": at_risk}
+
+
+@api_router.post("/admin/link-health/notify")
+async def admin_link_health_notify(admin: dict = Depends(require_admin)):
+    """Run the at-risk buy-link scan now and push a grouped alert to admins for any
+    NEW broken links (same routine the scraper runs automatically). Lets the owner
+    test the alert and force an immediate check."""
+    n = await _notify_admins_broken_links()
+    return {"ok": True, "notified_new": n}
+
+
+async def _scan_broken_links(days: int = 120, city: str = ""):
+    """Shared at-risk buy-link scan (used by the admin panel endpoint AND the
+    scheduled admin push alert). Returns (checked_count, at_risk_list)."""
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
     end = (date.fromisoformat(today) + timedelta(days=max(1, days))).isoformat()
     q: dict = {"date": {"$gte": today, "$lte": end}}
@@ -7526,7 +7542,48 @@ async def admin_link_health(admin: dict = Depends(require_admin),
                 "auto_commission_url": _auto_commission_url_for(ev),
             })
     at_risk.sort(key=lambda x: (x["date"], x["venue"]))
-    return {"total": len(at_risk), "checked": checked, "events": at_risk}
+    return checked, at_risk
+
+
+async def _notify_admins_broken_links():
+    """Send ONE grouped push to every admin when NEW at-risk buy links appear
+    (see _scan_broken_links). Persists the set of already-alerted event ids in
+    app_settings key 'admin_notified_broken_links' so the same event never
+    re-alerts until it's fixed and breaks again. Opt-out via app_settings key
+    'admin_broken_link_alerts' (ON by default). Never raises."""
+    try:
+        s = await db.app_settings.find_one({"key": "admin_broken_link_alerts"}, {"_id": 0})
+        if s is not None and s.get("value") is False:
+            return 0  # disabled by admin
+        _checked, at_risk = await _scan_broken_links(days=120)
+        current_ids = {e["event_id"] for e in at_risk}
+        prev_doc = await db.app_settings.find_one({"key": "admin_notified_broken_links"}, {"_id": 0})
+        prev_ids = set((prev_doc or {}).get("value") or [])
+        # Keep the persisted set aligned with what's currently broken (so a fixed
+        # event that breaks AGAIN later will alert again), and find the genuinely NEW ones.
+        new_ids = current_ids - prev_ids
+        await db.app_settings.update_one(
+            {"key": "admin_notified_broken_links"},
+            {"$set": {"key": "admin_notified_broken_links", "value": list(current_ids),
+                      "updated_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+        if not new_ids:
+            return 0
+        new_events = [e for e in at_risk if e["event_id"] in new_ids]
+        n = len(new_events)
+        sample = "; ".join(f"{(e.get('name') or '¿?')[:28]} ({e.get('venue') or ''})" for e in new_events[:3])
+        titulo = "1 evento con enlace en riesgo" if n == 1 else f"{n} eventos con enlace en riesgo"
+        msg = f"⚠️ {titulo}. Ábrelo y arréglalo con el lápiz." + (f" Ej.: {sample}" if sample else "")
+        data = {"type": "admin_broken_link", "count": n,
+                "event_id": new_events[0]["event_id"] if n == 1 else None,
+                "url": f"/event/{new_events[0]['event_id']}" if n == 1 else "/admin"}
+        async for a in db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1}):
+            await create_notification(a["user_id"], "admin_broken_link", msg, data)
+        return n
+    except Exception as e:
+        logger.warning(f"[broken-link-alert] failed: {e}")
+        return 0
 
 
 @api_router.delete("/admin/events/{event_id}")
@@ -12457,6 +12514,12 @@ async def run_all_scrapers(mode: str = "full"):
         await _notify_admins_affiliate_flips(batch_id)
     except Exception:
         pass
+    # Grouped admin push when NEW at-risk buy links appear (so the owner can fix
+    # them before anyone clicks a dead link) — runs AFTER refresh_affiliate_events.
+    try:
+        await _notify_admins_broken_links()
+    except Exception:
+        pass
     return results
 
 
@@ -12768,6 +12831,26 @@ async def admin_set_affiliate_flip_alerts(inp: AffiliateFlipAlertsInput, admin: 
     await db.app_settings.update_one(
         {"key": "admin_affiliate_flip_alerts"},
         {"$set": {"key": "admin_affiliate_flip_alerts", "value": bool(inp.enabled),
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"enabled": bool(inp.enabled)}
+
+
+@app.get("/api/admin/settings/broken-link-alerts")
+async def admin_get_broken_link_alerts(admin: dict = Depends(require_admin)):
+    """Whether admins get a grouped push when NEW at-risk buy links appear
+    (ON by default)."""
+    s = await db.app_settings.find_one({"key": "admin_broken_link_alerts"}, {"_id": 0})
+    enabled = not (s is not None and s.get("value") is False)
+    return {"enabled": enabled}
+
+
+@app.put("/api/admin/settings/broken-link-alerts")
+async def admin_set_broken_link_alerts(inp: AffiliateFlipAlertsInput, admin: dict = Depends(require_admin)):
+    await db.app_settings.update_one(
+        {"key": "admin_broken_link_alerts"},
+        {"$set": {"key": "admin_broken_link_alerts", "value": bool(inp.enabled),
                   "updated_at": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )

@@ -398,6 +398,35 @@ export default function Admin() {
   });
   const brokenCount = linkHealth?.total || 0;
 
+  // Push alert toggle for at-risk links + on-demand check.
+  const { data: brokenAlerts } = useQuery({
+    queryKey: ["admin-broken-alerts"],
+    queryFn: async () => (await api.get("/admin/settings/broken-link-alerts")).data,
+  });
+  const toggleBrokenAlerts = useMutation({
+    mutationFn: async (enabled) => (await api.put("/admin/settings/broken-link-alerts", { enabled })).data,
+    onMutate: async (enabled) => {
+      await qc.cancelQueries({ queryKey: ["admin-broken-alerts"] });
+      const prev = qc.getQueryData(["admin-broken-alerts"]);
+      qc.setQueryData(["admin-broken-alerts"], { enabled });
+      return { prev };
+    },
+    onSuccess: (d) => toast.success(d.enabled ? "Te avisaremos por push 🔔" : "Avisos de enlaces desactivados"),
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["admin-broken-alerts"], ctx.prev);
+      toast.error("No se pudo actualizar");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-broken-alerts"] }),
+  });
+  const checkNow = useMutation({
+    mutationFn: async () => (await api.post("/admin/link-health/notify")).data,
+    onSuccess: (d) => {
+      toast.success(d.notified_new > 0 ? `Aviso enviado: ${d.notified_new} nuevo(s)` : "Comprobado. Sin novedades ✅");
+      qc.invalidateQueries({ queryKey: ["admin-link-health"] });
+    },
+    onError: () => toast.error("No se pudo comprobar"),
+  });
+
   const del = useMutation({
     mutationFn: async (id) => (await api.delete(`/admin/events/${id}`)).data,
     onSuccess: () => {
@@ -585,6 +614,25 @@ export default function Admin() {
               <p className="text-[11px] text-white/40 mt-1 leading-snug">
                 Detectamos enlaces de afiliado que pueden estar rotos (código desincronizado) o vacíos. Ábrelo y pon el enlace correcto con el lápiz — tu enlace manual siempre manda.
               </p>
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
+                <div className="flex items-center gap-2 min-w-0">
+                  <BellRing className="w-4 h-4 text-qv-secondary shrink-0" />
+                  <span className="text-sm text-white/80 truncate">Avisarme por push cuando haya nuevos</span>
+                </div>
+                <Switch
+                  data-testid="admin-broken-alerts-toggle"
+                  checked={brokenAlerts?.enabled ?? true}
+                  onCheckedChange={(v) => toggleBrokenAlerts.mutate(v)}
+                />
+              </div>
+              <button
+                data-testid="admin-check-now"
+                onClick={() => checkNow.mutate()}
+                disabled={checkNow.isPending}
+                className="mt-3 w-full h-10 rounded-xl bg-white/5 border border-white/15 text-white/80 text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
+              >
+                {checkNow.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Comprobar ahora"}
+              </button>
             </div>
             {brokenCount === 0 ? (
               <p className="py-8 text-center text-white/40 text-sm">Todo en orden. No hay enlaces en riesgo. ✅</p>

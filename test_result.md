@@ -1919,6 +1919,86 @@ frontend:
           
           Test file: /app/backend_test_edit_history_link_health.py
 
+  - task: "Admin broken buy-link push alert (settings + notify endpoint)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL BROKEN BUY-LINK PUSH ALERT FEATURES (8 test scenarios, 100% pass):
+          
+          ✅ TEST 1: GET SETTINGS (DEFAULT ON)
+          - GET /api/admin/settings/broken-link-alerts → 200 with {enabled: true}
+          - Default setting is ON as expected
+          
+          ✅ TEST 2: PUT SETTINGS (PERSISTENCE)
+          - PUT /api/admin/settings/broken-link-alerts {enabled: true} → 200 with {enabled: true}
+          - Setting persists correctly (verified with subsequent GET)
+          
+          ✅ TEST 3: FIRST NOTIFY CALL (DETECTS NEW BROKEN LINKS)
+          - Created test event with has_commission=true, commission_url="" (empty), future date (2026-09-17)
+          - Event appears in link-health with reason='empty'
+          - POST /api/admin/link-health/notify → 200 with {ok: true, notified_new: 1}
+          - notified_new = 1 (>= 1 as expected, detected the new broken link)
+          
+          ✅ TEST 4: NOTIFICATION CREATED
+          - GET /api/notifications as admin → 200
+          - Found notification with type='admin_broken_link'
+          - Notification message: "⚠️ 1 evento con enlace en riesgo. Ábrelo y arréglalo con el lápiz. Ej.: Test Event Broken Link 17879 (Test Venue QA)"
+          - Notification data includes: type, count, event_id, url
+          
+          ✅ TEST 5: DEDUPLICATION (SECOND NOTIFY CALL)
+          - POST /api/admin/link-health/notify (second call) → 200 with {ok: true, notified_new: 0}
+          - notified_new = 0 (deduplication working correctly - same event not re-notified)
+          
+          ✅ TEST 6: FIX EVENT WITH LINK_OVERRIDE
+          - PUT /api/admin/events/{id}/admin-edit {link_override: "https://x.com/ok"} → 200
+          - Event NO LONGER appears in link-health (correctly excluded after fix)
+          - Events with link_override are considered fixed and excluded from alerts
+          
+          ✅ TEST 7: DISABLED SETTING
+          - PUT /api/admin/settings/broken-link-alerts {enabled: false} → 200
+          - POST /api/admin/link-health/notify → 200 with {ok: true, notified_new: 0}
+          - notified_new = 0 (correctly disabled, no notifications sent)
+          - Re-enabled setting for cleanup
+          
+          ✅ TEST 8: AUTHORIZATION
+          - GET /api/admin/settings/broken-link-alerts:
+            * No token → 401 ✓
+            * Non-admin token → 403 ✓
+          - PUT /api/admin/settings/broken-link-alerts:
+            * No token → 401 ✓
+            * Non-admin token → 403 ✓
+          - POST /api/admin/link-health/notify:
+            * No token → 401 ✓
+            * Non-admin token → 403 ✓
+          
+          CONCLUSION:
+          Broken buy-link push alert feature working perfectly:
+          ✅ GET /api/admin/settings/broken-link-alerts returns correct structure (default ON)
+          ✅ PUT /api/admin/settings/broken-link-alerts persists correctly
+          ✅ POST /api/admin/link-health/notify detects new broken links
+          ✅ Notifications created with type='admin_broken_link' and sent to admins
+          ✅ Deduplication working (same event not re-notified until fixed and broken again)
+          ✅ Events with link_override excluded from link-health (considered fixed)
+          ✅ Disabled setting prevents notifications (notified_new = 0)
+          ✅ Authorization working (401/403 for unauthorized access)
+          ✅ Test event cleanup successful (DELETE /api/admin/events/{id})
+          
+          The feature allows admins to:
+          1. Enable/disable broken link alerts via settings endpoint
+          2. Manually trigger a scan and notification via notify endpoint
+          3. Receive ONE grouped push notification for NEW broken links only
+          4. Avoid duplicate notifications for the same broken links (persistent dedup)
+          5. Fix broken links with link_override (automatically excluded from future alerts)
+          
+          Test file: /app/backend_test_broken_link_alerts.py
+
 metadata:
   created_by: "main_agent"
   version: "2.11"
@@ -1932,6 +2012,63 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: |
+      TESTING COMPLETE (2026-08-28, iteración 3) — BACKEND ONLY
+      
+      Tested the NEW admin "broken buy-link push alert" feature as requested.
+      
+      ✅ ALL 8 TEST SCENARIOS PASSED (100% success rate)
+      
+      FEATURE: Admin Broken Buy-Link Push Alert
+      - GET /api/admin/settings/broken-link-alerts → {enabled: bool} (default ON) ✓
+      - PUT /api/admin/settings/broken-link-alerts → persists correctly ✓
+      - POST /api/admin/link-health/notify → detects NEW broken links and sends notifications ✓
+      
+      TEST RESULTS:
+      1. ✓ Settings GET: Returns {enabled: true} by default
+      2. ✓ Settings PUT: Persists enabled/disabled state correctly
+      3. ✓ First notify call: Created test event with empty commission_url (future date 2026-09-17)
+         → notified_new = 1 (detected new broken link)
+      4. ✓ Notification created: GET /api/notifications shows type='admin_broken_link' with correct message
+      5. ✓ Deduplication: Second notify call → notified_new = 0 (same event not re-notified)
+      6. ✓ Fix with link_override: Event with link_override no longer appears in link-health
+      7. ✓ Disabled setting: When enabled=false, notify returns notified_new = 0
+      8. ✓ Authorization: All 3 endpoints return 401 without token, 403 for non-admin
+      
+      CLEANUP: Test event deleted successfully via DELETE /api/admin/events/{id}
+      
+      CONCLUSION:
+      The broken buy-link push alert feature is fully functional and meets all requirements:
+      - Settings endpoint works with proper persistence
+      - Notify endpoint detects new broken links and sends grouped notifications to admins
+      - Deduplication prevents duplicate notifications for the same broken links
+      - Events with link_override are correctly excluded (considered fixed)
+      - Disabled setting prevents notifications
+      - Proper authorization on all endpoints
+      
+      No frontend testing performed as instructed.
+      Test file: /app/backend_test_broken_link_alerts.py
+  - agent: "main"
+    message: |
+      MEJORA (2026-08-28, iteración 3) — PROBAR SOLO BACKEND. Admin: admin@quienva.app / admin123.
+      AVISO PUSH cuando aparecen NUEVOS enlaces en riesgo. Endpoints nuevos:
+      - GET /api/admin/settings/broken-link-alerts -> {enabled:bool} (ON por defecto).
+      - PUT /api/admin/settings/broken-link-alerts {enabled:bool} -> persiste y devuelve {enabled}.
+      - POST /api/admin/link-health/notify -> {ok:true, notified_new:int} (escanea y envía UNA
+        notificación agrupada a los admins por los enlaces en riesgo NUEVOS; dedup persistente).
+      TESTS:
+      1) PUT broken-link-alerts {enabled:true}. Crear evento con has_commission=true, commission_url=""
+         y fecha futura (reason 'empty').
+      2) POST /admin/link-health/notify -> notified_new >= 1. GET /api/notifications (como admin)
+         debe incluir una notificación type=admin_broken_link.
+      3) POST /admin/link-health/notify otra vez -> notified_new == 0 (dedup: no re-notifica el mismo).
+      4) PUT admin-edit {link_override:"https://x.com"} sobre ese evento -> ya no está en riesgo;
+         GET /admin/link-health no lo lista.
+      5) PUT broken-link-alerts {enabled:false}; POST /admin/link-health/notify -> notified_new == 0
+         (desactivado). Volver a {enabled:true} al final.
+      6) Auth: los 3 endpoints sin token -> 401; con no-admin -> 403.
+      NO tocar frontend.
   - agent: "main"
     message: |
       MEJORAS (2026-08-28, iteración 2) — PROBAR SOLO BACKEND. Admin: admin@quienva.app / admin123.
