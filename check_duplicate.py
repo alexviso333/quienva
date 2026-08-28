@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://production-deploy-26.preview.emergentagent.com"
+BACKEND_URL = "https://url-validation-fix.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin
