@@ -300,22 +300,36 @@ def _guest_going_boost(ev: dict) -> int:
 
 
 _FV_CODE_RE = re.compile(r"/events/([A-Za-z0-9]+)/?$")
+# Public short-link format: (www.)fourvenues.com/<org-slug>/<CODE>. The code is a
+# short alphanumeric token (no hyphens). We read it so an event's OWN live link
+# supplies the CURRENT code, instead of a possibly-stale code from the affiliate
+# panel feed. The panel code desyncs when the club recreates the event (FourVenues
+# issues a new code) → the auto affiliate link then points at a dead code (this was
+# the "Fitz 10-sep → .../quienva/events/H6LG" broken-redirect bug).
+_FV_PUBLIC_CODE_RE = re.compile(
+    r"^https?://(?:www\.)?fourvenues\.com/[^/]+/([A-Za-z0-9]{3,12})/?$", re.I)
 
 
 def _fv_event_code(url: str) -> str:
-    """The trailing FourVenues event code (e.g. .../events/127U -> '127U')."""
+    """The trailing FourVenues event code (e.g. .../events/127U -> '127U', or the
+    public short link www.fourvenues.com/<org>/4RA8 -> '4RA8')."""
     if not url:
         return ""
-    m = _FV_CODE_RE.search(url.split("?")[0].rstrip("/"))
+    base = url.split("?")[0].rstrip("/")
+    m = _FV_CODE_RE.search(base)
+    if m:
+        return m.group(1)
+    m = _FV_PUBLIC_CODE_RE.match(base)
     return m.group(1) if m else ""
 
 
-def _commission_url_for(ev: dict) -> str:
-    """The ticket link served to buyers: OUR affiliate link ONLY for events we
-    carry; otherwise the original untouched link. We use the canonical code-based
-    microsite URL (site.fourvenues.com/es/<affiliate>/events/<code>) — the exact
-    format the affiliate microsite itself links to, so it resolves INSTANTLY. (The
-    pretty name-date-code URL is SSR-generated on demand and 404s for ~1 min until
+def _auto_commission_url_for(ev: dict) -> str:
+    """The AUTOMATIC ticket link (scraper/affiliate logic), ignoring any manual
+    admin override. OUR affiliate link ONLY for events we carry; otherwise the
+    original untouched link. We use the canonical code-based microsite URL
+    (site.fourvenues.com/es/<affiliate>/events/<code>) — the exact format the
+    affiliate microsite itself links to, so it resolves INSTANTLY. (The pretty
+    name-date-code URL is SSR-generated on demand and 404s for ~1 min until
     FourVenues caches it.)"""
     m = _affiliate_match(ev)
     if m:
@@ -330,6 +344,16 @@ def _commission_url_for(ev: dict) -> str:
     # direct link (no ?aff) so the party always resolves. So serve it AS-IS: never
     # blanket-tag a clubtickets.com link here.
     return ev.get("commission_url", "") or ""
+
+
+def _commission_url_for(ev: dict) -> str:
+    """The ticket link served to buyers. An admin MANUAL override (link_override)
+    ALWAYS wins — set from the event edit panel when the auto link is broken; the
+    scraper never touches it. Otherwise fall back to the automatic link."""
+    lo = str(ev.get("link_override") or "").strip()
+    if lo:
+        return lo
+    return _auto_commission_url_for(ev)
 
 
 def _fv_embed_url(ev: dict) -> str:
@@ -680,6 +704,28 @@ class EventInput(BaseModel):
     price_tiers: List[PriceTier] = Field(default_factory=list)
     sale_state: str = "no_a_la_venta"   # no_a_la_venta | a_la_venta | pocas_entradas | agotado
     currency: str = "EUR"
+
+
+class AdminEventEditInput(BaseModel):
+    """Partial edit from the admin event panel (pencil button). All fields
+    optional — only provided ones are changed. Non-link fields are NOT locked
+    (the scraper may refresh them on its next run, per the owner's choice); only
+    the buy-link override is sticky and always wins."""
+    name: Optional[str] = None
+    venue: Optional[str] = None
+    address: Optional[str] = None
+    date: Optional[str] = None
+    time: Optional[str] = None
+    image_url: Optional[str] = None
+    genre: Optional[str] = None
+    city: Optional[str] = None
+    sale_state: Optional[str] = None
+    price_tiers: Optional[List[PriceTier]] = None
+    # Manual buy-link override (sticky). When set it ALWAYS wins over scraper +
+    # affiliate logic and the scraper never overwrites it. Send clear_link_override
+    # (or an empty string) to remove it and go back to the automatic link.
+    link_override: Optional[str] = None
+    clear_link_override: bool = False
 
 
 class EventPricingInput(BaseModel):
@@ -5495,6 +5541,10 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         # Admin-only flag so the owner can spot their affiliate events in the feed.
         # Sent as null to everyone else → no marker, no info leak.
         "is_affiliate": (_event_is_mine(ev) if (user or {}).get("role") == "admin" else None),
+        # Admin-only: the manual link override (if any) + what the automatic link
+        # WOULD be, so the event edit panel can prefill / show "back to automatic".
+        "link_override": (str(ev.get("link_override") or "") if (user or {}).get("role") == "admin" else None),
+        "auto_commission_url": (_auto_commission_url_for(ev) if (user or {}).get("role") == "admin" else None),
         "more_info_url": ev.get("more_info_url", ""),
         "featured": bool(ev.get("featured", False)),
         # Pricing
@@ -7330,6 +7380,49 @@ async def edit_event(event_id: str, inp: EventInput, admin: dict = Depends(requi
         raise HTTPException(status_code=404, detail="Evento no encontrado")
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     return ev
+
+
+@api_router.put("/admin/events/{event_id}/admin-edit")
+async def admin_edit_event(
+    event_id: str, inp: AdminEventEditInput, admin: dict = Depends(require_admin)
+):
+    """Partial edit from the event panel pencil (admin only). Non-link fields are
+    applied directly (the scraper may still refresh them later — owner's choice).
+    The buy-link override is STICKY: once set it always wins over scraper +
+    affiliate logic and the scraper never overwrites it (fixes broken auto links
+    like the stale FourVenues affiliate code)."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    set_fields: dict = {}
+    unset_fields: dict = {}
+    for f in ("name", "venue", "address", "date", "time", "image_url",
+              "genre", "city", "sale_state"):
+        val = getattr(inp, f)
+        if val is not None:
+            set_fields[f] = val
+    if inp.price_tiers is not None:
+        set_fields["price_tiers"] = [t.model_dump() for t in inp.price_tiers]
+    # Sticky buy-link override.
+    if inp.clear_link_override:
+        unset_fields["link_override"] = ""
+    elif inp.link_override is not None:
+        lo = inp.link_override.strip()
+        if lo:
+            set_fields["link_override"] = lo
+            set_fields["has_commission"] = True
+        else:
+            unset_fields["link_override"] = ""
+    update: dict = {}
+    if set_fields:
+        update["$set"] = set_fields
+    if unset_fields:
+        update["$unset"] = unset_fields
+    if update:
+        await db.events.update_one({"id": event_id}, update)
+        _invalidate_stats_cache()
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return await serialize_event(ev, admin, [])
 
 
 @api_router.delete("/admin/events/{event_id}")

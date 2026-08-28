@@ -12,7 +12,7 @@ import { NightRecapCard } from "@/components/NightRecapCard";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import {
-  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram,
+  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram, Pencil, X, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -48,6 +48,9 @@ export default function EventDetail() {
   const { requireAuth } = useGuestGate();
   const navigate = useNavigate();
   const [storyBusy, setStoryBusy] = useState(false);
+  const isAdmin = user?.role === "admin";
+  const [editOpen, setEditOpen] = useState(false);
+  const [form, setForm] = useState(null);
   const location = useLocation();
   // Robust "back": if the user landed here directly (shared link, notification,
   // refresh) there is no in-app history to pop, so navigate(-1) would do nothing
@@ -133,6 +136,66 @@ export default function EventDetail() {
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["event", id] }),
   });
+
+  // ---- Admin-only: edit event (pencil) ----
+  const openEdit = () => {
+    setForm({
+      name: event.name || "",
+      venue: event.venue || "",
+      address: event.address || "",
+      date: event.date || "",
+      time: event.time || "",
+      genre: event.genre || "",
+      image_url: event.image_url || "",
+      city: event.city || "",
+      // The manual buy-link override (sticky). Prefill with the current override if
+      // set, otherwise leave blank so the automatic link keeps mandando (option B).
+      link_override: event.link_override || "",
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = useMutation({
+    mutationFn: async (payload) =>
+      (await api.put(`/admin/events/${id}/admin-edit`, payload)).data,
+    onSuccess: () => {
+      toast.success("Evento actualizado");
+      setEditOpen(false);
+      qc.invalidateQueries({ queryKey: ["event", id] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+    },
+    onError: () => toast.error("No se pudo guardar"),
+  });
+
+  const submitEdit = (e) => {
+    e?.preventDefault?.();
+    if (!form) return;
+    const payload = {
+      name: form.name,
+      venue: form.venue,
+      address: form.address,
+      date: form.date,
+      time: form.time,
+      genre: form.genre,
+      image_url: form.image_url,
+      city: form.city,
+    };
+    // Sticky buy-link override: only send it when the admin actually typed one.
+    const lo = (form.link_override || "").trim();
+    const currentOverride = (event.link_override || "").trim();
+    if (lo) {
+      payload.link_override = lo;
+    } else if (currentOverride) {
+      // Field was cleared → remove the override, back to automatic.
+      payload.clear_link_override = true;
+    }
+    saveEdit.mutate(payload);
+  };
+
+  const resetLinkOverride = () => {
+    setForm((f) => ({ ...f, link_override: "" }));
+    saveEdit.mutate({ clear_link_override: true });
+  };
 
   if (isLoading) {
     return (
@@ -249,6 +312,16 @@ export default function EventDetail() {
           >
             <Bell className={`w-5 h-5 ${event.is_following ? "text-qv-secondary" : "text-white"}`} fill={event.is_following ? "currentColor" : "none"} />
           </button>
+          {isAdmin && (
+            <button
+              data-testid="detail-admin-edit"
+              onClick={openEdit}
+              aria-label="Editar evento"
+              className="absolute top-6 right-40 w-10 h-10 rounded-full qv-glass border border-qv-secondary/50 flex items-center justify-center text-qv-secondary active:scale-90 transition-transform"
+            >
+              <Pencil className="w-5 h-5" />
+            </button>
+          )}
           <button
             data-testid="detail-share-story"
             onClick={() => shareStory("neon")}
@@ -476,6 +549,89 @@ export default function EventDetail() {
           </div>
         </div>
       </div>
+
+      {/* Admin edit modal (pencil) */}
+      {isAdmin && editOpen && form && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm" data-testid="admin-edit-modal">
+          <form
+            onSubmit={submitEdit}
+            className="w-full max-w-md max-h-[92vh] overflow-y-auto qv-app-bg border border-white/15 rounded-t-3xl sm:rounded-3xl p-5 flex flex-col gap-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-xl font-black text-white">Editar evento</h2>
+              <button type="button" onClick={() => setEditOpen(false)} data-testid="admin-edit-close" className="w-9 h-9 rounded-full bg-white/5 border border-white/15 flex items-center justify-center text-white active:scale-90">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {[
+              { key: "name", label: "Nombre", placeholder: "Nombre del evento" },
+              { key: "venue", label: "Discoteca / local", placeholder: "Nombre del local" },
+              { key: "address", label: "Dirección", placeholder: "Dirección" },
+              { key: "genre", label: "Género", placeholder: "Techno, Reggaeton…" },
+              { key: "image_url", label: "Foto (URL)", placeholder: "https://…" },
+              { key: "city", label: "Ciudad", placeholder: "Ibiza, Madrid…" },
+            ].map((fld) => (
+              <label key={fld.key} className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-widest font-bold text-white/50">{fld.label}</span>
+                <input
+                  data-testid={`admin-edit-${fld.key}`}
+                  value={form[fld.key]}
+                  onChange={(e) => setForm((f) => ({ ...f, [fld.key]: e.target.value }))}
+                  placeholder={fld.placeholder}
+                  className="h-11 rounded-xl bg-white/5 border border-white/15 px-3 text-white placeholder:text-white/30 focus:border-qv-secondary/60 outline-none"
+                />
+              </label>
+            ))}
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-widest font-bold text-white/50">Fecha</span>
+                <input type="date" data-testid="admin-edit-date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="h-11 rounded-xl bg-white/5 border border-white/15 px-3 text-white outline-none focus:border-qv-secondary/60" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-widest font-bold text-white/50">Hora</span>
+                <input type="time" data-testid="admin-edit-time" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} className="h-11 rounded-xl bg-white/5 border border-white/15 px-3 text-white outline-none focus:border-qv-secondary/60" />
+              </label>
+            </div>
+
+            {/* Sticky buy-link override */}
+            <div className="flex flex-col gap-1 pt-1 border-t border-white/10">
+              <span className="text-[11px] uppercase tracking-widest font-bold text-qv-secondary mt-3">Enlace de compra (manual)</span>
+              <input
+                data-testid="admin-edit-link"
+                value={form.link_override}
+                onChange={(e) => setForm((f) => ({ ...f, link_override: e.target.value }))}
+                placeholder="Déjalo vacío para usar el enlace automático"
+                className="h-11 rounded-xl bg-white/5 border border-white/15 px-3 text-white placeholder:text-white/30 focus:border-qv-secondary/60 outline-none"
+              />
+              <p className="text-[11px] text-white/40 leading-snug mt-1">
+                Si pones un enlace aquí, <b className="text-white/70">siempre manda el tuyo</b> (el scraper no lo tocará). Déjalo vacío para volver al automático.
+              </p>
+              {event.auto_commission_url && (
+                <p className="text-[11px] text-white/40 break-all mt-1">
+                  Enlace automático actual: <span className="text-white/60">{event.auto_commission_url}</span>
+                </p>
+              )}
+              {(event.link_override || "").trim() && (
+                <button type="button" onClick={resetLinkOverride} data-testid="admin-edit-reset-link" className="self-start mt-2 h-9 px-3 rounded-lg bg-white/5 border border-white/15 text-white/80 text-xs font-semibold flex items-center gap-1.5 active:scale-95">
+                  <RotateCcw className="w-3.5 h-3.5" /> Volver a automático
+                </button>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              data-testid="admin-edit-save"
+              disabled={saveEdit.isPending}
+              className="h-12 rounded-2xl bg-qv-primary text-white font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60 mt-1"
+            >
+              {saveEdit.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Guardar cambios"}
+            </button>
+          </form>
+        </div>
+      )}
+
     </div>
   );
 }

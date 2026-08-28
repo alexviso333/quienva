@@ -170,6 +170,105 @@ user_problem_statement: |
           meet the requirements.
 
 frontend:
+  - task: "Admin event edit + sticky buy-link override (PUT /api/admin/events/{id}/admin-edit)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Nueva feature: endpoint PUT /api/admin/events/{id}/admin-edit (AdminEventEditInput, todos
+          los campos opcionales). Los campos que NO son enlace se aplican directos (el scraper puede
+          refrescarlos luego, opción B del usuario). El enlace manual (link_override) es STICKY:
+          _commission_url_for() lo devuelve por encima de scraper/afiliado y el scraper nunca lo
+          toca. serialize_event expone link_override + auto_commission_url solo a admin. Además se
+          arregló la causa raíz del bug Fitz: _fv_event_code ahora también extrae el código del
+          formato público www.fourvenues.com/<org>/<CODE>, así el enlace afiliado usa el código VIVO
+          del evento en vez del código obsoleto del panel. Verificado manualmente (set/clear/edit/
+          auth). Falta verificación formal del agente de backend.
+      - working: true
+        agent: "testing"
+        comment: |
+          ADMIN EVENT EDIT + STICKY BUY-LINK OVERRIDE TESTING COMPLETE (2026-08-28)
+          
+          🎉 ALL 8 TEST SCENARIOS PASSED - FEATURE WORKING PERFECTLY
+          
+          Tested the NEW PUT /api/admin/events/{event_id}/admin-edit endpoint with comprehensive 
+          scenarios covering sticky link override behavior, authorization, and admin-only field visibility.
+          
+          ✅ TEST RESULTS (8/8 scenarios PASSED):
+          
+          1. INITIAL STATE VERIFICATION (PASSED):
+             - Created test event with commission_url="https://www.fourvenues.com/fitz-mallorca/4RA8"
+             - Verified commission_url equals the original URL ✓
+             - Verified link_override is empty string "" ✓
+             - Verified auto_commission_url equals the original URL ✓
+          
+          2. SET LINK OVERRIDE (PASSED):
+             - PUT admin-edit with link_override="https://site.fourvenues.com/es/fitz-mallorca/events/jueves-fitz-10-09-20261-4RA8"
+             - Verified commission_url now equals the override link ✓
+             - Verified link_override field equals the override link ✓
+             - Verified auto_commission_url STILL equals the original scraped URL (unchanged) ✓
+             - Confirmed via fresh GET /api/events/{id} ✓
+          
+          3. STICKY LINK OVERRIDE (PASSED):
+             - PUT admin-edit with name="NUEVO NOMBRE" (editing other field)
+             - Verified name changed successfully ✓
+             - Verified commission_url STILL equals the override link (sticky behavior working) ✓
+             - Verified link_override field persisted (not lost when editing other fields) ✓
+          
+          4. CLEAR WITH clear_link_override=true (PASSED):
+             - PUT admin-edit with clear_link_override=true
+             - Verified commission_url reverted to automatic (scraped) URL ✓
+             - Verified link_override is now empty string "" ✓
+          
+          5. CLEAR WITH link_override="" EMPTY STRING (PASSED):
+             - Set override again, then PUT admin-edit with link_override="" (empty string)
+             - Verified commission_url reverted to automatic URL ✓
+             - Verified link_override is now empty string "" ✓
+             - Both clearing methods work correctly ✓
+          
+          6. AUTHORIZATION - NO AUTH (PASSED):
+             - PUT admin-edit without Authorization header → HTTP 401 ✓
+          
+          7. AUTHORIZATION - NON-ADMIN USER (PASSED):
+             - Created non-admin test user
+             - PUT admin-edit as non-admin → HTTP 403 ✓
+          
+          8. NON-EXISTENT EVENT (PASSED):
+             - PUT admin-edit on fake event ID → HTTP 404 ✓
+          
+          9. ADMIN-ONLY FIELDS VISIBILITY (PASSED):
+             - Set link_override on test event
+             - GET /api/events/{id} as NON-ADMIN user:
+               * link_override field is null (not leaked) ✓
+               * auto_commission_url field is null (not leaked) ✓
+             - GET /api/events/{id} as ADMIN user:
+               * link_override field visible with correct value ✓
+               * auto_commission_url field visible with correct value ✓
+          
+          CONCLUSION:
+          The admin event edit endpoint with sticky buy-link override is fully functional and meets 
+          all requirements:
+          ✅ link_override takes precedence over automatic commission_url
+          ✅ link_override persists when editing other fields (sticky behavior)
+          ✅ auto_commission_url always shows the automatic link (unchanged by override)
+          ✅ Two methods to clear override: clear_link_override=true OR link_override=""
+          ✅ Proper authorization (admin-only, 401/403 for unauthorized)
+          ✅ Admin-only fields (link_override, auto_commission_url) hidden from non-admin users
+          ✅ Proper error handling (404 for non-existent events)
+          
+          This feature allows admins to manually fix broken affiliate links (like stale FourVenues 
+          codes) while preserving the automatic link for reference. The sticky behavior ensures the 
+          manual override isn't lost when the scraper refreshes other event fields.
+          
+          Test file: /app/backend_test_admin_event_edit.py
+          All tests executed successfully with no failures.
+
   - task: "Dark background from first paint (inline style in index.html to prevent white flash)"
     implemented: true
     working: true
@@ -1714,12 +1813,40 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Admin event edit + sticky buy-link override (PUT /api/admin/events/{id}/admin-edit)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NUEVA FEATURE (2026-08-28) — PROBAR SOLO BACKEND. Admin: admin@quienva.app / admin123.
+      IMPORTANTE: el entorno se reseteó; la BD local está VACÍA de eventos (los scrapers están
+      bloqueados por Cloudflare desde esta IP). CREA tus propios eventos con POST /api/admin/events.
+      login: POST /api/auth/login {email,password} devuelve {token}; usar Authorization: Bearer <token>.
+
+      Endpoint nuevo: PUT /api/admin/events/{event_id}/admin-edit  (AdminEventEditInput, todos los
+      campos opcionales). Objetivo: el admin puede editar cualquier campo del evento y, sobre todo,
+      FIJAR un enlace de compra manual que SIEMPRE gana sobre scraper/afiliado.
+      TESTS a verificar:
+      1) Crear evento con commission_url="https://www.fourvenues.com/fitz-mallorca/4RA8".
+         GET /api/events/{id} (como admin) -> commission_url == esa URL; link_override=="";
+         auto_commission_url == esa URL.
+      2) PUT admin-edit {link_override:"https://site.fourvenues.com/es/fitz-mallorca/events/jueves-fitz-10-09-20261-4RA8"}
+         -> 200; el evento servido tiene commission_url == el override; link_override == override;
+         auto_commission_url sigue siendo la URL scrapeada (no cambia).
+      3) PUT admin-edit {name:"NUEVO NOMBRE"} -> 200; name cambia PERO commission_url sigue siendo
+         el override (el enlace fijado NO se pierde al editar otros campos).
+      4) PUT admin-edit {clear_link_override:true} -> 200; commission_url vuelve al automático
+         (la URL scrapeada); link_override=="".
+      5) Enviar link_override:"" (string vacío) también debe quitar el override.
+      6) Autorización: PUT admin-edit sin token -> 401; con usuario NO admin -> 403.
+      7) Evento inexistente -> 404.
+      8) Campos admin-only: link_override y auto_commission_url deben ser null para usuarios NO admin
+         en GET /api/events/{id}.
+      NO tocar/entrar en pruebas de frontend.
   - agent: "main"
     message: |
       BUGFIX (2026-08-12) — Orden de discotecas en el feed. Admin admin@quienva.app / admin123.
@@ -8713,3 +8840,82 @@ agent_communication:
       regression tests passed with no issues.
       
       Ready for production deployment.
+  - agent: "testing"
+    message: |
+      ADMIN EVENT EDIT + STICKY BUY-LINK OVERRIDE TESTING COMPLETE (2026-08-28)
+      
+      🎉 ALL 8 TEST SCENARIOS PASSED - FEATURE WORKING PERFECTLY
+      
+      Tested the NEW PUT /api/admin/events/{event_id}/admin-edit endpoint as requested in the 
+      review_request. Environment was reset with empty local DB, so I created test events via 
+      POST /api/admin/events as instructed.
+      
+      ✅ COMPREHENSIVE TEST RESULTS (8/8 scenarios PASSED):
+      
+      1. INITIAL STATE (commission_url from scraper):
+         ✓ Created event with commission_url="https://www.fourvenues.com/fitz-mallorca/4RA8"
+         ✓ commission_url equals the original URL
+         ✓ link_override is empty string ""
+         ✓ auto_commission_url equals the original URL
+      
+      2. SET LINK OVERRIDE (sticky override takes precedence):
+         ✓ PUT admin-edit with link_override="https://site.fourvenues.com/es/fitz-mallorca/events/jueves-fitz-10-09-20261-4RA8"
+         ✓ commission_url now equals the override link
+         ✓ link_override field equals the override link
+         ✓ auto_commission_url STILL equals the original scraped URL (unchanged)
+         ✓ Confirmed via fresh GET /api/events/{id}
+      
+      3. STICKY BEHAVIOR (override persists when editing other fields):
+         ✓ PUT admin-edit with name="NUEVO NOMBRE"
+         ✓ Name changed successfully
+         ✓ commission_url STILL equals the override link (sticky)
+         ✓ link_override field persisted (not lost)
+      
+      4. CLEAR WITH clear_link_override=true:
+         ✓ PUT admin-edit with clear_link_override=true
+         ✓ commission_url reverted to automatic (scraped) URL
+         ✓ link_override is now empty string ""
+      
+      5. CLEAR WITH link_override="" (empty string):
+         ✓ Set override again
+         ✓ PUT admin-edit with link_override="" (empty string)
+         ✓ commission_url reverted to automatic URL
+         ✓ link_override is now empty string ""
+         ✓ Both clearing methods work correctly
+      
+      6. AUTHORIZATION - NO AUTH:
+         ✓ PUT admin-edit without Authorization header → HTTP 401
+      
+      7. AUTHORIZATION - NON-ADMIN USER:
+         ✓ Created non-admin test user
+         ✓ PUT admin-edit as non-admin → HTTP 403
+      
+      8. NON-EXISTENT EVENT:
+         ✓ PUT admin-edit on fake event ID → HTTP 404
+      
+      9. ADMIN-ONLY FIELDS (link_override and auto_commission_url):
+         ✓ GET /api/events/{id} as NON-ADMIN user:
+           - link_override is null (not leaked)
+           - auto_commission_url is null (not leaked)
+         ✓ GET /api/events/{id} as ADMIN user:
+           - link_override visible with correct value
+           - auto_commission_url visible with correct value
+      
+      CONCLUSION:
+      The admin event edit endpoint with sticky buy-link override is fully functional and meets 
+      all requirements specified in the review_request:
+      ✅ link_override takes precedence over automatic commission_url
+      ✅ link_override persists when editing other fields (sticky behavior)
+      ✅ auto_commission_url always shows the automatic link (unchanged by override)
+      ✅ Two methods to clear override: clear_link_override=true OR link_override=""
+      ✅ Proper authorization (admin-only, 401/403 for unauthorized)
+      ✅ Admin-only fields hidden from non-admin users (null values)
+      ✅ Proper error handling (404 for non-existent events)
+      
+      This feature allows admins to manually fix broken affiliate links (like stale FourVenues 
+      codes) while preserving the automatic link for reference. The sticky behavior ensures the 
+      manual override isn't lost when the scraper refreshes other event fields.
+      
+      Test file: /app/backend_test_admin_event_edit.py
+      All tests executed successfully with no failures.
+
