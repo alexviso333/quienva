@@ -79,6 +79,31 @@ export default function EventDetail() {
   const { data: event, isLoading, isError } = useQuery({
     queryKey: ["event", id],
     queryFn: async () => (await api.get(`/events/${id}`)).data,
+    // Instant open: reuse the event already cached from the feed/carousel lists
+    // as placeholder so the panel paints immediately instead of showing a
+    // full-screen spinner while the detailed payload loads in the background.
+    placeholderData: () => {
+      try {
+        for (const [, data] of qc.getQueriesData({})) {
+          if (!data) continue;
+          const arr = Array.isArray(data)
+            ? data
+            : Array.isArray(data?.events)
+              ? data.events
+              : Array.isArray(data?.items)
+                ? data.items
+                : null;
+          if (arr) {
+            const hit = arr.find((e) => e && e.id === id);
+            if (hit) return hit;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      return undefined;
+    },
+    staleTime: 30_000,
     // A genuine 404 (party removed/rescheduled) must NOT retry — show the
     // friendly "no longer available" screen immediately instead of hanging.
     retry: (count, err) => (err?.response?.status === 404 ? false : count < 2),

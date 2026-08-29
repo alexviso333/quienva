@@ -202,7 +202,7 @@ export function AppShell({ children, showNav = true, wide = false }) {
       <div className={`lg:flex lg:mx-auto ${showNav && wide ? "lg:max-w-[1480px]" : "lg:max-w-4xl"}`}>
         {showNav && <DesktopSidebar />}
         <main className="flex-1 min-w-0">
-          <div className={`relative mx-auto min-h-screen bg-transparent max-w-md ${wide ? "lg:max-w-none" : ""}`}>
+          <div className={`relative mx-auto qv-screen bg-transparent max-w-md ${wide ? "lg:max-w-none" : ""}`}>
             <div className={showNav ? "pb-28 lg:pb-12" : ""}>{children}</div>
           </div>
         </main>

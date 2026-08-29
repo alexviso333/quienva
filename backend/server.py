@@ -29,6 +29,7 @@ from datetime import datetime, timezone, timedelta, date, time as dtime
 from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pywebpush import webpush, WebPushException
+import apns
 import httpx
 import hashlib
 
@@ -1358,6 +1359,25 @@ _ICONS_HEAD = (
 )
 
 
+APP_STORE_URL = "https://apps.apple.com/es/app/qui%C3%A9n-va-fiestas-cerca/id6804396475"
+
+
+def _app_store_badge(lang: str) -> str:
+    """Small 'Download on the App Store' button (Apple logo + label) for SEO
+    pages, so visitors can jump straight to the native iOS app."""
+    label = {"es": "Desc\u00e1rgala en la App Store",
+             "en": "Download on the App Store",
+             "de": "Im App Store laden"}.get(lang, "Desc\u00e1rgala en la App Store")
+    apple = ('<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+             '<path d="M16.365 1.43c0 1.14-.42 2.2-1.12 3.03-.78.94-2.06 1.66-3.16 1.57-.14-1.1.42-2.28 1.09-3.02.76-.86 2.12-1.5 3.19-1.58zM20.9 17.02c-.55 1.27-.81 1.83-1.52 2.95-.99 1.56-2.39 3.5-4.12 3.51-1.54.02-1.94-1-4.03-.99-2.09.01-2.53 1.01-4.07.99-1.73-.02-3.05-1.78-4.04-3.34C1.28 16.62.99 12.02 2.68 9.6c1.02-1.46 2.62-2.31 4.13-2.31 1.54 0 2.5 1.02 3.77 1.02 1.23 0 1.98-1.02 3.76-1.02 1.34 0 2.76.73 3.78 1.99-3.32 1.82-2.78 6.56.98 7.74z"/>'
+             '</svg>')
+    return (f'<a class="appstore-badge" href="{APP_STORE_URL}" target="_blank" rel="noopener" '
+            f'data-testid="seo-appstore-badge" '
+            f'style="display:inline-flex;align-items:center;gap:9px;margin-top:14px;padding:11px 20px;'
+            f'border-radius:999px;background:#000;color:#fff;border:1px solid rgba(255,255,255,.22);'
+            f'font-weight:700;text-decoration:none;font-size:14px">{apple}<span>{label}</span></a>')
+
+
 def _seo_topbar(front, lang, e):
     ui = _SEO_UI.get(lang, _SEO_UI["es"])
     return (f'<header class="topbar"><a class="brand" href="{front}/">\u00bfQui\u00e9n va?<span>.</span></a>'
@@ -1379,7 +1399,8 @@ def _seo_benefits(lang, e):
 def _seo_joinband(front, lang, e):
     ui = _SEO_UI.get(lang, _SEO_UI["es"])
     return (f'<div class="joinband"><h2>{e(ui["join_h"])}</h2><p>{e(ui["join_p"])}</p>'
-            f'<a class="cta" href="{front}/feed">{e(ui["join"])}</a></div>')
+            f'<a class="cta" href="{front}/feed">{e(ui["join"])}</a>'
+            f'<div style="margin-top:6px">{_app_store_badge(lang)}</div></div>')
 
 
 def _org_website_jsonld(front: str) -> str:
@@ -8682,16 +8703,36 @@ def _sync_web_push(sub: dict, payload: str):
 
 
 async def push_to_user(user_id: str, title: str, body: str, url: str):
-    if not VAPID_PRIVATE_KEY:
+    # 1) Web Push (browser / PWA) — unchanged, powers quienva.me.
+    if VAPID_PRIVATE_KEY:
+        payload = json.dumps({"title": title, "body": body, "url": url})
+        subs = []
+        async for s in db.push_subscriptions.find({"user_id": user_id}):
+            subs.append(s)
+        for s in subs:
+            dead = await asyncio.to_thread(_sync_web_push, s, payload)
+            if dead and dead != "err":
+                await db.push_subscriptions.delete_one({"endpoint": dead})
+    # 2) APNs (native iOS App Store app) — separate collection & credentials.
+    await _apns_to_user(user_id, title, body, url)
+
+
+async def _apns_to_user(user_id: str, title: str, body: str, url: str):
+    if not apns.is_configured():
         return
-    payload = json.dumps({"title": title, "body": body, "url": url})
-    subs = []
-    async for s in db.push_subscriptions.find({"user_id": user_id}):
-        subs.append(s)
-    for s in subs:
-        dead = await asyncio.to_thread(_sync_web_push, s, payload)
-        if dead and dead != "err":
-            await db.push_subscriptions.delete_one({"endpoint": dead})
+    try:
+        devices = []
+        async for d in db.apns_devices.find({"user_id": user_id, "disabled_at": None}):
+            devices.append(d)
+        for d in devices:
+            res = await apns.send_apns(d["token"], title, body, {"url": url})
+            if res == "gone":
+                await db.apns_devices.update_one(
+                    {"_id": d["_id"]},
+                    {"$set": {"disabled_at": datetime.now(timezone.utc).isoformat()}},
+                )
+    except Exception as e:
+        logging.warning("APNs dispatch failed for %s: %s", user_id, e)
 
 
 @api_router.get("/notifications")
@@ -8785,7 +8826,43 @@ async def push_unsubscribe(inp: PushSubscriptionInput, user: dict = Depends(get_
 @api_router.get("/push/status")
 async def push_status(user: dict = Depends(get_current_user)):
     count = await db.push_subscriptions.count_documents({"user_id": user["user_id"]})
-    return {"subscribed": count > 0}
+    apns_count = await db.apns_devices.count_documents({"user_id": user["user_id"], "disabled_at": None})
+    return {"subscribed": count > 0 or apns_count > 0}
+
+
+class ApnsTokenInput(BaseModel):
+    token: str
+
+
+@api_router.post("/push/apns/register")
+async def apns_register(inp: ApnsTokenInput, user: dict = Depends(get_current_user)):
+    """Store the APNs device token for the native iOS app. One user can have
+    several devices; upsert keyed by (user, token)."""
+    token = (inp.token or "").strip()
+    if not token or len(token) < 32:
+        raise HTTPException(status_code=400, detail="Invalid APNs token")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.apns_devices.update_one(
+        {"user_id": user["user_id"], "token": token},
+        {"$set": {
+            "user_id": user["user_id"],
+            "token": token,
+            "platform": "ios",
+            "provider": "apns",
+            "bundle_id": apns.APNS_BUNDLE_ID,
+            "environment": "production" if apns.APNS_PRODUCTION else "sandbox",
+            "updated_at": now,
+            "disabled_at": None,
+        }, "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+    return {"ok": True, "configured": apns.is_configured()}
+
+
+@api_router.post("/push/apns/unregister")
+async def apns_unregister(inp: ApnsTokenInput, user: dict = Depends(get_current_user)):
+    await db.apns_devices.delete_one({"user_id": user["user_id"], "token": (inp.token or "").strip()})
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

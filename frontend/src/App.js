@@ -123,6 +123,20 @@ function AppRouter() {
 }
 
 function App() {
+  // Hide the native launch overlay (#qv-splash, injected in index.html) once the
+  // React app has mounted, with a smooth fade. No-op on the web (the overlay is
+  // display:none there). A safety timeout guarantees it never gets stuck.
+  useEffect(() => {
+    const el = document.getElementById("qv-splash");
+    if (!el) return;
+    const hide = () => {
+      el.classList.add("qv-hide");
+      setTimeout(() => el.remove(), 600);
+    };
+    const timer = setTimeout(hide, 550);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div className="App">
       <AuthProvider>

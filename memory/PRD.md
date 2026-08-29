@@ -520,3 +520,27 @@ Tras el fix del freeze, el .ipa (commit a9c3df2) seguía sin cargar en BrowserSt
 - FIX frontend (EventDetail.js): sin reintentos en 404 + pantalla "Esta fiesta ya no esta disponible"
   con boton "Ver otras fiestas" -> /feed (no mas spinner infinito). Verificado frontend agent 4/4.
 - Nota: arregla roturas FUTURAS; enlaces ya rotos (UUID ya purgado) ahora caen en la pantalla amable.
+
+## Iteración app iOS (2026) — pulido App Store (Codemagic), web quienva.me INTACTA
+Cambios SOLO en la app nativa (detección `Capacitor.isNativePlatform()` / clase `.qv-native`):
+- Splash: nuevo `frontend/assets/splash.png` limpio (wordmark centrado sobre #0A0A0C, sin cuadro negro)
+  + overlay HTML animado de carga (native-only) en index.html, retirado por React al montar.
+- Safe-area iPhone: capacitor.config ios.contentInset "always"→"never" + CSS `.qv-native` (padding-top
+  safe-area y `.qv-screen` = calc(100vh - safe-top)) → se acaba el scroll extra "como una página".
+- Feed: se oculta "Tu semana" (RecapCard) y "Cómo instalar" (InstallPwaBanner) en la app.
+- "El Momento": nuevo banner GRANDE en el feed (MomentFeedBanner) cuando hay momento activo.
+- Invitar contactos: SMS → WhatsApp directo al número (inviteWhatsAppTo, Spain-first +34).
+- EventDetail: apertura instantánea usando el evento ya cacheado del feed (placeholderData).
+- SEO (backend): botón "Descárgala en la App Store" en todas las páginas SEO (_app_store_badge /
+  _seo_joinband) → https://apps.apple.com/es/app/qui%C3%A9n-va-fiestas-cerca/id6804396475
+
+### Notificaciones nativas APNs (nuevo, coexiste con Web Push/VAPID de la web)
+- Backend: `backend/apns.py` (JWT ES256 con .p8, HTTP/2) + endpoints /api/push/apns/register|unregister,
+  /api/push/status ahora incluye apns, push_to_user() despacha también a APNs. No-op si no está configurado.
+- Frontend: `lib/nativePush.js` (@capacitor/push-notifications) + push.js usa APNs en la app; el error
+  "tu navegador no permite push" ya no aparece en la app (ahora pide permiso real de iOS).
+- iOS: entitlement `aps-environment=production` añadido a native/App.entitlements (lo copia codemagic.yaml).
+- PENDIENTE del usuario: (1) APNS_TEAM_ID (10 chars), (2) confirmar que el .p8 es clave APNs (no de
+  App Store Connect API), (3) activar capability "Push Notifications" en el App ID me.quienva.app,
+  (4) en Render añadir APNS_TEAM_ID, APNS_KEY_ID=C3DKS73GY4, APNS_BUNDLE_ID=me.quienva.app,
+  APNS_PRODUCTION=true, APNS_PRIVATE_KEY (contenido del .p8; el fichero está gitignored).

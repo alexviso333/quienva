@@ -54,6 +54,15 @@ body {
         #0A0A0C;
 }
 
+/* ---- Native app (Capacitor iOS) safe-area handling ----
+   The .qv-native class is added to <html> in index.html ONLY inside the native
+   shell, so none of this touches the web (quienva.me). It pushes content below
+   the notch and keeps the full-height containers exactly one screen tall (no
+   extra "scroll like a page" caused by the status-bar inset). */
+.qv-screen { min-height: 100vh; }
+.qv-native .qv-app-bg { padding-top: env(safe-area-inset-top); }
+.qv-native .qv-screen { min-height: calc(100vh - env(safe-area-inset-top)); }
+
 @keyframes qv-pulse-glow {
     0%, 100% { opacity: 0.6; }
     50% { opacity: 1; }

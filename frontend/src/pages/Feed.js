@@ -14,6 +14,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
 import InstallPwaBanner from "@/components/InstallPwaBanner";
+import MomentFeedBanner from "@/components/MomentFeedBanner";
+import { isNativeApp } from "@/lib/platform";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Camera, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -284,7 +286,9 @@ export default function Feed() {
 
       {user && <StoriesBar />}
 
-      <InstallPwaBanner />
+      {user && <MomentFeedBanner />}
+
+      {!isNativeApp() && <InstallPwaBanner />}
 
       {user && showPrivacyReminder && (
         <div className="px-4 pt-1 pb-1">
@@ -393,7 +397,7 @@ export default function Feed() {
         {user && <StreakBanner />}
       </div>
 
-      {user && <RecapCard />}
+      {user && !isNativeApp() && <RecapCard />}
 
       <div className="px-4 pb-3">
         <div className="relative mb-3">

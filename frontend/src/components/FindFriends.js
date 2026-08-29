@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
-import { getContacts, contactsSupported, inviteWhatsApp, shareInvite, inviteSms } from "@/lib/contacts";
+import { getContacts, contactsSupported, inviteWhatsApp, shareInvite, inviteWhatsAppTo } from "@/lib/contacts";
 import { Contact, Share2, UserPlus, Check, Loader2, Sparkles, Send } from "lucide-react";
 import { toast } from "sonner";
 
@@ -174,8 +174,8 @@ export default function FindFriends() {
                       <p className="text-white/35 text-xs truncate">{c.phones[0]}</p>
                     </div>
                     <button
-                      onClick={() => inviteSms(c.phones[0], code)}
-                      className="h-9 px-4 rounded-full bg-qv-secondary/15 border border-qv-secondary/40 text-qv-secondary text-sm font-semibold flex items-center gap-1.5 active:scale-95"
+                      onClick={() => inviteWhatsAppTo(c.phones[0], code)}
+                      className="h-9 px-4 rounded-full bg-[#25D366]/15 border border-[#25D366]/40 text-[#4ee38a] text-sm font-semibold flex items-center gap-1.5 active:scale-95"
                     >
                       <Send className="w-4 h-4" /> {t("findfriends.invite")}
                     </button>

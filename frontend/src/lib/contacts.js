@@ -108,6 +108,20 @@ export function inviteWhatsApp(code) {
   window.open(`https://wa.me/?text=${encodeURIComponent(inviteText(code))}`, "_blank", "noopener,noreferrer");
 }
 
+// Invite ONE contact by opening WhatsApp straight to that person's chat with the
+// invite already written. Spain-first: if the number looks local (9 digits
+// starting 6/7/8/9 with no country code) we prepend +34 so wa.me can resolve it.
+export function inviteWhatsAppTo(number, code) {
+  const text = inviteText(code);
+  let digits = (number || "").replace(/[^\d]/g, "");
+  // Strip a leading 00 international prefix if present.
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  // Local Spanish mobile/landline without country code -> add 34.
+  if (digits.length === 9 && /^[6789]/.test(digits)) digits = `34${digits}`;
+  const base = digits ? `https://wa.me/${digits}` : "https://wa.me/";
+  window.open(`${base}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+}
+
 // Invite ONE contact by opening the SMS composer pre-filled with the invite.
 // iOS uses `sms:<number>&body=`, Android uses `sms:<number>?body=`.
 export function inviteSms(number, code) {

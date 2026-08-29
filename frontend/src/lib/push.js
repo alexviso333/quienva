@@ -1,4 +1,6 @@
 import api from "@/lib/api";
+import { isNativeApp } from "@/lib/platform";
+import { registerNativePush } from "@/lib/nativePush";
 
 function urlB64ToUint8Array(base64String) {
   const clean = (base64String || "").trim();
@@ -17,6 +19,9 @@ function urlB64ToUint8Array(base64String) {
 }
 
 export function isPushSupported() {
+  // Native iOS/Android app: push is delivered via APNs/FCM (Capacitor), not the
+  // browser PushManager — so it IS supported even though WKWebView lacks it.
+  if (isNativeApp()) return true;
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
@@ -39,6 +44,9 @@ export async function getPushStatus() {
 }
 
 export async function subscribeToPush() {
+  // Native app → APNs (asks the iOS permission dialog + registers the token).
+  if (isNativeApp()) return registerNativePush();
+
   if (!isPushSupported()) throw new Error("Tu navegador no soporta notificaciones push.");
   const permission = await Notification.requestPermission();
   if (permission !== "granted") throw new Error("Permiso de notificaciones denegado.");
