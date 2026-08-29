@@ -57,7 +57,7 @@ workflows:
           # 1) Generar iconos y splash a partir de assets/ (si existen).
           if [ -f assets/icon.png ]; then
             npx capacitor-assets generate --ios \
-              --iconBackgroundColor '#0A0A0C' --splashBackgroundColor '#0A0A0C' || true
+              --iconBackgroundColor '#000000' --splashBackgroundColor '#000000' || true
           fi
           # 2) CRITICO (motivo del rechazo de App Store / pantalla negra):
           #    iOS rechaza cualquier "launch image" cuyo tamano DECODIFICADO

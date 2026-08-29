@@ -169,23 +169,16 @@
             .qv-native #qv-splash{
                 display:flex;position:fixed;inset:0;z-index:99999;
                 flex-direction:column;align-items:center;justify-content:center;
-                background:
-                    radial-gradient(ellipse 90% 55% at 50% 30%, rgba(255,0,85,.14), transparent 60%),
-                    #0A0A0C;
+                background:#000;
                 transition:opacity .45s ease;
                 padding-top:env(safe-area-inset-top);
                 padding-bottom:env(safe-area-inset-bottom);
             }
             .qv-native #qv-splash.qv-hide{opacity:0;pointer-events:none}
-            #qv-splash .qv-word{
-                font-family:'Unbounded',-apple-system,BlinkMacSystemFont,sans-serif;
-                font-weight:900;line-height:.98;letter-spacing:-.5px;text-align:center;
-                font-size:clamp(40px,13vw,76px);
+            #qv-splash .qv-logo{
+                width:min(72vw,420px);height:auto;display:block;
                 opacity:0;animation:qvUp .6s cubic-bezier(.2,.8,.2,1) forwards;
             }
-            #qv-splash .qv-l2{animation-delay:.12s}
-            #qv-splash .qv-w{color:#fff}
-            #qv-splash .qv-p{color:#FF0055}
             #qv-splash .qv-bar{
                 margin-top:34px;width:110px;height:4px;border-radius:999px;
                 background:rgba(255,255,255,.12);overflow:hidden;position:relative;
@@ -200,7 +193,7 @@
             @keyframes qvFade{to{opacity:1}}
             @keyframes qvSlide{0%{left:-40%}100%{left:110%}}
             @media (prefers-reduced-motion: reduce){
-                #qv-splash .qv-word,#qv-splash .qv-bar{animation:none;opacity:1}
+                #qv-splash .qv-logo,#qv-splash .qv-bar{animation:none;opacity:1}
                 #qv-splash .qv-bar::after{animation:none}
             }
         </style>
@@ -239,8 +232,7 @@
         <div id="root"></div>
         <!-- Native-only branded launch overlay (see <style> in <head>). -->
         <div id="qv-splash" aria-hidden="true">
-            <div class="qv-word qv-w">¿Quién</div>
-            <div class="qv-word qv-l2 qv-p">va?</div>
+            <img class="qv-logo" src="/qv-logo.png" alt="¿Quién va?" />
             <div class="qv-bar"></div>
         </div>
     </body>

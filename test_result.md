@@ -9409,3 +9409,201 @@ agent_communication:
       
       Both tasks marked as working:true, needs_retesting:false.
       Test file: /app/backend_test_apns_push.py
+
+#====================================================================================================
+# ITERATION: iOS launch splash redesign (Instagram-style) — 2026
+#====================================================================================================
+frontend:
+  - task: "Native/app launch splash — Instagram-style centered logo on homogeneous bg"
+    implemented: true
+    working: true
+    file: "frontend/public/index.html, frontend/src/App.js, frontend/native/LaunchScreen.storyboard, frontend/assets/splash.png"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          BUG: user says the iOS app startup shows an ugly grey/off-colour small logo (old build).
+          Fix (native launch image only changes after a Codemagic rebuild + App Store update):
+          1) Regenerated frontend/assets/splash.png: big, centered "¿Quién va?" wordmark on solid
+             #0A0A0C (no inner square). Verified visually (screenshot).
+          2) LaunchScreen.storyboard imageView changed scaleAspectFill -> scaleAspectFit so the whole
+             logo shows centered with uniform #0A0A0C letterbox (no cropping) — Instagram-like.
+          3) In-webview branded loading overlay (#qv-splash in index.html) enlarged wordmark; it is
+             native-only (shows only when <html> has .qv-native, added by a head script when running
+             inside Capacitor). Removed by React (App.js useEffect) after mount.
+          BROWSER-TESTABLE parts only: (a) on plain web the overlay must NOT appear (web untouched);
+          (b) when .qv-native is forced, the #qv-splash overlay shows a centered wordmark on dark bg;
+          (c) the app still boots and the overlay disappears after load. The actual iOS launch image
+          can only be validated on a device build (not testable here).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ TESTED WEB BUILD LAUNCH SPLASH BEHAVIOR (3 test scenarios, 100% PASS)
+          
+          Verified the branded launch overlay (#qv-splash) behavior on the web build at:
+          https://927361aa-2382-439e-9c1f-ff16794654e4.preview.emergentagent.com/feed
+          
+          ✅ TEST 1: WEB (UNTOUCHED) - Splash hidden on plain web (PASS)
+          - Navigated to /feed as guest (no login)
+          - #qv-splash element exists in DOM: YES
+          - Computed style display: none ✓ (overlay does NOT show on plain web)
+          - <html> has qv-native class: NO ✓ (correct for web)
+          - Feed page loaded normally: YES ✓
+          - City tabs visible (Palma, Ibiza, Madrid, Barcelona, Marbella): YES ✓
+          - Event cards/search visible: YES ✓
+          - NO regression detected - web experience untouched
+          
+          ✅ TEST 2: NATIVE SIMULATION - Splash visible with correct styling (PASS)
+          - Mocked window.Capacitor.isNativePlatform() to return true
+          - Navigated to /feed with Capacitor mock
+          - <html> has qv-native class: YES ✓ (mock worked)
+          - #qv-splash computed style:
+            * display: flex ✓ (visible)
+            * position: fixed ✓
+            * background: rgb(10, 10, 12) ✓ (dark #0A0A0C)
+            * dimensions: 1920x1080 (full-screen) ✓
+            * opacity: 1 ✓
+          - Wordmark content verified:
+
+agent_communication:
+  - agent: "main"
+    message: |
+      RE-FIX of the launch splash (user said letters didn't match the logo and bg wasn't fully black).
+      Now the overlay uses the EXACT logo image (/qv-logo.png = the app icon wordmark) on PURE BLACK (#000).
+      Re-verify (browser-testable parts only):
+      1) Plain web /feed: #qv-splash computed display must be 'none' (hidden on web) and the feed loads
+         (no regression). Cold backend can take ~15s; wait for the spinner to disappear.
+      2) Native simulation: add_init_script document.documentElement.classList.add('qv-native'); go to
+         /feed (wait_until='domcontentloaded') and screenshot within ~400ms — #qv-splash must show a
+         full-screen PURE BLACK background with the "¿Quién va?" LOGO IMAGE (img.qv-logo, src /qv-logo.png)
+         centered, plus the thin gradient loading bar. Confirm <img class="qv-logo"> is present,
+         loaded (naturalWidth>0) and centered, and the background is black rgb(0,0,0).
+      3) After ~3s the overlay is removed and the feed shows. No stuck overlay.
+  - agent: "testing"
+    message: |
+      ✅ RE-DESIGNED SPLASH OVERLAY VERIFICATION COMPLETE (2026-08-29)
+      
+      Tested the RE-DESIGNED app launch splash overlay with EXACT logo image on PURE BLACK background.
+      All 3 test scenarios PASSED (100% success rate).
+      
+      TEST RESULTS:
+      
+      ✅ TEST 1: WEB (UNTOUCHED) - Splash hidden on plain web (PASS)
+      - Navigated to /feed as guest at https://927361aa-2382-439e-9c1f-ff16794654e4.preview.emergentagent.com
+      - #qv-splash element exists in DOM: YES ✓
+      - getComputedStyle(#qv-splash).display === 'none' ✓ (overlay HIDDEN on plain web)
+      - <html> has qv-native class: NO ✓ (correct for web)
+      - Feed loaded normally: YES ✓
+      - City tabs visible (Palma, Ibiza, Madrid, Barcelona, Marbella): YES ✓
+      - Search bar visible: YES ✓
+      - NO regression detected - web experience completely untouched
+      
+      ✅ TEST 2: NATIVE SIMULATION - Splash visible with logo image on black bg (PASS)
+      - Used route interception to inject qv-native class into <html> tag
+      - Navigated to /feed with qv-native simulation
+      - Checked at 300ms after domcontentloaded (before React removes it)
+      - <html> has qv-native class: YES ✓ (injection successful)
+      - #qv-splash overlay styling verified:
+        * display: flex ✓ (VISIBLE in native mode)
+        * position: fixed ✓
+        * background: rgb(0, 0, 0) ✓ (PURE BLACK as required, NOT the old #0A0A0C)
+        * z-index: 99999 ✓
+        * opacity: 1 ✓
+        * flexDirection: column, alignItems: center, justifyContent: center ✓
+      - Logo image (<img class="qv-logo">) verified:
+        * Element exists: YES ✓
+        * Tag: IMG ✓
+        * Class: qv-logo ✓
+        * Src: https://.../qv-logo.png ✓ (ends with /qv-logo.png)
+        * Alt: "¿Quién va?" ✓
+        * Natural size: 1024x1024 ✓
+        * Image loaded (naturalWidth > 0): YES ✓
+        * Display: block ✓
+        * Horizontally and vertically centered: YES ✓ (flex container with center alignment)
+      - Loading bar (.qv-bar) present: YES ✓ (thin gradient loading bar below logo)
+      
+      ✅ TEST 3: AUTO-REMOVE - Splash disappears after ~3 seconds (PASS)
+      - Waited 3 seconds in native simulation
+      - #qv-splash status: REMOVED from DOM ✓
+      - React successfully removed the overlay via App.js useEffect (550ms timer)
+      - Feed UI visible after removal: YES ✓
+      - NO stuck overlay - app UI renders correctly
+      
+      CONCLUSION:
+      The RE-DESIGNED splash overlay is working perfectly on the web build:
+      ✅ Uses EXACT logo IMAGE (/qv-logo.png) instead of text wordmark
+      ✅ Background is PURE BLACK rgb(0, 0, 0) instead of previous #0A0A0C
+      ✅ Only appears in native app (qv-native class detection working)
+      ✅ Hidden on plain web (display: none)
+      ✅ Logo image loads correctly (1024x1024, centered)
+      ✅ Thin gradient loading bar present
+      ✅ Auto-removes after ~550ms (no stuck overlay)
+      ✅ Feed loads normally in both modes (no regressions)
+      
+      The in-webview branded loading overlay (#qv-splash) works exactly as designed. The actual iOS 
+      native launch image (LaunchScreen.storyboard + splash.png) cannot be tested in browser and will 
+      only be visible after Codemagic rebuild + App Store update.
+      
+      Test URL: https://927361aa-2382-439e-9c1f-ff16794654e4.preview.emergentagent.com/feed
+      Test date: 2026-08-29
+
+            * Line 1: "¿Quién" in white (rgb(255, 255, 255)) ✓
+            * Line 2: "va?" in pink (rgb(255, 0, 85)) ✓
+            * Both lines CENTERED horizontally and vertically ✓
+            * Thin gradient loading bar present below wordmark ✓
+          - Screenshot captured at ~400ms after load shows perfect splash overlay
+          
+          ✅ TEST 3: OVERLAY AUTO-REMOVE - Splash disappears after ~3s (PASS)
+          - Waited 3 seconds in native simulation
+          - #qv-splash status: REMOVED from DOM ✓
+          - React successfully removed the overlay via App.js useEffect
+          - Feed UI now visible:
+            * City tabs visible: YES ✓
+            * Feed content visible: YES ✓
+          - NO stuck overlay - app UI renders correctly
+          
+          CONCLUSION:
+          All browser-testable requirements met perfectly:
+          ✅ Web build untouched - splash stays hidden (display:none) on plain web
+          ✅ Native simulation shows splash correctly - full-screen dark bg with centered wordmark
+          ✅ Splash auto-removes after mount - no stuck overlay
+          ✅ Feed loads normally in both modes - no regressions
+          
+          The in-webview branded loading overlay works exactly as designed. The actual iOS native
+          launch image (LaunchScreen.storyboard + splash.png) cannot be tested in browser and will
+          only be visible after Codemagic rebuild + App Store update.
+          
+          Screenshots: revised-test1-web.png, revised-test2-native-splash.png, revised-test3-after-remove.png
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Frontend verification for the launch-splash change. The native iOS launch image is NOT
+      browser-testable; verify only what runs in the browser:
+      1) On https://<host>/feed WITHOUT any tweak: element #qv-splash must be display:none (hidden)
+         and the feed must load normally (no regression). Confirm getComputedStyle(#qv-splash).display
+         === 'none' on normal web.
+      2) Simulate the native app: use page.add_init_script to run
+         document.documentElement.classList.add('qv-native') BEFORE load, navigate to /feed with
+         wait_until='commit' (or 'domcontentloaded') and take a screenshot within ~300ms — the
+         #qv-splash overlay should be visible: full-screen dark (#0A0A0C) background with the
+         "¿Quién / va?" wordmark centered (white + pink) and a thin gradient loading bar. Confirm the
+         overlay element exists and is centered.
+      3) After ~2-3s the overlay should be removed/hidden (React removes it on mount) and the app UI
+         renders. Confirm #qv-splash is gone or hidden after load.
+      Guest browsing is fine (no login needed). Admin creds if needed: admin@quienva.app / admin123.
+  - agent: "testing"
+    message: |
+      ✅ TESTING COMPLETE - All 3 scenarios PASSED
+      
+      Verified the web build launch splash behavior successfully:
+      1. WEB MODE: Splash is hidden (display:none), feed loads normally, no regression
+      2. NATIVE SIMULATION: Splash visible with correct styling (dark bg, centered wordmark, loading bar)
+      3. AUTO-REMOVE: Splash disappears after ~3s, feed UI renders correctly
+      
+      The in-webview branded overlay (#qv-splash) works perfectly. The actual iOS native launch
+      image cannot be tested in browser - it will only be visible after Codemagic rebuild.
+

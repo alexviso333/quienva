@@ -2,15 +2,15 @@
   "appId": "me.quienva.app",
   "appName": "¿Quién va?",
   "webDir": "build",
-  "backgroundColor": "#0A0A0C",
+  "backgroundColor": "#000000",
   "loggingBehavior": "none",
   "ios": {
     "contentInset": "never",
-    "backgroundColor": "#0A0A0C",
+    "backgroundColor": "#000000",
     "limitsNavigationsToAppBoundDomains": false
   },
   "android": {
-    "backgroundColor": "#0A0A0C"
+    "backgroundColor": "#000000"
   },
   "server": {
     "androidScheme": "https",
@@ -20,13 +20,13 @@
     "SplashScreen": {
       "launchShowDuration": 1200,
       "launchAutoHide": true,
-      "backgroundColor": "#0A0A0C",
+      "backgroundColor": "#000000",
       "showSpinner": false,
       "androidScaleType": "CENTER_CROP"
     },
     "StatusBar": {
       "style": "DARK",
-      "backgroundColor": "#0A0A0C"
+      "backgroundColor": "#000000"
     }
   }
 }
