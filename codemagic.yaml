@@ -24,6 +24,10 @@ workflows:
         XCODE_WORKSPACE: "frontend/ios/App/App.xcworkspace"
         XCODE_PROJECT: "frontend/ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
+        # Versión visible en la App Store (CFBundleShortVersionString). Para CADA
+        # actualización, súbela aquí (1.1 -> 1.2 -> ...). Debe ser mayor que la
+        # versión ya publicada. El número de build interno se pone solo (abajo).
+        APP_VERSION: "1.1"
         APP_STORE_APPLE_ID: 6804396475        # Apple ID numérico de la app (App Store Connect → Información de la app)
         # URL del backend de producción. SIN esto la app iOS se compila sin saber
         # dónde está el servidor (en Vercel la inyecta Vercel; aquí hay que darla).
@@ -159,6 +163,10 @@ workflows:
           BUILD_NO=$(date +%s)
           echo "Usando número de build: $BUILD_NO"
           agvtool new-version -all "$BUILD_NO"
+          # Versión visible (marketing). Se toma de la variable APP_VERSION para
+          # que cada actualización sea solo cambiar ese número arriba.
+          agvtool new-marketing-version "${APP_VERSION:-1.1}"
+          echo "Versión marketing: ${APP_VERSION:-1.1}"
       - name: Compilar IPA
         script: |
           xcode-project build-ipa \
