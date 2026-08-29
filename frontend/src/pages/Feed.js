@@ -13,7 +13,7 @@ import FeedVenuesTonight from "@/components/FeedVenuesTonight";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { useCompactMode } from "@/hooks/useCompactMode";
-import InstallPwaBanner from "@/components/InstallPwaBanner";
+import AppStorePromo from "@/components/AppStorePromo";
 import MomentFeedBanner from "@/components/MomentFeedBanner";
 import { isNativeApp } from "@/lib/platform";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -288,7 +288,7 @@ export default function Feed() {
 
       {user && <MomentFeedBanner />}
 
-      {!isNativeApp() && <InstallPwaBanner />}
+      {!isNativeApp() && <AppStorePromo />}
 
       {user && showPrivacyReminder && (
         <div className="px-4 pt-1 pb-1">

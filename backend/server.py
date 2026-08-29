@@ -1289,6 +1289,26 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .stickycta .pr small{display:block;color:var(--muted);font-size:11px}
 .stickycta .pr b{font-family:'Unbounded',system-ui,sans-serif;font-size:17px}
 .stickycta .cta{flex:1;padding:13px 18px}
+/* App download promo (SEO) — very visual, drives App Store installs */
+.appband{position:relative;overflow:hidden;margin:14px 0 26px;display:flex;align-items:center;gap:16px;background:linear-gradient(120deg,rgba(0,0,0,.55),rgba(255,0,85,.20) 60%,rgba(0,240,255,.16));border:1px solid rgba(255,255,255,.14);border-radius:24px;padding:20px 22px;box-shadow:0 18px 50px -20px rgba(255,0,85,.5)}
+.appband:before{content:"";position:absolute;top:-40%;right:-10%;width:220px;height:220px;background:radial-gradient(circle,rgba(0,240,255,.35),transparent 65%);filter:blur(8px);pointer-events:none}
+.appband .ico{flex:0 0 auto;width:66px;height:66px;border-radius:16px;background:linear-gradient(150deg,#141216,#000);border:1px solid rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-family:'Unbounded',system-ui,sans-serif;font-weight:900;font-size:15px;line-height:1;box-shadow:0 10px 26px -10px rgba(0,0,0,.8)}
+.appband .ico b{color:#fff}.appband .ico i{color:var(--pink);font-style:normal}
+.appband .tx{position:relative;z-index:1;flex:1;text-align:left;min-width:0}
+.appband .stars{color:#ffce31;font-size:13px;letter-spacing:2px;margin-bottom:3px}
+.appband .tx b{display:block;font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:19px;line-height:1.15}
+.appband .tx small{display:block;color:#e5e5ea;font-size:13px;margin:3px 0 12px}
+.appstore-badge{transition:transform .15s ease,box-shadow .15s ease}
+.appstore-badge:hover{transform:translateY(-2px);box-shadow:0 14px 30px -10px rgba(0,0,0,.7)}
+.appstore-badge.big{padding:14px 26px !important;font-size:16px !important}
+.appsticky{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:12px;padding:11px 16px calc(11px + env(safe-area-inset-bottom));background:rgba(12,10,16,.94);backdrop-filter:blur(16px);border-top:1px solid rgba(255,255,255,.1)}
+.appsticky .ico{flex:0 0 auto;width:42px;height:42px;border-radius:11px;background:linear-gradient(150deg,#141216,#000);border:1px solid rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-family:'Unbounded',system-ui,sans-serif;font-weight:900;font-size:10px}
+.appsticky .ico b{color:#fff}.appsticky .ico i{color:var(--pink);font-style:normal}
+.appsticky .pr{flex:1;line-height:1.15;text-align:left}
+.appsticky .pr b{display:block;font-family:'Unbounded',system-ui,sans-serif;font-size:15px}
+.appsticky .pr small{display:block;color:var(--muted);font-size:11px}
+.appsticky .appstore-badge{flex:0 0 auto;margin-top:0 !important}
+@media(max-width:640px){.appband .tx b{font-size:17px}.appband{padding:16px}.appband .ico{width:56px;height:56px;font-size:13px}}
 .cities{margin-top:38px;border-top:1px solid var(--line);padding-top:20px}
 .cities a{color:var(--cyan);margin-right:16px;text-decoration:none;display:inline-block;margin-bottom:8px;font-weight:600}
 .cities a:hover{color:#fff}
@@ -1362,26 +1382,73 @@ _ICONS_HEAD = (
 APP_STORE_URL = "https://apps.apple.com/es/app/qui%C3%A9n-va-fiestas-cerca/id6804396475"
 
 
-def _app_store_badge(lang: str) -> str:
-    """Small 'Download on the App Store' button (Apple logo + label) for SEO
-    pages, so visitors can jump straight to the native iOS app."""
+def _apple_logo(size: int = 20) -> str:
+    return (f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+            '<path d="M16.365 1.43c0 1.14-.42 2.2-1.12 3.03-.78.94-2.06 1.66-3.16 1.57-.14-1.1.42-2.28 1.09-3.02.76-.86 2.12-1.5 3.19-1.58zM20.9 17.02c-.55 1.27-.81 1.83-1.52 2.95-.99 1.56-2.39 3.5-4.12 3.51-1.54.02-1.94-1-4.03-.99-2.09.01-2.53 1.01-4.07.99-1.73-.02-3.05-1.78-4.04-3.34C1.28 16.62.99 12.02 2.68 9.6c1.02-1.46 2.62-2.31 4.13-2.31 1.54 0 2.5 1.02 3.77 1.02 1.23 0 1.98-1.02 3.76-1.02 1.34 0 2.76.73 3.78 1.99-3.32 1.82-2.78 6.56.98 7.74z"/>'
+            '</svg>')
+
+
+def _app_store_badge(lang: str, big: bool = False) -> str:
+    """'Download on the App Store' button (Apple logo + label)."""
     label = {"es": "Desc\u00e1rgala en la App Store",
              "en": "Download on the App Store",
              "de": "Im App Store laden"}.get(lang, "Desc\u00e1rgala en la App Store")
-    apple = ('<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
-             '<path d="M16.365 1.43c0 1.14-.42 2.2-1.12 3.03-.78.94-2.06 1.66-3.16 1.57-.14-1.1.42-2.28 1.09-3.02.76-.86 2.12-1.5 3.19-1.58zM20.9 17.02c-.55 1.27-.81 1.83-1.52 2.95-.99 1.56-2.39 3.5-4.12 3.51-1.54.02-1.94-1-4.03-.99-2.09.01-2.53 1.01-4.07.99-1.73-.02-3.05-1.78-4.04-3.34C1.28 16.62.99 12.02 2.68 9.6c1.02-1.46 2.62-2.31 4.13-2.31 1.54 0 2.5 1.02 3.77 1.02 1.23 0 1.98-1.02 3.76-1.02 1.34 0 2.76.73 3.78 1.99-3.32 1.82-2.78 6.56.98 7.74z"/>'
-             '</svg>')
-    return (f'<a class="appstore-badge" href="{APP_STORE_URL}" target="_blank" rel="noopener" '
+    cls = "appstore-badge big" if big else "appstore-badge"
+    return (f'<a class="{cls}" href="{APP_STORE_URL}" target="_blank" rel="noopener" '
             f'data-testid="seo-appstore-badge" '
             f'style="display:inline-flex;align-items:center;gap:9px;margin-top:14px;padding:11px 20px;'
             f'border-radius:999px;background:#000;color:#fff;border:1px solid rgba(255,255,255,.22);'
-            f'font-weight:700;text-decoration:none;font-size:14px">{apple}<span>{label}</span></a>')
+            f'font-weight:700;text-decoration:none;font-size:14px">{_apple_logo()}<span>{label}</span></a>')
+
+
+def _app_icon_tile(cls: str = "ico") -> str:
+    # Mini brand tile that mimics the app icon: "¿Q va?" (white + pink).
+    return f'<div class="{cls}"><b>\u00bfQ</b><i>va?</i></div>'
+
+
+def _app_promo_band(lang: str) -> str:
+    """Big, eye-catching 'get the app' card to maximise App Store installs.
+    Shown high on SEO pages."""
+    txt = {
+        "es": ("Descarga <b>\u00bfQui\u00e9n va?</b> gratis", "Todas las fiestas cerca de ti \u2014 en tu bolsillo"),
+        "en": ("Get <b>\u00bfQui\u00e9n va?</b> free", "Every party near you \u2014 in your pocket"),
+        "de": ("Hol dir <b>\u00bfQui\u00e9n va?</b> gratis", "Alle Partys in deiner N\u00e4he \u2014 in der Tasche"),
+    }.get(lang, None) or ("Descarga <b>\u00bfQui\u00e9n va?</b> gratis", "Todas las fiestas cerca de ti \u2014 en tu bolsillo")
+    return (f'<a class="appband" href="{APP_STORE_URL}" target="_blank" rel="noopener" '
+            f'data-testid="seo-app-promo" style="text-decoration:none;color:inherit">'
+            f'{_app_icon_tile()}'
+            f'<div class="tx"><div class="stars">\u2605\u2605\u2605\u2605\u2605</div>'
+            f'<b>{txt[0]}</b><small>{txt[1]}</small>'
+            f'<span class="appstore-badge big" style="display:inline-flex;align-items:center;gap:9px;'
+            f'padding:12px 22px;border-radius:999px;background:#000;color:#fff;border:1px solid rgba(255,255,255,.22);'
+            f'font-weight:700;font-size:15px;margin-top:0">{_apple_logo()}<span>App Store</span></span>'
+            f'</div></a>')
+
+
+def _app_sticky_bar(lang: str) -> str:
+    """Fixed bottom download bar (smart-banner style) for SEO city pages."""
+    t = {"es": ("\u00bfQui\u00e9n va?", "Gratis en la App Store"),
+         "en": ("\u00bfQui\u00e9n va?", "Free on the App Store"),
+         "de": ("\u00bfQui\u00e9n va?", "Gratis im App Store")}.get(lang, ("\u00bfQui\u00e9n va?", "Gratis en la App Store"))
+    get = {"es": "Obtener", "en": "Get", "de": "Laden"}.get(lang, "Obtener")
+    return (f'<div class="appsticky" data-testid="seo-app-sticky">{_app_icon_tile()}'
+            f'<div class="pr"><b>{t[0]}</b><small>{t[1]}</small></div>'
+            f'<a class="appstore-badge" href="{APP_STORE_URL}" target="_blank" rel="noopener" '
+            f'style="display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:999px;'
+            f'background:#000;color:#fff;border:1px solid rgba(255,255,255,.22);font-weight:700;'
+            f'text-decoration:none;font-size:14px">{_apple_logo(18)}<span>{get}</span></a></div>')
 
 
 def _seo_topbar(front, lang, e):
     ui = _SEO_UI.get(lang, _SEO_UI["es"])
+    getapp = {"es": "Descargar app", "en": "Get the app", "de": "App laden"}.get(lang, "Descargar app")
     return (f'<header class="topbar"><a class="brand" href="{front}/">\u00bfQui\u00e9n va?<span>.</span></a>'
-            f'<a class="open" href="{front}/feed">{e(ui["open"])} \u2192</a></header>')
+            f'<span style="display:inline-flex;align-items:center;gap:10px">'
+            f'<a class="appstore-badge" href="{APP_STORE_URL}" target="_blank" rel="noopener" '
+            f'style="display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:999px;'
+            f'background:#000;color:#fff;border:1px solid rgba(255,255,255,.22);font-weight:700;'
+            f'text-decoration:none;font-size:13px;margin-top:0">{_apple_logo(16)}<span>{e(getapp)}</span></a>'
+            f'<a class="open" href="{front}/feed">{e(ui["open"])} \u2192</a></span></header>')
 
 
 def _seo_benefits(lang, e):
@@ -2279,6 +2346,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 <div class="ctarow"><a class="cta" href="{front}/feed">{e(T["open_app"])}</a></div>
 {nav_html}
 </section>
+{_app_promo_band(lang)}
 {intro_html}
 {finder_html}
 <ul class="grid">{''.join(items_html)}<li class="nores" id="qvnores">{e(L2["nores"])}</li></ul>
@@ -2291,7 +2359,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 {faq_html}
 {langsw}
 <footer>{e(T["footer"])}</footer>
-</div>{_search_js}</body></html>"""
+</div>{_app_sticky_bar(lang)}{_search_js}</body></html>"""
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
                              headers={"Cache-Control": "public, max-age=1800"})
 
@@ -2543,6 +2611,7 @@ async def _render_event(event_id: str, lang: str, request: Request, slug: str = 
 <div><b>{e(T["ev_price"])}</b>{e(pl or T["free"])}</div>
 </div>
 {ctarow_html}
+{_app_promo_band(lang)}
 {related_html}
 {benefits}
 {joinband}

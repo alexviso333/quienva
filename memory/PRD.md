@@ -544,3 +544,13 @@ Cambios SOLO en la app nativa (detección `Capacitor.isNativePlatform()` / clase
   App Store Connect API), (3) activar capability "Push Notifications" en el App ID me.quienva.app,
   (4) en Render añadir APNS_TEAM_ID, APNS_KEY_ID=C3DKS73GY4, APNS_BUNDLE_ID=me.quienva.app,
   APNS_PRODUCTION=true, APNS_PRIVATE_KEY (contenido del .p8; el fichero está gitignored).
+
+## Promoción de descargas de la app (2026) — SOLO web/SEO, NO en la app
+Objetivo: más descargas en App Store. Todo gated para NO mostrarse en la app nativa.
+- Páginas SEO (backend): botón "Descargar app" en la cabecera (todas las páginas), banner
+  grande con estrellas + badge App Store (_app_promo_band, en ciudad y evento, arriba), y
+  barra fija inferior "Obtener" (_app_sticky_bar, en páginas de ciudad). Verificado por curl+captura.
+- Web quienva.me (React): componente AppStorePromo en la parte superior del feed (i18n es/en/de),
+  descartable 7 días, oculto en la app nativa (isNativeApp()). Reemplaza al antiguo InstallPwaBanner
+  en el feed (la app ahora se promociona en vez del "instalar PWA").
+- APP_STORE_URL: https://apps.apple.com/es/app/qui%C3%A9n-va-fiestas-cerca/id6804396475
