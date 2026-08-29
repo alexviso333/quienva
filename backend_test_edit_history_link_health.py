@@ -11,7 +11,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 
-BASE_URL = "https://bddf5d6a-7da4-4858-902b-35ce76fbe96e.preview.emergentagent.com/api"
+BASE_URL = "https://whatsapp-invites-2.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

@@ -9,7 +9,7 @@ import sys
 from urllib.parse import urlparse, parse_qs
 
 # Backend URL from frontend/.env
-BASE_URL = "https://url-validation-fix.preview.emergentagent.com/api"
+BASE_URL = "https://whatsapp-invites-2.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
