@@ -94,6 +94,24 @@ workflows:
             # Fallback: forzar el color de fondo a #0A0A0C si no se pudo copiar.
             sed -i '' -E 's#<color key="backgroundColor"[^>]*systemColor="systemBackgroundColor"[^>]*/>#<color key="backgroundColor" red="0.0392156862745098" green="0.0392156862745098" blue="0.047058823529411764" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>#g' "$SB" || true
           fi
+      - name: "Push APNs — reenvio del token en AppDelegate (CAUSA RAIZ)"
+        script: |
+          # MOTIVO por el que el token de push nunca llegaba al servidor:
+          # la plantilla por defecto de Capacitor NO incluye los callbacks de APNs
+          # en AppDelegate.swift. Resultado: iOS obtiene el token del dispositivo
+          # pero nunca se lo entrega al plugin -> el JS no recibe 'registration' ni
+          # 'registrationError' -> el token no se sube -> apns_devices vacio.
+          # Insertamos los dos metodos oficiales (idempotente: solo si faltan) para
+          # reenviar el token a Capacitor. No toca nada mas del AppDelegate, asi que
+          # deep links / Sign in with Apple / Google siguen funcionando igual.
+          APPDELEGATE="frontend/ios/App/App/AppDelegate.swift"
+          if [ -f "$APPDELEGATE" ] && ! grep -q "didRegisterForRemoteNotificationsWithDeviceToken" "$APPDELEGATE"; then
+            perl -0pi -e 's/(class AppDelegate[^\n]*\{)/$1\n\n    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {\n        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)\n    }\n\n    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {\n        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)\n    }\n/' "$APPDELEGATE"
+            echo "== AppDelegate parcheado con los callbacks de APNs push =="
+            grep -n "RemoteNotifications" "$APPDELEGATE" || true
+          else
+            echo "AppDelegate ya tenia los callbacks de push (o no se encontro): $APPDELEGATE"
+          fi
       - name: Ajustes Info.plist (encriptación + permiso de contactos) y solo-iPhone
         script: |
           PLIST="frontend/ios/App/App/Info.plist"
