@@ -8973,6 +8973,14 @@ async def admin_push_inspect(email: str, admin: dict = Depends(require_admin)):
             "updated_at": d.get("updated_at"),
         })
     web = await db.push_subscriptions.count_documents({"user_id": u["user_id"]})
+    # Recent native-app diagnostics (self-reported by the device). This reveals
+    # WHY a token never arrived: permission result, APNs token arrival, and the
+    # upload result/error — plus whether the DEVICE was authenticated at all.
+    debug_events = []
+    async for ev in db.apns_debug.find(
+        {"$or": [{"email": u["email"]}, {"email": None}]}, {"_id": 0},
+    ).sort("ts", -1).limit(15):
+        debug_events.append(ev)
     return {
         "email": u["email"],
         "server_apns_configured": apns.is_configured(),
@@ -8980,6 +8988,7 @@ async def admin_push_inspect(email: str, admin: dict = Depends(require_admin)):
         "server_bundle_id": apns.APNS_BUNDLE_ID,
         "apns_devices": devices,
         "web_subscriptions": web,
+        "device_debug_log": debug_events,
     }
 
 
@@ -9046,6 +9055,39 @@ async def apns_register(inp: ApnsTokenInput, user: dict = Depends(get_current_us
 @api_router.post("/push/apns/unregister")
 async def apns_unregister(inp: ApnsTokenInput, user: dict = Depends(get_current_user)):
     await db.apns_devices.delete_one({"user_id": user["user_id"], "token": (inp.token or "").strip()})
+    return {"ok": True}
+
+
+class ApnsDebugInput(BaseModel):
+    stage: str
+    detail: Optional[str] = None
+    token_prefix: Optional[str] = None
+    email: Optional[str] = None
+    logged_in: Optional[bool] = None
+    platform: Optional[str] = None
+
+
+@api_router.post("/push/apns/debug")
+async def apns_debug_report(inp: ApnsDebugInput, user: dict = Depends(get_optional_user)):
+    """Best-effort diagnostic sink for the native app. NEVER fails so we capture
+    exactly what happens on the device (permission result, APNs token arrival,
+    upload success/error) EVEN when the device has no valid session — which is how
+    we tell apart an APNs problem from a not-logged-in problem. Viewable by admin
+    via /admin/push/inspect."""
+    now = datetime.now(timezone.utc).isoformat()
+    server_user_id = user.get("user_id")  # None => the DEVICE is NOT authenticated
+    server_email = user.get("email")
+    email = ((inp.email or server_email or "").lower().strip()) or None
+    await db.apns_debug.insert_one({
+        "ts": now,
+        "stage": inp.stage,
+        "detail": (inp.detail or "")[:500],
+        "token_prefix": inp.token_prefix,
+        "platform": inp.platform,
+        "email": email,
+        "client_says_logged_in": inp.logged_in,
+        "server_authenticated": server_user_id is not None,
+    })
     return {"ok": True}
 
 

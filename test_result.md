@@ -9932,3 +9932,111 @@ agent_communication:
       Test file: /app/backend_test_admin_push_debug.py
       All 5 tests executed successfully with no failures.
 
+
+  - agent: "main"
+    message: |
+      NEW backend changes to test (2026-08-30, iOS push token diagnosis):
+      1) POST /api/push/apns/debug — best-effort diagnostic sink used by the native app.
+         Uses get_optional_user so it NEVER 401s (must accept requests with AND without a
+         valid session). Body: {stage, detail?, token_prefix?, email?, logged_in?, platform?}.
+         Always returns {"ok": true} and stores an event in db.apns_debug (fields include
+         server_authenticated=true/false depending on whether a valid Bearer session was sent).
+      2) GET /api/admin/push/inspect?email=... (admin) — NOW also returns a new field
+         "device_debug_log": the last ~15 apns_debug events for that email (or with email=null),
+         newest first. Still requires admin auth (401 no-auth, 403 non-admin), 404 unknown email.
+      Please verify: (a) debug endpoint returns 200 with and without auth and stores events;
+      (b) inspect includes device_debug_log and the events posted for a user's email show up there;
+      (c) auth checks + 404 still correct; (d) no regressions on /push/status, /push/test,
+      /push/apns/register, /admin/push/send. Local admin: admin@quienva.app / admin123.
+  - agent: "testing"
+    message: |
+      ✅ BACKEND TESTING COMPLETE - iOS PUSH-DIAGNOSTIC ENDPOINTS (12/12 TESTS PASSED)
+      
+      Tested the NEW POST /api/push/apns/debug endpoint and MODIFIED GET /api/admin/push/inspect endpoint.
+      ALL REQUIREMENTS MET PERFECTLY - NO ISSUES FOUND.
+      
+      ✅ TEST 1: POST /api/push/apns/debug WITHOUT Authorization header (PASSED)
+      - Status: 200 ✓
+      - Response: {ok: true} ✓
+      - CRITICAL: Endpoint NEVER returns 401 (uses get_optional_user as required) ✓
+      - Event stored with server_authenticated=false ✓
+      
+      ✅ TEST 2: POST /api/push/apns/debug WITH admin Bearer token (PASSED)
+      - Status: 200 ✓
+      - Response: {ok: true} ✓
+      - Event stored with server_authenticated=true ✓
+      
+      ✅ TEST 3: GET /api/admin/push/inspect?email=admin@quienva.app (admin auth) - PASSED
+      - Status: 200 ✓
+      - Response contains ALL required keys:
+        * email: "admin@quienva.app" ✓
+        * server_apns_configured: false ✓
+        * server_apns_environment: "production" ✓
+        * server_bundle_id: "me.quienva.app" ✓
+        * apns_devices: [] (array) ✓
+        * web_subscriptions: 0 ✓
+        * device_debug_log: [array with 2 events] ✓ (NEW FIELD)
+      - device_debug_log is a list containing debug events posted for that email ✓
+      - Events are newest first ✓
+      - Sample event structure verified: stage, server_authenticated fields present ✓
+      
+      ✅ TEST 4: GET /api/admin/push/inspect?email=doesnotexist@nope.com (admin auth) - PASSED
+      - Status: 404 ✓
+      - Correctly returns 404 for non-existent user email
+      
+      ✅ TEST 5: GET /api/admin/push/inspect WITHOUT Authorization header - PASSED
+      - Status: 401 ✓
+      - Authorization correctly enforced
+      
+      ✅ TEST 6: GET /api/admin/push/inspect with NON-ADMIN user token - PASSED
+      - Status: 403 ✓
+      - Admin-only access correctly enforced
+      
+      ✅ TEST 7: REGRESSION - GET /api/push/status (PASSED)
+      - Status: 200 ✓
+      - Response: {subscribed: false} ✓
+      - Existing endpoint still works
+      
+      ✅ TEST 8: REGRESSION - POST /api/push/test (PASSED)
+      - Status: 200 ✓
+      - Response contains: ok, apns_configured, apns_devices ✓
+      - Existing endpoint still works
+      
+      ✅ TEST 9: REGRESSION - GET /api/push/diagnostics (PASSED)
+      - Status: 200 ✓
+      - Response contains: apns_configured, apns_environment, apns_bundle_id ✓
+      - Existing endpoint still works
+      
+      ✅ TEST 10: REGRESSION - POST /api/push/apns/register (valid 64-char token) - PASSED
+      - Status: 200 ✓
+      - Response: {ok: true, configured: false} ✓
+      - Existing endpoint still works
+      
+      ✅ TEST 11: REGRESSION - POST /api/push/apns/register (short token <32 chars) - PASSED
+      - Status: 400 ✓
+      - Token validation still works correctly
+      
+      ✅ TEST 12: REGRESSION - POST /api/admin/push/send auth checks - PASSED
+      - Without Authorization header → 401 ✓
+      - With NON-ADMIN user token → 403 ✓
+      - Auth checks still correct
+      
+      CONCLUSION:
+      The NEW iOS push-diagnostic endpoints are FULLY FUNCTIONAL and meet all requirements:
+      ✅ POST /api/push/apns/debug accepts requests with AND without auth (NEVER 401)
+      ✅ POST /api/push/apns/debug always returns {ok: true}
+      ✅ Events are stored in db.apns_debug with server_authenticated=true/false
+      ✅ GET /api/admin/push/inspect now includes device_debug_log field
+      ✅ device_debug_log contains the last ~15 apns_debug events for that email
+      ✅ device_debug_log events are sorted newest first
+      ✅ GET /api/admin/push/inspect still requires admin auth (401/403 for unauthorized)
+      ✅ GET /api/admin/push/inspect returns 404 for non-existent users
+      ✅ All existing push endpoints still work (no regressions)
+      
+      These endpoints allow the owner to diagnose push notification issues on REAL iPhones
+      without needing to ship an app update. The debug endpoint captures device-side events
+      (permission results, token registration, upload errors) EVEN when the device has no
+      valid session, which is critical for diagnosing auth vs APNs issues.
+      
+      Test file: /app/backend_test_ios_push_diagnostics.py
+      All 12 tests executed successfully with no failures.
