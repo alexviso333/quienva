@@ -8899,6 +8899,63 @@ async def push_status(user: dict = Depends(get_current_user)):
     return {"subscribed": count > 0 or apns_count > 0}
 
 
+@api_router.get("/push/diagnostics")
+async def push_diagnostics(user: dict = Depends(get_current_user)):
+    """Tells exactly why pushes may not arrive: is APNs configured on this server,
+    how many devices are registered, and (production vs sandbox)."""
+    apns_count = await db.apns_devices.count_documents({"user_id": user["user_id"], "disabled_at": None})
+    web_count = await db.push_subscriptions.count_documents({"user_id": user["user_id"]})
+    return {
+        "apns_configured": apns.is_configured(),
+        "apns_environment": "production" if apns.APNS_PRODUCTION else "sandbox",
+        "apns_bundle_id": apns.APNS_BUNDLE_ID,
+        "apns_devices": apns_count,
+        "web_push_configured": bool(VAPID_PRIVATE_KEY),
+        "web_subscriptions": web_count,
+    }
+
+
+@api_router.post("/push/test")
+async def push_test(user: dict = Depends(get_current_user)):
+    """Send a REAL test notification to the current user's registered devices and
+    return a per-device result so the user can confirm delivery end-to-end."""
+    # Persist an in-app notification too (bypass pref gating for the test).
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user["user_id"],
+        "type": "test",
+        "message": "🔔 ¡Notificaciones activadas! Esto es una prueba.",
+        "data": {},
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    apns_results = []
+    if apns.is_configured():
+        async for d in db.apns_devices.find({"user_id": user["user_id"], "disabled_at": None}):
+            res = await apns.send_apns(d["token"], "¿Quién va?", "🔔 ¡Notificaciones activadas! Esto es una prueba.", {"url": "/notifications"})
+            apns_results.append(res)
+            if res == "gone":
+                await db.apns_devices.update_one({"_id": d["_id"]}, {"$set": {"disabled_at": datetime.now(timezone.utc).isoformat()}})
+    # Web push (browser/PWA) too.
+    web_sent = 0
+    if VAPID_PRIVATE_KEY:
+        payload = json.dumps({"title": "¿Quién va?", "body": "🔔 ¡Notificaciones activadas! Esto es una prueba.", "url": "/notifications"})
+        async for s in db.push_subscriptions.find({"user_id": user["user_id"]}):
+            dead = await asyncio.to_thread(_sync_web_push, s, payload)
+            if dead and dead != "err":
+                await db.push_subscriptions.delete_one({"endpoint": dead})
+            elif not dead:
+                web_sent += 1
+    ok = ("ok" in apns_results) or web_sent > 0
+    return {
+        "ok": ok,
+        "apns_configured": apns.is_configured(),
+        "apns_devices": len(apns_results),
+        "apns_results": apns_results,
+        "web_sent": web_sent,
+    }
+
+
 class ApnsTokenInput(BaseModel):
     token: str
 

@@ -50,3 +50,21 @@ export async function attachNativePushTapHandler(onNavigate) {
     /* ignore */
   }
 }
+
+// Called on every app start (native): if the user already granted permission,
+// silently re-register so the current APNs device token is (re)sent to the
+// backend. Tokens can rotate and the very first upload may have failed, which
+// is a common reason pushes stop arriving.
+export async function refreshNativePushIfGranted() {
+  if (!isNativeApp()) return;
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const perm = await PushNotifications.checkPermissions();
+    if (perm.receive === "granted") {
+      await ensureListeners(PushNotifications);
+      await PushNotifications.register();
+    }
+  } catch (e) {
+    console.error("refreshNativePush failed", e);
+  }
+}

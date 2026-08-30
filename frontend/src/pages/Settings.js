@@ -153,6 +153,24 @@ export default function Settings() {
     } finally { setPushBusy(false); }
   };
 
+  const sendTestPush = async () => {
+    setPushBusy(true);
+    try {
+      const { data } = await api.post("/push/test");
+      if (data.ok) {
+        toast.success("Prueba enviada. Debería llegarte en unos segundos 🔔");
+      } else if (!data.apns_configured && data.web_sent === 0) {
+        toast.error("El servidor aún no tiene las notificaciones push configuradas.");
+      } else if (data.apns_devices === 0 && data.web_sent === 0) {
+        toast.error("No hay ningún dispositivo registrado. Activa las notificaciones primero.");
+      } else {
+        toast.error("No se pudo entregar el aviso. Revisa los permisos del sistema.");
+      }
+    } catch (e) {
+      toast.error("No se pudo enviar la prueba");
+    } finally { setPushBusy(false); }
+  };
+
   const save = async () => {
     setSaving(true);
     const cityChanged = city !== (user?.city);
@@ -295,6 +313,11 @@ export default function Settings() {
         <button data-testid="push-toggle-btn" onClick={togglePush} disabled={pushBusy} className={`h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60 ${pushOn ? "bg-qv-primary/15 border border-qv-primary/40 text-qv-primary" : "bg-white/5 border border-white/15 text-white"}`}>
           {pushBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : pushOn ? <><BellRing className="w-4 h-4" /> Notificaciones activadas</> : <><Bell className="w-4 h-4" /> Activar notificaciones</>}
         </button>
+        {pushOn && (
+          <button data-testid="push-test-btn" onClick={sendTestPush} disabled={pushBusy} className="h-11 rounded-2xl bg-white/5 border border-white/15 text-white/80 text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60">
+            <BellRing className="w-4 h-4" /> Enviar notificación de prueba
+          </button>
+        )}
         <button data-testid="compact-toggle-btn" onClick={() => { setCompact(!compact); toast.success(compact ? "Vista completa activada" : "Vista compacta activada"); }} className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-between px-4 active:scale-95">
           <span className="flex items-center gap-2">{compact ? <Grid3x3 className="w-4 h-4" /> : <Rows3 className="w-4 h-4" />} Vista del feed</span>
           <span className={`text-xs px-2.5 py-1 rounded-full ${compact ? "bg-qv-secondary/20 text-qv-secondary" : "bg-white/10 text-white/70"}`}>{compact ? "Compacta" : "Completa"}</span>

@@ -1,12 +1,19 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { refreshNativePushIfGranted } from "@/lib/nativePush";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // On the native app, whenever we have a logged-in user, silently re-register
+  // the APNs device token so the backend always has a fresh, valid token.
+  useEffect(() => {
+    if (user?.user_id) refreshNativePushIfGranted();
+  }, [user?.user_id]);
 
   const checkAuth = useCallback(async () => {
     // Optimistic hydrate from the last-known user so the app opens INSTANTLY
