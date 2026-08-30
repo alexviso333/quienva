@@ -9,7 +9,7 @@ import time
 import json
 
 # Base URL from frontend/.env
-BASE_URL = "https://whatsapp-invites-2.preview.emergentagent.com/api"
+BASE_URL = "https://apns-token-debug.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

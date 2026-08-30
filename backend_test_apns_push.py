@@ -8,7 +8,7 @@ import requests
 import sys
 
 # Backend URL from frontend/.env
-BASE_URL = "https://927361aa-2382-439e-9c1f-ff16794654e4.preview.emergentagent.com/api"
+BASE_URL = "https://apns-token-debug.preview.emergentagent.com/api"
 
 # Test credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
