@@ -6,6 +6,24 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import "@/index.css";
 import "@/i18n";
 import App from "@/App";
+import { isNativeApp } from "@/lib/platform";
+
+// --- Native app: lock zoom -----------------------------------------------------
+// Inside the iOS/Android app the WKWebView must behave like a native screen, not
+// a zoomable web page. Without this, a double-tap zooms in, pinch zooms, and
+// focusing a text field auto-zooms and "cuts off" the layout. We ONLY do this in
+// the native app so the website (quienva.me) keeps its normal, zoomable behavior.
+if (isNativeApp()) {
+  const vp = document.querySelector('meta[name="viewport"]');
+  if (vp) {
+    vp.setAttribute(
+      "content",
+      "width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover",
+    );
+  }
+  // Kills the 300ms double-tap-to-zoom gesture entirely.
+  document.documentElement.style.touchAction = "manipulation";
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
