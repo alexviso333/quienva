@@ -178,10 +178,10 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # Sube el build a App Store Connect Y lo pone disponible en TestFlight.
-        # Los TESTERS INTERNOS (tu propia cuenta del equipo) pueden instalarlo a los
-        # pocos minutos de procesarse, SIN revisión de Apple y SIN rellenar la
-        # "Información de pruebas" de la beta (eso solo lo exigen los testers EXTERNOS).
-        # Así puedes probar las notificaciones push sin publicar una actualización.
-        submit_to_testflight: true
+        # Sube el build a App Store Connect. Los TESTERS INTERNOS (tu cuenta del
+        # equipo) pueden instalarlo desde TestFlight en cuanto se procesa, SIN
+        # revisión de Apple y SIN rellenar la "Información de pruebas".
+        # Lo dejamos en false a proposito: 'true' intentaria enviarlo a testers
+        # EXTERNOS (beta review), que SI exige rellenar datos y hace fallar el paso.
+        submit_to_testflight: false
         # submit_to_app_store: false     # cámbialo a true si quieres que Codemagic lo envíe a revisión solo
