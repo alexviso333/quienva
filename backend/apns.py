@@ -64,10 +64,12 @@ def _provider_token() -> str:
     return _jwt_cache["token"]
 
 
-async def send_apns(device_token: str, title: str, body: str, data: dict | None = None) -> str:
+async def send_apns(device_token: str, title: str, body: str, data: dict | None = None,
+                    production: bool | None = None) -> str:
     """Send one alert push. Returns:
     'ok' on success, 'gone' if the token is invalid/unregistered (caller should
     delete it), or 'err' on any other failure. Never raises.
+    `production` overrides the default host (used to probe sandbox vs prod).
     """
     if not is_configured():
         return "err"
@@ -75,6 +77,10 @@ async def send_apns(device_token: str, title: str, body: str, data: dict | None 
         import httpx
     except Exception:  # pragma: no cover
         return "err"
+
+    host = APNS_HOST
+    if production is not None:
+        host = "https://api.push.apple.com" if production else "https://api.development.push.apple.com"
 
     payload = {
         "aps": {"alert": {"title": title, "body": body}, "sound": "default"},
@@ -91,7 +97,7 @@ async def send_apns(device_token: str, title: str, body: str, data: dict | None 
     try:
         async with httpx.AsyncClient(http2=True, timeout=15) as client:
             resp = await client.post(
-                f"{APNS_HOST}/3/device/{device_token}",
+                f"{host}/3/device/{device_token}",
                 json=payload,
                 headers=headers,
             )

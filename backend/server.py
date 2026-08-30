@@ -8956,6 +8956,64 @@ async def push_test(user: dict = Depends(get_current_user)):
     }
 
 
+@api_router.get("/admin/push/inspect")
+async def admin_push_inspect(email: str, admin: dict = Depends(require_admin)):
+    """DEBUG (admin): shows whether a given user's iPhone token is stored on THIS
+    server, its APNs environment and whether it got disabled. No app update needed."""
+    u = await db.users.find_one({"email": email.lower().strip()}, {"_id": 0, "user_id": 1, "email": 1, "notif_prefs": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="user not found")
+    devices = []
+    async for d in db.apns_devices.find({"user_id": u["user_id"]}, {"_id": 0}):
+        devices.append({
+            "token_prefix": (d.get("token") or "")[:14],
+            "environment": d.get("environment"),
+            "disabled_at": d.get("disabled_at"),
+            "created_at": d.get("created_at"),
+            "updated_at": d.get("updated_at"),
+        })
+    web = await db.push_subscriptions.count_documents({"user_id": u["user_id"]})
+    return {
+        "email": u["email"],
+        "server_apns_configured": apns.is_configured(),
+        "server_apns_environment": "production" if apns.APNS_PRODUCTION else "sandbox",
+        "server_bundle_id": apns.APNS_BUNDLE_ID,
+        "apns_devices": devices,
+        "web_subscriptions": web,
+    }
+
+
+@api_router.post("/admin/push/send")
+async def admin_push_send(email: str, admin: dict = Depends(require_admin)):
+    """DEBUG (admin): send a REAL push to a user's registered iPhone(s) and report
+    the raw APNs result per device. Tries ALL devices (even disabled) so the exact
+    failure is visible. Re-enables a device if Apple accepts it (result 'ok')."""
+    u = await db.users.find_one({"email": email.lower().strip()}, {"_id": 0, "user_id": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="user not found")
+    results = []
+    async for d in db.apns_devices.find({"user_id": u["user_id"]}):
+        res = await apns.send_apns(d["token"], "¿Quién va?", "🔔 Prueba de notificación", {"url": "/notifications"}, production=True)
+        entry = {"token_prefix": (d.get("token") or "")[:14], "env": d.get("environment"), "was_disabled": bool(d.get("disabled_at")), "result_production": res}
+        if res != "ok":
+            # Probe sandbox: if THIS works, the installed app is a development/sandbox
+            # build and needs a production (App Store) build to match the server.
+            sandbox_res = await apns.send_apns(d["token"], "¿Quién va?", "🔔 Prueba (sandbox)", {"url": "/notifications"}, production=False)
+            entry["result_sandbox"] = sandbox_res
+        if res == "ok":
+            await db.apns_devices.update_one({"_id": d["_id"]}, {"$set": {"disabled_at": None}})
+        results.append(entry)
+    if not results:
+        hint = "No hay ningun token registrado para este usuario -> la app instalada no envio el token al servidor."
+    elif any(r.get("result_production") == "ok" for r in results):
+        hint = "OK: entregado a Apple en produccion. Debe llegar al iPhone."
+    elif any(r.get("result_sandbox") == "ok" for r in results):
+        hint = "ENTORNO EQUIVOCADO: el token funciona en SANDBOX, no en produccion. La app instalada es un build de desarrollo; necesita un build de App Store/TestFlight (aps-environment=production)."
+    else:
+        hint = "gone/err en ambos entornos -> token invalido o credenciales del servidor incorrectas."
+    return {"server_apns_configured": apns.is_configured(), "sent_to": len(results), "results": results, "hint": hint}
+
+
 class ApnsTokenInput(BaseModel):
     token: str
 

@@ -44,6 +44,9 @@ export default function Settings() {
   const [uploading, setUploading] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [dbgEmail, setDbgEmail] = useState("");
+  const [dbgResult, setDbgResult] = useState(null);
+  const [dbgBusy, setDbgBusy] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [compact, setCompact] = useCompactMode();
   const pushSupported = isPushSupported();
@@ -169,6 +172,23 @@ export default function Settings() {
     } catch (e) {
       toast.error("No se pudo enviar la prueba");
     } finally { setPushBusy(false); }
+  };
+
+  // Admin-only push diagnostics (usable from the web, no app update needed).
+  const dbgRun = async (kind) => {
+    const email = (dbgEmail || user?.email || "").trim();
+    if (!email) { toast.error("Escribe un email"); return; }
+    setDbgBusy(true);
+    setDbgResult(null);
+    try {
+      const path = kind === "send" ? "/admin/push/send" : "/admin/push/inspect";
+      const { data } = kind === "send"
+        ? await api.post(`${path}?email=${encodeURIComponent(email)}`)
+        : await api.get(`${path}?email=${encodeURIComponent(email)}`);
+      setDbgResult(data);
+    } catch (e) {
+      setDbgResult({ error: e?.response?.data?.detail || e.message });
+    } finally { setDbgBusy(false); }
   };
 
   const save = async () => {
@@ -317,6 +337,24 @@ export default function Settings() {
           <button data-testid="push-test-btn" onClick={sendTestPush} disabled={pushBusy} className="h-11 rounded-2xl bg-white/5 border border-white/15 text-white/80 text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60">
             <BellRing className="w-4 h-4" /> Enviar notificación de prueba
           </button>
+        )}
+        {user?.role === "admin" && (
+          <div data-testid="admin-push-debug" className="rounded-2xl bg-white/5 border border-white/12 p-3 flex flex-col gap-2">
+            <p className="text-white/70 text-xs font-semibold uppercase tracking-wider">Diagnóstico push (admin)</p>
+            <input
+              value={dbgEmail}
+              onChange={(e) => setDbgEmail(e.target.value)}
+              placeholder={user?.email || "email del usuario"}
+              className="h-10 rounded-xl bg-white/5 border border-white/15 px-3 text-white text-sm placeholder:text-white/40"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => dbgRun("inspect")} disabled={dbgBusy} className="flex-1 h-10 rounded-xl bg-white/8 border border-white/15 text-white text-sm font-semibold active:scale-95 disabled:opacity-60">Inspeccionar</button>
+              <button onClick={() => dbgRun("send")} disabled={dbgBusy} className="flex-1 h-10 rounded-xl bg-qv-primary/15 border border-qv-primary/40 text-qv-primary text-sm font-semibold active:scale-95 disabled:opacity-60">Enviar prueba</button>
+            </div>
+            {dbgResult && (
+              <pre className="text-[11px] text-white/70 bg-black/40 rounded-xl p-2.5 overflow-x-auto whitespace-pre-wrap break-words max-h-52">{JSON.stringify(dbgResult, null, 2)}</pre>
+            )}
+          </div>
         )}
         <button data-testid="compact-toggle-btn" onClick={() => { setCompact(!compact); toast.success(compact ? "Vista completa activada" : "Vista compacta activada"); }} className="h-12 rounded-2xl bg-white/5 border border-white/15 text-white font-semibold flex items-center justify-between px-4 active:scale-95">
           <span className="flex items-center gap-2">{compact ? <Grid3x3 className="w-4 h-4" /> : <Rows3 className="w-4 h-4" />} Vista del feed</span>
