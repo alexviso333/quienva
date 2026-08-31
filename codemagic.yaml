@@ -135,6 +135,15 @@ workflows:
           MIC_MSG="Usamos el microfono cuando grabas un video para compartirlo en los albumes de eventos."
           /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string $MIC_MSG" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription $MIC_MSG" "$PLIST"
+          # Custom URL scheme 'quienva://' — para que el login con Google (que se
+          # abre en Safari del sistema) devuelva la sesion a la app. Idempotente:
+          # borramos y re-anadimos para no duplicar en cada build.
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string me.quienva.app" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string quienva" "$PLIST"
           # App SOLO para iPhone (evita tener que subir capturas de iPad)
           sed -i '' -E 's/TARGETED_DEVICE_FAMILY = "?1,2"?/TARGETED_DEVICE_FAMILY = "1"/g' frontend/ios/App/App.xcodeproj/project.pbxproj
           # Subir el iOS minimo a 15.0 (Apple exige >=15.0 a partir de 2027; aviso ITMS-90068).

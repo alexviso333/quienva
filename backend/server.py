@@ -4980,7 +4980,11 @@ class GoogleCallbackInput(BaseModel):
 
 @api_router.get("/auth/google/config")
 async def google_config():
-    return {"enabled": GOOGLE_ENABLED, "client_id": GOOGLE_CLIENT_ID}
+    # Canonical web origin used by the NATIVE app to build a valid Google
+    # redirect_uri (inside the app window.location.origin is https://localhost,
+    # which Google rejects). The web keeps using window.location.origin.
+    web_origin = os.environ.get("PUBLIC_WEB_ORIGIN", "https://quienva.me").rstrip("/")
+    return {"enabled": GOOGLE_ENABLED, "client_id": GOOGLE_CLIENT_ID, "web_origin": web_origin}
 
 
 @api_router.post("/auth/google/callback")

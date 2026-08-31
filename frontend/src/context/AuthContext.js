@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { refreshNativePushIfGranted } from "@/lib/nativePush";
+import { isNativeApp } from "@/lib/platform";
 
 const AuthContext = createContext(null);
 
@@ -57,6 +58,40 @@ export function AuthProvider({ children }) {
       return;
     }
     checkAuth();
+  }, [checkAuth]);
+
+  // NATIVE app only: Google login happens in the system browser (Safari) and the
+  // web callback bounces the session back here via the custom URL scheme
+  // (quienva://auth-callback?token=...). Catch it, store the session, load user.
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    let remove;
+    (async () => {
+      try {
+        const { App: CapApp } = await import("@capacitor/app");
+        const handle = await CapApp.addListener("appUrlOpen", async ({ url }) => {
+          try {
+            if (!url || url.indexOf("auth-callback") === -1) return;
+            let token = null;
+            try { token = new URL(url).searchParams.get("token"); } catch (e) { /* ignore */ }
+            if (!token) {
+              const m = url.match(/[?&]token=([^&]+)/);
+              token = m ? decodeURIComponent(m[1]) : null;
+            }
+            if (token) {
+              localStorage.setItem("qv_token", token);
+              try {
+                const { Browser } = await import("@capacitor/browser");
+                await Browser.close();
+              } catch (e) { /* ignore */ }
+              await checkAuth();
+            }
+          } catch (e) { /* ignore */ }
+        });
+        remove = () => handle.remove();
+      } catch (e) { /* ignore */ }
+    })();
+    return () => { if (remove) remove(); };
   }, [checkAuth]);
 
   const login = async (email, password) => {

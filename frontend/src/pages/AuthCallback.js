@@ -17,6 +17,7 @@ export default function AuthCallback() {
       // 1) Self-hosted Google OAuth: ?code=... in the query string
       const search = new URLSearchParams(window.location.search);
       const code = search.get("code");
+      const isNativeLogin = search.get("state") === "native";
       if (code) {
         try {
           const redirectUri = window.location.origin + "/auth/callback";
@@ -24,6 +25,12 @@ export default function AuthCallback() {
             code,
             redirect_uri: redirectUri,
           });
+          // NATIVE app login: this page is running in the phone's Safari, so we
+          // bounce the session token back INTO the app via its custom URL scheme.
+          if (isNativeLogin && data.token) {
+            window.location.href = `quienva://auth-callback?token=${encodeURIComponent(data.token)}`;
+            return;
+          }
           if (data.token) localStorage.setItem("qv_token", data.token);
           setUser(data.user);
           window.history.replaceState(null, "", "/feed");
