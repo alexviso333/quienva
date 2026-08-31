@@ -10326,6 +10326,7 @@ async def my_active_moment(user: dict = Depends(get_current_user)):
     if friend_ids:
         friends_captured = await db.captures.count_documents(
             {"event_id": best["event_id"], "user_id": {"$in": friend_ids}})
+    capturing_now = await db.captures.count_documents({"event_id": best["event_id"]})
     return {
         "active": True,
         "event_id": ev["id"],
@@ -10334,6 +10335,7 @@ async def my_active_moment(user: dict = Depends(get_current_user)):
         "prompt": best,
         "on_time": on_time,
         "friends_captured": friends_captured,
+        "capturing_now": capturing_now,
     }
 
 
@@ -10580,6 +10582,13 @@ async def moment_upload(event_id: str, file: UploadFile = File(...), user: dict 
                 )
     except Exception as e:
         logger.warning(f"Moment friend notify failed: {e}")
+    # Live Activity (Dynamic Island): flip MY island to the "reactions" phase and
+    # bump the "capturing now" counter on everyone else's island for this event.
+    try:
+        await push_moment_live_update(event_id, exclude_uid=user["user_id"])
+        await push_capture_reactions_update(capture)
+    except Exception as e:
+        logger.warning(f"Live activity moment update failed: {e}")
     return capture
 
 
@@ -10632,7 +10641,92 @@ async def like_capture(capture_id: str, user: dict = Depends(get_current_user)):
                 {"user_id": uid, "type": "capture_like"},
             )
     count = await db.capture_reactions.count_documents({"capture_id": capture_id})
+    try:
+        await push_capture_reactions_update(c)
+    except Exception as e:
+        logger.warning(f"Live activity reaction update failed: {e}")
     return {"liked": liked, "likes": count}
+
+
+# =========================================================================
+# LIVE ACTIVITY (Dynamic Island) — "El Momento" live countdown + capturing
+# counter, and live reactions on your own capture. Native widget updates are
+# delivered via APNs (apns-push-type: liveactivity) to each activity token.
+# =========================================================================
+async def _event_name(event_id: str) -> str:
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0, "name": 1})
+    return ((ev or {}).get("name", "") or "")[:40]
+
+
+async def push_moment_live_update(event_id: str, exclude_uid: str = None):
+    """Bump the live 'capturing' counter on everyone's Live Activity for this event."""
+    total = await db.captures.count_documents({"event_id": event_id})
+    name = await _event_name(event_id)
+    prompt = await db.moment_prompts.find_one({"event_id": event_id}, {"_id": 0, "on_time_deadline": 1})
+    deadline = prompt.get("on_time_deadline") if prompt else None
+    async for la in db.live_activities.find({"event_id": event_id, "ended": {"$ne": True}}):
+        if exclude_uid and la.get("user_id") == exclude_uid:
+            continue
+        cs = {"phase": "capturing", "capturing_now": total, "event_name": name,
+              "deadline": deadline, "my_likes": 0}
+        res = await apns.send_live_activity(la["token"], cs, event="update")
+        if res == "gone":
+            await db.live_activities.update_one({"_id": la["_id"]}, {"$set": {"ended": True}})
+
+
+async def push_capture_reactions_update(capture: dict):
+    """Update the capture owner's Live Activity with the live like count (reactions phase)."""
+    owner = capture["user_id"]
+    event_id = capture["event_id"]
+    likes = await db.capture_reactions.count_documents({"capture_id": capture["id"]})
+    total = await db.captures.count_documents({"event_id": event_id})
+    name = await _event_name(event_id)
+    la = await db.live_activities.find_one(
+        {"user_id": owner, "event_id": event_id, "ended": {"$ne": True}})
+    if not la:
+        return
+    cs = {"phase": "reactions", "capturing_now": total, "event_name": name,
+          "deadline": None, "my_likes": likes}
+    res = await apns.send_live_activity(la["token"], cs, event="update")
+    if res == "gone":
+        await db.live_activities.update_one({"_id": la["_id"]}, {"$set": {"ended": True}})
+
+
+class LiveActivityToken(BaseModel):
+    activity_id: str
+    token: str
+    event_id: Optional[str] = None
+
+
+@api_router.post("/live-activity/token")
+async def live_activity_register(inp: LiveActivityToken, user: dict = Depends(get_current_user)):
+    """The native app reports its per-activity APNs update token here so the
+    server can push live updates to that specific Dynamic Island activity."""
+    token = (inp.token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing token")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.live_activities.update_one(
+        {"user_id": user["user_id"], "activity_id": inp.activity_id},
+        {"$set": {
+            "user_id": user["user_id"], "activity_id": inp.activity_id,
+            "token": token, "event_id": inp.event_id, "ended": False, "updated_at": now,
+        }, "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+class LiveActivityEnd(BaseModel):
+    activity_id: str
+
+
+@api_router.post("/live-activity/end")
+async def live_activity_end(inp: LiveActivityEnd, user: dict = Depends(get_current_user)):
+    await db.live_activities.update_one(
+        {"user_id": user["user_id"], "activity_id": inp.activity_id},
+        {"$set": {"ended": True}})
+    return {"ok": True}
 
 
 # =========================================================================

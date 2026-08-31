@@ -115,3 +115,63 @@ async def send_apns(device_token: str, title: str, body: str, data: dict | None 
     except Exception as e:  # pragma: no cover
         logger.warning("APNs send exception: %s", e)
         return "err"
+
+
+
+async def send_live_activity(activity_token: str, content_state: dict, event: str = "update",
+                             stale_seconds: int | None = None, dismissal_seconds: int | None = None,
+                             alert: dict | None = None) -> str:
+    """Push an update (or 'end') to an iOS Live Activity (Dynamic Island) via APNs.
+
+    `activity_token` is the per-activity update token the device reported.
+    `content_state` MUST match the widget's ContentState keys. `event` is
+    'update' or 'end'. Returns 'ok' / 'gone' / 'err' (never raises).
+    """
+    if not is_configured():
+        return "err"
+    try:
+        import httpx
+    except Exception:  # pragma: no cover
+        return "err"
+    now = int(time.time())
+    aps: dict = {
+        "timestamp": now,
+        "event": event,
+        "content-state": content_state,
+    }
+    if stale_seconds is not None:
+        aps["stale-date"] = now + stale_seconds
+    if event == "end" and dismissal_seconds is not None:
+        aps["dismissal-date"] = now + dismissal_seconds
+    if alert is not None:
+        aps["alert"] = alert
+    payload = {"aps": aps}
+    headers = {
+        "authorization": f"bearer {_provider_token()}",
+        # Live Activity pushes go to a dedicated topic suffix.
+        "apns-topic": f"{APNS_BUNDLE_ID}.push-type.liveactivity",
+        "apns-push-type": "liveactivity",
+        "apns-priority": "10",
+        "apns-id": str(uuid4()),
+    }
+    try:
+        async with httpx.AsyncClient(http2=True, timeout=15) as client:
+            resp = await client.post(
+                f"{APNS_HOST}/3/device/{activity_token}",
+                json=payload,
+                headers=headers,
+            )
+        if resp.status_code == 200:
+            return "ok"
+        reason = ""
+        try:
+            reason = resp.json().get("reason", "")
+        except Exception:
+            reason = resp.text[:120]
+        if resp.status_code == 410 or reason in ("Unregistered", "BadDeviceToken"):
+            return "gone"
+        logger.warning("APNs live-activity failed %s: %s", resp.status_code, reason)
+        return "err"
+    except Exception as e:  # pragma: no cover
+        logger.warning("APNs live-activity exception: %s", e)
+        return "err"

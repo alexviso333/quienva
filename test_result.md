@@ -10040,3 +10040,17 @@ agent_communication:
       
       Test file: /app/backend_test_ios_push_diagnostics.py
       All 12 tests executed successfully with no failures.
+
+  - agent: "main"
+    message: |
+      NEW: Dynamic Island / Live Activity backend (Phase 1) to test:
+      1) POST /api/live-activity/token {activity_id, token, event_id?} (auth) -> upserts token in
+         db.live_activities, returns {ok:true}. 401 without auth.
+      2) POST /api/live-activity/end {activity_id} (auth) -> marks ended, {ok:true}. 401 without auth.
+      3) GET /api/me/active-moment (auth) -> now must ALSO include integer field "capturing_now"
+         (0 when no active moment returns {active:false}; that's fine).
+      4) REGRESSION: POST /api/captures/{id}/like (auth) still returns {liked,likes} and does NOT 500
+         (it now also fires a best-effort Live Activity push that no-ops with no real token).
+      5) REGRESSION: existing push endpoints /api/push/status, /api/push/apns/register, /api/push/apns/debug still OK.
+      Note: APNs live-activity pushes need real device activity tokens; with none/fake they are wrapped in
+      try/except and must never break the request. Local admin: admin@quienva.app / admin123.
