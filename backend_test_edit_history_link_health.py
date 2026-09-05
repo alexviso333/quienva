@@ -11,7 +11,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 
-BASE_URL = "https://apns-token-debug.preview.emergentagent.com/api"
+BASE_URL = "https://fiesta-rebuild.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

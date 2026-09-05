@@ -25,7 +25,7 @@ import sys
 import time
 
 # Base URL from frontend/.env
-BASE_URL = "https://591a38d4-c2a9-4674-9b2a-b962c829977a.preview.emergentagent.com/api"
+BASE_URL = "https://fiesta-rebuild.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

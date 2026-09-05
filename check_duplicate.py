@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://apns-token-debug.preview.emergentagent.com"
+BACKEND_URL = "https://fiesta-rebuild.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin
