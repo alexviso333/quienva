@@ -46,6 +46,39 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("quienva")
 
+
+# ---------------------------------------------------------------------------
+# SEO EDGE-CACHE HARDENING
+# ---------------------------------------------------------------------------
+# The public SSR pages (home, city, event, discoteca, artist, blog) and the
+# sitemaps/robots are proxied by Vercel from this Render origin. On a free/low
+# tier, if EVERY Googlebot hit reaches Render, the origin gets slow or hits the
+# monthly bandwidth cap and Google deindexes the site (this is exactly what
+# tanked traffic on 2026-08-21). We upgrade every *public* HTML/XML/plain/JPEG
+# 200 response so Vercel's global edge serves it and Render is barely touched:
+#   - a long shared-cache TTL (s-maxage) so the CDN answers almost every request
+#   - stale-while-revalidate=7d so the CDN keeps serving the last good HTML even
+#     when the origin is asleep/down/rate-limited (it revalidates in background)
+# This gives the "ISR" resilience & speed of Next.js WITHOUT migrating and for
+# €0. It never changes any noindex/robots directive, only the caching policy.
+@app.middleware("http")
+async def _seo_edge_cache_hardening(request: Request, call_next):
+    resp = await call_next(request)
+    try:
+        if request.method in ("GET", "HEAD") and resp.status_code in (200, 203):
+            cc = resp.headers.get("Cache-Control", "")
+            ctype = resp.headers.get("Content-Type", "")
+            cacheable = ("text/html" in ctype or "application/xml" in ctype
+                         or "text/plain" in ctype or "image/jpeg" in ctype)
+            if "public" in cc and cacheable and "stale-while-revalidate" not in cc:
+                if "s-maxage" not in cc:
+                    cc = cc + ", s-maxage=86400"
+                cc = cc + ", stale-while-revalidate=604800"
+                resp.headers["Cache-Control"] = cc
+    except Exception:
+        pass
+    return resp
+
 SESSION_DAYS = 7
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
