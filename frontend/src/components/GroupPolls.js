@@ -103,9 +103,9 @@ function PollCreator({ groupId, onClose }) {
   const [customText, setCustomText] = useState("");
 
   const { data: events = [], isLoading } = useQuery({
-    queryKey: ["poll-events"],
+    queryKey: ["poll-events-all"],
     queryFn: async () =>
-      (await api.get("/events", { params: { date_filter: "finde", genre: "all" } })).data,
+      (await api.get("/events", { params: { date_filter: "all", genre: "all" } })).data,
   });
   const list = Array.isArray(events) ? events : events.items || events.events || [];
 
@@ -150,15 +150,15 @@ function PollCreator({ groupId, onClose }) {
           placeholder={t("polls.title_ph", "¿Dónde vamos el finde?")}
           className="h-11 bg-white/5 border-white/15 rounded-xl text-white placeholder:text-white/40"
         />
-        <p className="text-white/50 text-xs mt-1">{t("polls.pick_hint", "Elige 2-4 planes candidatos")}</p>
+        <p className="text-white/50 text-xs mt-1">{t("polls.pick_hint", "Elige 2-4 planes candidatos de los próximos eventos")}</p>
 
         <div className="flex flex-col gap-2 mt-1">
           {isLoading ? (
             <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 text-qv-primary animate-spin" /></div>
           ) : list.length === 0 ? (
-            <p className="text-white/40 text-sm py-2">{t("polls.no_events", "No hay planes esta semana — añade opciones a mano abajo.")}</p>
+            <p className="text-white/40 text-sm py-2">{t("polls.no_events", "No hay planes próximos — añade opciones a mano abajo.")}</p>
           ) : (
-            list.slice(0, 12).map((ev) => {
+            list.slice(0, 50).map((ev) => {
               const on = selected.includes(ev.id);
               return (
                 <button

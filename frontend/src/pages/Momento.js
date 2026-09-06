@@ -274,10 +274,10 @@ export default function Momento() {
   return (
     <div className="fixed inset-0 bg-black z-[80] flex flex-col" data-testid="momento-page">
       {/* Top bar */}
-      <div className="relative z-10 flex items-center justify-between px-4 pt-5 pb-3">
+      <div className="relative z-10 flex items-center justify-between px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3">
         <button
           onClick={() => navigate("/feed")}
-          className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center active:scale-90"
+          className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center active:scale-90"
           data-testid="momento-close"
         >
           <X className="w-5 h-5 text-white" />
@@ -288,7 +288,7 @@ export default function Momento() {
           </p>
           <p className="text-yellow-200/80 text-[11px] mt-0.5 truncate max-w-[200px]">{moment.event_name}</p>
         </div>
-        <div className="w-10" />
+        <div className="w-11" />
       </div>
 
       {/* FOMO + countdown */}
