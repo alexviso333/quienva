@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaUrl, mediaThumb, downloadMedia } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
+import GroupPolls from "@/components/GroupPolls";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X, ImagePlus, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -275,6 +276,7 @@ export default function ChatThread({ kind }) {
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto hide-scrollbar px-4 py-4 flex flex-col gap-3" data-testid="chat-messages">
+          {kind === "group" && <GroupPolls groupId={id} />}
           {isLoading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-qv-primary animate-spin" /></div>
           ) : messages.length === 0 ? (

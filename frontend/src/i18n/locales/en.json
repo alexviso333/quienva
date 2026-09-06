@@ -956,5 +956,21 @@
     "hint": "Anyone who joins through your link auto-joins your group and you become friends automatically.",
     "or_contacts": "or search your contacts",
     "err_create": "Could not create the group, try again"
+  },
+  "polls": {
+    "closed": "Closed",
+    "close_action": "Close & decide",
+    "launch": "Start a weekend poll",
+    "new_title": "Weekend poll",
+    "title_ph": "Where are we going this weekend?",
+    "pick_hint": "Pick 2-4 candidate plans",
+    "no_events": "No plans this week — add options below.",
+    "custom_ph": "Other option (e.g. Marta's place)",
+    "create_btn": "Launch poll",
+    "created": "Poll created!",
+    "err_create": "Could not create",
+    "err_vote": "Could not vote",
+    "max_options": "Max 4 options",
+    "total": "{{count}} votes"
   }
 }

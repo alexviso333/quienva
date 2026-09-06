@@ -6228,6 +6228,8 @@ BADGES_CATALOG = [
     {"id": "night_marathon", "name": "Maratón nocturno", "desc": "2 eventos en el mismo día", "emoji": "🏁", "tier": "gold", "cat": "otros", "points": 80},
     {"id": "solo_traveler", "name": "En solitario", "desc": "Fuiste a un evento donde no había amigos apuntados", "emoji": "🧍", "tier": "silver", "cat": "otros", "points": 30},
     {"id": "group_leader", "name": "Líder de grupo", "desc": "5+ amigos coincidieron contigo en un evento", "emoji": "👥", "tier": "gold", "cat": "otros", "points": 100},
+    {"id": "founder", "name": "Fundador", "desc": "Montaste un grupo y alguien se unió", "emoji": "🚩", "tier": "gold", "cat": "social", "points": 80},
+    {"id": "group_captain", "name": "Capitán de grupo", "desc": "Tu grupo llegó a 5 personas", "emoji": "🧭", "tier": "platinum", "cat": "social", "points": 150},
     {"id": "profile_complete", "name": "Perfil top", "desc": "Perfil con foto y bio completos", "emoji": "✅", "tier": "bronze", "cat": "otros", "points": 10},
     {"id": "og", "name": "OG", "desc": "Fue de los primeros 100 usuarios", "emoji": "🥇", "tier": "platinum", "cat": "otros", "points": 200},
 ]
@@ -6434,6 +6436,17 @@ async def _compute_user_stats(user_id: str) -> dict:
             group_leader = True
             break
 
+    # Founder: created a group that at least one other person joined.
+    founder = False
+    group_captain = False
+    async for g in db.groups.find({"created_by": user_id}, {"_id": 0, "member_ids": 1}):
+        n = len(g.get("member_ids", []))
+        if n >= 2:
+            founder = True
+        if n >= 5:
+            group_captain = True
+            break
+
     # Profile complete
     u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     profile_complete = bool(u and u.get("picture") and u.get("bio"))
@@ -6475,6 +6488,8 @@ async def _compute_user_stats(user_id: str) -> dict:
         "night_marathon": night_marathon,
         "solo_traveler": solo_traveler,
         "group_leader": group_leader,
+        "founder": founder,
+        "group_captain": group_captain,
         "profile_complete": profile_complete,
         "is_og": is_og,
         "top_venue": top_venue_name,
@@ -6587,6 +6602,8 @@ def _award_badges(stats: dict) -> list:
     if stats["night_marathon"]: earned.append("night_marathon")
     if stats["solo_traveler"]: earned.append("solo_traveler")
     if stats["group_leader"]: earned.append("group_leader")
+    if stats.get("founder"): earned.append("founder")
+    if stats.get("group_captain"): earned.append("group_captain")
     if stats["profile_complete"]: earned.append("profile_complete")
     if stats["is_og"]: earned.append("og")
     return earned
@@ -6869,6 +6886,23 @@ async def get_event(event_id: str, user: dict = Depends(get_optional_user)):
     return await serialize_event(ev, user, friend_ids, follows_set=follows_set)
 
 
+async def _notify_groups_on_voy(user: dict, ev: dict):
+    """Tell the members of every group the user belongs to that they just locked
+    a plan — the group coordination nudge. Each member is notified once."""
+    uid = user["user_id"]
+    notified = set()
+    async for g in db.groups.find({"member_ids": uid}, {"_id": 0}):
+        for mid in g.get("member_ids", []):
+            if mid == uid or mid in notified:
+                continue
+            notified.add(mid)
+            await create_notification(
+                mid, "group_going",
+                f"En tu grupo '{g['name']}': {display_name(user)} se apunta a {ev['name']} 🎉",
+                {"event_id": ev["id"], "user_id": uid, "group_id": g["id"]},
+            )
+
+
 @api_router.post("/events/{event_id}/interest")
 async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(get_current_user)):
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
@@ -6909,6 +6943,12 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
                 f"{display_name(user)} va a {ev['name']}",
                 {"event_id": event_id, "user_id": user["user_id"]},
             )
+
+    # Group coordination alert: notify your groups when you lock a plan (unless
+    # your attendance privacy is "nadie"). This works even for "amigos" privacy
+    # because groups are your close crew.
+    if inp.status == "voy" and prev_status != "voy" and my_privacy != "nadie":
+        await _notify_groups_on_voy(user, ev)
 
     return {"status": inp.status}
 
@@ -9584,6 +9624,20 @@ class GroupMessageInput(BaseModel):
     image_url: str = ""
 
 
+class PollOptionInput(BaseModel):
+    event_id: Optional[str] = None
+    label: Optional[str] = None
+
+
+class PollCreateInput(BaseModel):
+    title: Optional[str] = None
+    options: List[PollOptionInput] = []
+
+
+class PollVoteInput(BaseModel):
+    option_id: str
+
+
 def _dm_key(a: str, b: str) -> str:
     return "|".join(sorted([a, b]))
 
@@ -9836,6 +9890,119 @@ async def claim_group_invite(inp: ClaimGroupInviteInput, user: dict = Depends(ge
     if creator_id and creator_id != uid and me and not me.get("referred_by"):
         await db.users.update_one({"user_id": uid}, {"$set": {"referred_by": creator_id}})
     return {"ok": True, "group": {"id": g["id"], "name": g["name"]}}
+
+
+# ---- Encuesta del finde (group polls) --------------------------------------
+def _serialize_poll(p: dict, viewer_id: str) -> dict:
+    votes = p.get("votes", [])
+    counts = {}
+    for v in votes:
+        counts[v["option_id"]] = counts.get(v["option_id"], 0) + 1
+    total = len(votes)
+    my = next((v["option_id"] for v in votes if v["user_id"] == viewer_id), None)
+    return {
+        "id": p["id"],
+        "group_id": p["group_id"],
+        "title": p.get("title") or "Plan del finde",
+        "created_by": p.get("created_by"),
+        "created_at": p.get("created_at"),
+        "status": p.get("status", "open"),
+        "options": [
+            {**o, "votes": counts.get(o["id"], 0),
+             "pct": round(100 * counts.get(o["id"], 0) / total) if total else 0}
+            for o in p.get("options", [])
+        ],
+        "total_votes": total,
+        "my_vote": my,
+        "is_admin": p.get("created_by") == viewer_id,
+    }
+
+
+@api_router.post("/groups/{group_id}/polls")
+async def create_group_poll(group_id: str, inp: PollCreateInput, user: dict = Depends(get_current_user)):
+    g = await _group_or_404(group_id, user["user_id"])
+    opts = []
+    for o in inp.options[:6]:
+        oid = uuid.uuid4().hex[:8]
+        if o.event_id:
+            ev = await db.events.find_one({"id": o.event_id}, {"_id": 0})
+            if not ev:
+                continue
+            opts.append({"id": oid, "event_id": ev["id"], "label": ev["name"],
+                         "venue": ev.get("venue", ""), "date": ev.get("date", ""),
+                         "time": ev.get("time", ""), "image_url": ev.get("image_url", "")})
+        elif (o.label or "").strip():
+            opts.append({"id": oid, "event_id": None, "label": o.label.strip()[:80],
+                         "venue": "", "date": "", "time": "", "image_url": ""})
+    if len(opts) < 2:
+        raise HTTPException(status_code=400, detail="Añade al menos 2 opciones")
+    poll = {
+        "id": str(uuid.uuid4()),
+        "group_id": group_id,
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "title": ((inp.title or "").strip()[:80]) or "Plan del finde",
+        "options": opts,
+        "votes": [],
+        "status": "open",
+    }
+    await db.group_polls.insert_one(poll)
+    poll.pop("_id", None)
+    # Announce in the group chat + notify members.
+    await db.group_messages.insert_one({
+        "id": str(uuid.uuid4()), "group_id": group_id, "user_id": user["user_id"],
+        "text": f"📊 {display_name(user)} abrió una encuesta: {poll['title']}",
+        "image_url": "", "type": "poll", "poll_id": poll["id"],
+        "created_at": poll["created_at"], "read_by": [user["user_id"]],
+    })
+    for mid in g.get("member_ids", []):
+        if mid != user["user_id"]:
+            await create_notification(
+                mid, "group_poll",
+                f"Vota el plan del finde en '{g['name']}' 📊",
+                {"group_id": group_id, "poll_id": poll["id"]},
+            )
+    return _serialize_poll(poll, user["user_id"])
+
+
+@api_router.get("/groups/{group_id}/polls")
+async def list_group_polls(group_id: str, user: dict = Depends(get_current_user)):
+    await _group_or_404(group_id, user["user_id"])
+    out = []
+    async for p in db.group_polls.find({"group_id": group_id}, {"_id": 0}).sort("created_at", -1).limit(20):
+        out.append(_serialize_poll(p, user["user_id"]))
+    return out
+
+
+@api_router.post("/groups/{group_id}/polls/{poll_id}/vote")
+async def vote_group_poll(group_id: str, poll_id: str, inp: PollVoteInput, user: dict = Depends(get_current_user)):
+    await _group_or_404(group_id, user["user_id"])
+    p = await db.group_polls.find_one({"id": poll_id, "group_id": group_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Encuesta no encontrada")
+    if p.get("status") != "open":
+        raise HTTPException(status_code=400, detail="La encuesta está cerrada")
+    if inp.option_id not in [o["id"] for o in p.get("options", [])]:
+        raise HTTPException(status_code=400, detail="Opción no válida")
+    votes = [v for v in p.get("votes", []) if v["user_id"] != user["user_id"]]
+    votes.append({"user_id": user["user_id"], "option_id": inp.option_id,
+                  "at": datetime.now(timezone.utc).isoformat()})
+    await db.group_polls.update_one({"id": poll_id}, {"$set": {"votes": votes}})
+    p["votes"] = votes
+    return _serialize_poll(p, user["user_id"])
+
+
+@api_router.post("/groups/{group_id}/polls/{poll_id}/close")
+async def close_group_poll(group_id: str, poll_id: str, user: dict = Depends(get_current_user)):
+    await _group_or_404(group_id, user["user_id"])
+    p = await db.group_polls.find_one({"id": poll_id, "group_id": group_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Encuesta no encontrada")
+    if p.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Solo quien la creó puede cerrarla")
+    await db.group_polls.update_one({"id": poll_id}, {"$set": {"status": "closed"}})
+    p["status"] = "closed"
+    return _serialize_poll(p, user["user_id"])
 
 
 @api_router.get("/groups")
@@ -11189,6 +11356,7 @@ async def on_startup():
         await db.users.create_index("referral_code")
         await db.users.create_index("referred_by")
         await db.groups.create_index("invite_code")
+        await db.group_polls.create_index("group_id")
         await db.users.create_index("created_at")
         await db.sessions.create_index("session_token", unique=True)
         await db.sessions.create_index("user_id")

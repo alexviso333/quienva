@@ -956,5 +956,21 @@
     "hint": "Quien entre por tu enlace se une solo a tu grupo y os hacéis amigos automáticamente.",
     "or_contacts": "o busca en tus contactos",
     "err_create": "No se pudo crear el grupo, inténtalo de nuevo"
+  },
+  "polls": {
+    "closed": "Cerrada",
+    "close_action": "Cerrar y decidir",
+    "launch": "Montar encuesta del finde",
+    "new_title": "Encuesta del finde",
+    "title_ph": "¿Dónde vamos el finde?",
+    "pick_hint": "Elige 2-4 planes candidatos",
+    "no_events": "No hay planes esta semana — añade opciones a mano abajo.",
+    "custom_ph": "Otra opción (ej. Casa de Marta)",
+    "create_btn": "Lanzar encuesta",
+    "created": "¡Encuesta creada!",
+    "err_create": "No se pudo crear",
+    "err_vote": "No se pudo votar",
+    "max_options": "Máximo 4 opciones",
+    "total": "{{count}} votos"
   }
 }

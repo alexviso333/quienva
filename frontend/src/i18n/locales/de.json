@@ -956,5 +956,21 @@
     "hint": "Wer über deinen Link beitritt, kommt automatisch in deine Gruppe und ihr werdet automatisch Freunde.",
     "or_contacts": "oder durchsuche deine Kontakte",
     "err_create": "Gruppe konnte nicht erstellt werden, versuche es erneut"
+  },
+  "polls": {
+    "closed": "Geschlossen",
+    "close_action": "Schließen & entscheiden",
+    "launch": "Wochenend-Umfrage starten",
+    "new_title": "Wochenend-Umfrage",
+    "title_ph": "Wohin gehen wir am Wochenende?",
+    "pick_hint": "Wähle 2-4 mögliche Pläne",
+    "no_events": "Keine Pläne diese Woche — füge unten Optionen hinzu.",
+    "custom_ph": "Andere Option (z. B. bei Marta)",
+    "create_btn": "Umfrage starten",
+    "created": "Umfrage erstellt!",
+    "err_create": "Konnte nicht erstellt werden",
+    "err_vote": "Konnte nicht abstimmen",
+    "max_options": "Max. 4 Optionen",
+    "total": "{{count}} Stimmen"
   }
 }

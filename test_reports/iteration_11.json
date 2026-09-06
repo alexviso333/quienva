@@ -1,0 +1,37 @@
+{
+  "summary": "Independent verification of Fase B (Fundador badge + group_going alert) and Fase C (grupo polls) — backend and frontend. Backend pytest: 6/6 pass in /app/backend/tests/test_phase_b_c.py — (1) POST /api/groups + invite + claim awards 'founder' badge to creator A (GET /api/me/badges shows 'founder' in earned alongside 'social_1','referral_1','og'); (2) POST /api/events/{id}/interest {status:'voy'} by member B triggers a group alert visible in GET /api/notifications of A containing the group name and member name; (3) POST /api/groups/{gid}/polls creates open poll with 3 options; (4) vote returns my_vote+pct; changing a user's vote does NOT increment total_votes; (5) GET .../polls returns my_vote; (6) close by non-creator → 403; close by creator → status closed; vote after close → 400. Direct-API sanity check also confirms _serialize_poll returns is_admin=True to A (creator) and is_admin=False to B (member), and that 'founder' is included in /me/badges.earned after B joins the group. Frontend playwright: creator A opens /chats/group/{gid} → data-testid='group-polls' + 'create-poll-btn' visible; opening creator dialog shows 'poll-creator' + 'poll-title-input' + 'poll-custom-input' + 'poll-add-custom' + 'poll-submit'; submitting with title + 2 custom labels creates a poll rendered as data-testid='poll-card-<id>' with 2 'poll-option-<id>' children; creator sees 'poll-close-<id>' button. Member B (in a fresh browser page) opens the same group chat, sees the poll and options, and voting flips the option's pct bar to 100%. Creator A closes the poll successfully and the poll goes to 'Cerrada' state. Founder badge 🚩 also appears in A's profile BadgesPanel after opening 'See all'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PollCreator dialog", "issues": ["Radix DialogContent renders without a Description or aria-describedby, triggering an accessibility console warning (a11y): 'Missing Description or aria-describedby={undefined} for {DialogContent}'. Consider adding <DialogDescription> or aria-describedby to the Encuesta del finde dialog."]},
+      {"screen": "index.html preload", "issues": ["/icons/icon-512.png preload warning persists from iteration 9/10."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_b_c.py",
+    "/app/test_reports/pytest/iteration11.xml"
+  ],
+  "action_items": [
+    "(Nice-to-have) Add DialogDescription/aria-describedby to <DialogContent data-testid='poll-creator'> in GroupPolls.js to remove the Radix a11y warning.",
+    "(Carry-over) Drop the /icons/icon-512.png <link rel=preload> or set the correct 'as' value."
+  ],
+  "critical_code_review_comments": [
+    "server.py::_serialize_poll uses `p.get('created_by') == viewer_id` for is_admin — correct, but the field is named 'is_admin' even though only the CREATOR can close (not any group admin). If future group-admin roles are added the semantic will be confusing; consider renaming to 'is_creator' or splitting into 'can_close'.",
+    "server.py::_compute_user_stats founder check counts `len(g.member_ids) >= 2` including the creator. This works because the creator is always in member_ids, but it means a solo-invited group with 1 pending join and 1 leave could yield 1 member — founder revoked. Consider tracking 'ever_joined' explicitly.",
+    "GroupPolls.js::PollCreator queries /events with date_filter='finde' but the backend list also supports 'today'/'all'; when there are no weekend events the UI falls back to custom-only options — OK, but consider retrying with 'all' before showing the empty state.",
+    "GroupPolls.js::PollCard disables options with `disabled={!open || vote.isPending}`, so the user cannot switch vote while a vote mutation is in flight — fine, but there's no debounce; rapid taps can queue up unnecessary requests before the disabled flip. Consider adding a mutation guard.",
+    "GroupPolls.js polls are refetched every 8s (`refetchInterval: 8000`) even when the group chat is not focused. On low-power devices this is a minor drain; consider pausing when the tab is hidden."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase_b_c.py"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (all requested flows)"},
+  "test_credentials": "N/A — register TEST_ prefixed users via POST /api/auth/register (@example.com only; .test rejected). Rate limit: ~4 rapid registrations trigger 429 — space registrations by ≥16s. B's join is via POST /api/me/claim-group-invite {code}.",
+  "seed_data_creation": "Backend pytest creates 2 TEST_pbc_* users, 1 TEST_PBC_Group and 1 poll per run. Frontend playwright creates ~2 TEST_uipbc_*/TEST_final_* users + 1 group + 1 poll. All prefixed TEST_.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both Fase B (founder badge, group_going alert) and Fase C (polls: create/vote/change/close/permissions) are green backend + frontend. To run the pytest quickly: `pytest /app/backend/tests/test_phase_b_c.py -v -o addopts='' --junitxml=/app/test_reports/pytest/iteration11.xml`. When registering 2 users back-to-back keep ≥16s between calls or the second one gets 429. For frontend: use `page.evaluate` to seed localStorage.qv_token, qv_onboarding_done='1' and qv_discover_seen='1', then goto /chats/group/{gid} directly. To simulate user switching cleanly (creator A vs member B), open a second page via `page.context.new_page()` — mixing tokens inside the same page can leave stale react-query caches.",
+  "rca of the issue": "N/A — no blocking issues found. One transient false-positive during the exploratory playwright run showed 'B sees close btn=True' — root cause was `page.request` reusing the browser context's session/cookies plus stale react-query cache from the previous A-authenticated tab. Rerunning with a fresh `page.context.new_page()` for B correctly shows the close button hidden (is_admin=false), matching the direct-API assertion and the 403 pytest assertion for close-by-non-creator."
+}
