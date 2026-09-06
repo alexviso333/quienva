@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { PartyPopper, Users, Bell, ChevronRight, Sparkles, Loader2, ShieldCheck } from "lucide-react";
+import { PartyPopper, Users, Bell, ChevronRight, Sparkles, Loader2, ShieldCheck, Contact } from "lucide-react";
 import { subscribeToPush } from "@/lib/push";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
@@ -25,6 +25,7 @@ export default function Onboarding() {
   const [privacyStep, setPrivacyStep] = useState(false);
   const [notifStep, setNotifStep] = useState(false);
   const [inviteStep, setInviteStep] = useState(false);
+  const [contactsStep, setContactsStep] = useState(false);
   const [attendancePriv, setAttendancePriv] = useState("amigos");
   const [momentPriv, setMomentPriv] = useState("amigos");
   // First-run notification choices. new_event = "all my city" alerts (opt-in);
@@ -82,6 +83,7 @@ export default function Onboarding() {
     else if (!privacyStep) setPrivacyStep(true);
     else if (!notifStep) setNotifStep(true);
     else if (!inviteStep) { saveNotifPrefs(); setInviteStep(true); }
+    else if (!contactsStep) setContactsStep(true);
     else finish(true);
   };
 
@@ -94,24 +96,29 @@ export default function Onboarding() {
         <button onClick={() => finish(false)} className="text-white/50 text-sm">{t("onboarding.skip")}</button>
       </div>
 
-      {inviteStep ? (
-        <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-6 py-6" data-testid="onboarding-invite">
+      {contactsStep ? (
+        <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-5 py-6" data-testid="onboarding-contacts">
+          <div className="text-center flex flex-col items-center gap-3">
+            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+              <Contact className="w-10 h-10 text-qv-secondary" />
+            </div>
+            <h1 className="font-display text-3xl font-bold text-white">{t("onboarding.contacts_title", "Encuentra a tus amigos")}</h1>
+            <p className="text-white/60 text-sm max-w-xs leading-relaxed">{t("onboarding.contacts_sub", "Mira quién de tus contactos ya está en ¿Quién va? Tú eliges a quién añadir — es opcional.")}</p>
+          </div>
+          <div className="-mx-6">
+            <FindFriends />
+          </div>
+        </div>
+      ) : inviteStep ? (
+        <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col justify-center gap-6 py-6" data-testid="onboarding-invite">
           <div className="text-center flex flex-col items-center gap-3">
             <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
               <Users className="w-10 h-10 text-qv-primary" />
             </div>
             <h1 className="font-display text-3xl font-bold text-white">{t("groupinvite.title", "Monta tu grupo")}</h1>
-            <p className="text-white/60 text-sm max-w-xs leading-relaxed">{t("groupinvite.subtitle", "Ponle nombre a tu grupo y trae a tu gente de un toque. Veréis a qué fiesta va cada uno.")}</p>
+            <p className="text-white/60 text-sm max-w-xs leading-relaxed">{t("onboarding.group_sub", "Un grupo es tu pandilla: veréis a qué fiesta va cada uno y os organizáis en un chat. Créalo y trae a tu gente.")}</p>
           </div>
           <GroupInviteStep />
-          <div className="flex items-center gap-3 px-1">
-            <span className="flex-1 h-px bg-white/10" />
-            <span className="text-white/35 text-xs uppercase tracking-widest">{t("groupinvite.or_contacts", "o busca en tus contactos")}</span>
-            <span className="flex-1 h-px bg-white/10" />
-          </div>
-          <div className="-mx-6">
-            <FindFriends />
-          </div>
         </div>
       ) : notifStep ? (
         <div className="flex-1 flex flex-col justify-center gap-6 py-6" data-testid="onboarding-notif">
@@ -237,8 +244,8 @@ export default function Onboarding() {
         className="h-14 rounded-2xl bg-qv-primary text-white font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
       >
         {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-        {inviteStep ? t("onboarding.start") : t("onboarding.next")}
-        {!inviteStep && <ChevronRight className="w-5 h-5" />}
+        {contactsStep ? t("onboarding.finish", "Empezar") : t("onboarding.next")}
+        {!contactsStep && <ChevronRight className="w-5 h-5" />}
       </button>
     </div>
   );

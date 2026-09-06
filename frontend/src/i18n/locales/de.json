@@ -59,7 +59,11 @@
     "opt_none": "Niemand",
     "q_moment": "Wer kann deinen Moment sehen?",
     "opt_moment_public": "Alle (öffentlich)",
-    "toast_notif": "Benachrichtigungen aktiviert! ⚡"
+    "toast_notif": "Benachrichtigungen aktiviert! ⚡",
+    "finish": "Los geht's",
+    "group_sub": "Eine Gruppe ist deine Clique: Ihr seht, auf welche Party jeder geht, und stimmt euch im Chat ab. Erstelle sie und hol deine Leute dazu.",
+    "contacts_title": "Finde deine Freunde",
+    "contacts_sub": "Sieh, wer aus deinen Kontakten schon bei ¿Quién va? ist. Du entscheidest, wen du hinzufügst — optional."
   },
   "feed": {
     "title": "Die Pläne",
@@ -955,7 +959,11 @@
     "ready2": "bereit. Lade deine Leute ein 👇",
     "hint": "Wer über deinen Link beitritt, kommt automatisch in deine Gruppe und ihr werdet automatisch Freunde.",
     "or_contacts": "oder durchsuche deine Kontakte",
-    "err_create": "Gruppe konnte nicht erstellt werden, versuche es erneut"
+    "err_create": "Gruppe konnte nicht erstellt werden, versuche es erneut",
+    "create": "Meine Gruppe erstellen",
+    "create_hint": "Im nächsten Schritt lädst du deine Leute ein. Wer über deinen Link beitritt, wird automatisch hinzugefügt und ihr werdet Freunde.",
+    "ready_sub": "Gruppe erstellt. Lade jetzt deine Leute ein 👇",
+    "invite_whatsapp": "Per WhatsApp einladen"
   },
   "polls": {
     "closed": "Geschlossen",

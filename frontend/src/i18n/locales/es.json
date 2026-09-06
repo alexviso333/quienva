@@ -59,7 +59,11 @@
     "opt_none": "Nadie",
     "q_moment": "¿Quién puede ver tu Momento?",
     "opt_moment_public": "Todos (público)",
-    "toast_notif": "¡Notificaciones activadas! ⚡"
+    "toast_notif": "¡Notificaciones activadas! ⚡",
+    "finish": "Empezar",
+    "group_sub": "Un grupo es tu pandilla: veréis a qué fiesta va cada uno y os organizáis en un chat. Créalo y trae a tu gente.",
+    "contacts_title": "Encuentra a tus amigos",
+    "contacts_sub": "Mira quién de tus contactos ya está en ¿Quién va? Tú eliges a quién añadir — es opcional."
   },
   "feed": {
     "title": "Los planes",
@@ -955,7 +959,11 @@
     "ready2": "listo. Invita a tu gente 👇",
     "hint": "Quien entre por tu enlace se une solo a tu grupo y os hacéis amigos automáticamente.",
     "or_contacts": "o busca en tus contactos",
-    "err_create": "No se pudo crear el grupo, inténtalo de nuevo"
+    "err_create": "No se pudo crear el grupo, inténtalo de nuevo",
+    "create": "Crear mi grupo",
+    "create_hint": "En el siguiente paso invitas a tu gente. Quien entre por tu enlace se une solo y os hacéis amigos.",
+    "ready_sub": "Grupo creado. Ahora invita a tu gente 👇",
+    "invite_whatsapp": "Invitar por WhatsApp"
   },
   "polls": {
     "closed": "Cerrada",

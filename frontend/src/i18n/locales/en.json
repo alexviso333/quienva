@@ -59,7 +59,11 @@
     "opt_none": "Nobody",
     "q_moment": "Who can see your Moment?",
     "opt_moment_public": "Everyone (public)",
-    "toast_notif": "Notifications on! ⚡"
+    "toast_notif": "Notifications on! ⚡",
+    "finish": "Get started",
+    "group_sub": "A group is your crew: you'll see which party everyone's going to and can plan together in a chat. Create it and bring your people.",
+    "contacts_title": "Find your friends",
+    "contacts_sub": "See which of your contacts are already on ¿Quién va? You choose who to add — it's optional."
   },
   "feed": {
     "title": "The plans",
@@ -955,7 +959,11 @@
     "ready2": "ready. Invite your crew 👇",
     "hint": "Anyone who joins through your link auto-joins your group and you become friends automatically.",
     "or_contacts": "or search your contacts",
-    "err_create": "Could not create the group, try again"
+    "err_create": "Could not create the group, try again",
+    "create": "Create my group",
+    "create_hint": "You'll invite your crew in the next step. Anyone who joins through your link is added automatically and you become friends.",
+    "ready_sub": "Group created. Now invite your crew 👇",
+    "invite_whatsapp": "Invite via WhatsApp"
   },
   "polls": {
     "closed": "Closed",
