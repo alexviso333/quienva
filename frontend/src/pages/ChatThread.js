@@ -5,8 +5,9 @@ import api, { mediaUrl, mediaThumb, downloadMedia } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import GroupPolls from "@/components/GroupPolls";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X, ImagePlus, Download } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X, ImagePlus, Download, Trophy } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -19,6 +20,34 @@ function msgTime(iso) {
   try { return new Date(iso).toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" }); }
   catch { return ""; }
 }
+
+// Big animated "plan decidido" card shown in the group chat when a poll closes.
+function PollClosedCard({ winner, time }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.85, y: 10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 260, damping: 18 }}
+      className="my-2 mx-auto w-full max-w-[300px]"
+      data-testid="poll-closed-card"
+    >
+      <div className="rounded-2xl border border-qv-secondary/40 bg-gradient-to-br from-qv-secondary/20 via-qv-primary/10 to-transparent p-4 text-center relative overflow-hidden">
+        <motion.div
+          initial={{ rotate: -12, scale: 0 }}
+          animate={{ rotate: 0, scale: 1 }}
+          transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 12 }}
+          className="w-12 h-12 rounded-full bg-qv-secondary/25 flex items-center justify-center mx-auto mb-2"
+        >
+          <Trophy className="w-6 h-6 text-qv-secondary" />
+        </motion.div>
+        <p className="text-[11px] uppercase tracking-widest text-qv-secondary font-bold">Plan decidido</p>
+        <p className="font-display font-black text-white text-lg leading-tight mt-1">{winner}</p>
+        <p className="text-white/45 text-[10px] mt-1.5">{time}</p>
+      </div>
+    </motion.div>
+  );
+}
+
 
 /**
  * Universal chat thread — used for both DMs and Group chats.
@@ -283,6 +312,13 @@ export default function ChatThread({ kind }) {
             <p className="text-center text-white/40 text-sm py-10">{t("chat.empty")}</p>
           ) : (
             messages.map((m) => (
+              m.type === "poll_closed" ? (
+                <PollClosedCard
+                  key={m.id}
+                  winner={m.poll_winner || (m.text || "").replace(/^✅\s*Plan decidido:\s*/, "")}
+                  time={msgTime(m.created_at)}
+                />
+              ) : (
               <div key={m.id} className={`flex gap-2 ${m.is_mine ? "flex-row-reverse" : ""}`} data-testid={`msg-${m.id}`}>
                 {!m.is_mine && kind === "group" && (
                   <AvatarCircle name={m.author?.name || ""} picture={m.author?.picture || ""} size={28} ring={false} />
@@ -306,6 +342,7 @@ export default function ChatThread({ kind }) {
                   <span className="text-[10px] text-white/40 mt-0.5 px-1">{msgTime(m.created_at)}</span>
                 </div>
               </div>
+              )
             ))
           )}
         </div>

@@ -8388,12 +8388,65 @@ INVITE_NUDGE_PRESETS = [
      "body": "🔥 Trae a tu gente a ¿Quién va?: monta tu grupo y añade a tus amigos para vivir el finde juntos."},
 ]
 
+DEFAULT_NUDGE_CONFIG = {
+    "mode": "manual",       # manual | auto
+    "interval_days": 7,     # auto: re-nudge users no more often than this
+    "target": "both",       # group | friends | both (who to auto-nudge)
+    "preset_id": "both",
+    "body": "",
+    "action": "both",
+}
+
+
+async def _user_counts(uid: str) -> dict:
+    """Groups / accepted-friends / invites-sent for a user (used for nudge stats)."""
+    groups = await db.groups.count_documents({"member_ids": uid})
+    friends = await db.friendships.count_documents({
+        "$or": [{"from_user_id": uid, "status": "accepted"},
+                {"to_user_id": uid, "status": "accepted"}]})
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "invites_sent": 1})
+    return {"groups": groups, "friends": friends, "invites_sent": int((u or {}).get("invites_sent", 0))}
+
+
+async def _apply_invite_nudge(uid: str, body: str, action: str, source: str = "manual") -> bool:
+    """Set the skippable popup on a user, log a campaign event (with a snapshot of
+    their state so we can measure conversion later) and send the push."""
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "user_id": 1})
+    if not u:
+        return False
+    snap = await _user_counts(uid)
+    now = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"user_id": uid}, {"$set": {"invite_nudge": {
+        "active": True, "body": body, "action": action, "at": now}}})
+    await db.nudge_events.insert_one({
+        "id": str(uuid.uuid4()), "user_id": uid, "at": now, "action": action, "source": source,
+        "snap_groups": snap["groups"], "snap_friends": snap["friends"], "snap_invites": snap["invites_sent"]})
+    await create_notification(uid, "invite_nudge", body, {"type": "invite_nudge", "url": "/feed"})
+    return True
+
+
+async def _get_nudge_config() -> dict:
+    doc = await db.app_settings.find_one({"key": "invite_nudge_config"}, {"_id": 0})
+    cfg = dict(DEFAULT_NUDGE_CONFIG)
+    if doc and isinstance(doc.get("value"), dict):
+        cfg.update(doc["value"])
+    return cfg
+
 
 class InviteNudgeInput(BaseModel):
     user_ids: list[str] = []
     preset_id: str = ""
     body: str = ""
     action: str = "both"  # group | friends | both
+
+
+class InviteNudgeConfigInput(BaseModel):
+    mode: str = "manual"
+    interval_days: int = 7
+    target: str = "both"
+    preset_id: str = ""
+    body: str = ""
+    action: str = "both"
 
 
 @api_router.get("/admin/invite-nudge/presets")
@@ -8410,15 +8463,109 @@ async def admin_send_invite_nudge(inp: InviteNudgeInput, admin: dict = Depends(r
     if not body:
         raise HTTPException(status_code=400, detail="Escribe un mensaje o elige un preset")
     action = inp.action if inp.action in ("group", "friends", "both") else "both"
-    nudge = {"active": True, "body": body, "action": action,
-             "at": datetime.now(timezone.utc).isoformat()}
     count = 0
     for uid in inp.user_ids[:500]:
-        res = await db.users.update_one({"user_id": uid}, {"$set": {"invite_nudge": nudge}})
-        if res.matched_count:
-            await create_notification(uid, "invite_nudge", body, {"type": "invite_nudge", "url": "/feed"})
+        if await _apply_invite_nudge(uid, body, action, source="manual"):
             count += 1
     return {"ok": True, "sent": count}
+
+
+@api_router.get("/admin/invite-nudge/config")
+async def admin_get_nudge_config(admin: dict = Depends(require_admin)):
+    return await _get_nudge_config()
+
+
+@api_router.put("/admin/invite-nudge/config")
+async def admin_set_nudge_config(inp: InviteNudgeConfigInput, admin: dict = Depends(require_admin)):
+    mode = inp.mode if inp.mode in ("manual", "auto") else "manual"
+    target = inp.target if inp.target in ("group", "friends", "both") else "both"
+    action = inp.action if inp.action in ("group", "friends", "both") else "both"
+    interval = max(1, min(int(inp.interval_days or 7), 90))
+    value = {"mode": mode, "interval_days": interval, "target": target,
+             "preset_id": inp.preset_id or "", "body": (inp.body or "").strip(), "action": action}
+    await db.app_settings.update_one(
+        {"key": "invite_nudge_config"},
+        {"$set": {"key": "invite_nudge_config", "value": value,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    return {"ok": True, **value}
+
+
+@api_router.get("/admin/invite-nudge/stats")
+async def admin_nudge_stats(admin: dict = Depends(require_admin)):
+    """Campaign follow-up: of the users we nudged, how many then created a group,
+    added a friend or sent an invite (compared to a snapshot taken when nudged)."""
+    latest = {}
+    async for e in db.nudge_events.find({}, {"_id": 0}).sort("at", 1):
+        latest[e["user_id"]] = e  # ascending sort -> last write is the newest
+    total = len(latest)
+    created_group = added_friends = invited = converted = 0
+    for uid, e in latest.items():
+        cur = await _user_counts(uid)
+        cg = cur["groups"] > e.get("snap_groups", 0)
+        af = cur["friends"] > e.get("snap_friends", 0)
+        iv = cur["invites_sent"] > e.get("snap_invites", 0)
+        created_group += 1 if cg else 0
+        added_friends += 1 if af else 0
+        invited += 1 if iv else 0
+        converted += 1 if (cg or af or iv) else 0
+    return {"total_nudged": total, "created_group": created_group,
+            "added_friends": added_friends, "invited": invited,
+            "converted": converted, "pending": total - converted}
+
+
+async def run_auto_invite_nudge():
+    """Scheduled: when auto mode is on, nudge users who have no group and/or no
+    friends (per config.target), at most once per config.interval_days."""
+    cfg = await _get_nudge_config()
+    if cfg.get("mode") != "auto":
+        return
+    target = cfg.get("target", "both")
+    interval = int(cfg.get("interval_days", 7))
+    preset = next((p for p in INVITE_NUDGE_PRESETS if p["id"] == cfg.get("preset_id")), None)
+    body = (cfg.get("body") or "").strip() or (preset["body"] if preset else INVITE_NUDGE_PRESETS[2]["body"])
+    action = cfg.get("action", "both")
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=interval)).isoformat()
+    sent = 0
+    async for u in db.users.find({}, {"_id": 0, "user_id": 1, "invite_nudge": 1}):
+        uid = u["user_id"]
+        last = (u.get("invite_nudge") or {}).get("at")
+        if last and last > cutoff:
+            continue
+        c = await _user_counts(uid)
+        no_group, no_friends = c["groups"] == 0, c["friends"] == 0
+        match = ((target == "group" and no_group) or (target == "friends" and no_friends)
+                 or (target == "both" and (no_group or no_friends)))
+        if not match:
+            continue
+        await _apply_invite_nudge(uid, body, action, source="auto")
+        sent += 1
+        if sent >= 200:
+            break
+    if sent:
+        logger.info(f"[auto_nudge] sent {sent} automatic invite nudges (target={target})")
+
+
+async def poll_vote_reminders():
+    """Scheduled: remind group members who haven't voted on a poll that's been
+    open for >24h (once per poll)."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    async for p in db.group_polls.find({"status": "open", "reminded": {"$ne": True}}, {"_id": 0}):
+        if p.get("created_at", "") > cutoff:
+            continue  # not old enough yet
+        g = await db.groups.find_one({"id": p["group_id"]}, {"_id": 0})
+        if not g:
+            await db.group_polls.update_one({"id": p["id"]}, {"$set": {"reminded": True}})
+            continue
+        voted = {v["user_id"] for v in p.get("votes", [])}
+        for mid in g.get("member_ids", []):
+            if mid in voted or mid == p.get("created_by"):
+                continue
+            await create_notification(
+                mid, "poll_reminder",
+                f"Aún no has votado en '{g['name']}' — decide el plan del finde 📊",
+                {"group_id": p["group_id"], "poll_id": p["id"]})
+        await db.group_polls.update_one({"id": p["id"]}, {"$set": {"reminded": True}})
+
 
 
 class FeaturedInput(BaseModel):
@@ -10089,7 +10236,7 @@ async def close_group_poll(group_id: str, poll_id: str, user: dict = Depends(get
         await db.group_messages.insert_one({
             "id": str(uuid.uuid4()), "group_id": group_id, "user_id": user["user_id"],
             "text": f"✅ Plan decidido: {win_label}",
-            "image_url": "", "type": "poll_closed", "poll_id": poll_id,
+            "image_url": "", "type": "poll_closed", "poll_id": poll_id, "poll_winner": win_label,
             "created_at": datetime.now(timezone.utc).isoformat(), "read_by": [user["user_id"]],
         })
         for mid in g.get("member_ids", []):
@@ -11584,6 +11731,12 @@ async def on_startup():
         # Process scheduled admin notifications every minute
         scheduler.add_job(process_scheduled_notifications, "interval", minutes=1,
                           id="scheduled_notifications", replace_existing=True)
+        # Remind group members who haven't voted on a poll open >24h (once per poll)
+        scheduler.add_job(poll_vote_reminders, "interval", hours=2,
+                          id="poll_vote_reminders", replace_existing=True)
+        # Auto "empujón para invitar": nudge users with no group/friends (if enabled)
+        scheduler.add_job(run_auto_invite_nudge, "interval", hours=6,
+                          id="auto_invite_nudge", replace_existing=True)
         # Monthly Wrapped: 1st of each month at 12:00 (Madrid) notify active users.
         scheduler.add_job(notify_monthly_wrapped, "cron", day=1, hour=12, minute=0,
                           id="monthly_wrapped", replace_existing=True)
