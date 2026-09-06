@@ -986,5 +986,13 @@
     "sub": "Hol deine Freunde dazu und seht, auf welche Party jeder geht",
     "cta": "Erstellen",
     "dialog_sub": "Benenne sie, erstelle sie und hol deine Leute mit einem Tipp."
+  },
+  "nudge": {
+    "title": "Hol deine Leute 🎉",
+    "default_body": "Lade deine Freunde ein und genießt das Wochenende zusammen.",
+    "group_title": "Erstelle deine Gruppe",
+    "friends_btn": "Freunde in meinen Kontakten finden",
+    "or": "oder",
+    "skip": "Jetzt nicht"
   }
 }

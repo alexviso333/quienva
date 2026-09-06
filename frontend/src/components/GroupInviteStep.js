@@ -33,16 +33,22 @@ export default function GroupInviteStep({ onCreated }) {
     }
   };
 
-  const shareWhatsApp = () => group && groupInviteWhatsApp(group.name, group.code);
+  // Fire-and-forget: record that this user shared an invite link, so admins can
+  // see who is actively inviting people (even if they never register).
+  const logInviteSent = () => { api.post("/me/invite-sent").catch(() => {}); };
+
+  const shareWhatsApp = () => { if (group) { logInviteSent(); groupInviteWhatsApp(group.name, group.code); } };
 
   const doShare = async () => {
     if (!group) return;
+    logInviteSent();
     const res = await shareGroupInvite(group.name, group.code);
     if (res === "copied") toast.success(t("groupinvite.copied", "¡Enlace copiado!"));
   };
 
   const copyLink = async () => {
     if (!group) return;
+    logInviteSent();
     try {
       await navigator.clipboard.writeText(groupInviteUrl(group.code));
       toast.success(t("groupinvite.copied", "¡Enlace copiado!"));

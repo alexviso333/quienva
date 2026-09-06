@@ -986,5 +986,13 @@
     "sub": "Trae a tus amigos y ved a qué fiesta va cada uno",
     "cta": "Crear",
     "dialog_sub": "Ponle nombre, créalo y trae a tu gente de un toque."
+  },
+  "nudge": {
+    "title": "Trae a tu gente 🎉",
+    "default_body": "Invita a tus amigos y vivid el finde juntos.",
+    "group_title": "Monta tu grupo",
+    "friends_btn": "Buscar amigos en mis contactos",
+    "or": "o",
+    "skip": "Ahora no"
   }
 }

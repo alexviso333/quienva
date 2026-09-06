@@ -16,6 +16,7 @@ import AdminAffiliatePanel from "@/components/AdminAffiliatePanel";
 import AdminClubTicketsCoverage from "@/components/AdminClubTicketsCoverage";
 import AdminEventStats from "@/components/AdminEventStats";
 import AdminNotifyComposer from "@/components/AdminNotifyComposer";
+import AdminInviteNudge from "@/components/AdminInviteNudge";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
@@ -302,6 +303,8 @@ export default function AdminDashboard() {
       {/* ---------------- USUARIOS ---------------- */}
       {tab === "usuarios" && (
         <div className="px-4 pt-4">
+          <AdminInviteNudge />
+
           {pendingTickets.length > 0 && (
             <div className="mb-6">
               <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2"><Ticket className="w-4 h-4 text-orange-300" /> Entradas pendientes <span className="text-xs font-normal text-white/40">({pendingTickets.length})</span></h2>
@@ -332,7 +335,7 @@ export default function AdminDashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm text-white truncate flex items-center gap-1.5">{u.name}{u.role === "admin" && <span className="text-[9px] uppercase tracking-widest bg-qv-secondary/20 text-qv-secondary px-1.5 py-0.5 rounded-full">Admin</span>}</p>
                     <p className="text-white/40 text-xs truncate">{u.email}</p>
-                    <p className="text-white/40 text-[10px] mt-0.5">{u._stats?.attended || 0} estuve · {u._stats?.going || 0} voy · {u._stats?.friends || 0} amigos</p>
+                    <p className="text-white/40 text-[10px] mt-0.5">{u._stats?.attended || 0} estuve · {u._stats?.going || 0} voy · {u._stats?.friends || 0} amigos · {u._stats?.groups || 0} grupos · {u._stats?.referred || 0} reg. · {u._stats?.invites_sent || 0} env.</p>
                   </div>
                   <button onClick={() => setRole.mutate({ userId: u.user_id, role: u.role === "admin" ? "user" : "admin" })} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" data-testid={`admin-toggle-role-${u.user_id}`}>{u.role === "admin" ? <ShieldOff className="w-4 h-4 text-white/60" /> : <ShieldCheck className="w-4 h-4 text-qv-secondary" />}</button>
                   <button onClick={() => { if (window.confirm(`¿Borrar a ${u.name}?`)) deleteUser.mutate(u.user_id); }} className="p-2 rounded-lg bg-white/5 hover:bg-red-500/20" data-testid={`admin-delete-${u.user_id}`}><Trash2 className="w-4 h-4 text-red-400" /></button>

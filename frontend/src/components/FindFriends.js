@@ -62,7 +62,10 @@ export default function FindFriends() {
     }
   };
 
+  const logInviteSent = () => { api.post("/me/invite-sent").catch(() => {}); };
+
   const doShare = async () => {
+    logInviteSent();
     const res = await shareInvite(code);
     if (res === "copied") toast.success(t("findfriends.toast_link_copied"));
   };
@@ -113,7 +116,7 @@ export default function FindFriends() {
 
         {/* Generic share (not "invite everyone") — a subtle secondary option. */}
         <div className="grid grid-cols-2 gap-2 mt-2">
-          <button data-testid="invite-whatsapp-btn" onClick={() => inviteWhatsApp(code)} className="h-10 rounded-xl bg-[#25D366]/12 border border-[#25D366]/30 text-[#4ee38a] font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-95">WhatsApp</button>
+          <button data-testid="invite-whatsapp-btn" onClick={() => { logInviteSent(); inviteWhatsApp(code); }} className="h-10 rounded-xl bg-[#25D366]/12 border border-[#25D366]/30 text-[#4ee38a] font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-95">WhatsApp</button>
           <button data-testid="invite-share-btn" onClick={doShare} className="h-10 rounded-xl bg-white/5 border border-white/12 text-white/80 font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-95"><Share2 className="w-3.5 h-3.5" /> {t("findfriends.link")}</button>
         </div>
 
@@ -191,7 +194,7 @@ export default function FindFriends() {
                       <p className="text-white/35 text-xs truncate">{c.phones[0]}</p>
                     </div>
                     <button
-                      onClick={() => inviteWhatsAppTo(c.phones[0], code)}
+                      onClick={() => { logInviteSent(); inviteWhatsAppTo(c.phones[0], code); }}
                       className="h-9 px-4 rounded-full bg-[#25D366]/15 border border-[#25D366]/40 text-[#4ee38a] text-sm font-semibold flex items-center gap-1.5 active:scale-95"
                     >
                       <Send className="w-4 h-4" /> {t("findfriends.invite")}

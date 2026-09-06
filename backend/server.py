@@ -820,6 +820,7 @@ def public_user(u: dict) -> dict:
         "city_change_alerts": bool(u.get("city_change_alerts", False)),
         "has_phone": bool(u.get("phone_hash")),
         "needs_birthdate": not bool(u.get("birthdate")),
+        "invite_nudge": u.get("invite_nudge") if (u.get("invite_nudge") or {}).get("active") else None,
     }
 
 
@@ -5180,6 +5181,22 @@ async def me(user: dict = Depends(get_current_user)):
     return public_user(user)
 
 
+@api_router.post("/me/invite-sent")
+async def me_invite_sent(user: dict = Depends(get_current_user)):
+    """Fire-and-forget: the user shared their invite/group link (WhatsApp, copy or
+    native share). We count it so admins can see who is actively inviting people —
+    even those who never end up registering."""
+    await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"invites_sent": 1}})
+    return {"ok": True}
+
+
+@api_router.post("/me/invite-nudge/dismiss")
+async def me_dismiss_invite_nudge(user: dict = Depends(get_current_user)):
+    """User closed the 'invite your friends' popup an admin sent them."""
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"invite_nudge.active": False}})
+    return {"ok": True}
+
+
 @api_router.put("/auth/profile")
 async def update_profile(inp: ProfileUpdate, user: dict = Depends(get_current_user)):
     updates = {}
@@ -8001,7 +8018,11 @@ async def admin_list_users(
             "$or": [{"from_user_id": u["user_id"], "status": "accepted"},
                     {"to_user_id": u["user_id"], "status": "accepted"}]
         })
-        u["_stats"] = {"going": going, "attended": attended, "friends": friends}
+        groups = await db.groups.count_documents({"member_ids": u["user_id"]})
+        referred = await db.users.count_documents({"referred_by": u["user_id"]})
+        u["_stats"] = {"going": going, "attended": attended, "friends": friends,
+                       "groups": groups, "referred": referred,
+                       "invites_sent": int(u.get("invites_sent", 0))}
         users.append(u)
     return users
 
@@ -8353,6 +8374,51 @@ class AdminNotifyInput(BaseModel):
 @api_router.get("/admin/notify/presets")
 async def admin_notify_presets(admin: dict = Depends(require_admin)):
     return {"presets": ADMIN_NOTIFY_PRESETS}
+
+
+# --- Admin "Empujón para invitar" -------------------------------------------
+# The admin picks specific users and nudges them (push) to invite their friends.
+# When they next open the app a skippable blocking popup appears (invite_nudge).
+INVITE_NUDGE_PRESETS = [
+    {"id": "group", "label": "Monta tu grupo", "emoji": "👥", "action": "group",
+     "body": "🎉 Monta tu grupo en ¿Quién va? e invita a tus amigos — ved a qué fiesta va cada uno."},
+    {"id": "friends", "label": "Añade amigos", "emoji": "🙌", "action": "friends",
+     "body": "👀 Añade a tus amigos en ¿Quién va? y no salgáis cada uno por su lado."},
+    {"id": "both", "label": "Grupo + amigos", "emoji": "🔥", "action": "both",
+     "body": "🔥 Trae a tu gente a ¿Quién va?: monta tu grupo y añade a tus amigos para vivir el finde juntos."},
+]
+
+
+class InviteNudgeInput(BaseModel):
+    user_ids: list[str] = []
+    preset_id: str = ""
+    body: str = ""
+    action: str = "both"  # group | friends | both
+
+
+@api_router.get("/admin/invite-nudge/presets")
+async def admin_invite_nudge_presets(admin: dict = Depends(require_admin)):
+    return {"presets": INVITE_NUDGE_PRESETS}
+
+
+@api_router.post("/admin/invite-nudge")
+async def admin_send_invite_nudge(inp: InviteNudgeInput, admin: dict = Depends(require_admin)):
+    if not inp.user_ids:
+        raise HTTPException(status_code=400, detail="Elige al menos un usuario")
+    preset = next((p for p in INVITE_NUDGE_PRESETS if p["id"] == inp.preset_id), None)
+    body = (inp.body or "").strip() or (preset["body"] if preset else "")
+    if not body:
+        raise HTTPException(status_code=400, detail="Escribe un mensaje o elige un preset")
+    action = inp.action if inp.action in ("group", "friends", "both") else "both"
+    nudge = {"active": True, "body": body, "action": action,
+             "at": datetime.now(timezone.utc).isoformat()}
+    count = 0
+    for uid in inp.user_ids[:500]:
+        res = await db.users.update_one({"user_id": uid}, {"$set": {"invite_nudge": nudge}})
+        if res.matched_count:
+            await create_notification(uid, "invite_nudge", body, {"type": "invite_nudge", "url": "/feed"})
+            count += 1
+    return {"ok": True, "sent": count}
 
 
 class FeaturedInput(BaseModel):
@@ -9989,12 +10055,21 @@ async def vote_group_poll(group_id: str, poll_id: str, inp: PollVoteInput, user:
                   "at": datetime.now(timezone.utc).isoformat()})
     await db.group_polls.update_one({"id": poll_id}, {"$set": {"votes": votes}})
     p["votes"] = votes
+    # Notify ONLY the poll creator that someone voted. Pinging the whole group on
+    # every vote would be spam, so we keep it to the person who opened the poll.
+    creator = p.get("created_by")
+    if creator and creator != user["user_id"]:
+        await create_notification(
+            creator, "poll_vote",
+            f"{display_name(user)} ha votado en tu encuesta '{p.get('title', '')}' 📊",
+            {"group_id": group_id, "poll_id": poll_id},
+        )
     return _serialize_poll(p, user["user_id"])
 
 
 @api_router.post("/groups/{group_id}/polls/{poll_id}/close")
 async def close_group_poll(group_id: str, poll_id: str, user: dict = Depends(get_current_user)):
-    await _group_or_404(group_id, user["user_id"])
+    g = await _group_or_404(group_id, user["user_id"])
     p = await db.group_polls.find_one({"id": poll_id, "group_id": group_id}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Encuesta no encontrada")
@@ -10002,6 +10077,28 @@ async def close_group_poll(group_id: str, poll_id: str, user: dict = Depends(get
         raise HTTPException(status_code=403, detail="Solo quien la creó puede cerrarla")
     await db.group_polls.update_one({"id": poll_id}, {"$set": {"status": "closed"}})
     p["status"] = "closed"
+    # Announce the decided plan to the whole group (chat message + push).
+    counts = {}
+    for v in p.get("votes", []):
+        counts[v["option_id"]] = counts.get(v["option_id"], 0) + 1
+    win_label = ""
+    if p.get("options") and counts:
+        winner = max(p["options"], key=lambda o: counts.get(o["id"], 0))
+        win_label = winner.get("label", "")
+    if win_label:
+        await db.group_messages.insert_one({
+            "id": str(uuid.uuid4()), "group_id": group_id, "user_id": user["user_id"],
+            "text": f"✅ Plan decidido: {win_label}",
+            "image_url": "", "type": "poll_closed", "poll_id": poll_id,
+            "created_at": datetime.now(timezone.utc).isoformat(), "read_by": [user["user_id"]],
+        })
+        for mid in g.get("member_ids", []):
+            if mid != user["user_id"]:
+                await create_notification(
+                    mid, "poll_closed",
+                    f"Plan decidido en '{g['name']}': {win_label} 🎉",
+                    {"group_id": group_id, "poll_id": poll_id},
+                )
     return _serialize_poll(p, user["user_id"])
 
 

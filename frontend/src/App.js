@@ -10,6 +10,7 @@ import { GuestGateProvider } from "@/context/GuestGate";
 import PushPermissionGate from "@/components/PushPermissionGate";
 import MomentGate from "@/components/MomentGate";
 import AgeGate from "@/components/AgeGate";
+import InviteNudgeGate from "@/components/InviteNudgeGate";
 import OfflineBanner from "@/components/OfflineBanner";
 import { Loader2 } from "lucide-react";
 // Eager: first-paint / auth-critical screens.
@@ -179,6 +180,7 @@ function App() {
             <PushPermissionGate />
             <MomentGate />
             <AgeGate />
+            <InviteNudgeGate />
           </GuestGateProvider>
         </BrowserRouter>
         <Toaster position="top-center" theme="dark" richColors />
