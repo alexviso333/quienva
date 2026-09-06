@@ -14,7 +14,7 @@ from datetime import datetime
 from collections import defaultdict
 
 # Configuration
-BASE_URL = "https://fiesta-rebuild.preview.emergentagent.com/api"
+BASE_URL = "https://poll-integration-dev.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

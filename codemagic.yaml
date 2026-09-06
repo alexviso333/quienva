@@ -27,7 +27,7 @@ workflows:
         # Versión visible en la App Store (CFBundleShortVersionString). Para CADA
         # actualización, súbela aquí (1.1 -> 1.2 -> ...). Debe ser mayor que la
         # versión ya publicada. El número de build interno se pone solo (abajo).
-        APP_VERSION: "1.2"
+        APP_VERSION: "1.3"
         APP_STORE_APPLE_ID: 6804396475        # Apple ID numérico de la app (App Store Connect → Información de la app)
         # URL del backend de producción. SIN esto la app iOS se compila sin saber
         # dónde está el servidor (en Vercel la inyecta Vercel; aquí hay que darla).
