@@ -980,5 +980,11 @@
     "err_vote": "No se pudo votar",
     "max_options": "Máximo 4 opciones",
     "total": "{{count}} votos"
+  },
+  "montagrupo": {
+    "title": "Crea e invita a tu grupo",
+    "sub": "Trae a tus amigos y ved a qué fiesta va cada uno",
+    "cta": "Crear",
+    "dialog_sub": "Ponle nombre, créalo y trae a tu gente de un toque."
   }
 }

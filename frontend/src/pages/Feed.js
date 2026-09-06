@@ -291,6 +291,12 @@ export default function Feed() {
 
       {!isNativeApp() && <AppStorePromo />}
 
+      {user && (
+        <div className="px-4 pt-1 pb-1">
+          <MontaGrupoBanner />
+        </div>
+      )}
+
       {user && showPrivacyReminder && (
         <div className="px-4 pt-1 pb-1">
           <div
@@ -394,13 +400,9 @@ export default function Feed() {
 
       {user && <FriendsActivity />}
 
-      <div className="px-4 pb-3">
-        {user && <StreakBanner />}
-      </div>
-
       {user && (
         <div className="px-4 pb-3">
-          <MontaGrupoBanner />
+          {user && <StreakBanner />}
         </div>
       )}
 

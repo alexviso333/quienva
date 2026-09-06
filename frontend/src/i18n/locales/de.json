@@ -980,5 +980,11 @@
     "err_vote": "Konnte nicht abstimmen",
     "max_options": "Max. 4 Optionen",
     "total": "{{count}} Stimmen"
+  },
+  "montagrupo": {
+    "title": "Erstelle und lade deine Gruppe ein",
+    "sub": "Hol deine Freunde dazu und seht, auf welche Party jeder geht",
+    "cta": "Erstellen",
+    "dialog_sub": "Benenne sie, erstelle sie und hol deine Leute mit einem Tipp."
   }
 }

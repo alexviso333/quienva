@@ -980,5 +980,11 @@
     "err_vote": "Could not vote",
     "max_options": "Max 4 options",
     "total": "{{count}} votes"
+  },
+  "montagrupo": {
+    "title": "Create and invite your group",
+    "sub": "Bring your friends and see which party everyone's going to",
+    "cta": "Create",
+    "dialog_sub": "Name it, create it and bring your crew in one tap."
   }
 }
