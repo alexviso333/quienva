@@ -7,7 +7,8 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import InviteGroup from "@/components/InviteGroup";
+import GroupInviteStep from "@/components/GroupInviteStep";
+import FindFriends from "@/components/FindFriends";
 
 const SLIDES = [
   { icon: PartyPopper, color: "text-qv-primary", titleKey: "onboarding.slide1_title", bodyKey: "onboarding.slide1_body" },
@@ -94,15 +95,23 @@ export default function Onboarding() {
       </div>
 
       {inviteStep ? (
-        <div className="flex-1 flex flex-col justify-center gap-7 py-6" data-testid="onboarding-invite">
+        <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-6 py-6" data-testid="onboarding-invite">
           <div className="text-center flex flex-col items-center gap-3">
             <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
               <Users className="w-10 h-10 text-qv-primary" />
             </div>
-            <h1 className="font-display text-3xl font-bold text-white">{t("invite.title")}</h1>
-            <p className="text-white/60 text-sm max-w-xs leading-relaxed">{t("invite.subtitle")}</p>
+            <h1 className="font-display text-3xl font-bold text-white">{t("groupinvite.title", "Monta tu grupo")}</h1>
+            <p className="text-white/60 text-sm max-w-xs leading-relaxed">{t("groupinvite.subtitle", "Ponle nombre a tu grupo y trae a tu gente de un toque. Veréis a qué fiesta va cada uno.")}</p>
           </div>
-          <InviteGroup />
+          <GroupInviteStep />
+          <div className="flex items-center gap-3 px-1">
+            <span className="flex-1 h-px bg-white/10" />
+            <span className="text-white/35 text-xs uppercase tracking-widest">{t("groupinvite.or_contacts", "o busca en tus contactos")}</span>
+            <span className="flex-1 h-px bg-white/10" />
+          </div>
+          <div className="-mx-6">
+            <FindFriends />
+          </div>
         </div>
       ) : notifStep ? (
         <div className="flex-1 flex flex-col justify-center gap-6 py-6" data-testid="onboarding-notif">

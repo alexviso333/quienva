@@ -24,7 +24,9 @@
     "err_name_user": "Name und Benutzername ausfüllen",
     "err_birthdate": "Gib dein Geburtsdatum ein",
     "err_age": "Du musst 18+ sein, um Quienva zu nutzen",
-    "ref_applied": "Code angewendet! +100 Punkte"
+    "ref_applied": "Code angewendet! +100 Punkte",
+    "invited_group": "Du wurdest in eine Gruppe eingeladen 🎉",
+    "group_joined": "Du bist der Gruppe beigetreten!"
   },
   "nav": {
     "planes": "Pläne",
@@ -61,8 +63,8 @@
   },
   "feed": {
     "title": "Die Pläne",
-    "search_placeholder": "Party, Club oder Genre suchen\u2026",
-    "search_empty_title": "Keine Ergebnisse f\u00fcr \u201e{{q}}\u201c",
+    "search_placeholder": "Party, Club oder Genre suchen…",
+    "search_empty_title": "Keine Ergebnisse für „{{q}}“",
     "search_empty_body": "Versuch eine andere Party, einen Club oder ein Genre.",
     "locales": "Locations",
     "hidden_mode_title": "Du bist im versteckten Modus",
@@ -590,7 +592,7 @@
     "timeago_now": "jetzt",
     "timeago_min": "vor {{n}} Min.",
     "timeago_hour": "vor {{n}} Std.",
-    "highlight": "R\u00fcckblick"
+    "highlight": "Rückblick"
   },
   "eventcard": {
     "starts_in": "Beginnt in",
@@ -936,6 +938,23 @@
     "invite_rest_title": "Lade die anderen ein",
     "on_app": "In der App",
     "not_here": "Noch nicht dabei ({{count}})",
-    "toast_denied": "Wir brauchen deine Erlaubnis für die Kontakte"
+    "toast_denied": "Wir brauchen deine Erlaubnis für die Kontakte",
+    "search_placeholder": "Kontakt suchen…"
+  },
+  "groupinvite": {
+    "title": "Bau deine Gruppe",
+    "subtitle": "Benenne deine Gruppe und hol deine Leute mit einem Tipp. Seht, wer wohin geht.",
+    "banner_sub": "Hol deine Leute mit einem Tipp und seht, wer wohin geht",
+    "default_name": "Meine Gruppe",
+    "name_placeholder": "Gruppenname (z. B. Bio-Kurs)",
+    "whatsapp": "Gruppe per WhatsApp bauen",
+    "share": "Teilen",
+    "copy": "Link kopieren",
+    "copied": "Link kopiert!",
+    "ready": "Gruppe",
+    "ready2": "bereit. Lade deine Leute ein 👇",
+    "hint": "Wer über deinen Link beitritt, kommt automatisch in deine Gruppe und ihr werdet automatisch Freunde.",
+    "or_contacts": "oder durchsuche deine Kontakte",
+    "err_create": "Gruppe konnte nicht erstellt werden, versuche es erneut"
   }
 }

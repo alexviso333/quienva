@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { EventCarousel } from "@/components/EventCarousel";
 import { StoriesBar } from "@/components/Stories";
 import { StreakBanner } from "@/components/StreakBanner";
+import MontaGrupoBanner from "@/components/MontaGrupoBanner";
 import { FriendsActivity, RecapCard } from "@/components/FeedExtras";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import FeedPlans, { FeedPlansControls } from "@/components/FeedPlans";
@@ -396,6 +397,12 @@ export default function Feed() {
       <div className="px-4 pb-3">
         {user && <StreakBanner />}
       </div>
+
+      {user && (
+        <div className="px-4 pb-3">
+          <MontaGrupoBanner />
+        </div>
+      )}
 
       {user && !isNativeApp() && <RecapCard />}
 

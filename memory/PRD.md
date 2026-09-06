@@ -554,3 +554,30 @@ Objetivo: más descargas en App Store. Todo gated para NO mostrarse en la app na
   descartable 7 días, oculto en la app nativa (isNativeApp()). Reemplaza al antiguo InstallPwaBanner
   en el feed (la app ahora se promociona en vez del "instalar PWA").
 - APP_STORE_URL: https://apps.apple.com/es/app/qui%C3%A9n-va-fiestas-cerca/id6804396475
+
+## FASE A — Bucle viral "Monta tu grupo" (2026-06)
+Objetivo: crecimiento orgánico "desde dentro". Decisiones del usuario: auto-unión directa; panel en onboarding + acceso discreto en Feed; varios grupos por usuario (1 principal en onboarding); centrarse en el bucle viral (OG-image ya funciona en local, posible tema de despliegue).
+
+Backend (`server.py`):
+- `GET /api/groups/{id}/invite` → `{code, group_name, url: https://quienva.me/?g=CODE}` (genera invite_code único idempotente).
+- `POST /api/me/claim-group-invite {code}` → auto-une al grupo, crea amistades ACEPTADAS con todos los miembros, notifica a nuevo ("[creador] te ha añadido a su grupo") y a miembros ("[nuevo] se ha unido a tu grupo"), atribuye referred_by al creador. Idempotente (already_member). 403 no-miembro en /invite, 404 code inexistente.
+- Helper `_ensure_accepted_friendship`; índice `groups.invite_code`.
+
+Frontend:
+- `App.js`: captura `?g=` en localStorage (qv_pending_group) en cualquier ruta + efecto global que reclama la invitación cuando el user se autentica (cubre email/Google/Apple), con guard useRef.
+- `Login.js`: `?g=` activa modo registro + banner; reclama tras registro.
+- `components/GroupInviteStep.js`: crear grupo + compartir enlace por WhatsApp/copiar/share (con fallback de share si clipboard falla).
+- `components/MontaGrupoBanner.js`: banner discreto y descartable en Feed (solo si el user no tiene grupos).
+- `pages/Onboarding.js`: paso final "Monta tu grupo" = GroupInviteStep + FindFriends (contactos).
+- `components/FindFriends.js`: nueva barra buscadora de contactos (contacts-search-input).
+- `lib/contacts.js`: helpers groupInviteUrl/Text/WhatsApp/shareGroupInvite.
+- i18n: bloque `groupinvite.*` en es/en/de.
+
+Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). Sin bugs.
+
+## Backlog pendiente tras Fase A
+- P1: OG-image compartir ciudad/evento — funciona en local; revisar SÓLO si sigue roto en producción (despliegue Vercel/Render), no es código.
+- P1 Design (no bug): el redirect one-time a /descubrir para users con 0 amigos oculta el MontaGrupoBanner en la primera visita a /feed (el onboarding ya cubre el primer contacto viral).
+- Fase B: bloquear "Ver quién va" hasta tener grupo; insignia "Fundador"; alertas de evento para el grupo.
+- Fase C: "Encuesta del finde" (miér/jue) para votar evento del grupo.
+- P2: Generador SEO "Fiestas en [ciudad] este finde" + guion diario TikTok.

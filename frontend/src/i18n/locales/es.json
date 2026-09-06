@@ -24,7 +24,9 @@
     "err_name_user": "Completa nombre y usuario",
     "err_birthdate": "Añade tu fecha de nacimiento",
     "err_age": "Debes ser mayor de 18 años para usar ¿Quién va?",
-    "ref_applied": "¡Código aplicado! +100 puntos"
+    "ref_applied": "¡Código aplicado! +100 puntos",
+    "invited_group": "Te han invitado a un grupo 🎉",
+    "group_joined": "¡Te has unido al grupo!"
   },
   "nav": {
     "planes": "Planes",
@@ -61,8 +63,8 @@
   },
   "feed": {
     "title": "Los planes",
-    "search_placeholder": "Busca fiesta, discoteca o estilo\u2026",
-    "search_empty_title": "Sin resultados para \u201c{{q}}\u201d",
+    "search_placeholder": "Busca fiesta, discoteca o estilo…",
+    "search_empty_title": "Sin resultados para “{{q}}”",
     "search_empty_body": "Prueba con otro nombre de fiesta, discoteca o estilo.",
     "locales": "Locales",
     "hidden_mode_title": "Estás en modo oculto",
@@ -594,7 +596,7 @@
   },
   "eventcard": {
     "starts_in": "Empieza en",
-    "friends_fomo": "van y t\u00fa no. \u00bfTe lo vas a perder?",
+    "friends_fomo": "van y tú no. ¿Te lo vas a perder?",
     "follow_on": "Te avisaremos cuando salgan 🔔",
     "follow_off": "Notificaciones desactivadas",
     "toast_error": "Error",
@@ -936,6 +938,23 @@
     "invite_rest_title": "Invita a los que faltan",
     "on_app": "En la app",
     "not_here": "Aún no están ({{count}})",
-    "toast_denied": "Necesitamos tu permiso para acceder a los contactos"
+    "toast_denied": "Necesitamos tu permiso para acceder a los contactos",
+    "search_placeholder": "Busca un contacto…"
+  },
+  "groupinvite": {
+    "title": "Monta tu grupo",
+    "subtitle": "Ponle nombre a tu grupo y trae a tu gente de un toque. Veréis a qué fiesta va cada uno.",
+    "banner_sub": "Trae a tu gente de un toque y ved a qué va cada uno",
+    "default_name": "Mi grupo",
+    "name_placeholder": "Nombre del grupo (ej. Clase de Bio)",
+    "whatsapp": "Montar grupo por WhatsApp",
+    "share": "Compartir",
+    "copy": "Copiar enlace",
+    "copied": "¡Enlace copiado!",
+    "ready": "Grupo",
+    "ready2": "listo. Invita a tu gente 👇",
+    "hint": "Quien entre por tu enlace se une solo a tu grupo y os hacéis amigos automáticamente.",
+    "or_contacts": "o busca en tus contactos",
+    "err_create": "No se pudo crear el grupo, inténtalo de nuevo"
   }
 }

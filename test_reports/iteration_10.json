@@ -1,0 +1,39 @@
+{
+  "summary": "Full backend + frontend regression of the 'Monta tu grupo' viral loop (Fase A). Backend: 6/6 pytest cases pass — POST /api/groups, GET /api/groups/{id}/invite (returns {code, group_name, url=https://quienva.me/?g=CODE}), POST /api/me/claim-group-invite (auto-join + auto-friend + both notifications), idempotency (already_member=true, no duplicated membership), 403 for non-member on /invite, 404 for unknown code. Frontend: 4/4 flows pass — (1) opening /?g=CODE persists qv_pending_group in localStorage; (2) registering a NEW user via UI at /login?g=CODE auto-joins the group after signup (GET /api/groups shows TEST_UIGroup) and clears qv_pending_group; (3) onboarding-invite step is reached by tapping onboarding-next through slides+privacy+notif, GroupInviteStep renders with group-name-input + group-invite-whatsapp + group-invite-share + group-invite-copy, typing a name and pressing Copy triggers POST /api/groups + GET /api/groups/{id}/invite (200) and shows group-created banner; (4) for a fresh user with no groups/friends, /feed (with qv_discover_seen=1 to bypass the one-time /descubrir redirect) renders the monta-grupo-banner + monta-grupo-open, tapping expands GroupInviteStep inline with monta-grupo-close, close hides the banner. FindFriends component renders inside onboarding invite step (data-testid=find-friends) with connect-contacts-btn present; contacts-search-input is gated behind a real Contact Picker scan which is unavailable in headless — confirmed no render error.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Feed (first visit for users with 0 friends)", "issues": ["Feed.js redirects new users once to /descubrir (via qv_discover_seen), which HIDES the MontaGrupoBanner on the very first landing. The banner is only reachable when the user comes back to /feed. Consider showing the banner on /descubrir too or delaying the auto-redirect until after the banner is dismissed, otherwise the viral entry point on Feed is invisible for the first session."]},
+      {"screen": "Feed on load", "issues": ["PushPermissionGate ('Turn on notifications' modal) covers the whole feed before the user has interacted — banner is not visible until the modal is dismissed. Consider only showing the push gate AFTER the user creates/joins a group so the viral banner is not hidden."]},
+      {"screen": "index.html preload", "issues": ["/icons/icon-512.png preload warning persists (carried over from iteration 9) — either drop the <link rel=preload> or add correct 'as' value."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_group_viral_loop.py",
+    "/app/test_reports/pytest/iteration10.xml"
+  ],
+  "action_items": [
+    "Consider gating the /descubrir first-visit redirect so the MontaGrupoBanner on /feed is discoverable in the first session (viral entry point is currently hidden for new users).",
+    "Consider delaying the PushPermissionGate until after the user has interacted with the Monta-Grupo banner so it's not obscured on first paint.",
+    "(Nice-to-have) Return a stable copy toast even when navigator.clipboard.writeText throws — the copyLink swallows the error silently."
+  ],
+  "critical_code_review_comments": [
+    "server.py::claim_group_invite reads member_ids BEFORE $addToSet, then loops those members for friendships/notifs and skips the newcomer for the 'joined-your-group' broadcast (mid != uid). Correct today, but if any concurrent claim occurs the same code re-uses the pre-fetched `members` list — safe because the newcomer id is excluded — no bug, just fragile.",
+    "server.py::_ensure_group_invite_code has a race: two concurrent GET /invite calls on a code-less group can each generate different codes; the second update_one overwrites the first. Rare, but consider find_one_and_update with upsert-like semantics or a unique index on invite_code.",
+    "Frontend App.js runs the claim effect whenever `user` becomes truthy AND qv_pending_group is set. If the API is slow the user may already be navigated to /onboarding when the claim resolves, and the toast fires on a non-feed screen. UX is fine (still shown) but the effect could also fire twice on quick auth changes — a small `useRef(inFlight)` guard would harden it.",
+    "GroupInviteStep.copyLink swallows clipboard errors silently — no toast, no fallback text — on iOS/Safari without clipboard permission the user gets no feedback. Consider falling back to shareGroupInvite or a manual copy modal.",
+    "Feed.js one-time /descubrir redirect for users with 0 friends effectively hides the Monta-Grupo banner on the first (and highest-intent) visit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_group_viral_loop.py"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (4/4 requested flows)"},
+  "test_credentials": "N/A — tests register fresh TEST_ prefixed users each run via POST /api/auth/register with @example.com emails (the app rejects .test TLD). Backend rate-limits registration (429) after ~4 rapid registrations from the same IP.",
+  "seed_data_creation": "Backend pytest creates 3 TEST_viral_* users and 1 TEST_ViralGroup per run. Frontend playwright run created ~5 TEST_* users, 1 TEST_UIGroup, 1 TEST_MyOnbGroup2. All prefixed TEST_ for easy cleanup; nothing else touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend viral loop is solid — reuse /app/backend/tests/test_group_viral_loop.py (run with `-o addopts=''` if xdist parallelism causes email-uniqueness collisions on the module-scope fixtures). For frontend, three gotchas: (a) POST /api/auth/register rejects .test TLD (needs @example.com); (b) rate-limit kicks in around 4 rapid registrations — space them out ≥15s; (c) new users with 0 friends get a one-time redirect to /descubrir on first /feed visit — pre-set localStorage.qv_discover_seen='1' before goto('/feed') to test the MontaGrupoBanner. The PushPermissionGate overlay is dismissible via clicking the 'Continue anyway' link.",
+  "rca of the issue": "Initial TEST3 flake (group not created after copy click) was caused by a 3.5s wait that was shorter than the two sequential API calls (POST /groups then GET /invite) on the preview URL. Extending the wait to ≥5s makes the flow deterministic. Root cause was test timing, not application code."
+}

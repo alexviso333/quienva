@@ -108,6 +108,47 @@ export function inviteWhatsApp(code) {
   window.open(`https://wa.me/?text=${encodeURIComponent(inviteText(code))}`, "_blank", "noopener,noreferrer");
 }
 
+// ---- Group invite links ("Monta tu grupo") --------------------------------
+// A GROUP invite link (?g=CODE): whoever signs up through it auto-joins the
+// group and becomes friends with every member — zero friction, no requests.
+export function groupInviteUrl(code) {
+  return code ? `${PUBLIC_BASE}/?g=${code}` : `${PUBLIC_BASE}/`;
+}
+
+export function groupInviteText(groupName, code) {
+  const url = groupInviteUrl(code);
+  const name = (groupName || "").trim();
+  const lines = [
+    name
+      ? `¡Hola! 👋 Te he montado en el grupo *${name}* en *¿Quién va?* 🎉`
+      : "¡Hola! 👋 Móntate el grupo conmigo en *¿Quién va?* 🎉",
+    "",
+    "Entra con este enlace y te unes solo: veremos las mejores fiestas y a qué va cada uno del grupo. Sin registros raros, un toque.",
+    "",
+    url,
+  ];
+  return lines.join("\n");
+}
+
+export function groupInviteWhatsApp(groupName, code) {
+  window.open(`https://wa.me/?text=${encodeURIComponent(groupInviteText(groupName, code))}`, "_blank", "noopener,noreferrer");
+}
+
+export async function shareGroupInvite(groupName, code) {
+  const text = groupInviteText(groupName, code);
+  const url = groupInviteUrl(code);
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: "¿Quién va?", text, url });
+      return "shared";
+    }
+    await navigator.clipboard.writeText(text);
+    return "copied";
+  } catch {
+    return "cancelled";
+  }
+}
+
 // Invite ONE contact by opening WhatsApp straight to that person's chat with the
 // invite already written. Spain-first: if the number looks local (9 digits
 // starting 6/7/8/9 with no country code) we prepend +34 so wa.me can resolve it.

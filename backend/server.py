@@ -9575,6 +9575,10 @@ class GroupMemberInput(BaseModel):
     user_id: str
 
 
+class ClaimGroupInviteInput(BaseModel):
+    code: str
+
+
 class GroupMessageInput(BaseModel):
     text: str = ""
     image_url: str = ""
@@ -9742,6 +9746,96 @@ async def create_group(inp: GroupCreateInput, user: dict = Depends(get_current_u
                 {"group_id": g["id"]},
             )
     return g
+
+
+# ---- "Monta tu grupo" viral loop -------------------------------------------
+def _make_invite_code() -> str:
+    return secrets.token_urlsafe(6).replace("-", "").replace("_", "")[:8].upper()
+
+
+async def _ensure_accepted_friendship(a: str, b: str):
+    """Create (or upgrade to) an accepted friendship between two users. No-op on self."""
+    if not a or not b or a == b:
+        return
+    existing = await db.friendships.find_one({
+        "$or": [
+            {"requester_id": a, "addressee_id": b},
+            {"requester_id": b, "addressee_id": a},
+        ]
+    })
+    if existing:
+        if existing.get("status") != "accepted":
+            await db.friendships.update_one({"id": existing["id"]}, {"$set": {"status": "accepted"}})
+        return
+    await db.friendships.insert_one({
+        "id": str(uuid.uuid4()),
+        "requester_id": a,
+        "addressee_id": b,
+        "status": "accepted",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def _ensure_group_invite_code(g: dict) -> str:
+    code = g.get("invite_code")
+    if code:
+        return code
+    code = _make_invite_code()
+    while await db.groups.find_one({"invite_code": code}):
+        code = _make_invite_code()
+    await db.groups.update_one({"id": g["id"]}, {"$set": {"invite_code": code}})
+    return code
+
+
+@api_router.get("/groups/{group_id}/invite")
+async def group_invite_link(group_id: str, user: dict = Depends(get_current_user)):
+    """Return a shareable invite link for this group. Anyone who signs up through
+    it auto-joins the group and becomes friends with every member (no requests)."""
+    g = await _group_or_404(group_id, user["user_id"])
+    code = await _ensure_group_invite_code(g)
+    return {"code": code, "group_name": g["name"], "url": f"https://quienva.me/?g={code}"}
+
+
+@api_router.post("/me/claim-group-invite")
+async def claim_group_invite(inp: ClaimGroupInviteInput, user: dict = Depends(get_current_user)):
+    """Called right after signup (or when opening a ?g= link while logged in).
+    Auto-joins the group, auto-friends every existing member, and notifies everyone."""
+    code = (inp.code or "").strip().upper()
+    if not code:
+        raise HTTPException(status_code=400, detail="Código no válido")
+    g = await db.groups.find_one({"invite_code": code}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    uid = user["user_id"]
+    members = list(g.get("member_ids", []))
+    if uid in members:
+        return {"ok": True, "already_member": True, "group": {"id": g["id"], "name": g["name"]}}
+    creator_id = g.get("created_by")
+    creator = await db.users.find_one({"user_id": creator_id}, {"_id": 0}) if creator_id else None
+    # 1. Auto-join.
+    await db.groups.update_one({"id": g["id"]}, {"$addToSet": {"member_ids": uid}})
+    # 2. Auto-friend every existing member (accepted, no request needed).
+    for mid in members:
+        await _ensure_accepted_friendship(uid, mid)
+    # 3. Notify the newcomer + the existing members.
+    if creator:
+        await create_notification(
+            uid, "group_invite",
+            f"{display_name(creator)} te ha añadido a su grupo '{g['name']}'",
+            {"group_id": g["id"]},
+        )
+    for mid in members:
+        if mid != uid:
+            await create_notification(
+                mid, "group_join",
+                f"{display_name(user)} se ha unido a tu grupo '{g['name']}'",
+                {"group_id": g["id"], "user_id": uid},
+            )
+    # 4. Growth attribution: credit the group creator as referrer (once).
+    me = await db.users.find_one({"user_id": uid}, {"_id": 0})
+    if creator_id and creator_id != uid and me and not me.get("referred_by"):
+        await db.users.update_one({"user_id": uid}, {"$set": {"referred_by": creator_id}})
+    return {"ok": True, "group": {"id": g["id"], "name": g["name"]}}
 
 
 @api_router.get("/groups")
@@ -11094,6 +11188,7 @@ async def on_startup():
         await db.users.create_index([("city", 1), ("city_change_alerts", 1)])
         await db.users.create_index("referral_code")
         await db.users.create_index("referred_by")
+        await db.groups.create_index("invite_code")
         await db.users.create_index("created_at")
         await db.sessions.create_index("session_token", unique=True)
         await db.sessions.create_index("user_id")

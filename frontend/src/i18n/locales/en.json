@@ -24,7 +24,9 @@
     "err_name_user": "Fill in name and username",
     "err_birthdate": "Add your date of birth",
     "err_age": "You must be 18+ to use Quienva",
-    "ref_applied": "Code applied! +100 points"
+    "ref_applied": "Code applied! +100 points",
+    "invited_group": "You've been invited to a group 🎉",
+    "group_joined": "You joined the group!"
   },
   "nav": {
     "planes": "Plans",
@@ -61,8 +63,8 @@
   },
   "feed": {
     "title": "The plans",
-    "search_placeholder": "Search party, club or genre\u2026",
-    "search_empty_title": "No results for \u201c{{q}}\u201d",
+    "search_placeholder": "Search party, club or genre…",
+    "search_empty_title": "No results for “{{q}}”",
     "search_empty_body": "Try another party, club or genre.",
     "locales": "Venues",
     "hidden_mode_title": "You're in hidden mode",
@@ -936,6 +938,23 @@
     "invite_rest_title": "Invite the rest",
     "on_app": "On the app",
     "not_here": "Not here yet ({{count}})",
-    "toast_denied": "We need your permission to access contacts"
+    "toast_denied": "We need your permission to access contacts",
+    "search_placeholder": "Search a contact…"
+  },
+  "groupinvite": {
+    "title": "Build your group",
+    "subtitle": "Name your group and bring your crew in one tap. See who's going where.",
+    "banner_sub": "Bring your crew in one tap and see who's going where",
+    "default_name": "My group",
+    "name_placeholder": "Group name (e.g. Bio class)",
+    "whatsapp": "Build group via WhatsApp",
+    "share": "Share",
+    "copy": "Copy link",
+    "copied": "Link copied!",
+    "ready": "Group",
+    "ready2": "ready. Invite your crew 👇",
+    "hint": "Anyone who joins through your link auto-joins your group and you become friends automatically.",
+    "or_contacts": "or search your contacts",
+    "err_create": "Could not create the group, try again"
   }
 }

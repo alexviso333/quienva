@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { getContacts, contactsSupported, inviteWhatsApp, shareInvite, inviteWhatsAppTo } from "@/lib/contacts";
-import { Contact, Share2, UserPlus, Check, Loader2, Sparkles, Send } from "lucide-react";
+import { Contact, Share2, UserPlus, Check, Loader2, Sparkles, Send, Search } from "lucide-react";
 import { toast } from "sonner";
 
 /**
@@ -21,6 +21,7 @@ export default function FindFriends() {
   const [deviceContacts, setDeviceContacts] = useState([]); // [{name, phones[]}]
   const [matches, setMatches] = useState([]);                // users found on the app
   const [scanning, setScanning] = useState(false);
+  const [filter, setFilter] = useState("");
 
   const { data: referral } = useQuery({
     queryKey: ["referral"],
@@ -83,8 +84,13 @@ export default function FindFriends() {
     });
     // People on the app first; among them, those you can still add before friends.
     onA.sort((a, b) => (a.user.relationship?.status === "accepted") - (b.user.relationship?.status === "accepted"));
-    return { onApp: onA, toInvite: inv.slice(0, 100) };
-  }, [matches, deviceContacts]);
+    const q = filter.trim().toLowerCase();
+    const matchName = (c) =>
+      !q ||
+      (c.name || "").toLowerCase().includes(q) ||
+      (c.user?.username || "").toLowerCase().includes(q);
+    return { onApp: onA.filter(matchName), toInvite: inv.filter(matchName).slice(0, 100) };
+  }, [matches, deviceContacts, filter]);
 
   return (
     <section className="px-5 mt-4" data-testid="find-friends">
@@ -118,6 +124,17 @@ export default function FindFriends() {
 
       {ran && (
         <div className="mt-4" data-testid="contact-list">
+          <div className="relative mb-3">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+            <input
+              data-testid="contacts-search-input"
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder={t("findfriends.search_placeholder", "Busca un contacto\u2026")}
+              className="w-full h-11 rounded-2xl bg-white/5 border border-white/12 pl-10 pr-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-qv-secondary/50"
+            />
+          </div>
           {onApp.length === 0 && toInvite.length === 0 && (
             <p className="text-white/45 text-sm py-2">{t("findfriends.none_here")}</p>
           )}

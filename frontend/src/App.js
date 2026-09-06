@@ -1,6 +1,9 @@
 import "@/App.css";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import api from "@/lib/api";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { GuestGateProvider } from "@/context/GuestGate";
@@ -65,6 +68,9 @@ function PublicRoute({ children }) {
 
 function AppRouter() {
   const location = useLocation();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const claimingGroup = useRef(false);
   // Capture referral / invite params on ANY route the visitor lands on. This
   // lets us send shared links to the app ROOT (preview) instead of /login —
   // the code is persisted and applied when the guest eventually signs up.
@@ -75,8 +81,34 @@ function AppRouter() {
       if (ref) localStorage.setItem("qv_pending_ref", ref.trim());
       const add = params.get("add");
       if (add) localStorage.setItem("qv_pending_add", add.toLowerCase().trim());
+      const grp = params.get("g");
+      if (grp) localStorage.setItem("qv_pending_group", grp.trim());
     } catch (e) { /* ignore */ }
   }, [location.search]);
+  // Once the visitor is authenticated (via ANY path: email, Google, Apple), if a
+  // group invite is pending, claim it — auto-join the group + auto-friend the
+  // crew. Robust single place so no auth entrypoint misses it.
+  useEffect(() => {
+    if (!user) return;
+    let pendingGrp;
+    try { pendingGrp = localStorage.getItem("qv_pending_group"); } catch (e) { return; }
+    if (!pendingGrp || claimingGroup.current) return;
+    claimingGroup.current = true;
+    (async () => {
+      try {
+        const { data } = await api.post("/me/claim-group-invite", { code: pendingGrp });
+        if (data?.ok && !data?.already_member) {
+          toast.success("¡Te has unido al grupo! 🎉");
+          qc.invalidateQueries({ queryKey: ["groups"] });
+          qc.invalidateQueries({ queryKey: ["friends"] });
+        }
+      } catch (e) { /* ignore — code invalid/expired */ }
+      finally {
+        try { localStorage.removeItem("qv_pending_group"); } catch (e) { /* ignore */ }
+        claimingGroup.current = false;
+      }
+    })();
+  }, [user, qc]);
   // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
   if (location.hash?.includes("session_id=")) {
     return <AuthCallback />;

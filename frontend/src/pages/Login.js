@@ -49,15 +49,25 @@ export default function Login() {
       setInvitedBy(t("login.invited_by_code", { code: ref.trim() }));
       setMode("register");
     }
+    const grp = params.get("g");
+    if (grp) {
+      localStorage.setItem("qv_pending_group", grp.trim());
+      setInvitedBy(t("login.invited_group", { defaultValue: "Te han invitado a un grupo 🎉" }));
+      setMode("register");
+    }
     // If the visitor was captured earlier (arrived on the preview via a
     // referral link and now navigated here), still show the banner + put them
     // in register mode so the invite context is not lost.
-    if (!add && !ref) {
+    if (!add && !ref && !grp) {
       try {
         const pendingAdd = localStorage.getItem("qv_pending_add");
         const pendingRef = localStorage.getItem("qv_pending_ref");
+        const pendingGrp = localStorage.getItem("qv_pending_group");
         if (pendingAdd) {
           setInvitedBy(pendingAdd);
+          setMode("register");
+        } else if (pendingGrp) {
+          setInvitedBy(t("login.invited_group", { defaultValue: "Te han invitado a un grupo 🎉" }));
           setMode("register");
         } else if (pendingRef) {
           setInvitedBy(t("login.invited_by_code", { code: pendingRef }));
@@ -73,12 +83,24 @@ export default function Login() {
     setAppleAvailable(isAppleSignInAvailable());
   }, []);
 
-  const goAfterAuth = async () => {
+  const claimPendingInvites = async () => {
+    const pendingGrp = localStorage.getItem("qv_pending_group");
+    if (pendingGrp) {
+      try {
+        const { data } = await api.post("/me/claim-group-invite", { code: pendingGrp });
+        if (data?.group?.name) toast.success(t("login.group_joined", { defaultValue: "¡Te has unido al grupo!" }));
+      } catch (e) { /* ignore */ }
+      localStorage.removeItem("qv_pending_group");
+    }
     const pendingRef = localStorage.getItem("qv_pending_ref");
     if (pendingRef) {
       try { await api.post("/me/claim-referral", { code: pendingRef }); } catch (e) { /* ignore */ }
       localStorage.removeItem("qv_pending_ref");
     }
+  };
+
+  const goAfterAuth = async () => {
+    await claimPendingInvites();
     const onboarded = localStorage.getItem("qv_onboarded") === "1";
     navigate(onboarded ? "/feed" : "/onboarding");
   };
@@ -131,6 +153,16 @@ export default function Login() {
         const pendingSrc = localStorage.getItem("qv_src");
         await register(pendingSrc ? { ...form, source: pendingSrc } : form);
         if (pendingSrc) { try { localStorage.removeItem("qv_src"); } catch (e) { /* ignore */ } }
+        // Claim a pending GROUP invite first (auto-join + auto-friend the crew),
+        // then any pending referral code.
+        const pendingGrp = localStorage.getItem("qv_pending_group");
+        if (pendingGrp) {
+          try {
+            await api.post("/me/claim-group-invite", { code: pendingGrp });
+            toast.success(t("login.group_joined", { defaultValue: "¡Te has unido al grupo!" }));
+          } catch (err) { /* ignore */ }
+          localStorage.removeItem("qv_pending_group");
+        }
         // Claim referral if there is a pending code
         const pendingRef = localStorage.getItem("qv_pending_ref");
         if (pendingRef) {
