@@ -11361,3 +11361,217 @@ agent_communication:
       
       All data-testids are correctly implemented and all UI elements render as expected.
       The features are production-ready.
+
+  - agent: "main"
+    message: |
+      FOCUSED regression on SEO SSR endpoints after adding: (a) a unique descriptive paragraph per 
+      language on event pages, (b) /api/llms.txt, (c) accessibility contrast fix. Backend at 
+      http://localhost:8001, routes prefixed with /api. DB is "quienva_local" with seeded upcoming 
+      event id "test-ev-0" (city Ibiza, genre "Comercial", price ~30 EUR).
+
+      Test ONLY:
+      1) Unique per-language descriptive paragraph on event pages. For event test-ev-0:
+         - GET /api/fiesta/test-ev-0 -> 200; body contains <section class="lead"><p>...</p></section> 
+           with SPANISH prose mentioning venue (Pacha) and city (Ibiza).
+         - GET /api/en/party/test-ev-0 -> 200; contains <section class="lead"> paragraph in ENGLISH.
+         - GET /api/de/party/test-ev-0 -> 200; contains <section class="lead"> paragraph in GERMAN.
+         Confirm the three paragraphs are genuinely DIFFERENT text across languages (not identical), 
+         and that the genre inside is localized (Comercial / Commercial / Charts respectively).
+
+      2) llms.txt:
+         - GET /api/llms.txt -> 200, content-type text/plain (charset utf-8). Body must be Markdown 
+           starting with an H1 line "# ¿Quién va?" and must contain at least one Markdown link like 
+           [Text](http...). Confirm it lists city links (e.g. /fiestas/ibiza) and English/Deutsch sections.
+
+      3) Regression - nothing else broke on event pages:
+         - Each event page still has self-referencing canonical per language, hreflang es+en+de+x-default, 
+           hero <img> fetchpriority="high", and (for res.cloudinary.com images) an "f_auto,q_auto,w_" transform.
+         - GET /api/home still 200 with the non-render-blocking font link (media="print" onload) and 
+           Cloudinary preconnect.
+         - Nonexistent event /api/fiesta/nope-xyz still returns 410 (or 301 to city hub), not 200.
+
+backend:
+  - task: "SEO SSR: unique per-language descriptive paragraphs + /api/llms.txt + accessibility contrast fix"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ALL SEO SSR REGRESSION REQUIREMENTS (2026-12-19) - 5/5 TESTS PASSED
+          
+          Backend: http://localhost:8001/api
+          Test event: test-ev-0 (Pacha, Ibiza, genre "Comercial", ~30 EUR)
+          
+          ✅ TEST 1: UNIQUE PER-LANGUAGE DESCRIPTIVE PARAGRAPHS (100% PASS)
+          
+          1.1 Spanish event page (GET /api/fiesta/test-ev-0):
+          - Status: 200 ✓
+          - Found <section class="lead"><p>...</p></section> ✓
+          - Spanish paragraph (first 150 chars):
+            "¿Buscas plan en Ibiza? El viernes 18 sep · 23:00, Pacha acoge Fiesta Test 0, 
+            una cita imprescindible para quienes disfrutan del Comercial. Aquí tienes..."
+          - ✅ Mentions venue "Pacha"
+          - ✅ Mentions city "Ibiza"
+          - ✅ Contains genre "Comercial"
+          
+          1.2 English event page (GET /api/en/party/test-ev-0):
+          - Status: 200 ✓
+          - Found <section class="lead"><p>...</p></section> ✓
+          - English paragraph (first 150 chars):
+            "Looking for something to do in Ibiza? On Fri 18 Sep · 23:00, Pacha hosts Fiesta Test 0, 
+            a must for anyone into Commercial / Top 40. Here you'll find a..."
+          - ✅ Contains genre "Commercial"
+          
+          1.3 German event page (GET /api/de/party/test-ev-0):
+          - Status: 200 ✓
+          - Found <section class="lead"><p>...</p></section> ✓
+          - German paragraph (first 150 chars):
+            "Du suchst einen Plan in Ibiza? Am Fr 18. Sep. · 23:00 findet im Pacha Fiesta Test 0 
+            statt – ein Muss für alle, die Charts / Kommerziell lieben. Hier f..."
+          - ✅ Contains genre "Charts"
+          
+          1.4 Cross-language comparison:
+          - ✅ Spanish and English paragraphs are DIFFERENT (not identical)
+          - ✅ Spanish and German paragraphs are DIFFERENT (not identical)
+          - ✅ English and German paragraphs are DIFFERENT (not identical)
+          - ✅ Genre localized correctly: Comercial (ES) / Commercial (EN) / Charts (DE)
+          
+          ✅ TEST 2: llms.txt ENDPOINT (100% PASS)
+          
+          2.1 GET /api/llms.txt:
+          - Status: 200 ✓
+          - Content-Type: text/plain; charset=utf-8 ✓
+          - Body length: 1,324 characters
+          - First line: "# ¿Quién va?" ✓
+          
+          2.2 Markdown links:
+          - Found 12 Markdown links [Text](http...) ✓
+          - Sample links:
+            * [Palma de Mallorca](http://localhost:8001/fiestas/palma)
+            * [Ibiza](http://localhost:8001/fiestas/ibiza)
+            * [Madrid](http://localhost:8001/fiestas/madrid)
+            * [Barcelona](http://localhost:8001/fiestas/barcelona)
+            * [Marbella / Puerto Banús](http://localhost:8001/fiestas/marbella)
+          
+          2.3 City links and language sections:
+          - ✅ Found 5 city links (/fiestas/palma, /fiestas/ibiza, /fiestas/madrid, etc.)
+          - ✅ English section found (contains '/en/' or 'Parties')
+          - ✅ German section found (contains '/de/' or 'Partys')
+          
+          ✅ TEST 3: REGRESSION - EVENT PAGE FEATURES (100% PASS)
+          
+          3.1 Spanish event page (GET /api/fiesta/test-ev-0):
+          - ✅ Canonical link: http://localhost:8001/fiesta/test-ev-0/fiesta-test-0-pacha-ibiza
+          - ✅ Canonical is self-referencing Spanish event page
+          - ✅ Found 4 hreflang alternates:
+            * es: http://localhost:8001/fiesta/test-ev-0/fiesta-test-0-pacha-ibiza
+            * en: http://localhost:8001/en/party/test-ev-0/fiesta-test-0-pacha-ibiza
+            * de: http://localhost:8001/de/party/test-ev-0/fiesta-test-0-pacha-ibiza
+            * x-default: http://localhost:8001/fiesta/test-ev-0/fiesta-test-0-pacha-ibiza
+          - ✅ Hero <img> with fetchpriority="high" found
+          - ✅ Cloudinary image has f_auto,q_auto,w_ transforms
+          
+          3.2 English event page (GET /api/en/party/test-ev-0):
+          - ✅ Canonical: http://localhost:8001/en/party/test-ev-0/fiesta-test-0-pacha-ibiza
+          - ✅ Canonical is self-referencing English event page
+          
+          3.3 German event page (GET /api/de/party/test-ev-0):
+          - ✅ Canonical: http://localhost:8001/de/party/test-ev-0/fiesta-test-0-pacha-ibiza
+          - ✅ Canonical is self-referencing German event page
+          
+          ✅ TEST 4: REGRESSION - HOME PAGE (100% PASS)
+          
+          4.1 GET /api/home:
+          - Status: 200 ✓
+          - ✅ Non-render-blocking font link found (media="print" onload)
+          - ✅ Cloudinary preconnect found
+          
+          ✅ TEST 5: REGRESSION - NONEXISTENT EVENT (100% PASS)
+          
+          5.1 GET /api/fiesta/nope-xyz:
+          - Status: 410 Gone ✓
+          - ✅ Nonexistent event correctly returns 410 (not 200)
+          
+          CONCLUSION:
+          All SEO SSR features working perfectly after adding:
+          (a) unique descriptive paragraph per language on event pages
+          (b) /api/llms.txt endpoint
+          (c) accessibility contrast fix
+          
+          ✅ Each language (ES/EN/DE) has genuinely different descriptive paragraphs
+          ✅ Genre names are properly localized (Comercial/Commercial/Charts)
+          ✅ Paragraphs mention venue and city as expected
+          ✅ llms.txt returns valid Markdown with H1 header and city links
+          ✅ llms.txt includes English and German sections
+          ✅ All event pages have correct canonical links (self-referencing per language)
+          ✅ All event pages have hreflang alternates (es, en, de, x-default)
+          ✅ Hero images have fetchpriority="high" and Cloudinary transforms
+          ✅ Home page has non-render-blocking font link and Cloudinary preconnect
+          ✅ Nonexistent events return 410 Gone (not 200)
+          
+          NO REGRESSIONS DETECTED. All existing SEO features remain intact.
+          
+          Test file: /app/backend_test_seo_ssr_regression.py
+          All 5 test suites executed successfully with 100% pass rate.
+
+metadata:
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "SEO SSR: unique per-language descriptive paragraphs + /api/llms.txt + accessibility contrast fix"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      ✅✅✅ ALL SEO SSR REGRESSION TESTS PASSED (2026-12-19)
+      
+      Tested 3 new features + 2 regression areas as requested:
+      
+      ### SUMMARY
+      
+      ✅ TEST 1: Unique per-language descriptive paragraphs (PASSED)
+      - Spanish event page: <section class="lead"><p>...</p></section> with Spanish prose mentioning Pacha and Ibiza, genre "Comercial"
+      - English event page: <section class="lead"><p>...</p></section> with English prose, genre "Commercial"
+      - German event page: <section class="lead"><p>...</p></section> with German prose, genre "Charts"
+      - All three paragraphs are genuinely DIFFERENT (not identical)
+      - Genre names properly localized across all languages
+      
+      ✅ TEST 2: llms.txt endpoint (PASSED)
+      - GET /api/llms.txt → 200, content-type text/plain; charset=utf-8
+      - Body starts with "# ¿Quién va?" (H1 Markdown header)
+      - Contains 12 Markdown links [Text](http...)
+      - Lists 5 city links (/fiestas/palma, /fiestas/ibiza, /fiestas/madrid, etc.)
+      - Includes English and German sections
+      
+      ✅ TEST 3: Regression - event pages (PASSED)
+      - All event pages have self-referencing canonical per language
+      - All event pages have hreflang alternates (es, en, de, x-default)
+      - Hero <img> has fetchpriority="high"
+      - Cloudinary images have f_auto,q_auto,w_ transforms
+      
+      ✅ TEST 4: Regression - home page (PASSED)
+      - GET /api/home → 200
+      - Non-render-blocking font link present (media="print" onload)
+      - Cloudinary preconnect present
+      
+      ✅ TEST 5: Regression - nonexistent event (PASSED)
+      - GET /api/fiesta/nope-xyz → 410 Gone (correct, not 200)
+      
+      ### Need Research
+      None - all tests passed with no issues.
+      
+      ### ACTION ITEMS FOR MAIN AGENT
+      - ✅ All backend SEO SSR features working perfectly
+      - ✅ No regressions detected
+      - Summarize and finish - all requirements met
+      
+      YOU MUST ASK USER BEFORE DOING FRONTEND TESTING

@@ -1234,7 +1234,7 @@ a{color:inherit}
 .open{display:inline-flex;align-items:center;gap:6px;background:#fff;color:#0a0a0c;font-weight:800;font-size:13px;padding:9px 15px;border-radius:999px;text-decoration:none;transition:transform .15s ease}
 .open:active{transform:scale(.95)}
 .wrap{max-width:1000px;margin:0 auto;padding:26px 16px 96px}
-.bc{font-size:12px;color:#71717a;margin-bottom:14px}
+.bc{font-size:12px;color:#9a9aa4;margin-bottom:14px}
 .bc a{color:#a1a1aa;text-decoration:none}
 .bc a:hover{color:#fff}
 .hero-sec{position:relative;margin-bottom:26px}
@@ -1242,6 +1242,7 @@ a{color:inherit}
 h1{font-family:'Unbounded',system-ui,sans-serif;font-weight:900;font-size:clamp(30px,6vw,48px);line-height:1.05;margin:0 0 12px;letter-spacing:-.02em}
 h1 .dot{color:var(--pink)}
 p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
+.lead{color:#c9c9d1;font-size:15px;line-height:1.65;margin:0 0 22px;max-width:700px}
 .stats{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
 .stat{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:8px 13px;font-size:13px;font-weight:600;color:#e6e6ea}
 .stat b{color:var(--cyan);font-weight:800}
@@ -1347,9 +1348,9 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .cities a{color:var(--cyan);margin-right:16px;text-decoration:none;display:inline-block;margin-bottom:8px;font-weight:600}
 .cities a:hover{color:#fff}
 .cities b{display:block;margin-bottom:10px;color:#fff}
-.langs{margin-top:28px;font-size:13px;color:#71717a}
+.langs{margin-top:28px;font-size:13px;color:#9a9aa4}
 .langs a{color:#a1a1aa;margin-right:12px;text-decoration:none}
-footer{margin-top:34px;color:#71717a;font-size:13px;border-top:1px solid var(--line);padding-top:18px}
+footer{margin-top:34px;color:#9a9aa4;font-size:13px;border-top:1px solid var(--line);padding-top:18px}
 .faq{margin-top:8px}
 .faq details{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px}
 .faq summary{font-weight:700;cursor:pointer;list-style:none}
@@ -2036,6 +2037,54 @@ def _cld_img(url: str, w: int) -> str:
         return url
 
 
+def _event_intro(ev: dict, lang: str, when: str, pl: str, genre_disp: str, city: str, e, is_past: bool) -> str:
+    """A UNIQUE, natively-worded descriptive paragraph per language, built from the
+    event's own facts (name/venue/city/genre/date/price). Three variants are
+    rotated deterministically per event so pages don't read as boilerplate, and
+    the wording is genuinely different across es/en/de -> stops Google from
+    clustering the language versions as duplicates. No runtime translation service."""
+    name = e(ev.get("name", "") or ("Fiesta" if lang == "es" else "Party"))
+    venue = e(ev.get("venue", "") or "")
+    city_e = e(city or "")
+    when_e = e(when or "")
+    g = e(genre_disp or ({"es": "fiesta", "en": "party", "de": "Party"}[lang]))
+    # Price phrase
+    if pl:
+        price = {"es": f"los precios de entrada ({e(pl)})",
+                 "en": f"ticket prices ({e(pl)})",
+                 "de": f"die Ticketpreise ({e(pl)})"}[lang]
+        price_short = e(pl)
+    else:
+        price = {"es": "el acceso gratuito", "en": "free entry", "de": "den freien Eintritt"}[lang]
+        price_short = {"es": "entrada gratuita", "en": "free entry", "de": "freier Eintritt"}[lang]
+    idx = (len(ev.get("id", "")) + len(ev.get("name", ""))) % 3
+    if is_past:
+        past = {
+            "es": f"{name} tuvo lugar en {venue} ({city_e}) el {when_e}. Descubre las pr\u00f3ximas fiestas de {g} en {city_e} y no te pierdas los siguientes planes en \u00bfQui\u00e9n va?.",
+            "en": f"{name} took place at {venue} in {city_e} on {when_e}. Discover upcoming {g} parties in {city_e} and don\u2019t miss what\u2019s next on \u00bfQui\u00e9n va?.",
+            "de": f"{name} fand am {when_e} im {venue} in {city_e} statt. Entdecke kommende {g}-Partys in {city_e} und verpasse nichts auf \u00bfQui\u00e9n va?.",
+        }[lang]
+        return f'<section class="lead"><p>{past}</p></section>'
+    variants = {
+        "es": [
+            f"{name} llega a {venue} ({city_e}) el {when_e}. Una noche de {g} para disfrutar con amigos: consulta {price}, mira qui\u00e9n va y descubre el ambiente antes de salir. {venue} es uno de los locales de referencia de {city_e} para los amantes de la m\u00fasica {g}.",
+            f"\u00bfBuscas plan en {city_e}? El {when_e}, {venue} acoge {name}, una cita imprescindible para quienes disfrutan del {g}. Aqu\u00ed tienes toda la info pr\u00e1ctica \u2014{price}, horario y qui\u00e9n va\u2014 para organizar tu noche sin sorpresas.",
+            f"{name} es una de las fiestas destacadas de {city_e}. Se celebra en {venue} el {when_e} con lo mejor del {g}. Reserva tus entradas ({price_short}), avisa a tu grupo y vive una noche inolvidable en una de las mejores salas de la ciudad.",
+        ],
+        "en": [
+            f"{name} comes to {venue} in {city_e} on {when_e}. A {g} night made for going out with friends: check {price}, see who\u2019s going and get a feel for the vibe before you head out. {venue} is one of {city_e}\u2019s go-to venues for {g} lovers.",
+            f"Looking for something to do in {city_e}? On {when_e}, {venue} hosts {name}, a must for anyone into {g}. Here you\u2019ll find all the practical details \u2014{price}, start time and who\u2019s going\u2014 so you can plan your night with no surprises.",
+            f"{name} is one of {city_e}\u2019s standout parties. It takes place at {venue} on {when_e} with the best of {g}. Grab your tickets ({price_short}), gather your crew and enjoy an unforgettable night at one of the city\u2019s top clubs.",
+        ],
+        "de": [
+            f"{name} kommt am {when_e} ins {venue} in {city_e}. Eine {g}-Nacht zum Feiern mit Freunden: Sieh dir {price} an, wer dabei ist und wie die Stimmung ist, bevor du losziehst. Das {venue} ist eine der beliebtesten Adressen in {city_e} f\u00fcr {g}-Fans.",
+            f"Du suchst einen Plan in {city_e}? Am {when_e} findet im {venue} {name} statt \u2013 ein Muss f\u00fcr alle, die {g} lieben. Hier findest du alle praktischen Infos \u2013 {price}, Beginn und wer dabei ist \u2013 f\u00fcr einen entspannten Abend ohne \u00dcberraschungen.",
+            f"{name} geh\u00f6rt zu den Highlights in {city_e}. Die Party steigt am {when_e} im {venue} mit dem Besten aus {g}. Sichere dir deine Tickets ({price_short}), informiere deine Crew und erlebe eine unvergessliche Nacht in einem der besten Clubs der Stadt.",
+        ],
+    }[lang]
+    return f'<section class="lead"><p>{variants[idx]}</p></section>'
+
+
 def _seo_card(ev, ev_url, lang, e, nofollow: bool = False, eager: bool = False) -> str:
     """App-style poster card for SEO listings.
 
@@ -2591,7 +2640,9 @@ async def _render_event(event_id: str, lang: str, request: Request, slug: str = 
                             f'<ul class="grid">{"".join(lis[:6])}</ul>'
                             f'<div class="ctarow"><a class="cta ghost" href="{e(more_url)}">{e(T["more_in"].format(label=city_label))}</a></div>')
 
-    genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(_translate_genre(ev.get("genre",""), lang))}</div>' if ev.get("genre") else ""
+    genre_disp = _translate_genre(ev.get("genre", ""), lang)
+    genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(genre_disp)}</div>' if ev.get("genre") else ""
+    intro_html = _event_intro(ev, lang, when, pl, genre_disp, city, e, is_past)
     addr = (", " + e(ev.get("address", ""))) if ev.get("address") else ""
 
     # Breadcrumbs + FAQ (rich results). Static/derived text, no extra DB cost.
@@ -2696,6 +2747,7 @@ async def _render_event(event_id: str, lang: str, request: Request, slug: str = 
 <p class="sub">{e(ev.get("venue",""))} \u00b7 {e(city)}</p>
 {ended_html}
 </section>
+{intro_html}
 <div class="meta">
 <div><b>{e(T["ev_when"])}</b>{e(when)}</div>
 <div><b>{e(T["ev_where"])}</b>{venue_link}{addr}, {city_link}</div>
@@ -4599,6 +4651,48 @@ async def seo_robots(request: Request):
     txt = "\n".join(lines)
     return StarletteResponse(content=txt, media_type="text/plain",
                              headers={"Cache-Control": "public, max-age=3600"})
+
+
+def _llms_txt(front: str) -> str:
+    """Markdown llms.txt (H1 + links) so the new PageSpeed "agentic navigation"
+    audit passes and LLM crawlers get a clean map of the site."""
+    lines = [
+        "# \u00bfQui\u00e9n va?",
+        "",
+        "> Agenda de fiestas, discotecas y eventos de m\u00fasica electr\u00f3nica en Espa\u00f1a "
+        "(Ibiza, Madrid, Barcelona, Marbella / Puerto Ban\u00fas y Palma de Mallorca). "
+        "Descubre qu\u00e9 fiestas hay hoy y este fin de semana, precios de entradas y qui\u00e9n va. "
+        "Sitio disponible en espa\u00f1ol, ingl\u00e9s y alem\u00e1n.",
+        "",
+        "## Ciudades",
+    ]
+    for c in SUPPORTED_CITIES:
+        cs = _city_slug(c["id"])
+        lines.append(f"- [{c['label']}]({front}/fiestas/{cs}): fiestas y discotecas en {c['label']}")
+    lines += [
+        "",
+        "## Secciones principales",
+        f"- [Inicio]({front}/): agenda de fiestas por ciudad",
+        f"- [Blog]({front}/blog): gu\u00edas de ocio nocturno y consejos",
+        f"- [Sitemap]({front}/sitemap.xml): todas las URLs indexables",
+        "",
+        "## English",
+        f"- [Home]({front}/en): nightlife, clubs and parties in Spain",
+        f"- [Blog]({front}/en/blog): nightlife guides and tips",
+        "",
+        "## Deutsch",
+        f"- [Startseite]({front}/de): Partys, Clubs und Nachtleben in Spanien",
+        f"- [Blog]({front}/de/blog): Nachtleben-Guides und Tipps",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+@api_router.api_route("/llms.txt", methods=["GET", "HEAD"])
+async def seo_llms(request: Request):
+    front = _frontend_base(request)
+    return StarletteResponse(content=_llms_txt(front), media_type="text/plain; charset=utf-8",
+                             headers={"Cache-Control": "public, max-age=86400"})
 
 
 # ---------------------------------------------------------------------------
