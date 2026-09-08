@@ -1,569 +1,503 @@
 #!/usr/bin/env python3
 """
-Test SEO SSR endpoints after adding:
-(a) unique descriptive paragraph per language on event pages
-(b) /api/llms.txt
-(c) accessibility contrast fix
-
-Backend: http://localhost:8001
-Routes prefixed with /api
-DB: quienva_local with seeded event id "test-ev-0" (city Ibiza, genre "Comercial", price ~30 EUR)
+FOCUSED regression test on SEO SSR after two additions in /app/backend/server.py.
+Tests ONLY:
+1) Event poster PRELOAD (LCP optimization) for test-ev-0 in all 3 languages
+2) City "tips" localized block on the MAIN city listing (timeframe=all) for city Ibiza
+3) Regression - make sure nothing else broke
 """
 
 import requests
 import re
-from typing import Dict, List, Tuple
+from html.parser import HTMLParser
 
 BASE_URL = "http://localhost:8001/api"
 
-def test_event_descriptive_paragraphs():
+class LinkParser(HTMLParser):
+    """Extract <link> tags from HTML"""
+    def __init__(self):
+        super().__init__()
+        self.links = []
+    
+    def handle_starttag(self, tag, attrs):
+        if tag == 'link':
+            self.links.append(dict(attrs))
+
+class ImgParser(HTMLParser):
+    """Extract <img> tags from HTML"""
+    def __init__(self):
+        super().__init__()
+        self.imgs = []
+    
+    def handle_starttag(self, tag, attrs):
+        if tag == 'img':
+            self.imgs.append(dict(attrs))
+
+class H2Parser(HTMLParser):
+    """Extract <h2> text content from HTML"""
+    def __init__(self):
+        super().__init__()
+        self.h2_texts = []
+        self.in_h2 = False
+        self.current_text = ""
+    
+    def handle_starttag(self, tag, attrs):
+        if tag == 'h2':
+            self.in_h2 = True
+            self.current_text = ""
+    
+    def handle_endtag(self, tag):
+        if tag == 'h2' and self.in_h2:
+            self.h2_texts.append(self.current_text.strip())
+            self.in_h2 = False
+    
+    def handle_data(self, data):
+        if self.in_h2:
+            self.current_text += data
+
+def test_event_poster_preload():
     """
-    Test 1: Unique per-language descriptive paragraph on event pages
-    For event test-ev-0:
-    - GET /api/fiesta/test-ev-0 -> 200; body contains <section class="lead"><p>...</p></section> with SPANISH prose
-    - GET /api/en/party/test-ev-0 -> 200; contains <section class="lead"> paragraph in ENGLISH
-    - GET /api/de/party/test-ev-0 -> 200; contains <section class="lead"> paragraph in GERMAN
-    - Confirm the three paragraphs are genuinely DIFFERENT text across languages
-    - Confirm genre is localized (Comercial / Commercial / Charts respectively)
+    TEST 1: Event poster PRELOAD (LCP optimization)
+    For test-ev-0 in all 3 languages:
+    - GET /api/fiesta/test-ev-0, /api/en/party/test-ev-0, /api/de/party/test-ev-0 -> each 200
+    - Each <head> must contain a <link rel="preload" as="image" href="..." fetchpriority="high">
+      where the href is the event image with Cloudinary transform "f_auto,q_auto,w_520,c_limit"
+    - Confirm the hero <img> still has fetchpriority="high" and the same transformed src
     """
     print("\n" + "="*80)
-    print("TEST 1: UNIQUE PER-LANGUAGE DESCRIPTIVE PARAGRAPH ON EVENT PAGES")
+    print("TEST 1: EVENT POSTER PRELOAD (LCP OPTIMIZATION)")
     print("="*80)
     
-    event_id = "test-ev-0"
-    
-    # Test Spanish event page
-    print(f"\n1.1 Testing Spanish event page: GET /api/fiesta/{event_id}")
-    es_url = f"{BASE_URL}/fiesta/{event_id}"
-    es_response = requests.get(es_url)
-    print(f"   Status: {es_response.status_code}")
-    
-    if es_response.status_code != 200:
-        print(f"   ❌ FAILED: Expected 200, got {es_response.status_code}")
-        return False
-    
-    print(f"   ✅ Status 200 OK")
-    print(f"   Content-Type: {es_response.headers.get('content-type')}")
-    
-    # Extract Spanish lead paragraph
-    es_html = es_response.text
-    es_lead_match = re.search(r'<section[^>]*class="lead"[^>]*>(.*?)</section>', es_html, re.DOTALL)
-    
-    if not es_lead_match:
-        print(f"   ❌ FAILED: No <section class=\"lead\"> found in Spanish page")
-        return False
-    
-    es_lead_section = es_lead_match.group(1)
-    es_paragraph_match = re.search(r'<p[^>]*>(.*?)</p>', es_lead_section, re.DOTALL)
-    
-    if not es_paragraph_match:
-        print(f"   ❌ FAILED: No <p> tag found inside <section class=\"lead\"> in Spanish page")
-        return False
-    
-    es_paragraph = es_paragraph_match.group(1).strip()
-    # Remove HTML tags from paragraph text
-    es_text = re.sub(r'<[^>]+>', '', es_paragraph).strip()
-    
-    print(f"   ✅ Found <section class=\"lead\"><p>...</p></section>")
-    print(f"   Spanish paragraph (first 150 chars): {es_text[:150]}...")
-    
-    # Check if Spanish text mentions venue (Pacha) and city (Ibiza)
-    if 'Pacha' not in es_text and 'pacha' not in es_text.lower():
-        print(f"   ⚠️  WARNING: Spanish paragraph doesn't mention venue 'Pacha'")
-    else:
-        print(f"   ✅ Spanish paragraph mentions venue 'Pacha'")
-    
-    if 'Ibiza' not in es_text and 'ibiza' not in es_text.lower():
-        print(f"   ⚠️  WARNING: Spanish paragraph doesn't mention city 'Ibiza'")
-    else:
-        print(f"   ✅ Spanish paragraph mentions city 'Ibiza'")
-    
-    # Check for Spanish genre "Comercial"
-    if 'Comercial' in es_html or 'comercial' in es_html.lower():
-        print(f"   ✅ Spanish page contains genre 'Comercial'")
-    else:
-        print(f"   ⚠️  WARNING: Spanish page doesn't contain genre 'Comercial'")
-    
-    # Test English event page
-    print(f"\n1.2 Testing English event page: GET /api/en/party/{event_id}")
-    en_url = f"{BASE_URL}/en/party/{event_id}"
-    en_response = requests.get(en_url)
-    print(f"   Status: {en_response.status_code}")
-    
-    if en_response.status_code != 200:
-        print(f"   ❌ FAILED: Expected 200, got {en_response.status_code}")
-        return False
-    
-    print(f"   ✅ Status 200 OK")
-    
-    # Extract English lead paragraph
-    en_html = en_response.text
-    en_lead_match = re.search(r'<section[^>]*class="lead"[^>]*>(.*?)</section>', en_html, re.DOTALL)
-    
-    if not en_lead_match:
-        print(f"   ❌ FAILED: No <section class=\"lead\"> found in English page")
-        return False
-    
-    en_lead_section = en_lead_match.group(1)
-    en_paragraph_match = re.search(r'<p[^>]*>(.*?)</p>', en_lead_section, re.DOTALL)
-    
-    if not en_paragraph_match:
-        print(f"   ❌ FAILED: No <p> tag found inside <section class=\"lead\"> in English page")
-        return False
-    
-    en_paragraph = en_paragraph_match.group(1).strip()
-    en_text = re.sub(r'<[^>]+>', '', en_paragraph).strip()
-    
-    print(f"   ✅ Found <section class=\"lead\"><p>...</p></section>")
-    print(f"   English paragraph (first 150 chars): {en_text[:150]}...")
-    
-    # Check for English genre "Commercial"
-    if 'Commercial' in en_html or 'commercial' in en_html.lower():
-        print(f"   ✅ English page contains genre 'Commercial'")
-    else:
-        print(f"   ⚠️  WARNING: English page doesn't contain genre 'Commercial'")
-    
-    # Test German event page
-    print(f"\n1.3 Testing German event page: GET /api/de/party/{event_id}")
-    de_url = f"{BASE_URL}/de/party/{event_id}"
-    de_response = requests.get(de_url)
-    print(f"   Status: {de_response.status_code}")
-    
-    if de_response.status_code != 200:
-        print(f"   ❌ FAILED: Expected 200, got {de_response.status_code}")
-        return False
-    
-    print(f"   ✅ Status 200 OK")
-    
-    # Extract German lead paragraph
-    de_html = de_response.text
-    de_lead_match = re.search(r'<section[^>]*class="lead"[^>]*>(.*?)</section>', de_html, re.DOTALL)
-    
-    if not de_lead_match:
-        print(f"   ❌ FAILED: No <section class=\"lead\"> found in German page")
-        return False
-    
-    de_lead_section = de_lead_match.group(1)
-    de_paragraph_match = re.search(r'<p[^>]*>(.*?)</p>', de_lead_section, re.DOTALL)
-    
-    if not de_paragraph_match:
-        print(f"   ❌ FAILED: No <p> tag found inside <section class=\"lead\"> in German page")
-        return False
-    
-    de_paragraph = de_paragraph_match.group(1).strip()
-    de_text = re.sub(r'<[^>]+>', '', de_paragraph).strip()
-    
-    print(f"   ✅ Found <section class=\"lead\"><p>...</p></section>")
-    print(f"   German paragraph (first 150 chars): {de_text[:150]}...")
-    
-    # Check for German genre "Charts"
-    if 'Charts' in de_html or 'charts' in de_html.lower():
-        print(f"   ✅ German page contains genre 'Charts'")
-    else:
-        print(f"   ⚠️  WARNING: German page doesn't contain genre 'Charts'")
-    
-    # Compare paragraphs to ensure they're different
-    print(f"\n1.4 Comparing paragraphs across languages")
-    
-    # Normalize texts for comparison (lowercase, remove extra whitespace)
-    es_normalized = ' '.join(es_text.lower().split())
-    en_normalized = ' '.join(en_text.lower().split())
-    de_normalized = ' '.join(de_text.lower().split())
-    
-    if es_normalized == en_normalized:
-        print(f"   ❌ FAILED: Spanish and English paragraphs are IDENTICAL")
-        return False
-    else:
-        print(f"   ✅ Spanish and English paragraphs are DIFFERENT")
-    
-    if es_normalized == de_normalized:
-        print(f"   ❌ FAILED: Spanish and German paragraphs are IDENTICAL")
-        return False
-    else:
-        print(f"   ✅ Spanish and German paragraphs are DIFFERENT")
-    
-    if en_normalized == de_normalized:
-        print(f"   ❌ FAILED: English and German paragraphs are IDENTICAL")
-        return False
-    else:
-        print(f"   ✅ English and German paragraphs are DIFFERENT")
-    
-    print(f"\n✅ TEST 1 PASSED: All three languages have unique descriptive paragraphs")
-    return True
-
-
-def test_llms_txt():
-    """
-    Test 2: llms.txt endpoint
-    - GET /api/llms.txt -> 200, content-type text/plain (charset utf-8)
-    - Body must be Markdown starting with H1 line "# ¿Quién va?"
-    - Must contain at least one Markdown link like [Text](http...)
-    - Confirm it lists city links (e.g. /fiestas/ibiza) and English/Deutsch sections
-    """
-    print("\n" + "="*80)
-    print("TEST 2: llms.txt ENDPOINT")
-    print("="*80)
-    
-    print(f"\n2.1 Testing llms.txt: GET /api/llms.txt")
-    url = f"{BASE_URL}/llms.txt"
-    response = requests.get(url)
-    print(f"   Status: {response.status_code}")
-    
-    if response.status_code != 200:
-        print(f"   ❌ FAILED: Expected 200, got {response.status_code}")
-        return False
-    
-    print(f"   ✅ Status 200 OK")
-    
-    # Check content-type
-    content_type = response.headers.get('content-type', '').lower()
-    print(f"   Content-Type: {content_type}")
-    
-    if 'text/plain' not in content_type:
-        print(f"   ❌ FAILED: Expected content-type 'text/plain', got '{content_type}'")
-        return False
-    
-    print(f"   ✅ Content-Type is text/plain")
-    
-    if 'utf-8' not in content_type and 'charset' in content_type:
-        print(f"   ⚠️  WARNING: Content-Type doesn't specify charset=utf-8")
-    else:
-        print(f"   ✅ Content-Type includes charset=utf-8")
-    
-    # Check body content
-    body = response.text
-    print(f"\n2.2 Checking llms.txt body content")
-    print(f"   Body length: {len(body)} characters")
-    print(f"   First 200 characters:\n   {body[:200]}")
-    
-    # Check for H1 line "# ¿Quién va?"
-    lines = body.split('\n')
-    first_line = lines[0].strip() if lines else ""
-    
-    if first_line != "# ¿Quién va?":
-        print(f"   ❌ FAILED: First line should be '# ¿Quién va?', got '{first_line}'")
-        return False
-    
-    print(f"   ✅ First line is '# ¿Quién va?'")
-    
-    # Check for Markdown links [Text](http...)
-    markdown_links = re.findall(r'\[([^\]]+)\]\(([^\)]+)\)', body)
-    
-    if not markdown_links:
-        print(f"   ❌ FAILED: No Markdown links [Text](http...) found in body")
-        return False
-    
-    print(f"   ✅ Found {len(markdown_links)} Markdown links")
-    print(f"   Sample links:")
-    for i, (text, url) in enumerate(markdown_links[:5]):
-        print(f"      [{text}]({url})")
-    
-    # Check for city links (e.g. /fiestas/ibiza)
-    city_links = [url for text, url in markdown_links if '/fiestas/' in url or '/parties/' in url or '/partys/' in url]
-    
-    if not city_links:
-        print(f"   ⚠️  WARNING: No city links (e.g. /fiestas/ibiza) found")
-    else:
-        print(f"   ✅ Found {len(city_links)} city links")
-        print(f"   Sample city links: {city_links[:3]}")
-    
-    # Check for English/Deutsch sections
-    has_english = '/en/' in body or 'English' in body or 'Parties' in body
-    has_german = '/de/' in body or 'Deutsch' in body or 'German' in body or 'Partys' in body
-    
-    if has_english:
-        print(f"   ✅ English section found (contains '/en/' or 'English' or 'Parties')")
-    else:
-        print(f"   ⚠️  WARNING: No English section found")
-    
-    if has_german:
-        print(f"   ✅ German section found (contains '/de/' or 'Deutsch' or 'German' or 'Partys')")
-    else:
-        print(f"   ⚠️  WARNING: No German section found")
-    
-    print(f"\n✅ TEST 2 PASSED: llms.txt endpoint working correctly")
-    return True
-
-
-def test_regression_event_pages():
-    """
-    Test 3: Regression - nothing else broke on event pages
-    - Each event page still has self-referencing canonical per language
-    - hreflang es+en+de+x-default
-    - hero <img> fetchpriority="high"
-    - For res.cloudinary.com images, an "f_auto,q_auto,w_" transform
-    """
-    print("\n" + "="*80)
-    print("TEST 3: REGRESSION - EVENT PAGE FEATURES")
-    print("="*80)
-    
-    event_id = "test-ev-0"
-    
-    # Test Spanish event page
-    print(f"\n3.1 Testing Spanish event page regression: GET /api/fiesta/{event_id}")
-    es_url = f"{BASE_URL}/fiesta/{event_id}"
-    es_response = requests.get(es_url)
-    
-    if es_response.status_code != 200:
-        print(f"   ❌ FAILED: Expected 200, got {es_response.status_code}")
-        return False
-    
-    es_html = es_response.text
-    
-    # Check canonical
-    canonical_match = re.search(r'<link[^>]*rel="canonical"[^>]*href="([^"]+)"', es_html)
-    if not canonical_match:
-        print(f"   ❌ FAILED: No canonical link found")
-        return False
-    
-    canonical_url = canonical_match.group(1)
-    print(f"   ✅ Canonical link found: {canonical_url}")
-    
-    # Check if canonical is self-referencing (contains /fiesta/ and event_id)
-    if '/fiesta/' not in canonical_url or event_id not in canonical_url:
-        print(f"   ❌ FAILED: Canonical is not self-referencing Spanish event page")
-        return False
-    
-    print(f"   ✅ Canonical is self-referencing Spanish event page")
-    
-    # Check hreflang alternates
-    hreflang_matches = re.findall(r'<link[^>]*rel="alternate"[^>]*hreflang="([^"]+)"[^>]*href="([^"]+)"', es_html)
-    hreflang_dict = {lang: url for lang, url in hreflang_matches}
-    
-    print(f"   Found {len(hreflang_dict)} hreflang alternates:")
-    for lang, url in hreflang_dict.items():
-        print(f"      {lang}: {url}")
-    
-    required_hreflangs = ['es', 'en', 'de', 'x-default']
-    missing_hreflangs = [lang for lang in required_hreflangs if lang not in hreflang_dict]
-    
-    if missing_hreflangs:
-        print(f"   ❌ FAILED: Missing hreflang alternates: {missing_hreflangs}")
-        return False
-    
-    print(f"   ✅ All required hreflang alternates present (es, en, de, x-default)")
-    
-    # Check hero image fetchpriority="high"
-    hero_img_match = re.search(r'<img[^>]*fetchpriority="high"[^>]*>', es_html)
-    
-    if not hero_img_match:
-        print(f"   ⚠️  WARNING: No hero <img> with fetchpriority=\"high\" found")
-    else:
-        print(f"   ✅ Hero <img> with fetchpriority=\"high\" found")
+    test_cases = [
+        ("Spanish", f"{BASE_URL}/fiesta/test-ev-0", "Consejos"),
+        ("English", f"{BASE_URL}/en/party/test-ev-0", "Tips"),
+        ("German", f"{BASE_URL}/de/party/test-ev-0", "Tipps"),
+    ]
+    
+    all_passed = True
+    
+    for lang_name, url, _ in test_cases:
+        print(f"\n--- Testing {lang_name}: {url} ---")
         
-        # Check if it's a Cloudinary image with transforms
-        hero_img = hero_img_match.group(0)
-        if 'res.cloudinary.com' in hero_img:
-            if 'f_auto' in hero_img and 'q_auto' in hero_img and 'w_' in hero_img:
-                print(f"   ✅ Cloudinary image has f_auto,q_auto,w_ transforms")
+        try:
+            resp = requests.get(url, timeout=10)
+            print(f"✓ Status: {resp.status_code}")
+            
+            if resp.status_code != 200:
+                print(f"✗ FAIL: Expected 200, got {resp.status_code}")
+                all_passed = False
+                continue
+            
+            html = resp.text
+            
+            # Parse <link> tags
+            link_parser = LinkParser()
+            link_parser.feed(html)
+            
+            # Find preload link
+            preload_links = [l for l in link_parser.links if l.get('rel') == 'preload' and l.get('as') == 'image']
+            
+            if not preload_links:
+                print(f"✗ FAIL: No <link rel='preload' as='image'> found in <head>")
+                all_passed = False
+                continue
+            
+            preload_link = preload_links[0]
+            preload_href = preload_link.get('href', '')
+            fetchpriority = preload_link.get('fetchpriority', '')
+            
+            print(f"✓ Found preload link: {preload_href[:80]}...")
+            
+            # Check fetchpriority="high"
+            if fetchpriority != 'high':
+                print(f"✗ FAIL: preload link fetchpriority is '{fetchpriority}', expected 'high'")
+                all_passed = False
             else:
-                print(f"   ⚠️  WARNING: Cloudinary image missing some transforms (f_auto, q_auto, w_)")
+                print(f"✓ Preload link has fetchpriority='high'")
+            
+            # Check Cloudinary transform in preload href
+            required_transforms = ['f_auto', 'q_auto', 'w_520', 'c_limit']
+            missing_transforms = [t for t in required_transforms if t not in preload_href]
+            
+            if missing_transforms:
+                print(f"✗ FAIL: Preload href missing transforms: {missing_transforms}")
+                print(f"   Full href: {preload_href}")
+                all_passed = False
+            else:
+                print(f"✓ Preload href contains all required Cloudinary transforms: {required_transforms}")
+            
+            # Check that it's a res.cloudinary.com URL
+            if 'res.cloudinary.com' not in preload_href:
+                print(f"✗ FAIL: Preload href is not a Cloudinary URL")
+                all_passed = False
+            else:
+                print(f"✓ Preload href is a Cloudinary URL")
+            
+            # Parse <img> tags to find hero image
+            img_parser = ImgParser()
+            img_parser.feed(html)
+            
+            # Find hero img (should have fetchpriority="high")
+            hero_imgs = [img for img in img_parser.imgs if img.get('fetchpriority') == 'high']
+            
+            if not hero_imgs:
+                print(f"✗ FAIL: No hero <img> with fetchpriority='high' found")
+                all_passed = False
+            else:
+                hero_img = hero_imgs[0]
+                hero_src = hero_img.get('src', '')
+                print(f"✓ Found hero <img> with fetchpriority='high'")
+                print(f"  Hero img src: {hero_src[:80]}...")
+                
+                # Check that hero img src matches preload href (same transformed URL)
+                if hero_src != preload_href:
+                    print(f"✗ FAIL: Hero img src does not match preload href")
+                    print(f"   Preload: {preload_href}")
+                    print(f"   Hero:    {hero_src}")
+                    all_passed = False
+                else:
+                    print(f"✓ Hero img src matches preload href (no duplicate/broken markup)")
+            
+        except Exception as e:
+            print(f"✗ FAIL: Exception occurred: {e}")
+            all_passed = False
     
-    # Test English event page
-    print(f"\n3.2 Testing English event page regression: GET /api/en/party/{event_id}")
-    en_url = f"{BASE_URL}/en/party/{event_id}"
-    en_response = requests.get(en_url)
+    if all_passed:
+        print("\n✅ TEST 1 PASSED: Event poster preload working correctly in all 3 languages")
+    else:
+        print("\n❌ TEST 1 FAILED: Issues found with event poster preload")
     
-    if en_response.status_code != 200:
-        print(f"   ❌ FAILED: Expected 200, got {en_response.status_code}")
-        return False
-    
-    en_html = en_response.text
-    
-    # Check canonical
-    en_canonical_match = re.search(r'<link[^>]*rel="canonical"[^>]*href="([^"]+)"', en_html)
-    if not en_canonical_match:
-        print(f"   ❌ FAILED: No canonical link found in English page")
-        return False
-    
-    en_canonical_url = en_canonical_match.group(1)
-    print(f"   ✅ Canonical link found: {en_canonical_url}")
-    
-    # Check if canonical is self-referencing (contains /en/party/ and event_id)
-    if '/en/party/' not in en_canonical_url or event_id not in en_canonical_url:
-        print(f"   ❌ FAILED: Canonical is not self-referencing English event page")
-        return False
-    
-    print(f"   ✅ Canonical is self-referencing English event page")
-    
-    # Test German event page
-    print(f"\n3.3 Testing German event page regression: GET /api/de/party/{event_id}")
-    de_url = f"{BASE_URL}/de/party/{event_id}"
-    de_response = requests.get(de_url)
-    
-    if de_response.status_code != 200:
-        print(f"   ❌ FAILED: Expected 200, got {de_response.status_code}")
-        return False
-    
-    de_html = de_response.text
-    
-    # Check canonical
-    de_canonical_match = re.search(r'<link[^>]*rel="canonical"[^>]*href="([^"]+)"', de_html)
-    if not de_canonical_match:
-        print(f"   ❌ FAILED: No canonical link found in German page")
-        return False
-    
-    de_canonical_url = de_canonical_match.group(1)
-    print(f"   ✅ Canonical link found: {de_canonical_url}")
-    
-    # Check if canonical is self-referencing (contains /de/party/ and event_id)
-    if '/de/party/' not in de_canonical_url or event_id not in de_canonical_url:
-        print(f"   ❌ FAILED: Canonical is not self-referencing German event page")
-        return False
-    
-    print(f"   ✅ Canonical is self-referencing German event page")
-    
-    print(f"\n✅ TEST 3 PASSED: Event page regression tests passed")
-    return True
+    return all_passed
 
 
-def test_regression_home_page():
+def test_city_tips_localized():
     """
-    Test 4: Regression - home page
-    - GET /api/home still 200 with non-render-blocking font link (media="print" onload) and Cloudinary preconnect
+    TEST 2: City "tips" localized block on the MAIN city listing (timeframe=all)
+    For city Ibiza:
+    - GET /api/ciudad/ibiza -> 200; contains <h2> "Consejos para salir en Ibiza" + 2 Spanish paragraphs
+    - GET /api/en/city/ibiza -> 200; contains <h2> "Tips for a night out in Ibiza" + English paragraphs
+    - GET /api/de/city/ibiza -> 200; contains <h2> "Tipps für eine Nacht in Ibiza" + German paragraphs
+    - Confirm the three tips blocks are genuinely DIFFERENT text across languages
+    - Confirm tonight/weekend variants do NOT include this tips block
     """
     print("\n" + "="*80)
-    print("TEST 4: REGRESSION - HOME PAGE")
+    print("TEST 2: CITY TIPS LOCALIZED BLOCK")
     print("="*80)
     
-    print(f"\n4.1 Testing home page: GET /api/home")
-    url = f"{BASE_URL}/home"
-    response = requests.get(url)
-    print(f"   Status: {response.status_code}")
+    test_cases = [
+        ("Spanish", f"{BASE_URL}/ciudad/ibiza", "Consejos para salir en Ibiza", "Compra tus entradas con antelación"),
+        ("English", f"{BASE_URL}/en/city/ibiza", "Tips for a night out in Ibiza", "Buy your tickets in advance"),
+        ("German", f"{BASE_URL}/de/city/ibiza", "Tipps für eine Nacht in Ibiza", "Kauf deine Tickets im Voraus"),
+    ]
     
-    if response.status_code != 200:
-        print(f"   ❌ FAILED: Expected 200, got {response.status_code}")
-        return False
+    all_passed = True
+    tips_texts = {}
     
-    print(f"   ✅ Status 200 OK")
+    for lang_name, url, expected_h2, expected_text_snippet in test_cases:
+        print(f"\n--- Testing {lang_name}: {url} ---")
+        
+        try:
+            resp = requests.get(url, timeout=10)
+            print(f"✓ Status: {resp.status_code}")
+            
+            if resp.status_code != 200:
+                print(f"✗ FAIL: Expected 200, got {resp.status_code}")
+                all_passed = False
+                continue
+            
+            html = resp.text
+            
+            # Parse <h2> tags
+            h2_parser = H2Parser()
+            h2_parser.feed(html)
+            
+            # Check for expected h2
+            if expected_h2 not in h2_parser.h2_texts:
+                print(f"✗ FAIL: Expected <h2> '{expected_h2}' not found")
+                print(f"   Found h2 tags: {h2_parser.h2_texts}")
+                all_passed = False
+            else:
+                print(f"✓ Found expected <h2>: '{expected_h2}'")
+            
+            # Check for expected text snippet in the HTML
+            if expected_text_snippet not in html:
+                print(f"✗ FAIL: Expected text snippet not found: '{expected_text_snippet}'")
+                all_passed = False
+            else:
+                print(f"✓ Found expected text snippet: '{expected_text_snippet[:50]}...'")
+            
+            # Extract the tips section for comparison
+            # Find text between the tips h2 and the next section
+            tips_match = re.search(rf'{re.escape(expected_h2)}.*?<div class="intro">(.*?)</div>', html, re.DOTALL)
+            if tips_match:
+                tips_text = tips_match.group(1)
+                tips_texts[lang_name] = tips_text
+                print(f"✓ Extracted tips text ({len(tips_text)} chars)")
+            else:
+                print(f"✗ FAIL: Could not extract tips section")
+                all_passed = False
+            
+        except Exception as e:
+            print(f"✗ FAIL: Exception occurred: {e}")
+            all_passed = False
     
-    html = response.text
+    # Verify tips texts are DIFFERENT across languages
+    print("\n--- Verifying tips texts are genuinely DIFFERENT across languages ---")
+    if len(tips_texts) == 3:
+        es_text = tips_texts.get("Spanish", "")
+        en_text = tips_texts.get("English", "")
+        de_text = tips_texts.get("German", "")
+        
+        if es_text == en_text or es_text == de_text or en_text == de_text:
+            print(f"✗ FAIL: Tips texts are NOT different across languages")
+            all_passed = False
+        else:
+            print(f"✓ Tips texts are genuinely DIFFERENT across languages")
+            print(f"  Spanish: {len(es_text)} chars")
+            print(f"  English: {len(en_text)} chars")
+            print(f"  German: {len(de_text)} chars")
     
-    # Check for non-render-blocking font link (media="print" onload)
-    font_link_match = re.search(r'<link[^>]*media="print"[^>]*onload[^>]*>', html)
+    # Test tonight/weekend variants do NOT include tips block
+    print("\n--- Testing tonight/weekend variants do NOT include tips block ---")
+    variant_urls = [
+        (f"{BASE_URL}/ciudad/ibiza/esta-noche", "Spanish tonight"),
+        (f"{BASE_URL}/en/city/ibiza/tonight", "English tonight"),
+        (f"{BASE_URL}/ciudad/ibiza/este-finde", "Spanish weekend"),
+        (f"{BASE_URL}/en/city/ibiza/this-weekend", "English weekend"),
+    ]
     
-    if not font_link_match:
-        print(f"   ⚠️  WARNING: No non-render-blocking font link (media=\"print\" onload) found")
+    for url, variant_name in variant_urls:
+        try:
+            resp = requests.get(url, timeout=10)
+            if resp.status_code != 200:
+                print(f"✗ FAIL: {variant_name} returned {resp.status_code}, expected 200")
+                all_passed = False
+                continue
+            
+            html = resp.text
+            
+            # Check that tips h2 is NOT present
+            has_tips = ("Consejos para salir" in html or 
+                       "Tips for a night out" in html or 
+                       "Tipps für eine Nacht" in html)
+            
+            if has_tips:
+                print(f"✗ FAIL: {variant_name} contains tips block (should not)")
+                all_passed = False
+            else:
+                print(f"✓ {variant_name} does NOT contain tips block (correct)")
+        
+        except Exception as e:
+            print(f"✗ FAIL: {variant_name} exception: {e}")
+            all_passed = False
+    
+    if all_passed:
+        print("\n✅ TEST 2 PASSED: City tips localized block working correctly")
     else:
-        print(f"   ✅ Non-render-blocking font link found (media=\"print\" onload)")
+        print("\n❌ TEST 2 FAILED: Issues found with city tips localized block")
     
-    # Check for Cloudinary preconnect
-    cloudinary_preconnect = re.search(r'<link[^>]*rel="preconnect"[^>]*href="[^"]*cloudinary[^"]*"', html)
-    
-    if not cloudinary_preconnect:
-        print(f"   ⚠️  WARNING: No Cloudinary preconnect found")
-    else:
-        print(f"   ✅ Cloudinary preconnect found")
-    
-    print(f"\n✅ TEST 4 PASSED: Home page regression tests passed")
-    return True
+    return all_passed
 
 
-def test_regression_nonexistent_event():
+def test_regression():
     """
-    Test 5: Regression - nonexistent event
-    - Nonexistent event /api/fiesta/nope-xyz still returns 410 (or 301 to city hub), not 200
+    TEST 3: Regression - make sure nothing else broke
+    - City pages still have self-referencing canonical per language + hreflang es+en+de+x-default
+    - Existing localized city intro + guide (zones/nights) still present on /api/en/city/ibiza and /api/de/city/ibiza
+    - GET /api/home still 200 with non-render-blocking font link (media="print" onload)
+    - GET /api/llms.txt still 200
+    - Nonexistent event /api/fiesta/nope-xyz still 410 (or 301), not 200
     """
     print("\n" + "="*80)
-    print("TEST 5: REGRESSION - NONEXISTENT EVENT")
+    print("TEST 3: REGRESSION CHECKS")
     print("="*80)
     
-    print(f"\n5.1 Testing nonexistent event: GET /api/fiesta/nope-xyz")
-    url = f"{BASE_URL}/fiesta/nope-xyz"
-    response = requests.get(url, allow_redirects=False)
-    print(f"   Status: {response.status_code}")
+    all_passed = True
     
-    if response.status_code == 200:
-        print(f"   ❌ FAILED: Nonexistent event returned 200 (should be 410 or 301)")
-        return False
+    # Test 3.1: City pages canonical + hreflang
+    print("\n--- 3.1: City pages canonical + hreflang ---")
+    city_urls = [
+        (f"{BASE_URL}/ciudad/ibiza", "es", "https://www.quienva.me/fiestas/ibiza"),
+        (f"{BASE_URL}/en/city/ibiza", "en", "https://www.quienva.me/en/parties/ibiza"),
+        (f"{BASE_URL}/de/city/ibiza", "de", "https://www.quienva.me/de/partys/ibiza"),
+    ]
     
-    if response.status_code == 410:
-        print(f"   ✅ Nonexistent event returned 410 Gone (correct)")
-    elif response.status_code == 301:
-        print(f"   ✅ Nonexistent event returned 301 redirect (correct)")
-        redirect_location = response.headers.get('location', '')
-        print(f"   Redirect location: {redirect_location}")
-    elif response.status_code == 404:
-        print(f"   ✅ Nonexistent event returned 404 Not Found (acceptable)")
+    # Use proper headers to simulate production environment
+    headers = {
+        'x-forwarded-host': 'quienva.me',
+        'x-forwarded-proto': 'https'
+    }
+    
+    for url, lang, expected_canonical in city_urls:
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                print(f"✗ FAIL: {url} returned {resp.status_code}")
+                all_passed = False
+                continue
+            
+            html = resp.text
+            
+            # Check canonical
+            canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', html)
+            if not canonical_match:
+                print(f"✗ FAIL: {url} missing canonical link")
+                all_passed = False
+            else:
+                canonical = canonical_match.group(1)
+                if canonical != expected_canonical:
+                    print(f"✗ FAIL: {url} canonical is {canonical}, expected {expected_canonical}")
+                    all_passed = False
+                else:
+                    print(f"✓ {lang} canonical correct: {canonical}")
+            
+            # Check hreflang (es, en, de, x-default)
+            hreflang_langs = re.findall(r'<link rel="alternate" hreflang="([^"]+)"', html)
+            required_langs = ['es', 'en', 'de', 'x-default']
+            missing_langs = [l for l in required_langs if l not in hreflang_langs]
+            
+            if missing_langs:
+                print(f"✗ FAIL: {url} missing hreflang: {missing_langs}")
+                all_passed = False
+            else:
+                print(f"✓ {lang} has all required hreflang: {required_langs}")
+        
+        except Exception as e:
+            print(f"✗ FAIL: {url} exception: {e}")
+            all_passed = False
+    
+    # Test 3.2: Existing localized city intro + guide still present
+    print("\n--- 3.2: Existing localized city intro + guide ---")
+    guide_checks = [
+        (f"{BASE_URL}/en/city/ibiza", "English", "Ibiza"),
+        (f"{BASE_URL}/de/city/ibiza", "German", "Ibiza"),
+    ]
+    
+    for url, lang, city_name in guide_checks:
+        try:
+            resp = requests.get(url, timeout=10)
+            if resp.status_code != 200:
+                print(f"✗ FAIL: {url} returned {resp.status_code}")
+                all_passed = False
+                continue
+            
+            html = resp.text
+            
+            # Check for intro/guide content (should have some descriptive text about the city)
+            # Look for common patterns in city guides
+            has_intro = '<div class="intro">' in html
+            has_content = len(html) > 10000  # City pages should have substantial content
+            
+            if not has_intro or not has_content:
+                print(f"✗ FAIL: {url} missing expected intro/guide content")
+                all_passed = False
+            else:
+                print(f"✓ {lang} intro/guide content present (page size: {len(html)} chars)")
+        
+        except Exception as e:
+            print(f"✗ FAIL: {url} exception: {e}")
+            all_passed = False
+    
+    # Test 3.3: Home page with non-render-blocking fonts
+    print("\n--- 3.3: Home page with non-render-blocking fonts ---")
+    try:
+        resp = requests.get(f"{BASE_URL}/home", timeout=10)
+        if resp.status_code != 200:
+            print(f"✗ FAIL: /api/home returned {resp.status_code}")
+            all_passed = False
+        else:
+            html = resp.text
+            
+            # Check for non-render-blocking font link (media="print" onload)
+            font_link_match = re.search(r'<link[^>]*fonts\.googleapis\.com[^>]*media="print"[^>]*onload', html)
+            
+            if not font_link_match:
+                print(f"✗ FAIL: /api/home missing non-render-blocking font link (media='print' onload)")
+                all_passed = False
+            else:
+                print(f"✓ /api/home has non-render-blocking font link")
+    
+    except Exception as e:
+        print(f"✗ FAIL: /api/home exception: {e}")
+        all_passed = False
+    
+    # Test 3.4: llms.txt still works
+    print("\n--- 3.4: llms.txt endpoint ---")
+    try:
+        resp = requests.get(f"{BASE_URL}/llms.txt", timeout=10)
+        if resp.status_code != 200:
+            print(f"✗ FAIL: /api/llms.txt returned {resp.status_code}")
+            all_passed = False
+        else:
+            print(f"✓ /api/llms.txt returned 200")
+    
+    except Exception as e:
+        print(f"✗ FAIL: /api/llms.txt exception: {e}")
+        all_passed = False
+    
+    # Test 3.5: Nonexistent event returns 410 or 301, not 200
+    print("\n--- 3.5: Nonexistent event handling ---")
+    try:
+        resp = requests.get(f"{BASE_URL}/fiesta/nope-xyz", allow_redirects=False, timeout=10)
+        status = resp.status_code
+        
+        if status == 200:
+            print(f"✗ FAIL: /api/fiesta/nope-xyz returned 200 (should be 410 or 301)")
+            all_passed = False
+        elif status in [410, 301, 302, 404]:
+            print(f"✓ /api/fiesta/nope-xyz returned {status} (correct, not 200)")
+        else:
+            print(f"⚠ WARNING: /api/fiesta/nope-xyz returned {status} (expected 410/301/404)")
+    
+    except Exception as e:
+        print(f"✗ FAIL: /api/fiesta/nope-xyz exception: {e}")
+        all_passed = False
+    
+    if all_passed:
+        print("\n✅ TEST 3 PASSED: All regression checks passed")
     else:
-        print(f"   ⚠️  WARNING: Nonexistent event returned {response.status_code} (expected 410, 301, or 404)")
+        print("\n❌ TEST 3 FAILED: Some regression checks failed")
     
-    print(f"\n✅ TEST 5 PASSED: Nonexistent event handling correct")
-    return True
+    return all_passed
 
 
 def main():
-    """Run all tests"""
     print("\n" + "="*80)
-    print("SEO SSR REGRESSION TESTING")
-    print("Testing after adding:")
-    print("  (a) unique descriptive paragraph per language on event pages")
-    print("  (b) /api/llms.txt")
-    print("  (c) accessibility contrast fix")
+    print("FOCUSED SEO SSR REGRESSION TEST")
+    print("Testing two additions in /app/backend/server.py:")
+    print("1. Event poster PRELOAD (LCP optimization)")
+    print("2. City 'tips' localized block")
     print("="*80)
     
     results = []
     
-    # Test 1: Unique per-language descriptive paragraphs
-    try:
-        result = test_event_descriptive_paragraphs()
-        results.append(("Unique per-language descriptive paragraphs", result))
-    except Exception as e:
-        print(f"\n❌ TEST 1 FAILED WITH EXCEPTION: {e}")
-        results.append(("Unique per-language descriptive paragraphs", False))
+    # Run all tests
+    results.append(("Event Poster Preload", test_event_poster_preload()))
+    results.append(("City Tips Localized", test_city_tips_localized()))
+    results.append(("Regression Checks", test_regression()))
     
-    # Test 2: llms.txt
-    try:
-        result = test_llms_txt()
-        results.append(("llms.txt endpoint", result))
-    except Exception as e:
-        print(f"\n❌ TEST 2 FAILED WITH EXCEPTION: {e}")
-        results.append(("llms.txt endpoint", False))
-    
-    # Test 3: Regression - event pages
-    try:
-        result = test_regression_event_pages()
-        results.append(("Regression - event pages", result))
-    except Exception as e:
-        print(f"\n❌ TEST 3 FAILED WITH EXCEPTION: {e}")
-        results.append(("Regression - event pages", False))
-    
-    # Test 4: Regression - home page
-    try:
-        result = test_regression_home_page()
-        results.append(("Regression - home page", result))
-    except Exception as e:
-        print(f"\n❌ TEST 4 FAILED WITH EXCEPTION: {e}")
-        results.append(("Regression - home page", False))
-    
-    # Test 5: Regression - nonexistent event
-    try:
-        result = test_regression_nonexistent_event()
-        results.append(("Regression - nonexistent event", result))
-    except Exception as e:
-        print(f"\n❌ TEST 5 FAILED WITH EXCEPTION: {e}")
-        results.append(("Regression - nonexistent event", False))
-    
-    # Print summary
+    # Summary
     print("\n" + "="*80)
-    print("TEST SUMMARY")
+    print("FINAL SUMMARY")
     print("="*80)
     
-    passed = sum(1 for _, result in results if result)
-    total = len(results)
-    
-    for test_name, result in results:
-        status = "✅ PASSED" if result else "❌ FAILED"
+    for test_name, passed in results:
+        status = "✅ PASS" if passed else "❌ FAIL"
         print(f"{status}: {test_name}")
     
-    print(f"\nTotal: {passed}/{total} tests passed")
+    all_passed = all(passed for _, passed in results)
     
-    if passed == total:
+    if all_passed:
         print("\n🎉 ALL TESTS PASSED 🎉")
-        return 0
+        print("\nThe two SEO SSR additions are working correctly:")
+        print("✓ Event poster preload with Cloudinary transforms in all 3 languages")
+        print("✓ City tips localized block on main city listings (not on tonight/weekend)")
+        print("✓ No regressions detected")
     else:
-        print(f"\n❌ {total - passed} TEST(S) FAILED")
-        return 1
+        print("\n⚠️  SOME TESTS FAILED ⚠️")
+        print("\nPlease review the failures above.")
+    
+    return 0 if all_passed else 1
 
 
 if __name__ == "__main__":

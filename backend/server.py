@@ -1737,6 +1737,41 @@ def _city_intro(city_id, label, n, lang, e):
                f"esta noche y este finde, compara discotecas y consigue tus entradas antes de que se agoten.")
     return f'<div class="intro"><p>{e(txt)}</p></div>'
 
+
+def _city_tips(city_id, label, lang, e):
+    """A NEW, unique localized 'tips for a night out' block per city (distinct from
+    the intro/guide). Adds genuine, natively-worded text to /en/ and /de/ city
+    listings using real city data (clubs + areas) so the language versions have
+    more unique content and index better. No runtime translation service."""
+    d = _CITY_INTRO_DATA.get(city_id)
+    if not d:
+        return ""
+    clubs = d["clubs"]
+    areas = d["areas"].get(lang, d["areas"]["es"])
+    if lang == "en":
+        heading = f"Tips for a night out in {label}"
+        p1 = (f"Buy your tickets in advance: the biggest parties in {label} \u2014 at venues like {clubs} \u2014 "
+              f"tend to sell out, especially in high season and at weekends. On \u00bfQui\u00e9n va? you see real "
+              f"prices and get an alert when only a few tickets are left.")
+        p2 = (f"The action centres on {areas}. Arrive early to skip the queues, check the day\u2019s line-up "
+              f"and see which of your friends are going before you decide on your plan.")
+    elif lang == "de":
+        heading = f"Tipps f\u00fcr eine Nacht in {label}"
+        p1 = (f"Kauf deine Tickets im Voraus: Die gr\u00f6\u00dften Partys in {label} \u2014 in Clubs wie {clubs} \u2014 "
+              f"sind oft ausverkauft, vor allem in der Hochsaison und am Wochenende. Auf \u00bfQui\u00e9n va? siehst "
+              f"du echte Preise und wirst benachrichtigt, wenn nur noch wenige Tickets \u00fcbrig sind.")
+        p2 = (f"Das Geschehen konzentriert sich auf {areas}. Komm fr\u00fch, um Warteschlangen zu vermeiden, "
+              f"pr\u00fcfe das Line-up des Tages und sieh, welche Freunde dabei sind, bevor du dich entscheidest.")
+    else:
+        heading = f"Consejos para salir en {label}"
+        p1 = (f"Compra tus entradas con antelaci\u00f3n: las fiestas m\u00e1s grandes de {label} \u2014 en salas como "
+              f"{clubs} \u2014 suelen agotarse, sobre todo en temporada alta y fines de semana. En \u00bfQui\u00e9n va? "
+              f"ves los precios reales y recibes un aviso cuando quedan pocas entradas.")
+        p2 = (f"El ambiente se concentra en {areas}. Llega pronto para evitar colas, consulta el cartel del "
+              f"d\u00eda y mira qu\u00e9 amigos van antes de decidir tu plan.")
+    return (f'<h2 class="sectitle">{e(heading)}</h2>'
+            f'<div class="intro"><p>{e(p1)}</p><p>{e(p2)}</p></div>')
+
 _FONTS_HREF = ("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700"
                "&family=Unbounded:wght@700;800;900&display=swap")
 # Fonts are loaded NON-render-blocking (media=print -> onload swap) so they no
@@ -2411,7 +2446,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     if venues:
         vcards = []
         for v in venues:
-            thumb = (f'<span class="vthumb"><img src="{e(v["image"])}" alt="{e(v["venue"])}" loading="lazy"></span>'
+            thumb = (f'<span class="vthumb"><img src="{e(_cld_img(v["image"], 120))}" alt="{e(v["venue"])}" loading="lazy" decoding="async"></span>'
                      if v["image"] else
                      f'<span class="vthumb">{e((v["venue"][:1] or "?").upper())}</span>')
             vcards.append(
@@ -2452,6 +2487,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     ]
     intro_html = _city_intro(city_id, label, n, lang, e) if timeframe == "all" else ""
     cityguide_html = _city_guide_content(city_id, label, lang, e) if timeframe == "all" else ""
+    citytips_html = _city_tips(city_id, label, lang, e) if timeframe == "all" else ""
     faq_html = _faq_html(T["faq_title"], faq_pairs, e)
     guides_html = _city_guides_block(front, slug_l, label, lang, e)
     extra_jsonld = (_org_website_jsonld(front)
@@ -2492,6 +2528,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 <ul class="grid">{''.join(items_html)}<li class="nores" id="qvnores">{e(L2["nores"])}</li></ul>
 {venues_html}
 {cityguide_html}
+{citytips_html}
 {benefits}
 {joinband}
 {guides_html}
@@ -2613,6 +2650,8 @@ async def _render_event(event_id: str, lang: str, request: Request, slug: str = 
     else:
         hero = ""
     ogimg_tag = f'<meta property="og:image" content="{e(img)}">' if str(img).startswith("http") else ''
+    hero_preload = (f'<link rel="preload" as="image" href="{e(_cld_img(img, 520))}" fetchpriority="high">'
+                    if str(img).startswith("http") else '')
     hreflang = _hreflang_links(paths, e)
     langsw = _lang_switch(paths, lang, e(T["other_langs"]), e)
     jsonld = f'<script type="application/ld+json">{_event_jsonld(ev, canonical, front, include_offers=not is_past, lang=lang)}</script>'
@@ -2723,7 +2762,7 @@ async def _render_event(event_id: str, lang: str, request: Request, slug: str = 
     html_out = f"""<!doctype html>
 <html lang="{T['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-{robots_meta}
+{robots_meta}{hero_preload}
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
