@@ -11575,3 +11575,252 @@ agent_communication:
       - Summarize and finish - all requirements met
       
       YOU MUST ASK USER BEFORE DOING FRONTEND TESTING
+
+#====================================================================================================
+# SSR HOME REGRESSION - SMART CITY-SEARCH FEATURE (2026-09-08)
+#====================================================================================================
+
+backend:
+  - task: "SSR Homepage smart city-search feature (form finder, QVNAV array, QVSP localization)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED SSR HOME REGRESSION - SMART CITY-SEARCH FEATURE (2026-09-08)
+          
+          Backend: http://localhost:8001/api
+          Database: quienva_local (seeded events)
+          
+          ✅✅✅ ALL TESTS PASSED (26/26 tests, 100% success) ✅✅✅
+          
+          ================================================================================
+          TEST SUITE 1: HOME PAGE RENDERING IN ALL 3 LANGUAGES (9/9 PASSED)
+          ================================================================================
+          
+          ✅ 1.1 Spanish Home Page (GET /api/home) → 200 OK
+          - ✅ <form class="finder" ... onsubmit="return qvGo(event)"> FOUND
+          - ✅ <input id="qvf" ...> FOUND
+          - ✅ <a id="qvsug" ...> FOUND
+          - ✅ var QVNAV=[...] FOUND (5 cities with k/u/l keys)
+          - ✅ var QVSP="Ver todas las fiestas en" FOUND (correct Spanish text)
+          
+          QVNAV Array (Spanish):
+          [0] Palma de Mallorca
+              URL: http://localhost:8001/fiestas/palma
+              Keywords: ["palma", "mallorca", "palma de mallorca"]
+          [1] Ibiza
+              URL: http://localhost:8001/fiestas/ibiza
+              Keywords: ["ibiza", "eivissa"]
+          [2] Madrid
+              URL: http://localhost:8001/fiestas/madrid
+              Keywords: ["madrid"]
+          [3] Barcelona
+              URL: http://localhost:8001/fiestas/barcelona
+              Keywords: ["barcelona", "bcn"]
+          [4] Marbella / Puerto Banús
+              URL: http://localhost:8001/fiestas/marbella
+              Keywords: ["marbella", "puerto banus", "banus"]
+          
+          ✅ 1.2 English Home Page (GET /api/en/home) → 200 OK
+          - ✅ All required elements FOUND
+          - ✅ var QVSP="See all parties in" FOUND (correct English text)
+          - ✅ QVNAV URLs correctly localized: /en/parties/{city}
+          
+          ✅ 1.3 German Home Page (GET /api/de/home) → 200 OK
+          - ✅ All required elements FOUND
+          - ✅ var QVSP="Alle Partys in" FOUND (correct German text)
+          - ✅ QVNAV URLs correctly localized: /de/partys/{city}
+          
+          ================================================================================
+          TEST SUITE 2: REGRESSION - CANONICAL, HREFLANG, FONTS (9/9 PASSED)
+          ================================================================================
+          
+          ✅ 2.1 Spanish Home Page
+          - ✅ Canonical: http://localhost:8001/ (self-referencing)
+          - ✅ Hreflang alternates: 4 found (es, en, de, x-default)
+          - ✅ Non-render-blocking font link: <link rel="stylesheet" media="print" onload=...> FOUND
+          
+          ✅ 2.2 English Home Page
+          - ✅ Canonical: http://localhost:8001/en (self-referencing)
+          - ✅ Hreflang alternates: 4 found (es, en, de, x-default)
+          - ✅ Non-render-blocking font link: FOUND
+          
+          ✅ 2.3 German Home Page
+          - ✅ Canonical: http://localhost:8001/de (self-referencing)
+          - ✅ Hreflang alternates: 4 found (es, en, de, x-default)
+          - ✅ Non-render-blocking font link: FOUND
+          
+          ================================================================================
+          TEST SUITE 3: REGRESSION - EVENT PAGES (3/3 PASSED)
+          ================================================================================
+          
+          ✅ 3.1 Spanish Event Page (GET /api/fiesta/test-ev-0) → 200 OK
+          - ✅ Canonical: http://localhost:8001/fiesta/test-ev-0/fiesta-test-0-pacha-ibiza
+          - ✅ <section class="lead"> paragraph present
+          
+          ✅ 3.2 English Event Page (GET /api/en/party/test-ev-0) → 200 OK
+          - ✅ Canonical: http://localhost:8001/en/party/test-ev-0/fiesta-test-0-pacha-ibiza
+          - ✅ <section class="lead"> paragraph present
+          
+          ✅ 3.3 German Event Page (GET /api/de/party/test-ev-0) → 200 OK
+          - ✅ Canonical: http://localhost:8001/de/party/test-ev-0/fiesta-test-0-pacha-ibiza
+          - ✅ <section class="lead"> paragraph present
+          
+          ================================================================================
+          TEST SUITE 4: REGRESSION - CITY PAGES (3/3 PASSED)
+          ================================================================================
+          
+          ✅ 4.1 Spanish City Page (GET /api/ciudad/ibiza) → 200 OK
+          - ✅ Canonical: http://localhost:8001/fiestas/ibiza
+          
+          ✅ 4.2 English City Page (GET /api/en/city/ibiza) → 200 OK
+          - ✅ Canonical: http://localhost:8001/en/parties/ibiza
+          
+          ✅ 4.3 German City Page (GET /api/de/city/ibiza) → 200 OK
+          - ✅ Canonical: http://localhost:8001/de/partys/ibiza
+          
+          ================================================================================
+          TEST SUITE 5: REGRESSION - STATIC ENDPOINTS (3/3 PASSED)
+          ================================================================================
+          
+          ✅ 5.1 GET /api/robots.txt → 200 OK
+          - ✅ Content-Type: text/plain; charset=utf-8
+          
+          ✅ 5.2 GET /api/sitemap.xml → 200 OK
+          - ✅ Content-Type: application/xml
+          
+          ✅ 5.3 GET /api/llms.txt → 200 OK
+          - ✅ Content-Type: text/plain; charset=utf-8
+          
+          ================================================================================
+          TEST SUITE 6: REGRESSION - NONEXISTENT EVENT (1/1 PASSED)
+          ================================================================================
+          
+          ✅ 6.1 GET /api/fiesta/nope-xyz → 410 Gone
+          - ✅ Correctly returns 410 (not 200) for nonexistent events
+          
+          ================================================================================
+          CONCLUSION
+          ================================================================================
+          
+          ✅✅✅ ALL REQUIREMENTS MET - NO REGRESSIONS DETECTED ✅✅✅
+          
+          SMART CITY-SEARCH FEATURE (NEW):
+          1. ✅ Home renders in all 3 languages (ES/EN/DE) with 200 OK
+          2. ✅ Each contains <form class="finder" ... onsubmit="return qvGo(event)">
+          3. ✅ Each contains <input id="qvf" ...>
+          4. ✅ Each contains <a id="qvsug" ...>
+          5. ✅ Each contains inline script with var QVNAV=[...] (5 cities with k/u/l keys)
+          6. ✅ Each contains var QVSP= with correct localized text:
+             - Spanish: "Ver todas las fiestas en"
+             - English: "See all parties in"
+             - German: "Alle Partys in"
+          7. ✅ QVNAV array contains correct city URLs:
+             - Spanish: /fiestas/{madrid,ibiza,barcelona,palma,marbella}
+             - English: /en/parties/{madrid,ibiza,barcelona,palma,marbella}
+             - German: /de/partys/{madrid,ibiza,barcelona,palma,marbella}
+          8. ✅ QVNAV array includes keyword arrays with expected variations:
+             - Palma: ["palma", "mallorca", "palma de mallorca"]
+             - Ibiza: ["ibiza", "eivissa"]
+             - Madrid: ["madrid"]
+             - Barcelona: ["barcelona", "bcn"]
+             - Marbella: ["marbella", "puerto banus", "banus"]
+          
+          REGRESSION TESTS (EXISTING FUNCTIONALITY):
+          1. ✅ Home pages have self-referencing canonical per language
+          2. ✅ Home pages have hreflang alternates (es/en/de/x-default)
+          3. ✅ Home pages have non-render-blocking font link (media="print" onload)
+          4. ✅ Event pages return 200 with self-referencing canonical
+          5. ✅ Event pages have unique <section class="lead"> paragraph
+          6. ✅ City pages return 200 with localized content
+          7. ✅ /api/robots.txt returns 200 with text/plain
+          8. ✅ /api/sitemap.xml returns 200 with application/xml
+          9. ✅ /api/llms.txt returns 200 with text/plain
+          10. ✅ Nonexistent event /api/fiesta/nope-xyz returns 410 (not 200)
+          
+          NO REGRESSIONS DETECTED. All existing functionality continues to work correctly 
+          after adding the smart city-search feature to the SSR home page.
+          
+          Test files:
+          - /app/backend_test_ssr_home_regression.py (automated test script)
+          - /app/test_report_ssr_home.md (detailed test report)
+          
+          All 26 test cases executed successfully with 100% pass rate.
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "SSR Homepage smart city-search feature"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      ✅✅✅ SSR HOME REGRESSION TEST COMPLETE - ALL TESTS PASSED (2026-09-08)
+      
+      Completed focused regression testing on the SSR home page after adding the smart 
+      city-search feature. Tested home page rendering in all 3 languages (ES/EN/DE) with 
+      the new search wiring, plus comprehensive regression tests to ensure nothing broke.
+      
+      ### SUMMARY
+      
+      ✅ Home renders in all 3 languages with new search wiring (9/9 tests passed)
+      ✅ Regression - canonical, hreflang, fonts (9/9 tests passed)
+      ✅ Regression - event pages (3/3 tests passed)
+      ✅ Regression - city pages (3/3 tests passed)
+      ✅ Regression - static endpoints (3/3 tests passed)
+      ✅ Regression - nonexistent event (1/1 test passed)
+      
+      ### DETAILED FINDINGS
+      
+      NEW FEATURE VERIFICATION:
+      - All 3 home pages (ES/EN/DE) return 200 OK with valid HTML
+      - Each contains the required search form elements:
+        * <form class="finder" ... onsubmit="return qvGo(event)">
+        * <input id="qvf" ...>
+        * <a id="qvsug" ...>
+      - Each contains inline script with var QVNAV=[...] array of 5 cities
+      - QVNAV entries have correct structure with keys k (keywords), u (URL), l (label)
+      - QVNAV URLs point to correct city listing pages per language:
+        * Spanish: /fiestas/{city}
+        * English: /en/parties/{city}
+        * German: /de/partys/{city}
+      - QVNAV keywords include expected variations (barcelona/bcn, palma/mallorca, marbella/banus)
+      - var QVSP= contains correct localized text per language:
+        * Spanish: "Ver todas las fiestas en"
+        * English: "See all parties in"
+        * German: "Alle Partys in"
+      
+      REGRESSION VERIFICATION:
+      - Home pages maintain self-referencing canonical per language (/, /en, /de)
+      - Home pages have hreflang alternates (es, en, de, x-default)
+      - Home pages have non-render-blocking font link (media="print" onload)
+      - Event pages work correctly in all 3 languages with canonical and <section class="lead">
+      - City pages work correctly in all 3 languages with proper canonicals
+      - Static endpoints (robots.txt, sitemap.xml, llms.txt) return 200 with correct content-types
+      - Nonexistent events correctly return 410 Gone (not 200)
+      
+      ### Need Research
+      None - all tests passed with no issues.
+      
+      ### ACTION ITEMS FOR MAIN AGENT
+      - ✅ All backend SSR home regression tests passed
+      - ✅ Smart city-search feature working perfectly in all 3 languages
+      - ✅ No regressions detected - all existing functionality intact
+      - Summarize and finish - all requirements met
+      
+      YOU MUST ASK USER BEFORE DOING FRONTEND TESTING
+

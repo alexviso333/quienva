@@ -1262,6 +1262,8 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .finder input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,240,255,.16)}
 .finder input::placeholder{color:#8b8b96}
 .finder .fic{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.55;font-size:16px}
+.qvsug{display:inline-block;margin:-8px 0 18px;padding:8px 14px;border-radius:999px;background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.3);color:var(--cyan);font-size:14px;font-weight:700;text-decoration:none}
+.qvsug:hover{background:rgba(0,240,255,.18)}
 .sech{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:32px 0 14px}
 .sech h2{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:20px;margin:0}
 .sech span{color:var(--muted);font-size:13px}
@@ -2966,7 +2968,14 @@ async def _render_home(lang: str, request: Request):
     paths = _home_paths(front)
     canonical = paths[lang]
 
-    city_cards, itemlist = [], []
+    city_cards, itemlist, city_nav = [], [], []
+    city_kw_map = {
+        "Ibiza": ["ibiza", "eivissa"],
+        "Madrid": ["madrid"],
+        "Barcelona": ["barcelona", "bcn"],
+        "Palma de Mallorca": ["palma", "mallorca", "palma de mallorca"],
+        "Marbella": ["marbella", "puerto banus", "banus"],
+    }
     total = 0
     for i, c in enumerate(SUPPORTED_CITIES, start=1):
         cid = c["id"]
@@ -2986,6 +2995,7 @@ async def _render_home(lang: str, request: Request):
             f'<div class="hcity-tf"><a href="{e(tf_t)}">{e(T["tonight"])}</a>'
             f'<a href="{e(tf_w)}">{e(T["weekend"])}</a></div></div>')
         itemlist.append({"@type": "ListItem", "position": i, "url": cp, "name": c["label"]})
+        city_nav.append({"k": city_kw_map.get(cid, [cid.lower()]), "u": cp, "l": c["label"]})
     cities_html = "".join(city_cards)
 
     # Premium home sections: search + upcoming parties grid + top nightclubs grid.
@@ -3015,15 +3025,34 @@ async def _render_home(lang: str, request: Request):
             vc.append(f'<a class="vcard glow-card reveal" data-s="{e(v["venue"].lower())}" href="{e(_venue_paths(front, v["slug"])[lang])}">'
                       f'{thumb}<span class="vmeta"><b>{e(v["venue"])}</b><small>{v["count"]} {e(HL["parties"])}</small></span></a>')
         ve_grid = f'<div class="sech"><h2>{e(HL["ve_h"])}</h2></div><div class="venues">{"".join(vc)}</div>'
-    finder_html = (f'<div class="finder"><span class="fic">\U0001F50D</span>'
-                   f'<input id="qvf" type="search" autocomplete="off" placeholder="{e(HL["search"])}" '
-                   f'oninput="qvFilter(this.value)" aria-label="{e(HL["search"])}"></div>')
-    home_search_js = ('<script>function qvFilter(q){q=(q||"").toLowerCase().trim();'
-                      'var c=document.querySelectorAll(".grid .card,.venues .vcard"),'
-                      'nr=document.getElementById("qvnores"),shown=0;'
-                      'c.forEach(function(el){var m=!q||(el.getAttribute("data-s")||el.textContent||"").toLowerCase().indexOf(q)>=0;'
-                      'el.style.display=m?"":"none";if(m&&el.classList.contains("card"))shown++;});'
-                      'if(nr)nr.style.display=(shown===0&&q)?"block":"none";}</script>')
+    sug_prompt = {"es": "Ver todas las fiestas en", "en": "See all parties in",
+                  "de": "Alle Partys in"}.get(lang, "Ver todas las fiestas en")
+    finder_html = (f'<form class="finder" role="search" onsubmit="return qvGo(event)">'
+                   f'<span class="fic">\U0001F50D</span>'
+                   f'<input id="qvf" type="search" autocomplete="off" enterkeyhint="search" '
+                   f'placeholder="{e(HL["search"])}" oninput="qvFilter(this.value)" aria-label="{e(HL["search"])}">'
+                   f'</form><a id="qvsug" class="qvsug" href="#" style="display:none"></a>')
+    _qv_js_body = (
+        'function qvn(s){return (s||"").toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").trim();}'
+        'function qvCity(q){q=qvn(q);if(q.length<2)return null;'
+        'for(var i=0;i<QVNAV.length;i++){var ks=QVNAV[i].k;for(var j=0;j<ks.length;j++){'
+        'if(q.indexOf(ks[j])>=0||ks[j].indexOf(q)>=0)return QVNAV[i];}}return null;}'
+        'function qvGo(ev){if(ev&&ev.preventDefault)ev.preventDefault();'
+        'var raw=document.getElementById("qvf").value;var c=qvCity(raw);'
+        'if(c){location.href=c.u;return false;}var q=(raw||"").trim();'
+        'if(q)location.href="/feed?buscar="+encodeURIComponent(q);return false;}'
+        'function qvFilter(q){var city=qvCity(q);var sug=document.getElementById("qvsug");'
+        'if(sug){if(city){sug.href=city.u;sug.textContent=QVSP+" "+city.l+" \\u2192";sug.style.display="";}'
+        'else{sug.style.display="none";}}'
+        'q=(q||"").toLowerCase().trim();'
+        'var c=document.querySelectorAll(".grid .card,.venues .vcard"),'
+        'nr=document.getElementById("qvnores"),shown=0;'
+        'c.forEach(function(el){var m=!q||(el.getAttribute("data-s")||el.textContent||"").toLowerCase().indexOf(q)>=0;'
+        'el.style.display=m?"":"none";if(m&&el.classList.contains("card"))shown++;});'
+        'if(nr)nr.style.display=(shown===0&&q&&!city)?"block":"none";}')
+    home_search_js = ('<script>var QVNAV=' + json.dumps(city_nav, ensure_ascii=False)
+                      + ';var QVSP=' + json.dumps(sug_prompt, ensure_ascii=False) + ';'
+                      + _qv_js_body + '</script>')
 
     hreflang = _hreflang_links(paths, e)
     langsw = _lang_switch(paths, lang, e(ST["other_langs"]), e)
