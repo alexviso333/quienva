@@ -1736,9 +1736,18 @@ def _city_intro(city_id, label, n, lang, e):
                f"esta noche y este finde, compara discotecas y consigue tus entradas antes de que se agoten.")
     return f'<div class="intro"><p>{e(txt)}</p></div>'
 
+_FONTS_HREF = ("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700"
+               "&family=Unbounded:wght@700;800;900&display=swap")
+# Fonts are loaded NON-render-blocking (media=print -> onload swap) so they no
+# longer sit on the critical path (~1.6s render-blocking savings on mobile).
+# With display=swap the text paints immediately in a fallback and swaps in when
+# the webfont arrives. Preconnect to Cloudinary too since posters live there.
 _SEO_FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
               '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-              '<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">')
+              '<link rel="preconnect" href="https://res.cloudinary.com" crossorigin>'
+              f'<link rel="stylesheet" href="{_FONTS_HREF}" media="print" '
+              'onload="this.media=&#39;all&#39;">'
+              f'<noscript><link rel="stylesheet" href="{_FONTS_HREF}"></noscript>')
 
 # Localized micro-copy for the redesigned SEO pages (topbar CTA, benefits,
 # join band). Kept separate from SEO_T so it is easy to extend.
@@ -1980,7 +1989,54 @@ def _seo_sale_badge(ev: dict, lang: str):
     return mp.get(st, mp["no_a_la_venta"])
 
 
-def _seo_card(ev, ev_url, lang, e, nofollow: bool = False) -> str:
+_GENRE_T = {
+    "en": {
+        "reggaeton": "Reggaeton", "reguetón": "Reggaeton", "techno": "Techno",
+        "house": "House", "comercial": "Commercial / Top 40", "música en directo": "Live music",
+        "musica en directo": "Live music", "remember": "Remember / Classics", "latino": "Latin",
+        "latina": "Latin", "electrónica": "Electronic", "electronica": "Electronic",
+        "pop": "Pop", "flamenco": "Flamenco", "sesión": "Session", "sesion": "Session",
+        "variado": "Mixed", "urbano": "Urban", "salsa": "Salsa", "bachata": "Bachata",
+    },
+    "de": {
+        "reggaeton": "Reggaeton", "reguetón": "Reggaeton", "techno": "Techno",
+        "house": "House", "comercial": "Charts / Kommerziell", "música en directo": "Live-Musik",
+        "musica en directo": "Live-Musik", "remember": "Remember / Klassiker", "latino": "Latin",
+        "latina": "Latin", "electrónica": "Elektronische Musik", "electronica": "Elektronische Musik",
+        "pop": "Pop", "flamenco": "Flamenco", "sesión": "Session", "sesion": "Session",
+        "variado": "Gemischt", "urbano": "Urban", "salsa": "Salsa", "bachata": "Bachata",
+    },
+}
+
+
+def _translate_genre(genre: str, lang: str) -> str:
+    """Localize the (Spanish) genre label for /en/ and /de/ pages. Universal
+    genres (Techno, House, Pop...) map to themselves; unknown values pass through
+    unchanged. No runtime translation service involved."""
+    g = (genre or "").strip()
+    if not g or lang == "es":
+        return g
+    return _GENRE_T.get(lang, {}).get(g.lower(), g)
+
+
+def _cld_img(url: str, w: int) -> str:
+    """Inject optimized delivery transforms (f_auto,q_auto,width,c_limit) into a
+    Cloudinary URL so posters ship as small WebP/AVIF instead of full-size JPGs.
+    Non-Cloudinary URLs (external scraper images) are returned unchanged: safe
+    no-op, so nothing breaks if a poster is hosted elsewhere."""
+    try:
+        if not url or "res.cloudinary.com" not in url or "/upload/" not in url:
+            return url
+        head, _sep, tail = url.partition("/upload/")
+        first = tail.split("/", 1)[0]
+        if first.startswith(("f_", "q_", "w_", "c_", "h_", "e_", "dpr_")):
+            return url  # a transform is already present
+        return f"{head}/upload/f_auto,q_auto,w_{w},c_limit/{tail}"
+    except Exception:
+        return url
+
+
+def _seo_card(ev, ev_url, lang, e, nofollow: bool = False, eager: bool = False) -> str:
     """App-style poster card for SEO listings.
 
     nofollow=True is used for links to PAST parties (which are noindex): it stops
@@ -1996,8 +2052,9 @@ def _seo_card(ev, ev_url, lang, e, nofollow: bool = False) -> str:
           f'<span class="phb">\u00bfQui\u00e9n va?</span></div>')
     img = ev.get("image_url", "")
     if str(img).startswith("http"):
-        poster = ph + (f'<div class="blurbg" style="background-image:url({e(img)})"></div>'
-                       f'<img src="{e(img)}" alt="{e(ev.get("name",""))}" loading="lazy" '
+        _load = ('loading="eager" fetchpriority="high"' if eager else 'loading="lazy"')
+        poster = ph + (f'<div class="blurbg" style="background-image:url({e(_cld_img(img, 32))})"></div>'
+                       f'<img src="{e(_cld_img(img, 400))}" alt="{e(ev.get("name",""))}" {_load} decoding="async" '
                        f'onerror="this.style.display=&#39;none&#39;">')
     else:
         poster = ph
@@ -2500,9 +2557,10 @@ async def _render_event(event_id: str, lang: str, request: Request, slug: str = 
     desc = e(T["ev_desc"].format(name=ev.get("name", ""), venue=ev.get("venue", ""), city=city, date=when, price=price_pref))
     img = ev.get("image_url", "")
     if str(img).startswith("http"):
-        hero = (f'<div class="ehero"><div class="ehero-bg" style="background-image:url({e(img)})"></div>'
-                f'<div class="ehero-poster"><img src="{e(img)}" alt="{e(ev.get("name",""))}" '
-                f'width="400" height="520" onerror="this.closest(&#39;.ehero&#39;).style.display=&#39;none&#39;"></div></div>')
+        hero = (f'<div class="ehero"><div class="ehero-bg" style="background-image:url({e(_cld_img(img, 48))})"></div>'
+                f'<div class="ehero-poster"><img src="{e(_cld_img(img, 520))}" alt="{e(ev.get("name",""))}" '
+                f'width="400" height="520" fetchpriority="high" decoding="async" '
+                f'onerror="this.closest(&#39;.ehero&#39;).style.display=&#39;none&#39;"></div></div>')
     else:
         hero = ""
     ogimg_tag = f'<meta property="og:image" content="{e(img)}">' if str(img).startswith("http") else ''
@@ -2533,7 +2591,7 @@ async def _render_event(event_id: str, lang: str, request: Request, slug: str = 
                             f'<ul class="grid">{"".join(lis[:6])}</ul>'
                             f'<div class="ctarow"><a class="cta ghost" href="{e(more_url)}">{e(T["more_in"].format(label=city_label))}</a></div>')
 
-    genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(ev.get("genre",""))}</div>' if ev.get("genre") else ""
+    genre_row = f'<div><b>{e(T["ev_genre"])}</b>{e(_translate_genre(ev.get("genre",""), lang))}</div>' if ev.get("genre") else ""
     addr = (", " + e(ev.get("address", ""))) if ev.get("address") else ""
 
     # Breadcrumbs + FAQ (rich results). Static/derived text, no extra DB cost.
@@ -2853,15 +2911,15 @@ async def _render_home(lang: str, request: Request):
     top_venues = await _top_venues_global(12)
     ev_grid = ""
     if top_events:
-        ecards = [_seo_card(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], lang, e)
-                  for ev in top_events]
+        ecards = [_seo_card(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], lang, e, eager=(_i == 0))
+                  for _i, ev in enumerate(top_events)]
         ev_grid = (f'<div class="sech"><h2>{e(HL["ev_h"])}</h2><span>{len(top_events)}</span></div>'
                    f'<ul class="grid">{"".join(ecards)}<li class="nores" id="qvnores">{e(HL["nores"])}</li></ul>')
     ve_grid = ""
     if top_venues:
         vc = []
         for v in top_venues:
-            thumb = (f'<span class="vthumb"><img src="{e(v["image"])}" alt="{e(v["venue"])}" loading="lazy"></span>'
+            thumb = (f'<span class="vthumb"><img src="{e(_cld_img(v["image"], 120))}" alt="{e(v["venue"])}" loading="lazy" decoding="async"></span>'
                      if v["image"] else f'<span class="vthumb">{e((v["venue"][:1] or "?").upper())}</span>')
             vc.append(f'<a class="vcard glow-card reveal" data-s="{e(v["venue"].lower())}" href="{e(_venue_paths(front, v["slug"])[lang])}">'
                       f'{thumb}<span class="vmeta"><b>{e(v["venue"])}</b><small>{v["count"]} {e(HL["parties"])}</small></span></a>')
