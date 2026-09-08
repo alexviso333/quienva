@@ -26,7 +26,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://poll-integration-dev.preview.emergentagent.com/api"
+BASE_URL = "https://seo-audit-fix-18.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

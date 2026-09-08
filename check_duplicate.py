@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://poll-integration-dev.preview.emergentagent.com"
+BACKEND_URL = "https://seo-audit-fix-18.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

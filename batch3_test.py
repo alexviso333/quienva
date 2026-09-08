@@ -11,7 +11,7 @@ import sys
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://poll-integration-dev.preview.emergentagent.com/api"
+BASE_URL = "https://seo-audit-fix-18.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"
