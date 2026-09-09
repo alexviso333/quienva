@@ -915,8 +915,8 @@ async def create_session(user_id: str, token: Optional[str] = None) -> str:
 @api_router.get("/cities")
 async def list_cities(response: Response):
     """Public list of supported cities for the registration / settings selector."""
-    # Static content — let the browser/CDN cache it for an hour to skip round-trips.
-    response.headers["Cache-Control"] = "public, max-age=3600"
+    # Dynamic list (admin-managed). Short cache so new cities appear within minutes.
+    response.headers["Cache-Control"] = "public, max-age=300"
     return {"cities": SUPPORTED_CITIES, "pending_city": PENDING_CITY}
 
 
@@ -1033,6 +1033,78 @@ CITY_SEO_SLUG = {
     "Barcelona": "barcelona",
     "Marbella": "marbella",
 }
+
+
+# ---------------------------------------------------------------------------
+# DYNAMIC CITIES
+# The lists above (SUPPORTED_CITIES / CITY_REGIONS / CITY_IDS / CITY_SEO_SLUG /
+# _CITY_SLUGS) are now just the FIRST-RUN SEED. At runtime the admin can add,
+# hide or remove cities via the `app_cities` collection, and we repopulate those
+# SAME containers IN PLACE (so every reference across the file keeps working)
+# with NO app update needed — the native app reads the live list from
+# /api/cities. This is how a new city like "Sevilla" appears instantly.
+# ---------------------------------------------------------------------------
+_CITY_SLUG_ALIASES = {
+    "palma": "Palma de Mallorca", "mallorca": "Palma de Mallorca",
+    "puerto-banus": "Marbella", "eivissa": "Ibiza", "marbella": "Marbella",
+}
+
+_DEFAULT_CITIES = [
+    {"id": c["id"], "label": c["label"], "emoji": c["emoji"],
+     "slug": CITY_SEO_SLUG.get(c["id"]) or _slugify(c["id"]),
+     "members": list(CITY_REGIONS.get(c["id"], [c["id"]])),
+     "enabled": True, "order": i}
+    for i, c in enumerate(SUPPORTED_CITIES)
+]
+
+
+async def seed_app_cities():
+    """First run only: fill `app_cities` from the hardcoded defaults. Idempotent
+    (never overwrites once the admin has started managing cities)."""
+    try:
+        if await db.app_cities.count_documents({}) == 0:
+            await db.app_cities.insert_many(
+                [{**c, "created_at": datetime.now(timezone.utc).isoformat()}
+                 for c in _DEFAULT_CITIES])
+            logger.info(f"[cities] seeded {len(_DEFAULT_CITIES)} default cities")
+    except Exception as e:
+        logger.warning(f"seed_app_cities warn: {e}")
+
+
+async def load_app_cities():
+    """Repopulate the in-memory city containers from the DB (ENABLED cities only).
+    Called on startup, after any admin change, and periodically (safety net)."""
+    try:
+        rows = [c async for c in db.app_cities.find(
+            {"enabled": {"$ne": False}}, {"_id": 0}).sort("order", 1)]
+    except Exception as e:
+        logger.warning(f"load_app_cities warn: {e}")
+        return
+    if not rows:
+        rows = _DEFAULT_CITIES
+    supported, regions, seo_slug, slugs_rev, ids = [], {}, {}, {}, set()
+    for c in rows:
+        cid = c["id"]
+        supported.append({"id": cid, "label": c.get("label", cid),
+                          "emoji": c.get("emoji", "")})
+        members = [m for m in (c.get("members") or [cid]) if m] or [cid]
+        regions[cid] = members
+        ids.add(cid)
+        cslug = (c.get("slug") or _slugify(cid)).lower()
+        seo_slug[cid] = cslug
+        slugs_rev[cslug] = cid
+        slugs_rev[_slugify(cid)] = cid
+    for alias, target in _CITY_SLUG_ALIASES.items():
+        if target in ids:
+            slugs_rev.setdefault(alias, target)
+    # Mutate the shared containers IN PLACE so every existing reference updates.
+    SUPPORTED_CITIES[:] = supported
+    CITY_REGIONS.clear(); CITY_REGIONS.update(regions)
+    CITY_IDS.clear(); CITY_IDS.update(ids)
+    CITY_SEO_SLUG.clear(); CITY_SEO_SLUG.update(seo_slug)
+    _CITY_SLUGS.clear(); _CITY_SLUGS.update(slugs_rev)
+
+
 
 
 def _city_slug(city_id: str) -> str:
@@ -11956,6 +12028,11 @@ async def on_startup():
         logger.warning(f"Index warn: {e}")
     await seed_admin()
     try:
+        await seed_app_cities()
+        await load_app_cities()
+    except Exception as _:
+        pass
+    try:
         await seed_scraped_venues()
     except Exception as _:
         pass
@@ -12034,6 +12111,10 @@ async def on_startup():
         # Process scheduled admin notifications every minute
         scheduler.add_job(process_scheduled_notifications, "interval", minutes=1,
                           id="scheduled_notifications", replace_existing=True)
+        # Refresh the dynamic city list from the DB (safety net for multi-worker
+        # deploys so admin add/remove propagates everywhere within a few minutes).
+        scheduler.add_job(load_app_cities, "interval", minutes=3,
+                          id="reload_app_cities", replace_existing=True)
         # Remind group members who haven't voted on a poll open >24h (once per poll)
         scheduler.add_job(poll_vote_reminders, "interval", hours=2,
                           id="poll_vote_reminders", replace_existing=True)
@@ -13949,6 +14030,110 @@ async def admin_run_scraper(venue_id: str, admin: dict = Depends(require_admin))
     if not v:
         raise HTTPException(status_code=404, detail="Venue no encontrado")
     return await run_scraper_for_venue(v)
+
+
+# --- DYNAMIC CITIES admin (add / edit / hide / remove without an app update) ---
+class AppCityInput(BaseModel):
+    label: str
+    emoji: str = ""
+    slug: str = ""
+    order: int = 0
+    enabled: bool = True
+    members: List[str] = []
+
+
+@app.get("/api/admin/cities")
+async def admin_list_cities(admin: dict = Depends(require_admin)):
+    rows = [c async for c in db.app_cities.find({}, {"_id": 0}).sort("order", 1)]
+    # How many upcoming events each city currently has (helps the admin decide).
+    _today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    for c in rows:
+        try:
+            c["events_upcoming"] = await db.events.count_documents(
+                {"city": {"$in": c.get("members") or [c["id"]]}, "date": {"$gte": _today}})
+        except Exception:
+            c["events_upcoming"] = 0
+    # Events/venues sitting in "Pendiente" (unassigned) so the admin sees the backlog.
+    try:
+        pending_events = await db.events.count_documents({"city": PENDING_CITY, "date": {"$gte": _today}})
+    except Exception:
+        pending_events = 0
+    return {"cities": rows, "pending_city": PENDING_CITY, "pending_events": pending_events}
+
+
+@app.post("/api/admin/cities")
+async def admin_create_city(inp: AppCityInput, admin: dict = Depends(require_admin)):
+    label = (inp.label or "").strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="Falta el nombre de la ciudad")
+    cid = label  # canonical id == the `city` value stored on events/venues
+    if await db.app_cities.find_one({"id": cid}):
+        raise HTTPException(status_code=400, detail="Esa ciudad ya existe")
+    slug = ((inp.slug or "").strip() or _slugify(cid)).lower()
+    members = [m.strip() for m in (inp.members or []) if m.strip()]
+    if cid not in members:
+        members = [cid] + members
+    order = inp.order or (await db.app_cities.count_documents({}))
+    doc = {"id": cid, "label": label, "emoji": (inp.emoji or "").strip(),
+           "slug": slug, "members": members, "enabled": bool(inp.enabled),
+           "order": order, "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.app_cities.insert_one(doc)
+    await load_app_cities()
+    doc.pop("_id", None)
+    return doc
+
+
+@app.put("/api/admin/cities/{city_id}")
+async def admin_update_city(city_id: str, inp: AppCityInput, admin: dict = Depends(require_admin)):
+    cur = await db.app_cities.find_one({"id": city_id})
+    if not cur:
+        raise HTTPException(status_code=404, detail="Ciudad no encontrada")
+    upd = {"label": (inp.label or "").strip() or cur.get("label", city_id),
+           "emoji": (inp.emoji or "").strip(), "enabled": bool(inp.enabled),
+           "order": inp.order}
+    if (inp.slug or "").strip():
+        upd["slug"] = inp.slug.strip().lower()
+    if inp.members:
+        m = [x.strip() for x in inp.members if x.strip()]
+        if city_id not in m:
+            m = [city_id] + m
+        upd["members"] = m
+    await db.app_cities.update_one({"id": city_id}, {"$set": upd})
+    await load_app_cities()
+    return await db.app_cities.find_one({"id": city_id}, {"_id": 0})
+
+
+@app.post("/api/admin/cities/{city_id}/toggle")
+async def admin_toggle_city(city_id: str, admin: dict = Depends(require_admin)):
+    """Hide/show a city WITHOUT losing data (events keep their city; re-enabling
+    restores them instantly). Great for turning a city off temporarily."""
+    cur = await db.app_cities.find_one({"id": city_id})
+    if not cur:
+        raise HTTPException(status_code=404, detail="Ciudad no encontrada")
+    new_en = not bool(cur.get("enabled", True))
+    await db.app_cities.update_one({"id": city_id}, {"$set": {"enabled": new_en}})
+    await load_app_cities()
+    return {"id": city_id, "enabled": new_en}
+
+
+@app.delete("/api/admin/cities/{city_id}")
+async def admin_delete_city(city_id: str, admin: dict = Depends(require_admin)):
+    """Remove a city. Its parties AND scraped venues drop to 'Pendiente' — hidden
+    from the public and reassignable from the scraping panel (reversible)."""
+    cur = await db.app_cities.find_one({"id": city_id})
+    if not cur:
+        raise HTTPException(status_code=404, detail="Ciudad no encontrada")
+    members = cur.get("members") or [city_id]
+    ev = await db.events.update_many({"city": {"$in": members}}, {"$set": {"city": PENDING_CITY}})
+    sv = await db.scraped_venues.update_many({"city": {"$in": members}}, {"$set": {"city": PENDING_CITY}})
+    try:
+        await db.venues.update_many({"city": {"$in": members}}, {"$set": {"city": PENDING_CITY}})
+    except Exception:
+        pass
+    await db.app_cities.delete_one({"id": city_id})
+    await load_app_cities()
+    return {"ok": True, "events_moved": getattr(ev, "modified_count", 0),
+            "venues_moved": getattr(sv, "modified_count", 0)}
 
 
 @app.get("/api/admin/affiliate-status")
