@@ -600,3 +600,12 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 - **Frontend**: `AdminScrapersPanel.js` — opción "Nyxell RRPP" en el dropdown de adaptador + label. Usa el campo URL (no slug).
 - **Verificado E2E** (curl vía preview + screenshot admin): scrape del venue → 1 evento creado ("BIENVENIDA UNIVERSITARIA", 2026-09-11, pocas_entradas, tiers 18€/15€-agotado, geo Sevilla). Aparece en `GET /api/events?city=Sevilla`. Panel admin muestra Sevilla "1 fiesta próxima" y la novedad del scrapeo. Backend arranca limpio.
 - PENDIENTE Fase 3: pantalla semibloqueante de selección de ciudad en la app (requiere 1 update de App Store).
+
+
+## 2026-09-09 c — Fase 3: Selector de ciudad semibloqueante COMPLETADA
+- **Nuevo componente `frontend/src/components/CitySelectorSheet.js`**: bottom-sheet animado (framer-motion) con diseño cuidado — degradado oscuro, hairline neón, pill MapPin, título "¿Dónde sales?", grid 2-col de ciudades (emoji + label, estado seleccionado con check/glow cian), botón X y "Explorar sin elegir" → **semibloqueante/omitible**. `data-testid`: city-selector-sheet, city-selector-overlay, city-select-{id}, city-selector-close, city-selector-skip.
+- **`Feed.js`**: (a) el nombre de ciudad de la cabecera pasa a botón `feed-city-switch-btn` (MapPin + chevron) que abre el sheet → sitio visible para cambiarla siempre; (b) primer arranque en la **app instalada** (`isNativeApp()`) abre el sheet una única vez (flag localStorage `qv_city_gate_seen`) → no vuelve a salir; (c) `/cities` se carga para todos (antes solo invitados).
+- **Selección**: invitado → `qv_guest_city` (local); registrado → `PUT /api/auth/profile {city}` (endpoint ya existente, acepta `city`) + `setUser` + cache localStorage → se guarda en la cuenta y persiste entre dispositivos. Al cambiar `user.city`/`guestCity` cambia `cityKey` → React Query refetchea el feed automáticamente.
+- **Sin cambios de backend** (reutiliza `PUT /auth/profile`).
+- **Verificado**: screenshot del sheet (diseño OK, Palma seleccionada con check); cambio invitado → cabecera pasa a "SEVILLA" y aparece el evento Granuja (18€ · pocas); curl `PUT /auth/profile {city:Sevilla}` → `/auth/me` confirma persistencia en cuenta (restaurado a Palma tras la prueba).
+- NOTA APP: el gate de primera apertura solo se activa en la app nativa (isNativeApp); requiere un rebuild/actualización de App Store para que llegue a los usuarios que ya la tienen instalada.

@@ -18,13 +18,14 @@ import AppStorePromo from "@/components/AppStorePromo";
 import MomentFeedBanner from "@/components/MomentFeedBanner";
 import { isNativeApp } from "@/lib/platform";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
-import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Camera, Search } from "lucide-react";
+import CitySelectorSheet from "@/components/CitySelectorSheet";
+import { Loader2, PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Camera, Search, MapPin, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
 export default function Feed() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const { requireAuth } = useGuestGate();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -40,6 +41,8 @@ export default function Feed() {
     try { return localStorage.getItem("qv_guest_city") || "Palma de Mallorca"; } catch { return "Palma de Mallorca"; }
   });
   const [cities, setCities] = useState([{ id: "Palma de Mallorca", label: "Palma de Mallorca", emoji: "🏝️" }]);
+  const [citySheetOpen, setCitySheetOpen] = useState(false);
+  const [citySaving, setCitySaving] = useState(false);
   const [compact] = useCompactMode();
   const cardRefs = useRef({});
 
@@ -53,17 +56,57 @@ export default function Feed() {
   const cityParam = user ? undefined : guestCity;
   const cityKey = effectiveCity;
 
-  // Load the supported-cities list so guests can switch city from the top bar.
+  // Load the supported-cities list (for the picker + the guest top bar).
   useEffect(() => {
-    if (user) return;
     api.get("/cities").then(({ data }) => {
       if (data?.cities?.length) setCities(data.cities);
     }).catch(() => {});
-  }, [user]);
+  }, []);
 
   const pickCity = (c) => {
     setGuestCity(c);
     try { localStorage.setItem("qv_guest_city", c); } catch { /* ignore */ }
+  };
+
+  // First launch on the installed app: gently offer to pick a city once. It's
+  // semi-blocking (dismissible) and never shows again after the first time.
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    let seen = false;
+    try { seen = localStorage.getItem("qv_city_gate_seen") === "1"; } catch { /* ignore */ }
+    if (!seen) setCitySheetOpen(true);
+  }, []);
+
+  const markCityGateSeen = () => {
+    try { localStorage.setItem("qv_city_gate_seen", "1"); } catch { /* ignore */ }
+  };
+
+  const closeCitySheet = () => {
+    markCityGateSeen();
+    setCitySheetOpen(false);
+  };
+
+  // Pick a city from the sheet. Registered users persist it to their account
+  // (so it sticks across devices); guests keep it locally.
+  const handlePickCity = async (cityId) => {
+    if (user) {
+      if (cityId === user.city) { closeCitySheet(); return; }
+      try {
+        setCitySaving(true);
+        const { data } = await api.put("/auth/profile", { city: cityId });
+        setUser(data);
+        try { localStorage.setItem("qv_user", JSON.stringify(data)); } catch { /* ignore */ }
+        toast.success(`Tu ciudad ahora es ${(cities.find((c) => c.id === cityId) || {}).label || cityId}`);
+      } catch {
+        toast.error("No se pudo cambiar la ciudad");
+      } finally {
+        setCitySaving(false);
+      }
+    } else {
+      pickCity(cityId);
+    }
+    markCityGateSeen();
+    setCitySheetOpen(false);
   };
 
   // Gentle one-time reminder for users who chose "Nadie" for their attendance
@@ -222,12 +265,28 @@ export default function Feed() {
 
   return (
     <AppShell wide>
+      <CitySelectorSheet
+        open={citySheetOpen}
+        cities={cities}
+        currentCity={effectiveCity}
+        onPick={handlePickCity}
+        onClose={closeCitySheet}
+        saving={citySaving}
+      />
       <header className="px-5 pt-8 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold truncate">
-              {user ? (user.city || "Palma de Mallorca") : ((cities.find((c) => c.id === guestCity) || {}).label || guestCity)}
-            </p>
+            <button
+              onClick={() => setCitySheetOpen(true)}
+              data-testid="feed-city-switch-btn"
+              className="group flex items-center gap-1 text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold max-w-full active:scale-95 transition-transform"
+            >
+              <MapPin className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">
+                {user ? (user.city || "Palma de Mallorca") : ((cities.find((c) => c.id === guestCity) || {}).label || guestCity)}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100" />
+            </button>
             <h1 className="font-display text-4xl lg:text-5xl font-black tracking-tighter mt-1">
               {t("feed.title")}<span className="text-qv-primary">.</span>
             </h1>
