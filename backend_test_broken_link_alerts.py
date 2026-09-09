@@ -18,7 +18,7 @@ import json
 from datetime import datetime, timedelta
 
 # Backend URL from frontend/.env
-BASE_URL = "https://city-memory-hub.preview.emergentagent.com/api"
+BASE_URL = "https://party-finder-55.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

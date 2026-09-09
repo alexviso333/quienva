@@ -361,8 +361,16 @@ def _affiliate_map_is_fresh() -> bool:
     """True if the quienva affiliate feed was refreshed successfully recently. When
     the feed is stale (e.g. FourVenues token expired → refresh keeps the old map),
     its event codes can be out of date, so we must NOT build affiliate links from
-    them; we fall back to the event's own fresh direct link instead."""
-    return bool(_AFFILIATE_TS) and (time.time() - _AFFILIATE_TS) < 6 * 3600
+    them; we fall back to the event's own fresh direct link instead.
+
+    Window = 24h (not 6h). FourVenues event codes are stable for days/weeks (a club
+    almost never recreates an event), so a 6h window was TOO tight: any gap between
+    scraper cycles / a Render restart / a brief token hiccup left the map "stale"
+    for a window during which EVERY carried party silently lost its RRPP link (the
+    "aparece 'Mi link' pero al clicar va al club" bug). 24h keeps us safe from truly
+    dead codes while making that lose-the-link window practically never happen. See
+    /app/AFFILIATE_LINKS.md — the affiliate link rules future maintainers MUST keep."""
+    return bool(_AFFILIATE_TS) and (time.time() - _AFFILIATE_TS) < 24 * 3600
 
 
 def _auto_commission_url_for(ev: dict) -> str:
@@ -421,6 +429,29 @@ def _fv_embed_url(ev: dict) -> str:
     # Use OUR quienva feed's code (codes are per-microsite, not global — the club's
     # own code would embed a DIFFERENT party under our slug).
     return f"https://www.fourvenues.com/iframe/{AFFILIATE_SLUG}/events/{feed_code}"
+
+
+def _served_link_is_ours(ev: dict) -> bool:
+    """True ONLY when the ticket link we ACTUALLY serve for this event earns us
+    commission — i.e. it goes through our RRPP slug (FourVenues) or carries our
+    ClubTickets affiliate code. This includes a manual link_override that points at
+    our slug (e.g. a hand-fixed pretty URL).
+
+    This is what drives the admin "Mi link" badge, deliberately based on the
+    SERVED url (not just the raw match) so the badge can NEVER disagree with the
+    real button again: if a carried party ever falls back to the club's direct link
+    (e.g. the feed is stale), the badge simply hides — instead of lying with a
+    "Mi link" that clicks through to the club. See /app/AFFILIATE_LINKS.md."""
+    url = _commission_url_for(ev) or ""
+    if not url:
+        return False
+    if AFFILIATE_SLUG:
+        # site.fourvenues.com/es/<slug>/... , www.fourvenues.com/<slug>/events/... ,
+        # www.fourvenues.com/iframe/<slug>/... — any URL routed through our RRPP.
+        if (f"/{AFFILIATE_SLUG}/" in url) or url.rstrip("/").endswith(f"/{AFFILIATE_SLUG}"):
+            return True
+    return _is_our_clubtickets_url(url)
+
 
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
@@ -3131,6 +3162,17 @@ async def _top_venues_global(limit: int = 12) -> list:
 
 
 
+# Short in-process cache of the fully-rendered "Fiestas de hoy" SSR home, per
+# (lang, front, day). The home runs ~15 DB queries (per-city counts, today's
+# parties, hidden search pool, top venues) so an uncached render — plus Render
+# cold-start — made quienva.me feel slow (~3 s). This makes repeat renders instant;
+# the key includes the Madrid day so it self-invalidates at midnight, and the TTL
+# picks up new events within a few minutes. Edge cache (middleware) still applies.
+_HOME_HTML_CACHE: dict = {}
+_HOME_HTML_TTL = 300  # seconds
+
+
+
 async def _render_home(lang: str, request: Request):
     import html as _html
     e = _html.escape
@@ -3140,6 +3182,13 @@ async def _render_home(lang: str, request: Request):
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
     paths = _home_paths(front)
     canonical = paths[lang]
+
+    _ck = f"{lang}|{front}|{today}"
+    _cached = _HOME_HTML_CACHE.get(_ck)
+    if _cached and (time.time() - _cached[0]) < _HOME_HTML_TTL:
+        return StarletteResponse(
+            content=_cached[1], media_type="text/html; charset=utf-8",
+            headers={"Cache-Control": "public, max-age=1800, s-maxage=86400"})
 
     city_cards, itemlist, city_nav = [], [], []
     city_kw_map = {
@@ -3290,9 +3339,19 @@ async def _render_home(lang: str, request: Request):
     stats_html = (f'<div class="stats"><span class="stat"><b>{total}</b> {e(T["n_plans"])}</span>'
                   f'<span class="stat">\U0001F3AB {e(ST["st_on_sale"])}</span>'
                   f'<span class="stat">\U0001F465 {e(_HOME_T[lang]["tonight"])}</span></div>')
+    # OPTION B (owner): do NOT auto-redirect logged-in users to /feed. quienva.me
+    # ALWAYS shows the "Fiestas de hoy" SEO page (good for SEO + shareable), and a
+    # small script below just relabels the hero button to "Abrir la app" for people
+    # who already have a session, so they still get one clear tap into the app.
+    open_label = {"es": "Abrir la app", "en": "Open the app",
+                  "de": "App \u00f6ffnen"}.get(lang, "Abrir la app")
+    cta_swap_js = (
+        "<script>try{if(localStorage.getItem('qv_token')){"
+        "var c=document.getElementById('qvcta');"
+        "if(c){c.textContent=" + json.dumps(open_label, ensure_ascii=False) + ";}}}"
+        "catch(e){}</script>")
     html_out = f"""<!doctype html>
 <html lang="{ST['html_lang']}"><head>
-<script>try{{if(localStorage.getItem('qv_token'))location.replace('/feed')}}catch(e){{}}</script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
 <title>{title}</title>
@@ -3317,7 +3376,7 @@ async def _render_home(lang: str, request: Request):
 <h1>{e(T["h1"])}<span class="dot">.</span></h1>
 <p class="sub">{e(T["sub"])}</p>
 {stats_html}
-<div class="ctarow"><a class="cta" href="{front}/feed">{e(_SEO_UI[lang]["join"])}</a></div>
+<div class="ctarow"><a id="qvcta" class="cta" href="{front}/feed">{e(_SEO_UI[lang]["join"])}</a></div>
 {finder_html}
 </section>
 {ev_grid}
@@ -3331,7 +3390,8 @@ async def _render_home(lang: str, request: Request):
 {social_html}
 {langsw}
 <footer>{e(ST["footer"])}</footer>
-</div>{home_search_js}</body></html>"""
+</div>{home_search_js}{cta_swap_js}</body></html>"""
+    _HOME_HTML_CACHE[_ck] = (time.time(), html_out)
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
                              headers={"Cache-Control": "public, max-age=1800, s-maxage=86400"})
 
@@ -6154,8 +6214,10 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         # to build trust, always keeping the "Comprar en FourVenues ↗" button too.
         "fv_embed_url": _fv_embed_url(ev),
         # Admin-only flag so the owner can spot their affiliate events in the feed.
-        # Sent as null to everyone else → no marker, no info leak.
-        "is_affiliate": (_event_is_mine(ev) if (user or {}).get("role") == "admin" else None),
+        # Sent as null to everyone else → no marker, no info leak. Based on the
+        # link we ACTUALLY serve (not just the match) so the badge and the buy
+        # button can never disagree — see _served_link_is_ours / AFFILIATE_LINKS.md.
+        "is_affiliate": (_served_link_is_ours(ev) if (user or {}).get("role") == "admin" else None),
         # Admin-only: the manual link override (if any) + what the automatic link
         # WOULD be, so the event edit panel can prefill / show "back to automatic".
         "link_override": (str(ev.get("link_override") or "") if (user or {}).get("role") == "admin" else None),
@@ -12486,6 +12548,8 @@ _CITY_KEYWORDS = {
     "Madrid": {"madrid", "alcorcon", "mostoles", "getafe", "leganes"},
     "Barcelona": {"barcelona"},
     "Marbella": {"marbella", "banus", "estepona"},  # "san pedro" handled below
+    "Sevilla": {"sevilla", "seville", "dos hermanas", "mairena", "tomares",
+                "camas", "bormujos", "alcala de guadaira"},
 }
 
 
