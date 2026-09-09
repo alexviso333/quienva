@@ -10846,6 +10846,79 @@ agent_communication:
           
           NOTE: Initial test failed due to frontend environment variable (REACT_APP_BACKEND_URL) 
           not being loaded. Fixed by restarting the frontend service to pick up the .env file.
+      - working: true
+        agent: "testing"
+        comment: |
+          RE-VERIFIED GROUP POLL EVENT ORDERING (2026-09-09) - ✅ PASS
+          
+          Performed comprehensive UI verification after backend ordering fix as requested.
+          
+          Test credentials: pruebapoll@test.dev / Prueba1234 (city: Ibiza)
+          Test group: "Grupo Prueba Finde" at /chats/group/3c3f9da1-ab95-4506-8126-a5eab57a009e
+          
+          ✅ ALL TEST SCENARIOS PASSED:
+          
+          1. Login and Navigation: ✅ SUCCESS
+             - Login with email/password successful
+             - Navigated to group chat /chats/group/3c3f9da1-ab95-4506-8126-a5eab57a009e
+             - Group chat loaded correctly
+          
+          2. Poll Creator Dialog: ✅ SUCCESS
+             - Found "Montar encuesta del finde" button (data-testid="create-poll-btn")
+             - Clicked button and dialog opened (data-testid="poll-creator")
+             - Dialog title: "Weekend poll"
+             - Total events displayed: 60
+          
+          3. Chronological Ordering Verification: ✅ PASS
+             - Events are ordered BY DATE ascending (chronological)
+             - Date sequence is monotonic non-decreasing
+             - First 20 events (date, venue) sequence:
+               1. 2026-09-09 - Club Ibiza 1
+               2. 2026-09-09 - Club Ibiza 2
+               3. 2026-09-09 - Club Ibiza 3
+               4. 2026-09-09 - Club Ibiza 1
+               5. 2026-09-09 - Club Ibiza 2
+               6. 2026-09-09 - Club Ibiza 3
+               7. 2026-09-09 - Club Ibiza 1
+               8. 2026-09-09 - Club Ibiza 2
+               9. 2026-09-10 - Es Paradis Ibiza
+              10. 2026-09-10 - Lío Ibiza
+              11. 2026-09-10 - Chinois Ibiza
+              12. 2026-09-10 - Swag Ibiza
+              13. 2026-09-10 - Playa Soleil
+              14. 2026-09-10 - Bambuku Ibiza
+              15. 2026-09-10 - O Beach Ibiza
+              16. 2026-09-10 - Club Ibiza 1
+              17. 2026-09-11 - Eden Ibiza
+              18. 2026-09-11 - Swag Ibiza
+              19. 2026-09-11 - Lío Ibiza
+              20. 2026-09-11 - Chinois Ibiza
+          
+          4. Venue Interleaving Verification: ✅ PASS
+             - Within each date, DIFFERENT VENUES are interleaved (NOT grouped by venue)
+             - Date 2026-09-09: 8 events, 3 venues, 7 venue changes
+             - Date 2026-09-10: 8 events, 8 venues, 7 venue changes
+               * Venues: Es Paradis → Lío → Chinois → Swag → Playa Soleil → Bambuku → O Beach → Club Ibiza 1
+             - Date 2026-09-11: 13 events, 11 venues, 11 venue changes
+             - Date 2026-09-12: 15 events, 13 venues, 13 venue changes
+             - Date 2026-09-13: 10 events, 10 venues, 9 venue changes
+             - Date 2026-09-14: 6 events, 6 venues, 5 venue changes
+             - NO venue grouping detected (all events from one venue together, then another)
+          
+          5. Screenshots: ✅ CAPTURED
+             - Mobile (390x844): .screenshots/poll-creator-mobile-verification.png
+             - Desktop (1920x800): .screenshots/poll-creator-desktop-verification.png
+          
+          🎉 FINAL RESULT: ✅ PASS
+          
+          The backend ordering fix is working perfectly. Events in the poll creator are:
+          ✅ Ordered chronologically BY DATE (ascending)
+          ✅ Venues are properly INTERLEAVED within the same date
+          ✅ NO venue grouping (NOT all events from one club, then all from another)
+          
+          The reported bug "poll options were grouped by venue/discoteca instead of by date" 
+          is COMPLETELY FIXED. Users now see a calendar-like chronological view with all 
+          parties happening on the same night together, regardless of which club they're at.
 
   - task: "Admin campaign follow-up stats (nudge-stats with 4 stat pills)"
     implemented: true
@@ -12063,3 +12136,97 @@ agent_communication:
       
       The requirement is CONFIRMED: poll events are ordered chronologically by date (ascending), 
       with different venues interleaved within the same date, NOT grouped by venue/club.
+
+  - agent: "main"
+    message: |
+      NEW ITERATION - user feedback (poll still grouped by venue on the live app; home should show ALL of TODAY's parties).
+
+      BACKEND CHANGES TO VERIFY:
+      1) /api/events default ordering (GET /api/events?date_filter=all&genre=all, authenticated):
+         - Now ordered STRICTLY BY DATE ascending (calendar-like). Within the same
+           date, tie-break = our affiliate events first, then venue priority, then
+           featured, then popularity. Verify the returned list's `date` field is
+           monotonic non-decreasing, and that DIFFERENT venues are interleaved
+           within a single date (NOT all events of one venue grouped together).
+         - This is the KEY fix: the published app's group poll uses this exact
+           request, so it must now come date-ordered.
+         - poll=1 variant (GET /api/events?date_filter=all&genre=all&poll=1) also
+           restricts to a window (today..Sunday of next week) with a fallback.
+         - Test user (city Ibiza, has many events): pruebapoll@test.dev / Prueba1234
+      2) SSR home /api/home (also /en/home, /de/home):
+         - Now shows EVERY party happening TODAY across all cities as visible cards
+           (header "Fiestas de hoy en España" with the real count), NOT a fixed 15.
+         - If today has zero events, falls back to next 15 upcoming (header
+           "Próximas fiestas en España").
+         - Still has the hidden search pool (class "card glow-card reveal xtra",
+           display:none) and the #qvsug .qvbtn button after the grid.
+         - Regression: /api/ciudad/madrid must NOT contain the substring "xtra".
+      NOTE: local DB seeded with today's events (28) and future events.
+
+  - agent: "testing"
+    message: |
+      BACKEND TESTING COMPLETE (2026-09-09) - ALL TESTS PASSED ✅
+      
+      Tested 3 main scenarios with 19 test cases total:
+      
+      ✅ TEST 1: /api/events DEFAULT ORDERING (THE KEY FIX) - 7/7 PASSED
+      - Login successful with test user pruebapoll@test.dev (city: Ibiza)
+      - GET /api/events?date_filter=all&genre=all → 200 OK with 224 events
+      - Events ordered BY DATE ascending: VERIFIED ✓
+        * First date: 2026-09-09, Last date: 2026-10-30
+        * Monotonic non-decreasing: ALL dates in correct order
+      - Venues INTERLEAVED within dates: VERIFIED ✓
+        * Date 2026-09-09: 8 events, 3 venues, 7 venue changes
+        * Example: Club Ibiza 1 → Club Ibiza 2 → Club Ibiza 3 → Club Ibiza 1 → Club Ibiza 2 → Club Ibiza 3 → Club Ibiza 1 → Club Ibiza 2
+        * Date 2026-09-10: Es Paradis → Lío → Chinois → Swag → Playa Soleil → Bambuku → O Beach → Club Ibiza 1
+        * NO venue grouping detected (venues are properly interleaved)
+      - First 20 (date, venue) pairs show clear interleaving pattern
+      - GET /api/events?date_filter=all&genre=all&poll=1 → 200 OK with 114 events
+      - Poll events ordered BY DATE ascending: VERIFIED ✓
+        * First date: 2026-09-09, Last date: 2026-09-20
+      - Poll max date <= 2026-09-20 (Sunday of next week): VERIFIED ✓
+        * Max date: 2026-09-20 (exactly the expected cutoff)
+        * Count: 114 events within the poll window
+      
+      ✅ TEST 2: SSR HOME /api/home (and /api/en/home, /api/de/home) - 10/10 PASSED
+      - GET /api/home → 200 OK (HTML length: 93,055 bytes)
+      - Events section header "Fiestas de hoy en España": FOUND ✓
+      - Header count matches visible cards: VERIFIED ✓
+        * Header <span>: 28
+        * Visible cards (class="card glow-card reveal", NOT xtra): 28
+        * EXACT MATCH ✓
+      - Visible count is 28 (today's parties): VERIFIED ✓
+        * All 28 parties happening TODAY (2026-09-09) are shown
+      - Hidden pool cards exist: VERIFIED ✓
+        * Found 22 hidden cards (class="card glow-card reveal xtra" with style="display:none")
+      - Button <a id="qvsug" class="qvbtn"> appears AFTER events grid <ul class="grid">: VERIFIED ✓
+      - GET /api/en/home → 200 OK (HTML length: 92,631 bytes)
+        * Visible cards: 28, qvbtn button: found ✓
+      - GET /api/de/home → 200 OK (HTML length: 92,759 bytes)
+        * Visible cards: 28, qvbtn button: found ✓
+      
+      ✅ TEST 3: REGRESSION - /api/ciudad/madrid - 2/2 PASSED
+      - GET /api/ciudad/madrid → 200 OK (HTML length: 83,938 bytes)
+      - HTML contains ZERO occurrences of "xtra": VERIFIED ✓
+        * No "xtra" substring found anywhere in the HTML
+        * Regression test passed (city pages do NOT leak hidden pool cards)
+      
+      🎉 OVERALL RESULT: 19/19 TESTS PASSED (100% SUCCESS RATE)
+      
+      CONCLUSION:
+      All backend changes are working perfectly:
+      1. ✅ /api/events now orders events STRICTLY BY DATE ascending (calendar-like)
+      2. ✅ Venues are properly INTERLEAVED within the same date (NOT grouped by venue)
+      3. ✅ Poll mode (poll=1) correctly restricts to today..Sunday of next week (2026-09-20)
+      4. ✅ SSR home pages show ALL 28 of today's parties with correct header count
+      5. ✅ Hidden pool cards are present and properly hidden (display:none)
+      6. ✅ qvbtn button appears in correct position (after events grid)
+      7. ✅ Multilingual home pages (ES/EN/DE) all working correctly
+      8. ✅ Regression test passed (city pages do NOT contain "xtra")
+      
+      The KEY FIX is confirmed: the published app's group poll will now receive events 
+      ordered chronologically by date (ascending) with venues interleaved, NOT grouped 
+      by venue/club. This matches the user's requirement for a calendar-like view.
+      
+      Test file: /app/backend_test_ordering_ssr.py
+      All tests executed successfully with no failures.

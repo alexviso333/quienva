@@ -2951,6 +2951,20 @@ async def _top_events_global(limit: int = 15) -> list:
     return [ev async for ev in cur]
 
 
+async def _today_events_global() -> list:
+    """EVERY party happening TODAY across all supported cities (no limit). The
+    home shows all of today's plans so a visitor sees the full picture for the
+    day, not just a sample. Our affiliate events float first (revenue), then the
+    rest, so nobody's plan is hidden."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    q = {"date": today, "$or": await _all_cities_match()}
+    cur = db.events.find(q, {"_id": 0})
+    evs = [ev async for ev in cur]
+    evs.sort(key=lambda ev: (0 if _event_is_mine(ev) else 1,
+                             str(ev.get("city", "")), str(ev.get("name", ""))))
+    return evs
+
+
 async def _city_events_pool(city_id: str, limit: int = 10) -> list:
     """Next `limit` upcoming parties for ONE app-city, chronological. Used to
     build the (hidden) home search pool so typing a city surfaces many of its
@@ -3025,12 +3039,16 @@ async def _render_home(lang: str, request: Request):
     # Premium home sections: search + upcoming parties grid + top nightclubs grid.
     HL = {
         "es": {"search": "Busca fiesta, discoteca o ciudad\u2026", "ev_h": "Pr\u00f3ximas fiestas en Espa\u00f1a",
+               "ev_h_today": "Fiestas de hoy en Espa\u00f1a",
                "ve_h": "Discotecas destacadas", "parties": "fiestas", "nores": "Sin resultados"},
         "en": {"search": "Search a party, club or city\u2026", "ev_h": "Upcoming parties in Spain",
+               "ev_h_today": "Parties today in Spain",
                "ve_h": "Top nightclubs", "parties": "parties", "nores": "No results"},
         "de": {"search": "Party, Club oder Stadt suchen\u2026", "ev_h": "Kommende Partys in Spanien",
+               "ev_h_today": "Partys heute in Spanien",
                "ve_h": "Top-Clubs", "parties": "Partys", "nores": "Keine Ergebnisse"},
-    }.get(lang, None) or {"search": "Buscar\u2026", "ev_h": "Pr\u00f3ximas fiestas", "ve_h": "Discotecas",
+    }.get(lang, None) or {"search": "Buscar\u2026", "ev_h": "Pr\u00f3ximas fiestas",
+                          "ev_h_today": "Fiestas de hoy", "ve_h": "Discotecas",
                           "parties": "fiestas", "nores": "Sin resultados"}
     # Map each app-city to search keywords so the home search can surface a party
     # by its CITY (data-s otherwise only holds the party name + venue).
@@ -3042,8 +3060,13 @@ async def _render_home(lang: str, request: Request):
     def _ev_extra(ev):
         return city_extra_map.get(region_for_city(ev.get("city", "")), "")
 
-    # Visible: the next 15 parties across ALL cities, chronological (by date).
-    top_events = await _top_events_global(15)
+    # Visible: EVERY party happening TODAY across all cities (what the user asked
+    # for — "todas las fiestas de hoy"). If today has none (e.g. late at night),
+    # fall back to the next 15 upcoming so the home is never empty.
+    top_events = await _today_events_global()
+    _showing_today = bool(top_events)
+    if not top_events:
+        top_events = await _top_events_global(15)
     seen_ids = {ev.get("id") for ev in top_events}
     # Hidden search pool: up to 10 upcoming parties PER city, collapsed
     # (display:none). Lazy images inside a hidden node are never fetched, so this
@@ -3067,7 +3090,7 @@ async def _render_home(lang: str, request: Request):
         ecards += [_seo_card(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], lang, e,
                              extra_s=_ev_extra(ev), hidden=True)
                    for ev in pool_events]
-        ev_grid = (f'<div class="sech"><h2>{e(HL["ev_h"])}</h2><span>{len(top_events)}</span></div>'
+        ev_grid = (f'<div class="sech"><h2>{e(HL["ev_h_today"] if _showing_today else HL["ev_h"])}</h2><span>{len(top_events)}</span></div>'
                    f'<ul class="grid">{"".join(ecards)}<li class="nores" id="qvnores">{e(HL["nores"])}</li></ul>')
     ve_grid = ""
     if top_venues:
@@ -6157,36 +6180,20 @@ async def list_events(user: dict = Depends(get_optional_user),
             urgency = _SALE_URGENCY.get(e.get("sale_state", "no_a_la_venta"), 1)
             return activity + urgency
 
-        def _price_for_sort(e):
-            p = _current_price(e)
-            try:
-                return float(p) if p is not None else 0.0
-            except Exception:
-                return 0.0
+        # Upcoming ordering (feed "Día" view AND group polls): order strictly BY
+        # DATE so plans read like a calendar — all of one day, then the next —
+        # giving preference to OUR affiliate clubs (and featured/popular) ONLY as a
+        # tie-break WITHIN the same date, never above a sooner party. This matches
+        # what the feed's "Día" view shows. Because it's done here (backend), the
+        # app shows date-ordered plans (incl. the poll) with NO app update.
+        def _date_sort_key(e):
+            return (e.get("date", ""), 0 if _event_is_mine(e) else 1,
+                    _venue_rank(e), 0 if e.get("featured") else 1, -_popularity(e))
 
-        # Two-tier ordering. The FIRST key (mine=0 / others=1) guarantees our
-        # affiliate events always come first, so a "mine" club can never fall below
-        # a non-affiliate one. WITHIN each tier the admin-curated club order
-        # (_venue_rank, lower = higher) is the primary key, so "Prioridad de
-        # discotecas" now works for OUR clubs too (e.g. Fitz above Amok), not only
-        # for the rest.
-        #   • OUR events (tier 0): club order → most EXPENSIVE first (≈ better
-        #     commission) → soonest date.
-        #   • Everyone else (tier 1): club order → featured → popularity → date.
-        def _feed_sort_key(e):
-            if _event_is_mine(e):
-                return (0, _venue_rank(e), -_price_for_sort(e), e.get("date", ""), 0.0)
-            return (1, _venue_rank(e), 0 if e.get("featured") else 1,
-                    -_popularity(e), e.get("date", ""))
-
-        # POLL mode (group "where do we go?" surveys): order strictly BY DATE
-        # (like the feed's "Día" view), giving preference to OUR affiliate clubs
-        # only as a tie-break WITHIN the same date — never above a sooner party.
-        # Also restrict to a short window: from today until the Sunday of the
-        # FOLLOWING week (e.g. if today is Wednesday, up to the next Sunday), so
-        # the poll shows the upcoming plans. Falls back to no window if it would
-        # leave too few options. Doing this here (backend) means future tweaks to
-        # the window/order need NO app update.
+        # POLL mode additionally restricts to a window: from today until the
+        # Sunday of the FOLLOWING week (falls back if that leaves too few). This is
+        # only applied when the caller sends poll=1, so the normal feed is
+        # unaffected. Tunable server-side with no app update.
         if poll:
             _tz = ZoneInfo("Europe/Madrid")
             _today = datetime.now(_tz).date()
@@ -6196,13 +6203,7 @@ async def list_events(user: dict = Depends(get_optional_user),
             if len(_win) >= 4:
                 filtered_events = _win
 
-            def _poll_sort_key(e):
-                return (e.get("date", ""), 0 if _event_is_mine(e) else 1,
-                        _venue_rank(e), -_popularity(e))
-
-            filtered_events.sort(key=_poll_sort_key)
-        else:
-            filtered_events.sort(key=_feed_sort_key)
+        filtered_events.sort(key=_date_sort_key)
 
     # Load user's followed events (for is_following flag)
     # For guests (user_id=None), follows_set should be None so is_following=null
