@@ -10776,6 +10776,77 @@ agent_communication:
           from the user's city, allowing group members to vote on any upcoming plan, not just
           weekend parties.
 
+
+  - task: "Group poll event ordering (chronological by date, not grouped by venue)"
+    implemented: true
+    working: true
+    file: "frontend/src/components/GroupPolls.js, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED GROUP POLL EVENT ORDERING (2026-09-09) - ✅ PASS
+          
+          Test credentials: pruebapoll@test.dev / Prueba1234 (city: Ibiza)
+          Test group: "Grupo Prueba Finde" at /chats/group/3c3f9da1-ab95-4506-8126-a5eab57a009e
+          
+          ✅ SCENARIO 1: Login and Navigation
+          - Login with pruebapoll@test.dev successful ✓
+          - Navigated to group chat successfully ✓
+          - Group chat loaded (data-testid="chat-messages") ✓
+          
+          ✅ SCENARIO 2: Open Poll Creator
+          - Found "Montar encuesta del finde" button (data-testid="create-poll-btn") ✓
+          - Clicked poll creation button ✓
+          - Poll creator dialog opened (data-testid="poll-creator") ✓
+          - Dialog title: "Weekend poll" ✓
+          
+          ✅ SCENARIO 3: Extract Event Options and Verify Ordering
+          - Total events displayed: 60 ✓
+          - Each event option (data-testid="poll-event-option-{id}") shows:
+            * Event name (e.g., "Bubbles", "TIEMPO by Nomis", "Defected")
+            * Venue name (e.g., "Es Paradis Ibiza", "Lío Ibiza", "Chinois Ibiza")
+            * Date in ISO format (e.g., "2026-09-10", "2026-09-11", "2026-09-12")
+          
+          ✅ SCENARIO 4: Chronological Order Verification
+          - Date sequence extracted (60 events):
+            * 2026-09-10: 8 events (Bubbles at Es Paradis, TIEMPO by Nomis at Lío, Defected at Chinois, Xcandalous at Swag, AFRODISE & MOOTS at Playa Soleil, R&B Mania Pool Party at Bambuku, O Beach Music at O Beach, Fiesta Ibiza #1 at Club Ibiza 1)
+            * 2026-09-11: 13 events (Eden Presents at Eden, Señorita at Swag, Vintage by Sebastian Gamboa at Lío, Major League DJz at Chinois, Ibiza Rocks Pool Days, Puro Reggaeton at Es Paradis, ORIGINS at Ibiza Rocks, Ibiza Brunch Club at Bambuku, Deseo at Baloo, O Beach Pool Party, MERAKI x NUAGE at Playa Soleil, Playa Soleil Presents..., Fiesta Ibiza #2)
+            * 2026-09-12: 15 events (Eden Presents, KŌDŌ at Lío, Claptone at Chinois, House of Eden, Gloss at Swag, Fiesta del Agua at Es Paradis, Ibiza Anthems, Pikes Presents at 528, Baloo Presents, El Kiddo at Bambuku, La Cucaracha at Teatro Pereyra, Bora Bora Saturdays at Playa Soleil, Créme de Créme, Soul Heaven at O Beach, Fiesta Ibiza #3)
+            * 2026-09-13: 10 events (Bedouin Presents Saga at Chinois, Eden Presents, Es Paradis Presents, Morenita at Swag, Travieso at Lío, Electric Ibiza at 528, R&B Affair at Ibiza Rocks, KISS Pool Party at O Beach, Baloo Presents, Fiesta Ibiza #4)
+            * 2026-09-14: 6 events (La Troya at Chinois, Safari at Swag, Fiesta del Agua at Es Paradis, Nothing New at Ibiza Rocks, ZUVA at O Beach, Fiesta Ibiza #5)
+            * 2026-09-15: 7 events (Chinois Presents, Arkadyan Voyage at Lío, Ibiza Records x Es Paradis, Ibiza Rocks Pool Party, Pikes Presents at 528, Kisstory at O Beach, Fiesta Ibiza #6)
+            * 2026-09-16: 1 event (Es Paradis Presents)
+          
+          ✅ KEY VERIFICATION: Events are ordered BY DATE (chronological), NOT by venue
+          - Within each date, DIFFERENT VENUES are interleaved ✓
+          - Example on 2026-09-10: Es Paradis → Lío → Chinois → Swag → Playa Soleil → Bambuku → O Beach → Club Ibiza 1
+          - NO venue grouping detected (e.g., all Es Paradis events together, then all Lío events together)
+          - Dates are in ascending order: 2026-09-10 < 2026-09-11 < 2026-09-12 < 2026-09-13 < 2026-09-14 < 2026-09-15 < 2026-09-16 ✓
+          - NO chronological violations found (no dates going backwards) ✓
+          
+          ✅ SCENARIO 5: Screenshots Captured
+          - Mobile screenshot (390x844): .screenshots/poll-creator-mobile.png ✓
+          - Desktop screenshot (1920x800): .screenshots/poll-creator-desktop.png ✓
+          
+          CONCLUSION:
+          The group poll event ordering is working PERFECTLY as specified:
+          ✅ Events are ordered chronologically BY DATE (ascending)
+          ✅ Within each date, different venues are interleaved (NOT grouped by venue)
+          ✅ The backend (GET /api/events?poll=1) returns events in the correct order
+          ✅ The frontend (PollCreator component) preserves this ordering
+          ✅ Users see a chronological list of upcoming parties across all venues
+          
+          The requirement "order BY DATE ascending (chronological) — NOT grouped by venue/club" 
+          is CONFIRMED. The implementation correctly prioritizes date over venue, allowing users 
+          to see all parties happening on the same night together, regardless of which club they're at.
+          
+          NOTE: Initial test failed due to frontend environment variable (REACT_APP_BACKEND_URL) 
+          not being loaded. Fixed by restarting the frontend service to pick up the .env file.
+
   - task: "Admin campaign follow-up stats (nudge-stats with 4 stat pills)"
     implemented: true
     working: true
@@ -11960,3 +12031,35 @@ agent_communication:
       Verify: opening "Montar encuesta del finde" lists candidate parties
       ORDERED BY DATE ascending (independent of venue/club), only within the
       window today..Sunday-of-next-week. Previously they were grouped by club.
+
+
+  - agent: "testing"
+    message: |
+      GROUP POLL EVENT ORDERING TEST COMPLETE (2026-09-09)
+      
+      🎉 TEST PASSED - Events are ordered chronologically BY DATE (not grouped by venue)
+      
+      Test Details:
+      - Credentials: pruebapoll@test.dev / Prueba1234 (city: Ibiza)
+      - Group: "Grupo Prueba Finde" at /chats/group/3c3f9da1-ab95-4506-8126-a5eab57a009e
+      - Poll creator opened successfully via "Montar encuesta del finde" button
+      - Total events displayed: 60 events
+      
+      ✅ CHRONOLOGICAL ORDERING VERIFIED:
+      - Events are ordered BY DATE ascending: 2026-09-10 → 2026-09-11 → 2026-09-12 → 2026-09-13 → 2026-09-14 → 2026-09-15 → 2026-09-16
+      - Within each date, DIFFERENT VENUES are interleaved (NOT grouped by venue)
+      - Example on 2026-09-10: Es Paradis → Lío → Chinois → Swag → Playa Soleil → Bambuku → O Beach → Club Ibiza 1
+      - NO venue grouping detected (e.g., all Es Paradis events together, then all Lío events together)
+      - NO chronological violations (no dates going backwards)
+      
+      ✅ SCREENSHOTS CAPTURED:
+      - Mobile (390x844): .screenshots/poll-creator-mobile.png
+      - Desktop (1920x800): .screenshots/poll-creator-desktop.png
+      
+      NOTE: Initial test failed due to REACT_APP_BACKEND_URL environment variable not being loaded 
+      (all API calls were going to /undefined/api/...). Fixed by restarting the frontend service 
+      to pick up the .env file. This is expected behavior for React apps - environment variables 
+      are baked into the build at compile time and require a restart to pick up changes.
+      
+      The requirement is CONFIRMED: poll events are ordered chronologically by date (ascending), 
+      with different venues interleaved within the same date, NOT grouped by venue/club.

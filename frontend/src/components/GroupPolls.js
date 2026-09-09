@@ -105,33 +105,13 @@ function PollCreator({ groupId, onClose }) {
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["poll-events-all"],
     queryFn: async () =>
-      (await api.get("/events", { params: { date_filter: "all", genre: "all" } })).data,
+      (await api.get("/events", { params: { date_filter: "all", genre: "all", poll: 1 } })).data,
   });
-  // Poll candidates = the next parties BY DATE (independent of venue), for the
-  // user's own city, within a window from today until the Sunday of NEXT week
-  // (e.g. if today is Wednesday, up to the following Sunday). The /events feed is
-  // ordered by club/affiliate priority, so we re-sort strictly chronologically.
-  const list = useMemo(() => {
-    const raw = Array.isArray(events) ? events : events.items || events.events || [];
-    const arr = Array.isArray(raw) ? [...raw] : [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const wd = today.getDay(); // 0 Sun .. 6 Sat
-    const daysToSunday = (7 - wd) % 7; // upcoming Sunday (0 if today is Sunday)
-    const end = new Date(today);
-    end.setDate(today.getDate() + daysToSunday + 7); // Sunday of the following week
-    const iso = (d) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const startISO = iso(today);
-    const endISO = iso(end);
-    const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-    const inWindow = arr.filter((ev) => ev.date && ev.date >= startISO && ev.date <= endISO).sort(byDate);
-    // Never leave the poll near-empty: if the window is thin, show all upcoming
-    // parties sorted by date instead.
-    return inWindow.length >= 4
-      ? inWindow
-      : arr.filter((ev) => ev.date && ev.date >= startISO).sort(byDate);
-  }, [events]);
+  // The backend (poll=1) already returns the next parties ordered BY DATE — with
+  // our affiliate clubs preferred only as a same-date tie-break — and limited to
+  // the window today..Sunday-of-next-week. Keeping the ordering/window server-side
+  // means future tweaks need no app update.
+  const list = Array.isArray(events) ? events : events.items || events.events || [];
 
   const toggle = (eid) =>
     setSelected((prev) => (prev.includes(eid) ? prev.filter((x) => x !== eid) : prev.length + customs.length >= 4 ? prev : [...prev, eid]));

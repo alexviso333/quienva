@@ -6051,7 +6051,8 @@ async def list_events(user: dict = Depends(get_optional_user),
                       date_filter: str = Query("all"),
                       genre: str = Query("all"),
                       q: str = Query(None),
-                      city: str = Query(None)):
+                      city: str = Query(None),
+                      poll: int = Query(0)):
     friend_ids = await accepted_friend_ids(user["user_id"])
     query = {"city": city_query_value(_effective_city(user, city))}
     sort_dir = -1 if date_filter == "pasados" else 1
@@ -6178,7 +6179,30 @@ async def list_events(user: dict = Depends(get_optional_user),
             return (1, _venue_rank(e), 0 if e.get("featured") else 1,
                     -_popularity(e), e.get("date", ""))
 
-        filtered_events.sort(key=_feed_sort_key)
+        # POLL mode (group "where do we go?" surveys): order strictly BY DATE
+        # (like the feed's "Día" view), giving preference to OUR affiliate clubs
+        # only as a tie-break WITHIN the same date — never above a sooner party.
+        # Also restrict to a short window: from today until the Sunday of the
+        # FOLLOWING week (e.g. if today is Wednesday, up to the next Sunday), so
+        # the poll shows the upcoming plans. Falls back to no window if it would
+        # leave too few options. Doing this here (backend) means future tweaks to
+        # the window/order need NO app update.
+        if poll:
+            _tz = ZoneInfo("Europe/Madrid")
+            _today = datetime.now(_tz).date()
+            _days_to_sun = (6 - _today.weekday()) % 7  # Mon=0..Sun=6 -> upcoming Sunday
+            _end_iso = (_today + timedelta(days=_days_to_sun + 7)).isoformat()
+            _win = [ev for ev in filtered_events if ev.get("date", "") <= _end_iso]
+            if len(_win) >= 4:
+                filtered_events = _win
+
+            def _poll_sort_key(e):
+                return (e.get("date", ""), 0 if _event_is_mine(e) else 1,
+                        _venue_rank(e), -_popularity(e))
+
+            filtered_events.sort(key=_poll_sort_key)
+        else:
+            filtered_events.sort(key=_feed_sort_key)
 
     # Load user's followed events (for is_following flag)
     # For guests (user_id=None), follows_set should be None so is_following=null

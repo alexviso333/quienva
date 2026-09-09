@@ -581,3 +581,7 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 - Fase B: bloquear "Ver quién va" hasta tener grupo; insignia "Fundador"; alertas de evento para el grupo.
 - Fase C: "Encuesta del finde" (miér/jue) para votar evento del grupo.
 - P2: Generador SEO "Fiestas en [ciudad] este finde" + guion diario TikTok.
+
+## Cambios (continuación) — Home SSR + Encuesta de grupo
+- **Home SSR (`_render_home`, /api/home /en/home /de/home)**: ahora muestra las **15** próximas fiestas por fecha de TODAS las ciudades (antes 12). Añadido "pool" de búsqueda OCULTO (10 por ciudad, class `xtra`, display:none → imágenes lazy no se descargan, 0 coste de first-paint / Lighthouse ~90 móvil / 94 escritorio). `_seo_card` acepta `extra_s` (mete ciudad en data-s) y `hidden`. El botón "Ver todas las fiestas de <ciudad>" (#qvsug) ahora es `.qvbtn` (botón grande) y sale DEBAJO del grid. Todo backend/web → NO requiere update de app.
+- **Encuesta de grupo (`/api/events?...&poll=1`)**: nuevo param `poll` en `list_events`. Con poll=1 ordena por FECHA asc (preferencia a afiliadas solo como desempate dentro del mismo día) y limita a ventana hoy..domingo de la semana siguiente (con fallback si <4). El feed NO se toca (no envía poll). `GroupPolls.js` ahora solo envía `poll:1` (cliente delgado) → esta lógica es backend-tuneable sin futuros updates de app. OJO: este cambio del poll SÍ requiere UN rebuild de la app (Codemagic + App Store) porque la app ahora envía poll=1.
