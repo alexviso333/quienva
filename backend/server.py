@@ -435,6 +435,7 @@ SUPPORTED_CITIES = [
     {"id": "Madrid", "label": "Madrid", "emoji": "\U0001F306"},
     {"id": "Barcelona", "label": "Barcelona", "emoji": "\U0001F3D9\uFE0F"},
     {"id": "Marbella", "label": "Marbella / Puerto Ban\u00fas", "emoji": "\U0001F6E5\uFE0F"},
+    {"id": "Sevilla", "label": "Sevilla", "emoji": "\U0001F483"},
 ]
 CITY_IDS = {c["id"] for c in SUPPORTED_CITIES}
 # Sentinel city for scraped venues/parties that are NOT yet assigned to a
@@ -460,6 +461,7 @@ CITY_REGIONS = {
     "Madrid": ["Madrid"],
     "Barcelona": ["Barcelona"],
     "Marbella": ["Marbella", "Puerto Banús", "Puerto Banus", "San Pedro", "San Pedro de Alcántara"],
+    "Sevilla": ["Sevilla", "Seville"],
 }
 
 
@@ -1032,8 +1034,8 @@ CITY_SEO_SLUG = {
     "Madrid": "madrid",
     "Barcelona": "barcelona",
     "Marbella": "marbella",
+    "Sevilla": "sevilla",
 }
-
 
 # ---------------------------------------------------------------------------
 # DYNAMIC CITIES
@@ -1067,6 +1069,15 @@ async def seed_app_cities():
                 [{**c, "created_at": datetime.now(timezone.utc).isoformat()}
                  for c in _DEFAULT_CITIES])
             logger.info(f"[cities] seeded {len(_DEFAULT_CITIES)} default cities")
+        else:
+            # Ensure newly-shipped default cities (e.g. Sevilla for Nyxell/Granuja)
+            # exist even on an already-seeded DB. Idempotent: never overwrites an
+            # admin's edits, only inserts a missing default.
+            for c in _DEFAULT_CITIES:
+                if not await db.app_cities.find_one({"id": c["id"]}):
+                    await db.app_cities.insert_one(
+                        {**c, "created_at": datetime.now(timezone.utc).isoformat()})
+                    logger.info(f"[cities] added missing default city: {c['id']}")
     except Exception as e:
         logger.warning(f"seed_app_cities warn: {e}")
 
@@ -12342,7 +12353,7 @@ app.include_router(api_router)
 from scrapers import build_scraper as _build_scraper, ScrapedEvent as _ScrapedEvent
 from scrapers.base import normalize_venue_key as _norm_venue
 
-_ALLOWED_ADAPTERS = ("fourvenues_api", "fourvenues_public_api", "nextjs_html", "nightleague", "xceed", "clubtickets")
+_ALLOWED_ADAPTERS = ("fourvenues_api", "fourvenues_public_api", "nextjs_html", "nightleague", "xceed", "clubtickets", "nyxell")
 
 # FourVenues guest-token: long-lived JWT shared by every microsite. Read from an
 # app_settings override (editable in admin) first, then the env var. Cached briefly.
@@ -12936,6 +12947,10 @@ _SEED_VENUES = [
      "url": "https://www.clubtickets.com/clubbing/playa-soleil"},
     {"name": "Teatro Pereyra", "slug": "teatro-pereyra", "city": "Ibiza", "adapter_type": "clubtickets",
      "url": "https://www.clubtickets.com/clubbing/teatro-pereyra"},
+    # ---- SEVILLA · Nyxell RRPP profile (our promoter link → Granuja events).
+    # SSR HTML carries prices/sale-state; buy links go through our RRPP profile.
+    {"name": "Granuja Club Sound", "slug": "", "city": "Sevilla", "adapter_type": "nyxell",
+     "url": "https://open.nyxell.com/rrpp/quienva"},
 ]
 for _v in _SEED_VENUES:
     _v.setdefault("city", "Palma de Mallorca")

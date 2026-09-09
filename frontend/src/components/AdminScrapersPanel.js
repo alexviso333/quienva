@@ -8,6 +8,7 @@ const ADAPTER_LABELS = {
   fourvenues_api: "FourVenues API (universal · precios reales)",
   fourvenues_public_api: "API pública (/api/fourvenues)",
   nextjs_html: "HTML Next.js (extrae del home)",
+  nyxell: "Nyxell RRPP (open.nyxell.com · precios reales)",
 };
 
 /**
@@ -308,6 +309,7 @@ export default function AdminScrapersPanel() {
             className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm"
           >
             <option value="fourvenues_api" className="bg-black">FourVenues API (universal, recomendado)</option>
+            <option value="nyxell" className="bg-black">Nyxell RRPP (open.nyxell.com)</option>
             <option value="nextjs_html" className="bg-black">HTML Next.js (webs propias)</option>
             <option value="fourvenues_public_api" className="bg-black">API pública /api/fourvenues (legacy)</option>
           </select>
