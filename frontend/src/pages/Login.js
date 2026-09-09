@@ -20,12 +20,22 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [invitedBy, setInvitedBy] = useState(null);
-  const [form, setForm] = useState({ email: "", password: "", name: "", username: "", city: "Palma de Mallorca", birthdate: "", phone: "" });
+  const [form, setForm] = useState(() => {
+    // Inherit the city the guest was already exploring so we don't ask twice.
+    let city = "Palma de Mallorca";
+    try { city = localStorage.getItem("qv_guest_city") || city; } catch { /* ignore */ }
+    return { email: "", password: "", name: "", username: "", city, birthdate: "", phone: "" };
+  });
   const [cities, setCities] = useState([{ id: "Palma de Mallorca", label: "Palma de Mallorca", emoji: "" }]);
 
   useEffect(() => {
     api.get("/cities").then(({ data }) => {
-      if (data?.cities?.length) setCities(data.cities);
+      if (data?.cities?.length) {
+        setCities(data.cities);
+        // Validate the inherited guest city against the real list (fallback to
+        // the first supported city only if it's not a valid option).
+        setForm((f) => (data.cities.some((c) => c.id === f.city) ? f : { ...f, city: data.cities[0].id }));
+      }
     }).catch(() => {});
   }, []);
 

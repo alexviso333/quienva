@@ -1,102 +1,134 @@
 {
-  "theme": "Nightlife Premium (Electric & Neon meets Luxury)",
-  "description": "High-end, dynamic dark mode for a nightlife events platform. Combines absolute darkness with saturated neon accents, glassmorphism, and smooth vanilla JavaScript micro-interactions to create tension, anticipation, and a premium nightclub feel.",
-  "target_environment": "Python SSR Templates (HTML, pure CSS, vanilla JS inline script) - NO React/SPA.",
-  "typography": {
-    "headings": {
-      "family": "Unbounded, sans-serif",
-      "weights": ["800", "900"],
-      "usage": "H1, H2, large statistical numbers, primary CTAs. Must use tracking-tighter (letter-spacing: -0.04em) and tight line-height (leading-none)."
-    },
-    "body": {
-      "family": "Outfit, sans-serif",
-      "weights": ["300", "400", "500", "600"],
-      "usage": "Paragraphs, tags, standard buttons, meta data. Use tracking-wide for uppercase labels."
-    }
+  "project_info": {
+    "app_name": "¿Quién va? (The plans.)",
+    "target_module": "Admin Control Panel (AdminDashboard.js & sub-panels)",
+    "context": "Mobile-first Nightlife & Events Social Platform Admin Dashboard",
+    "design_archetype": "ARCHETYPE 7: ELECTRIC & NEON (Dark Nightlife Club Aesthetic)",
+    "principles": [
+      "Keep 100% existing functionality — Reorganization and visual polish only",
+      "Declutter overloaded Scrapers tab into logical, collapsible, structured sub-sections",
+      "Enhance scannability and visual hierarchy with cohesive glassmorphism and clear sub-section headers",
+      "Ensure touch targets are mobile-first (≥40px) while scaling cleanly onto larger displays with max-width containers and responsive grid columns",
+      "Maintain existing dark neon identity (#FF0055 hot pink, #00F0FF cyan, Unbounded display font, Outfit body font)"
+    ]
   },
   "colors": {
-    "background": {
-      "page": "#050508",
-      "surface_base": "#0E0E12",
-      "surface_glass": "rgba(255, 255, 255, 0.02)",
-      "surface_glass_hover": "rgba(255, 255, 255, 0.05)"
+    "page_bg": "qv-app-bg (#0A0A0C to #121216 deep obsidian black)",
+    "surface": {
+      "card_bg": "bg-white/[0.04]",
+      "card_hover": "hover:bg-white/[0.07]",
+      "card_border": "border-white/10 hover:border-white/20",
+      "glass": "qv-glass (backdrop-blur-xl bg-black/60 border-b border-white/10)",
+      "accent_pink": "#FF0055 (qv-primary)",
+      "accent_cyan": "#00F0FF (qv-secondary)",
+      "accent_gold": "#FFD93D",
+      "accent_purple": "#B45CFF",
+      "accent_emerald": "#34D399"
     },
     "text": {
-      "primary": "#FFFFFF",
-      "secondary": "#A0A0AB",
-      "muted": "#60606A"
-    },
-    "brand": {
-      "neon_pink": "#FF0055",
-      "neon_cyan": "#00F0FF",
-      "deep_magenta": "#7A0029"
-    },
-    "status": {
-      "available": "#00F0FF",
-      "few_left": "#FFB800",
-      "sold_out": "#FF0055",
-      "list_only": "#B600FF"
+      "primary": "text-white",
+      "secondary": "text-white/60",
+      "muted": "text-white/40",
+      "highlight": "text-qv-primary / text-qv-secondary"
     }
   },
-  "visual_enhancers": {
-    "glassmorphism": "Use backdrop-filter: blur(24px) with a 1px border of rgba(255,255,255,0.06). Never use pure transparent backgrounds over content.",
-    "ambient_glow": "Create massive background blurred circles (filter: blur(120px)) in deep magenta and cyan, placed as fixed backgrounds with 15% opacity to break the pure black.",
-    "card_borders": "1px solid rgba(255,255,255,0.05). Add an inner shadow: inset 0 1px 0 rgba(255,255,255,0.1) for premium depth.",
-    "noise_texture": "Optionally apply a subtle SVG noise overlay (opacity: 0.03) to the body to remove digital flatness."
-  },
-  "layouts": {
-    "hero_section": "Asymmetrical layout. Massive H1 on the left. On the right, a floating abstract composition of event posters or blurred neon orbs.",
-    "bento_grid": "For statistics or 'FAQ/Benefits', use CSS Grid where items span different rows/columns. Provide generous gap (gap-6 or gap-8).",
-    "event_grid": "Responsive grid: 1 col (mobile), 2 cols (tablet), 3 or 4 cols (desktop). Posters must have aspect-ratio 4/5 or 3/4."
-  },
-  "motion": {
-    "strategy": "No React libraries. Pure CSS transitions for hover states, and Vanilla JS IntersectionObserver for scroll reveals.",
-    "scroll_reveal": {
-      "css": ".reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); } .reveal.active { opacity: 1; transform: translateY(0); }",
-      "js": "const observer = new IntersectionObserver(e => e.forEach(entry => { if(entry.isIntersecting) { entry.target.classList.add('active'); observer.unobserve(entry.target); } }), { threshold: 0.1 }); document.querySelectorAll('.reveal').forEach(el => observer.observe(el));"
+  "typography": {
+    "font_family": {
+      "heading": "font-display ('Unbounded', sans-serif)",
+      "body": "font-sans ('Outfit', sans-serif)"
     },
-    "mouse_glow_cards": {
-      "description": "Radial gradient spotlight that follows the mouse cursor inside the card.",
-      "css": ".glow-card { position: relative; overflow: hidden; background: #0E0E12; border: 1px solid rgba(255,255,255,0.05); } .glow-card::before { content: ''; position: absolute; top: var(--y, 50%); left: var(--x, 50%); width: 400px; height: 400px; background: radial-gradient(circle, rgba(255,0,85,0.15) 0%, transparent 70%); transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 2; } .glow-card:hover::before { opacity: 1; }",
-      "js": "document.querySelectorAll('.glow-card').forEach(card => card.addEventListener('mousemove', e => { const rect = card.getBoundingClientRect(); card.style.setProperty('--x', (e.clientX - rect.left) + 'px'); card.style.setProperty('--y', (e.clientY - rect.top) + 'px'); }));"
-    },
-    "micro_interactions": {
-      "poster_zoom": ".poster-img { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); } .glow-card:hover .poster-img { transform: scale(1.05); }",
-      "button_hover": "Scale up slightly (transform: scale(1.02)), increase box-shadow glow (box-shadow: 0 0 20px rgba(255,0,85,0.4))."
+    "text_sizes": {
+      "page_title": "font-display text-lg sm:text-xl font-bold text-white",
+      "section_header": "font-display text-sm sm:text-base font-bold text-white uppercase tracking-wider",
+      "card_title": "font-sans font-semibold text-sm sm:text-base text-white",
+      "stat_value": "font-display text-xl sm:text-2xl font-black text-white",
+      "caption": "font-sans text-xs text-white/50"
     }
   },
-  "component_specs": {
-    "city_hero": {
-      "layout": "Min-height 70vh, flex column or grid. H1 size clamp(3rem, 6vw, 5rem).",
-      "stats": "Inline flex row with glassmorphism pills (backdrop-blur-md, bg-white/5, border-white/10).",
-      "filters": "Sticky tab bar right below hero. Active state gets a 2px bottom border in neon pink."
-    },
-    "event_card": {
-      "wrapper": "Use .glow-card and .reveal classes.",
-      "image_container": "Border-radius 12px, overflow hidden, aspect-ratio 3/4. Include the blurred background fill trick we already have.",
-      "badges": "Absolute positioned over the image (top-left for status, bottom-right for price). Use pure CSS pulse animation for 'A la venta'.",
-      "typography": "Title in Unbounded (font-weight: 800, text-lg). Venue/Date in Outfit (text-sm, color: secondary)."
-    },
-    "event_detail_page": {
-      "hero": "Massive edge-to-edge poster with a heavy bottom gradient (to #050508) to blend into the content.",
-      "meta_boxes": "Grid of 3 items (Cuándo, Dónde, Precio). Glassmorphic background, glowing icons.",
-      "sticky_buy_bar": "Fixed bottom (bottom-0), z-index 50, glassmorphic (bg-black/80, blur-xl), border-t border-white/10. Contains Price and massive primary 'Comprar' button."
-    },
-    "buttons": {
-      "primary": "Background: linear-gradient(90deg, #FF0055, #D40047). Color: White. Font: Unbounded bold. Border-radius: 9999px (pill). Padding: 12px 24px."
-    }
+  "layout_and_navigation": {
+    "container": "max-w-4xl mx-auto px-4 pb-20",
+    "sticky_header": "sticky top-0 z-30 qv-glass px-4 py-3 flex items-center justify-between border-b border-white/10",
+    "sticky_tabs": "sticky top-[52px] z-20 qv-glass px-3 py-2 flex gap-1.5 overflow-x-auto hide-scrollbar border-b border-white/10 shadow-lg",
+    "tab_item_active": "shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 bg-white text-black transition-all shadow-sm active:scale-95",
+    "tab_item_inactive": "shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 bg-white/[0.05] text-white/60 hover:bg-white/10 hover:text-white transition-all active:scale-95"
+  },
+  "scrapers_tab_restructure": {
+    "problem": "The current Scrapers tab stacks 7 heavy panels vertically without grouping, making navigation tedious and overwhelming on mobile.",
+    "solution_groups": [
+      {
+        "id": "group_cities",
+        "title": "Configuración de Ciudades",
+        "icon": "MapPin / Globe",
+        "description": "Gestión de ciudades activas y cobertura en la plataforma",
+        "components": ["AdminCitiesPanel"]
+      },
+      {
+        "id": "group_sources",
+        "title": "Fuentes y Scrapers Activos",
+        "icon": "Radio / Cpu",
+        "description": "Administración de adaptadores, ejecuciones de scraping y changelog de sincronización",
+        "components": ["AdminScrapersPanel", "AdminScrapeChangelog"]
+      },
+      {
+        "id": "group_coverage_priority",
+        "title": "Cobertura y Prioridades",
+        "icon": "TrendingUp / ShieldCheck",
+        "description": "Nivel de entradas registradas por ClubTickets y orden de prioridad por local",
+        "components": ["AdminClubTicketsCoverage", "AdminVenuePriority"]
+      },
+      {
+        "id": "group_monetization",
+        "title": "Afiliación y Monetización",
+        "icon": "Euro / Zap",
+        "description": "Parámetros de FourVenues y enlaces de venta afiliada",
+        "components": ["AdminAffiliatePanel"]
+      },
+      {
+        "id": "group_directory",
+        "title": "Directorio de Locales",
+        "icon": "Building / Store",
+        "description": "Lista maestra de salas, discotecas y lugares verificados",
+        "components": ["AdminVenuesPanel"]
+      }
+    ],
+    "section_navigator_bar": "Sticky horizontal pill sub-nav or quick anchor filter chips at the top of Scrapers tab for instant jump / accordion toggle to specific sub-groups."
+  },
+  "tailwind_recipes": {
+    "page_background": "min-h-screen qv-app-bg text-white font-sans antialiased selection:bg-qv-primary selection:text-white",
+    "section_header_badge": "flex items-center justify-between px-1 py-2 border-b border-white/10 mb-3",
+    "collapsible_card": "rounded-2xl bg-white/[0.04] border border-white/10 hover:border-white/20 transition-all overflow-hidden mb-3 shadow-md",
+    "collapsible_card_header": "w-full flex items-center justify-between p-3.5 sm:p-4 text-left font-display text-sm font-bold text-white hover:bg-white/[0.02] active:scale-[0.99] transition-all",
+    "stat_box_grid": "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 my-3",
+    "stat_box_card": "rounded-2xl bg-white/[0.04] border border-white/10 p-3 sm:p-4 hover:border-white/20 transition-all flex flex-col justify-between",
+    "list_row_card": "w-full text-left rounded-xl bg-white/[0.04] border border-white/10 hover:border-white/20 p-3 flex items-center gap-3 active:scale-[0.99] transition-all",
+    "primary_button": "h-11 px-4 rounded-xl bg-qv-primary hover:bg-qv-primary/90 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-qv-primary/20",
+    "secondary_button": "h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all border border-white/10"
+  },
+  "accessibility_and_testing": {
+    "data_testids": [
+      "admin-dashboard",
+      "admin-tab-resumen",
+      "admin-tab-fiestas",
+      "admin-tab-avisos",
+      "admin-tab-scrapers",
+      "admin-tab-dinero",
+      "admin-tab-usuarios",
+      "admin-scrapers-group-cities",
+      "admin-scrapers-group-sources",
+      "admin-scrapers-group-coverage",
+      "admin-scrapers-group-monetization",
+      "admin-scrapers-group-directory",
+      "admin-event-search",
+      "admin-search-users",
+      "open-money-panel"
+    ],
+    "touch_targets": "Minimum 40px height for all tab buttons, row items, and interactive toggles."
   },
   "instructions_to_main_agent": [
-    "Inject the design directly into the Python SSR templates in /app/backend/server.py.",
-    "Do NOT touch or create any React files. We are returning HTML strings from Python.",
-    "Update the _SEO_CSS constant with all the custom CSS (animations, custom variables, .reveal classes, .glow-card styles, typography font-face imports).",
-    "Append a <script> block at the end of the <body> in _render_home, _render_city, _render_event, etc., containing the Vanilla JS for IntersectionObserver and Mouse Move glow effects.",
-    "Implement the .reveal classes on elements (H1s, cards, paragraphs) with inline stagger delays (e.g., style='transition-delay: 100ms') to create beautiful cascading entrances.",
-    "Ensure SEO tags and JSON-LD stay perfectly intact. Design is purely visual layer (CSS classes + minimal structural HTML divs for layout)."
-  ],
-  "universal_guidelines": {
-    "spacing": "Use 2x more padding/margin than usual. e.g., sections should have py-24 or py-32 equivalent.",
-    "accessibility": "Ensure text over gradients/images has sufficient contrast (use text-shadow or gradient overlays). Maintain descriptive aria-labels on buttons.",
-    "testing": "Add data-testid attributes to key structural elements (e.g., data-testid='event-card', data-testid='sticky-buy-bar') within the Python strings."
-  }
+    "Refactor AdminDashboard.js to introduce organized sub-groups in the Scrapers tab without modifying internal business logic or API calls of sub-components.",
+    "Ensure all existing sub-components (AdminCitiesPanel, AdminScrapeChangelog, AdminClubTicketsCoverage, AdminAffiliatePanel, AdminScrapersPanel, AdminVenuePriority, AdminVenuesPanel) are rendered inside their respective sub-section wrappers.",
+    "Add sub-navigation quick links/pills at the top of the Scrapers tab to allow instant expanding/collapsing or auto-scrolling to relevant sub-sections.",
+    "Apply responsive grid layouts for StatBoxes and summary cards so desktop displays utilize wide space cleanly without ballooning component widths.",
+    "Ensure Sonner toasts, Recharts, and testids are fully preserved."
+  ]
 }

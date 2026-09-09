@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck, Trophy, MessageCircle, Images, Zap, Check, X, BarChart3, Radio, Euro, ChevronRight, ChevronDown, History, Moon, Bell } from "lucide-react";
+import { ArrowLeft, Users, PartyPopper, TrendingUp, Star, ShieldCheck, ShieldOff, Trash2, Search, Loader2, Calendar, Ticket, BookOpen, UserCheck, Trophy, MessageCircle, Images, Zap, Check, X, BarChart3, Radio, Euro, ChevronRight, ChevronDown, History, Moon, Bell, Globe, Building2, Link2, Cpu } from "lucide-react";
 import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import AdminMomentPanel from "@/components/AdminMomentPanel";
 import AdminScrapersPanel from "@/components/AdminScrapersPanel";
@@ -20,11 +21,47 @@ import AdminInviteNudge from "@/components/AdminInviteNudge";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
-    <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-3">
+    <div className="rounded-2xl bg-white/[0.04] border border-white/10 hover:border-white/20 transition-colors p-3 sm:p-4 flex flex-col justify-between">
       <Icon className={`w-4 h-4 ${color}`} />
       <p className="font-display text-2xl font-bold text-white mt-1">{value ?? 0}</p>
       <p className="text-white/50 text-xs">{label}</p>
     </div>
+  );
+}
+
+// Collapsible group card — used to declutter the Scrapers tab by grouping its
+// many panels under clear, labelled, expandable sub-sections.
+function AdminSection({ id, testid, icon: Icon, color = "text-qv-secondary", tint = "rgba(0,240,255,0.12)", title, desc, open, onToggle, children }) {
+  return (
+    <section id={id} data-testid={testid} className="scroll-mt-28 rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden mb-3">
+      <button
+        onClick={onToggle}
+        data-testid={testid ? `${testid}-toggle` : undefined}
+        className="w-full flex items-center gap-3 p-3.5 sm:p-4 text-left active:scale-[0.995] transition-transform"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10" style={{ background: tint }}>
+          <Icon className={`w-5 h-5 ${color}`} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-display text-sm font-bold text-white leading-tight">{title}</p>
+          {desc && <p className="text-white/45 text-[11px] leading-snug mt-0.5">{desc}</p>}
+        </div>
+        {open ? <ChevronDown className="w-5 h-5 text-white/40 shrink-0" /> : <ChevronRight className="w-5 h-5 text-white/40 shrink-0" />}
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="overflow-hidden border-t border-white/10"
+          >
+            <div className="pb-2">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
   );
 }
 
@@ -35,6 +72,15 @@ const TABS = [
   { id: "scrapers", label: "Scrapers", icon: Radio },
   { id: "dinero", label: "Dinero", icon: Euro },
   { id: "usuarios", label: "Usuarios", icon: Users },
+];
+
+// Scrapers tab is grouped into these collapsible sub-sections (declutter).
+const SCRAPER_SECTIONS = [
+  { id: "cities", testid: "admin-scrapers-group-cities", icon: Globe, color: "text-qv-secondary", tint: "rgba(0,240,255,0.12)", title: "Ciudades de la app", desc: "Añade, oculta o elimina las ciudades disponibles" },
+  { id: "sources", testid: "admin-scrapers-group-sources", icon: Radio, color: "text-qv-primary", tint: "rgba(255,0,85,0.12)", title: "Fuentes y scrapers", desc: "Discotecas por adaptador + novedades del scrapeo" },
+  { id: "coverage", testid: "admin-scrapers-group-coverage", icon: TrendingUp, color: "text-emerald-300", tint: "rgba(52,211,153,0.12)", title: "Cobertura y prioridad", desc: "Cobertura ClubTickets y orden de discotecas" },
+  { id: "monetization", testid: "admin-scrapers-group-monetization", icon: Link2, color: "text-yellow-300", tint: "rgba(255,217,61,0.12)", title: "Afiliación y ventas", desc: "Configuración de afiliado FourVenues" },
+  { id: "directory", testid: "admin-scrapers-group-directory", icon: Building2, color: "text-fuchsia-300", tint: "rgba(180,92,255,0.12)", title: "Directorio de locales", desc: "Ficha maestra de salas y discotecas" },
 ];
 
 const SALE_LABEL = {
@@ -53,6 +99,16 @@ export default function AdminDashboard() {
   const [statsEventId, setStatsEventId] = useState(null);
   const [momentOpen, setMomentOpen] = useState(false);
   const [pastOpen, setPastOpen] = useState(false);
+  const [openSections, setOpenSections] = useState({ cities: true, sources: true });
+
+  const toggleSection = (id) => setOpenSections((s) => ({ ...s, [id]: !s[id] }));
+  const jumpToSection = (id) => {
+    setOpenSections((s) => ({ ...s, [id]: true }));
+    setTimeout(() => {
+      const el = document.getElementById(`scrapers-${id}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
 
   const { data: stats } = useQuery({ queryKey: ["admin-stats"], queryFn: async () => (await api.get("/admin/stats")).data, staleTime: 30_000 });
   const { data: dashboard } = useQuery({ queryKey: ["admin-dashboard"], queryFn: async () => (await api.get("/admin/dashboard")).data, staleTime: 30_000 });
@@ -141,10 +197,12 @@ export default function AdminDashboard() {
         })}
       </div>
 
+      {/* Tab content (centred + width-capped for wide screens) */}
+      <main className="max-w-4xl mx-auto w-full">
       {/* ---------------- RESUMEN ---------------- */}
       {tab === "resumen" && (
         <>
-          <div className="px-4 pt-4 grid grid-cols-3 gap-2">
+          <div className="px-4 pt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             <StatBox icon={Users} value={stats?.totals.users} label="usuarios" color="text-qv-secondary" />
             <StatBox icon={UserCheck} value={stats?.totals.active_week} label="activos 7d" color="text-emerald-400" />
             <StatBox icon={PartyPopper} value={stats?.totals.upcoming} label="próximas" color="text-qv-primary" />
@@ -180,7 +238,7 @@ export default function AdminDashboard() {
           )}
 
           {dashboard?.extras && (
-            <div className="px-4 mt-3 grid grid-cols-4 gap-2">
+            <div className="px-4 mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <StatBox icon={MessageCircle} value={dashboard.extras.dms} label="DM" color="text-blue-300" />
               <StatBox icon={Users} value={dashboard.extras.groups} label="grupos" color="text-emerald-300" />
               <StatBox icon={Images} value={dashboard.extras.album_items} label="álbum" color="text-fuchsia-300" />
@@ -273,13 +331,43 @@ export default function AdminDashboard() {
       {/* ---------------- SCRAPERS ---------------- */}
       {tab === "scrapers" && (
         <div className="px-4 pt-4">
-          <AdminCitiesPanel />
-          <AdminScrapeChangelog />
-          <AdminClubTicketsCoverage />
-          <AdminAffiliatePanel />
-          <AdminScrapersPanel />
-          <AdminVenuePriority />
-          <AdminVenuesPanel />
+          {/* Quick jump / sub-navigation */}
+          <div className="flex gap-1.5 overflow-x-auto hide-scrollbar pb-1 mb-3" data-testid="admin-scrapers-nav">
+            {SCRAPER_SECTIONS.map((s) => {
+              const Icon = s.icon;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => jumpToSection(s.id)}
+                  data-testid={`admin-scrapers-jump-${s.id}`}
+                  className="shrink-0 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 bg-white/[0.05] text-white/70 border border-white/10 hover:bg-white/10 hover:text-white active:scale-95 transition-colors"
+                >
+                  <Icon className={`w-3.5 h-3.5 ${s.color}`} /> {s.title.split(" ")[0]}
+                </button>
+              );
+            })}
+          </div>
+
+          {SCRAPER_SECTIONS.map((s) => (
+            <AdminSection
+              key={s.id}
+              id={`scrapers-${s.id}`}
+              testid={s.testid}
+              icon={s.icon}
+              color={s.color}
+              tint={s.tint}
+              title={s.title}
+              desc={s.desc}
+              open={!!openSections[s.id]}
+              onToggle={() => toggleSection(s.id)}
+            >
+              {s.id === "cities" && <AdminCitiesPanel />}
+              {s.id === "sources" && (<><AdminScrapersPanel /><AdminScrapeChangelog /></>)}
+              {s.id === "coverage" && (<><AdminClubTicketsCoverage /><AdminVenuePriority /></>)}
+              {s.id === "monetization" && <AdminAffiliatePanel />}
+              {s.id === "directory" && <AdminVenuesPanel />}
+            </AdminSection>
+          ))}
         </div>
       )}
 
@@ -287,7 +375,7 @@ export default function AdminDashboard() {
       {tab === "dinero" && (
         <div className="px-4 pt-4">
           {funnel?.totals && (
-            <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
               <StatBox icon={Ticket} value={funnel.totals.tickets} label="entradas" color="text-emerald-300" />
               <StatBox icon={Euro} value={`${Math.round(funnel.totals.commission)}€`} label="comisión est." color="text-yellow-300" />
               <StatBox icon={Users} value={funnel.totals.going} label="van (total)" color="text-qv-primary" />
@@ -348,6 +436,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      </main>
       {statsEventId && <AdminEventStats eventId={statsEventId} onClose={() => setStatsEventId(null)} />}
     </div>
   );
