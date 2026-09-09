@@ -35,7 +35,8 @@ const SALE_STATES = [
   { value: "agotado", label: "Agotado", color: "text-white/40" },
 ];
 
-function EventForm({ initial, onSaved, cityDefault }) {
+function EventForm({ initial, onSaved, cityDefault, cities }) {
+  const cityOptions = cities && cities.length ? cities : CITIES;
   const qc = useQueryClient();
   const [form, setForm] = useState(() => {
     if (!initial) return { ...EMPTY, city: cityDefault || EMPTY.city };
@@ -240,7 +241,7 @@ function EventForm({ initial, onSaved, cityDefault }) {
           onChange={set("city")}
           className={inputCls + " px-3 appearance-none"}
         >
-          {CITIES.map((c) => (
+          {cityOptions.map((c) => (
             <option key={c.value} value={c.value} className="bg-qv-bg text-white">{c.label}</option>
           ))}
         </select>
@@ -383,6 +384,20 @@ export default function Admin() {
   const [city, setCity] = useState("Palma de Mallorca");
   const [tab, setTab] = useState("upcoming");
 
+  // Dynamic city list from the backend so cities added in the "Panel de control"
+  // (e.g. Sevilla) show up here automatically — no more hardcoded list.
+  const { data: citiesData } = useQuery({
+    queryKey: ["cities"],
+    queryFn: async () => (await api.get("/cities")).data,
+    staleTime: 300_000,
+  });
+  const cityOptions = useMemo(
+    () => (citiesData?.cities?.length
+      ? citiesData.cities.map((c) => ({ value: c.id, label: c.label }))
+      : CITIES),
+    [citiesData],
+  );
+
   const scope = tab === "past" ? "past" : "upcoming";
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["admin-events", city, scope],
@@ -523,7 +538,7 @@ export default function Admin() {
           </button>
           <div>
             <h1 className="font-display text-2xl font-black tracking-tighter">Panel admin</h1>
-            <p className="text-white/40 text-xs">{events.length} fiestas · {CITIES.find((c) => c.value === city)?.label}</p>
+            <p className="text-white/40 text-xs">{events.length} fiestas · {cityOptions.find((c) => c.value === city)?.label}</p>
           </div>
           <button
             data-testid="admin-money-btn"
@@ -554,7 +569,7 @@ export default function Admin() {
 
         {/* City selector — a separate admin per city */}
         <div className="px-5 mb-3 flex gap-2 overflow-x-auto no-scrollbar">
-          {CITIES.map((c) => (
+          {cityOptions.map((c) => (
             <button
               key={c.value}
               data-testid={`admin-city-${c.value}`}
@@ -598,7 +613,7 @@ export default function Admin() {
               </DialogTrigger>
               <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader><DialogTitle className="font-display">Nueva fiesta</DialogTitle></DialogHeader>
-                <EventForm cityDefault={city} onSaved={() => setOpenNew(false)} />
+                <EventForm cityDefault={city} cities={cityOptions} onSaved={() => setOpenNew(false)} />
               </DialogContent>
             </Dialog>
           </div>
@@ -686,7 +701,7 @@ export default function Admin() {
         <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
           <DialogContent className="bg-[#121215] border-white/10 text-white max-w-md rounded-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="font-display">Editar fiesta</DialogTitle></DialogHeader>
-            {editing && <EventForm initial={editing} onSaved={() => setEditing(null)} />}
+            {editing && <EventForm initial={editing} cities={cityOptions} onSaved={() => setEditing(null)} />}
           </DialogContent>
         </Dialog>
 
