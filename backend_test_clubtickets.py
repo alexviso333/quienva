@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, List
 
 # Configuration
-BACKEND_URL = "https://quienva-events.preview.emergentagent.com"
+BACKEND_URL = "https://party-hub-control.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Admin credentials from /app/memory/test_credentials.md

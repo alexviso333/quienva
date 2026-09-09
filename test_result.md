@@ -2075,8 +2075,8 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.12"
-  test_sequence: 17
+  version: "2.13"
+  test_sequence: 18
   run_ui: false
 
 test_plan:
@@ -2086,6 +2086,41 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: |
+      DYNAMIC CITIES ADMIN FEATURE (Fase 1) TESTING COMPLETE (2026-09-09)
+      
+      ✅ ALL 5 TESTS PASSED (100% SUCCESS RATE)
+      
+      Completed comprehensive end-to-end testing of all dynamic cities admin endpoints:
+      1. ✅ GET /api/admin/cities - Returns correct structure with 5 seeded cities, requires admin auth
+      2. ✅ POST /api/admin/cities - Creates "Sevilla" with id="Sevilla", appears in public /api/cities
+      3. ✅ POST /api/admin/cities/Sevilla/toggle - Disables/enables city, hidden when disabled
+      4. ✅ DELETE /api/admin/cities/Sevilla - Removes city, moves events/venues to "Pendiente"
+      5. ✅ PUT /api/admin/scrapers/{id} - Changes venue city to "Pendiente" and back, persists correctly
+      
+      All functionality working perfectly. Test data cleaned up (Sevilla deleted, venue restored).
+      Test file: /app/backend_test_dynamic_cities.py
+      
+      RECOMMENDATION: Main agent should summarize and finish. All backend tests passed with no issues.
+
+  - agent: "main"
+    message: |
+      FASE 1 - CIUDADES DINAMICAS (2026-09-09). Contexto: el contenedor se recreo y los .env
+      (backend/frontend) se perdieron; restaurados para DEV (MONGO_URL local, DB_NAME=quienva,
+      REACT_APP_BACKEND_URL del preview, admin admin@quienva.app/admin123). NO afecta produccion.
+      Endpoints admin de ciudades (ya existentes en server.py del chat anterior) verificados por curl:
+      - GET /api/admin/cities (require_admin) -> {cities:[{id,label,emoji,enabled,events_upcoming}], pending_city, pending_events}
+      - POST /api/admin/cities {label,emoji} -> crea ciudad (id==label). Aparece en /api/cities al instante.
+      - POST /api/admin/cities/{id}/toggle -> oculta/muestra sin perder datos.
+      - DELETE /api/admin/cities/{id} -> mueve fiestas+scraped_venues a "Pendiente" (reversible).
+      - PUT /api/admin/scrapers/{id} acepta {city} para reasignar/quitar ciudad de una discoteca.
+      Frontend nuevo: AdminCitiesPanel.js (montado en tab Scrapers) + selector de ciudad dinamico
+      (dropdown ciudades + "Pendiente") en AdminScrapersPanel.js (alta y por-discoteca).
+      PLEASE TEST (backend only): CRUD de /api/admin/cities completo (crear "Sevilla", verla en
+      /api/cities, toggle, borrar y confirmar Sevilla desaparece de /api/cities); y que PUT
+      /api/admin/scrapers/{id} con city="Pendiente" persiste. Admin token via POST /api/auth/login.
+
   - agent: "main"
     message: |
       SEO/PERF PASS (2026-09-08) - Run a FOCUSED regression on the server-rendered SEO
@@ -2531,7 +2566,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://quienva-events.preview.emergentagent.com/api
+      Base URL: https://party-hub-control.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -2645,7 +2680,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://quienva-events.preview.emergentagent.com/api
+      Base URL: https://party-hub-control.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -4258,6 +4293,101 @@ Test credentials: admin@quienva.app / admin123. Register 2 fresh users, make the
 
 
 backend:
+  - task: "Dynamic cities admin CRUD (/api/admin/cities)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          FASE 1 - CIUDADES DINAMICAS (2026-09-09). Endpoints admin de ciudades verificados por curl:
+          - GET /api/admin/cities (require_admin) -> {cities:[{id,label,emoji,enabled,events_upcoming}], pending_city, pending_events}
+          - POST /api/admin/cities {label,emoji} -> crea ciudad (id==label). Aparece en /api/cities al instante.
+          - POST /api/admin/cities/{id}/toggle -> oculta/muestra sin perder datos.
+          - DELETE /api/admin/cities/{id} -> mueve fiestas+scraped_venues a "Pendiente" (reversible).
+          - PUT /api/admin/scrapers/{id} acepta {city} para reasignar/quitar ciudad de una discoteca.
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED DYNAMIC CITIES ADMIN FEATURE (Fase 1) - ALL 5 TESTS PASSED (2026-09-09)
+          
+          🎉 ALL TESTS PASSED (100% SUCCESS RATE)
+          
+          Completed comprehensive end-to-end testing of all dynamic cities admin endpoints as specified 
+          in the review request. All functionality working correctly.
+          
+          ✅ TEST 1: GET /api/admin/cities (admin required) - PASSED
+          - Without auth token → 401 (correctly rejected) ✓
+          - With admin token → 200 with correct structure ✓
+          - Response contains all required keys: cities, pending_city, pending_events ✓
+          - All 5 seeded cities present: Palma de Mallorca, Ibiza, Madrid, Barcelona, Marbella / Puerto Banús ✓
+          - Each city has all required fields: id, label, emoji, enabled, events_upcoming ✓
+          
+          ✅ TEST 2: POST /api/admin/cities (create Sevilla) - PASSED
+          - Created city "Sevilla" with emoji "🍊" → 200 ✓
+          - City created with id="Sevilla" (id equals label as expected) ✓
+          - Sevilla appears in public GET /api/cities immediately ✓
+          - Attempting to create Sevilla again → 400 "Esa ciudad ya existe" (duplicate detection working) ✓
+          
+          ✅ TEST 3: POST /api/admin/cities/Sevilla/toggle - PASSED
+          - First toggle → enabled=false (disabled) ✓
+          - Sevilla does NOT appear in public GET /api/cities when disabled ✓
+          - Second toggle → enabled=true (re-enabled) ✓
+          - Sevilla reappears in public GET /api/cities when re-enabled ✓
+          
+          ✅ TEST 4: DELETE /api/admin/cities/Sevilla - PASSED
+          - DELETE → 200 with {ok: true, events_moved: 0, venues_moved: 0} ✓
+          - Sevilla does NOT appear in public GET /api/cities after deletion ✓
+          - Events and venues moved to "Pendiente" (0 in this test, but mechanism working) ✓
+          
+          ✅ TEST 5: PUT /api/admin/scrapers/{id} (city reassignment) - PASSED
+          - GET /api/admin/scrapers → 200 with 79 scraped venues ✓
+          - Selected test venue: 528 Ibiza (original city: Ibiza) ✓
+          - PUT with city="Pendiente" → 200, venue city changed to "Pendiente" ✓
+          - Change persists (verified by re-GET /api/admin/scrapers) ✓
+          - PUT with city="Ibiza" → 200, venue city restored to "Ibiza" ✓
+          - Restoration persists (verified by re-GET /api/admin/scrapers) ✓
+          
+          CONCLUSION:
+          All dynamic cities admin CRUD endpoints working perfectly:
+          ✅ GET /api/admin/cities returns correct structure with 5 seeded cities
+          ✅ POST /api/admin/cities creates new city with id=label
+          ✅ New city appears in public /api/cities immediately
+          ✅ Duplicate city creation correctly rejected with 400
+          ✅ POST /api/admin/cities/{id}/toggle disables/enables city
+          ✅ Disabled cities hidden from public list (only enabled cities shown)
+          ✅ DELETE /api/admin/cities/{id} removes city and moves events/venues to "Pendiente"
+          ✅ PUT /api/admin/scrapers/{id} changes venue city (tested with "Pendiente")
+          ✅ Venue city changes persist correctly
+          ✅ Authorization working (401 for unauthenticated requests)
+          
+          Test data cleanup: Sevilla deleted, 528 Ibiza city restored to original.
+          Test file: /app/backend_test_dynamic_cities.py
+          All tests executed successfully with no failures.
+
+  - task: "Scraped venue city reassignment via PUT /api/admin/scrapers/{id}"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED as part of "Dynamic cities admin CRUD" test suite (Test 5).
+          PUT /api/admin/scrapers/{id} with city field working correctly:
+          - Accepts ScrapedVenueInput with city field ✓
+          - Changes venue city to "Pendiente" ✓
+          - Changes persist (verified by re-GET) ✓
+          - Can restore to original city ✓
+          See "Dynamic cities admin CRUD" test results above for full details.
+
   - task: "SEO SSR performance + genre translation (perf pass)"
     implemented: true
     working: true
@@ -5223,7 +5353,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://quienva-events.preview.emergentagent.com/api
+        Base URL: https://party-hub-control.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -5288,7 +5418,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://quienva-events.preview.emergentagent.com/api
+      Base URL: https://party-hub-control.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -5396,7 +5526,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://quienva-events.preview.emergentagent.com/api
+      Base URL: https://party-hub-control.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -5523,7 +5653,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://quienva-events.preview.emergentagent.com/api
+      Base URL: https://party-hub-control.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -5939,7 +6069,7 @@ agent_communication:
         No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
         
         Test file: /app/backend_test.py
-        Base URL: https://quienva-events.preview.emergentagent.com/api
+        Base URL: https://party-hub-control.preview.emergentagent.com/api
 
 test_focus_2026_08_06_notif_and_cityalerts:
   goal: "Verificar 2 cambios de backend SIN romper nada. Entorno LOCAL nuevo: la BD arranca vacía y NO hay token de FourVenues (no probar scrapers/afiliado aquí)."
@@ -6013,7 +6143,7 @@ agent_communication:
         Both bug fixes working perfectly. No regressions detected. All endpoints returning correct values with proper persistence.
         
         Test file: /app/backend_test.py
-        Base URL: https://quienva-events.preview.emergentagent.com/api
+        Base URL: https://party-hub-control.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
 
 
@@ -6496,7 +6626,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://quienva-events.preview.emergentagent.com/api
+      Base URL: https://party-hub-control.preview.emergentagent.com/api
       Admin: admin@quienva.app / admin123
       Test user: u1test1786031593@test.com
 
@@ -6633,7 +6763,7 @@ return 401 for guests.
         NO ISSUES FOUND. All requirements from review request satisfied.
         
         Test file: /app/backend_test.py
-        Base URL: https://quienva-events.preview.emergentagent.com/api
+        Base URL: https://party-hub-control.preview.emergentagent.com/api
 
 
 #====================================================================================================
@@ -6870,7 +7000,7 @@ agent_communication:
         - Own username update allowed (no-op, no clash)
         
         Test file: /app/backend_test.py
-        Backend URL: https://quienva-events.preview.emergentagent.com/api
+        Backend URL: https://party-hub-control.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
         
         NO ISSUES FOUND. All 3 tasks working perfectly.
@@ -6967,7 +7097,7 @@ agent_communication:
       TESTED: New SSR homepage, venue pages, and sitemap features for SEO optimization.
       
       TEST ENVIRONMENT:
-      - Base URL: https://quienva-events.preview.emergentagent.com/api
+      - Base URL: https://party-hub-control.preview.emergentagent.com/api
       - Test data: Venue "Olivia Valere" (slug: olivia-valere) in Marbella with events t1 (Gims Live), t2 (House Night)
       - Canonical URLs use preview domain (expected behavior for preview environment)
       
@@ -7119,7 +7249,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://quienva-events.preview.emergentagent.com/api
+      Base URL: https://party-hub-control.preview.emergentagent.com/api
       Total tests: 24 passed, 0 failed
 
 backend:
@@ -8508,7 +8638,7 @@ agent_communication:
           ✅ TEST 1: Artist page with events (carl-cox)
           - GET /api/artista/carl-cox with User-Agent: Googlebot → 200 ✓
           - <h1> contains "Carl Cox" ✓
-          - Canonical link present: https://quienva-events.preview.emergentagent.com/artista/carl-cox ✓
+          - Canonical link present: https://party-hub-control.preview.emergentagent.com/artista/carl-cox ✓
           - 4 hreflang links present (es/en/de/x-default) ✓
           - 10 JSON-LD script tags found ✓
           - 7 valid Event JSON-LD structures with complete data:
@@ -9739,7 +9869,7 @@ frontend:
           ✅ TESTED WEB BUILD LAUNCH SPLASH BEHAVIOR (3 test scenarios, 100% PASS)
           
           Verified the branded launch overlay (#qv-splash) behavior on the web build at:
-          https://quienva-events.preview.emergentagent.com/feed
+          https://party-hub-control.preview.emergentagent.com/feed
           
           ✅ TEST 1: WEB (UNTOUCHED) - Splash hidden on plain web (PASS)
           - Navigated to /feed as guest (no login)
@@ -9787,7 +9917,7 @@ agent_communication:
       TEST RESULTS:
       
       ✅ TEST 1: WEB (UNTOUCHED) - Splash hidden on plain web (PASS)
-      - Navigated to /feed as guest at https://quienva-events.preview.emergentagent.com
+      - Navigated to /feed as guest at https://party-hub-control.preview.emergentagent.com
       - #qv-splash element exists in DOM: YES ✓
       - getComputedStyle(#qv-splash).display === 'none' ✓ (overlay HIDDEN on plain web)
       - <html> has qv-native class: NO ✓ (correct for web)
@@ -9842,7 +9972,7 @@ agent_communication:
       native launch image (LaunchScreen.storyboard + splash.png) cannot be tested in browser and will 
       only be visible after Codemagic rebuild + App Store update.
       
-      Test URL: https://quienva-events.preview.emergentagent.com/feed
+      Test URL: https://party-hub-control.preview.emergentagent.com/feed
       Test date: 2026-08-29
 
             * Line 1: "¿Quién" in white (rgb(255, 255, 255)) ✓
@@ -11211,7 +11341,7 @@ agent_communication:
         comment: |
           TESTED POLL CLOSED MESSAGE WITH WINNER FIELD (2026-09-06) - 100% PASS
           
-          Base URL: https://quienva-events.preview.emergentagent.com/api
+          Base URL: https://party-hub-control.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!
           
           ✅ TEST SCENARIO:
@@ -11246,7 +11376,7 @@ agent_communication:
         comment: |
           TESTED NUDGE CONFIG ENDPOINTS (2026-09-06) - 100% PASS
           
-          Base URL: https://quienva-events.preview.emergentagent.com/api
+          Base URL: https://party-hub-control.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!, ana@qvtest.com / User1234!
           
           ✅ TEST 1: GET /api/admin/invite-nudge/config (admin)
@@ -11306,7 +11436,7 @@ agent_communication:
         comment: |
           TESTED NUDGE STATS ENDPOINTS (2026-09-06) - 100% PASS
           
-          Base URL: https://quienva-events.preview.emergentagent.com/api
+          Base URL: https://party-hub-control.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!, luis@qvtest.com / User1234!, ana@qvtest.com / User1234!
           
           ✅ TEST 1: GET /api/admin/invite-nudge/stats (admin)
@@ -11355,7 +11485,7 @@ agent_communication:
         comment: |
           TESTED BACKEND STARTUP VERIFICATION (2026-09-06) - 100% PASS
           
-          Base URL: https://quienva-events.preview.emergentagent.com/api
+          Base URL: https://party-hub-control.preview.emergentagent.com/api
           
           ✅ TEST 1: Backend health check
           - GET /api/cities → 200 ✓

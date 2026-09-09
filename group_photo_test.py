@@ -11,7 +11,7 @@ from io import BytesIO
 from PIL import Image
 
 # Base URL from frontend/.env
-BASE_URL = "https://quienva-events.preview.emergentagent.com/api"
+BASE_URL = "https://party-hub-control.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@quienva.app"

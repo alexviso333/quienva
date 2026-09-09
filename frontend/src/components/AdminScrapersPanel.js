@@ -36,7 +36,27 @@ export default function AdminScrapersPanel() {
     staleTime: 30_000,
   });
 
+  // Dynamic cities (admin-managed) so the venue city selector always matches the
+  // app's live list. "Pendiente" is always available to un-assign a venue.
+  const { data: citiesData } = useQuery({
+    queryKey: ["cities"],
+    queryFn: async () => (await api.get("/cities")).data,
+    staleTime: 30_000,
+  });
+  const PENDING = citiesData?.pending_city || "Pendiente";
+  const cityOptions = [
+    ...(citiesData?.cities || []).map((c) => c.id),
+    PENDING,
+  ];
+
   const inv = () => qc.invalidateQueries({ queryKey: ["admin-scrapers"] });
+
+  // Reassign (or un-assign to "Pendiente") a scraped venue's city in one click.
+  const setCity = useMutation({
+    mutationFn: async ({ v, city }) => (await api.put(`/admin/scrapers/${v.id}`, { ...v, city })).data,
+    onSuccess: () => { toast.success("Ciudad actualizada"); inv(); },
+    onError: (e) => toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Error"),
+  });
 
   const saveToken = useMutation({
     mutationFn: async () => (await api.put("/admin/scrapers/fourvenues-token", { token: tokenInput.trim() })).data,
@@ -223,6 +243,19 @@ export default function AdminScrapersPanel() {
                   {v.last_run_error && (
                     <p className="text-rose-300/80 text-[10px] mt-1 truncate">⚠ {v.last_run_error}</p>
                   )}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <span className="text-white/40 text-[10px]">Ciudad</span>
+                    <select
+                      value={v.city || PENDING}
+                      onChange={(e) => setCity.mutate({ v, city: e.target.value })}
+                      className={`h-7 rounded-lg px-2 text-[11px] border ${v.city === PENDING ? "bg-amber-400/10 border-amber-400/30 text-amber-200" : "bg-white/5 border-white/10 text-white"}`}
+                      data-testid={`scraper-city-${v.id}`}
+                    >
+                      {(cityOptions.includes(v.city) ? cityOptions : [v.city, ...cityOptions]).map((c) => (
+                        <option key={c} value={c} className="bg-black">{c}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               <div className="mt-2 grid grid-cols-3 gap-1.5">
@@ -298,12 +331,16 @@ export default function AdminScrapersPanel() {
               El slug es lo que va tras <span className="text-white/60">site.fourvenues.com/es/</span> en la web del club.
             </p>
           )}
-          <input
-            placeholder="Ciudad"
+          <select
             value={newVenue.city}
             onChange={(e) => setNewVenue({ ...newVenue, city: e.target.value })}
-            className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm placeholder:text-white/40"
-          />
+            className="h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm"
+            data-testid="scraper-new-city"
+          >
+            {cityOptions.map((c) => (
+              <option key={c} value={c} className="bg-black">{c}</option>
+            ))}
+          </select>
           <div className="flex gap-2">
             <button
               onClick={() => {

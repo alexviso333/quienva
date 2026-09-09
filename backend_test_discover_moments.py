@@ -8,7 +8,7 @@ import io
 from datetime import datetime
 from PIL import Image
 
-BASE_URL = "https://quienva-events.preview.emergentagent.com/api"
+BASE_URL = "https://party-hub-control.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

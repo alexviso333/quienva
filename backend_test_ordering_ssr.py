@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import re
 
 # Base URL from frontend/.env
-BASE_URL = "https://b3074979-1e6d-439f-b8c8-6cba71645f27.preview.emergentagent.com/api"
+BASE_URL = "https://party-hub-control.preview.emergentagent.com/api"
 
 # Test credentials from /app/memory/test_credentials.md
 TEST_EMAIL = "pruebapoll@test.dev"

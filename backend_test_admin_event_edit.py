@@ -19,7 +19,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Backend URL from frontend/.env
-BASE_URL = "https://quienva-events.preview.emergentagent.com/api"
+BASE_URL = "https://party-hub-control.preview.emergentagent.com/api"
 
 # Admin credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

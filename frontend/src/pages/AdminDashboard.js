@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import AdminMomentPanel from "@/components/AdminMomentPanel";
 import AdminScrapersPanel from "@/components/AdminScrapersPanel";
-import AdminVenuesPanel from "@/components/AdminVenuesPanel";
+import AdminCitiesPanel from "@/components/AdminCitiesPanel";import AdminVenuesPanel from "@/components/AdminVenuesPanel";
 import AdminVenuePriority from "@/components/AdminVenuePriority";
 import AdminScrapeChangelog from "@/components/AdminScrapeChangelog";
 import AdminAffiliatePanel from "@/components/AdminAffiliatePanel";
@@ -273,6 +273,7 @@ export default function AdminDashboard() {
       {/* ---------------- SCRAPERS ---------------- */}
       {tab === "scrapers" && (
         <div className="px-4 pt-4">
+          <AdminCitiesPanel />
           <AdminScrapeChangelog />
           <AdminClubTicketsCoverage />
           <AdminAffiliatePanel />
