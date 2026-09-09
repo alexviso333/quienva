@@ -2593,10 +2593,18 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
                     + f'<script type="application/ld+json">{_breadcrumb_jsonld(bc_items)}</script>'
                     f'<script type="application/ld+json">{_faq_jsonld(faq_pairs)}</script>')
 
+    # Thin-content guard: a city (or timeframe) page with ZERO upcoming parties is
+    # thin — keep it OUT of Google's index until it has real content. When the city
+    # fills up with events it becomes indexable automatically on the next crawl.
+    # This is what prevents brand-new cities (just added from the admin) from
+    # creating low-value pages in Google.
+    robots_meta = ("noindex,follow" if n == 0
+                   else "index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1")
+
     html_out = f"""<!doctype html>
 <html lang="{T['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+<meta name="robots" content="{robots_meta}">
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <link rel="canonical" href="{e(canonical)}">{_ICONS_HEAD}
@@ -2636,8 +2644,11 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 {langsw}
 <footer>{e(T["footer"])}</footer>
 </div>{_app_sticky_bar(lang)}{_search_js}</body></html>"""
+    headers = {"Cache-Control": "public, max-age=1800"}
+    if n == 0:
+        headers["X-Robots-Tag"] = "noindex, follow"
     return StarletteResponse(content=html_out, media_type="text/html; charset=utf-8",
-                             headers={"Cache-Control": "public, max-age=1800"})
+                             headers=headers)
 
 
 @api_router.api_route("/ciudad/{slug}", methods=["GET", "HEAD"])
@@ -4756,12 +4767,31 @@ async def _city_lastmods(today: str) -> dict:
     return out
 
 
+async def _city_tf_count(city_id: str, timeframe: str) -> int:
+    """Count upcoming parties for a city in a given timeframe. Used to keep thin/
+    empty city pages OUT of the sitemap (they're also noindex) so Google only sees
+    city pages that have real content."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    if timeframe == "tonight":
+        q = {"city": city_query_value(city_id), "date": today.isoformat()}
+    elif timeframe == "weekend":
+        start, end = _weekend_range(today)
+        q = {"city": city_query_value(city_id), "date": {"$gte": start, "$lte": end}}
+    else:  # all upcoming
+        q = {"city": city_query_value(city_id), "date": {"$gte": today.isoformat()}}
+    return await db.events.count_documents(q)
+
+
 async def _sitemap_cities_xml(front: str, today: str) -> str:
     lastmods = await _city_lastmods(today)
     parts = [f"<url><loc>{front}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>"]
     for c in SUPPORTED_CITIES:
         lm = lastmods.get(c["id"], today)
         for tf in ("all", "tonight", "weekend"):
+            # Skip empty (thin) city pages — they're noindex anyway; listing only
+            # pages with real content concentrates crawl budget on what matters.
+            if await _city_tf_count(c["id"], tf) == 0:
+                continue
             cp = _city_tf_paths(front, _city_slug(c["id"]), tf)
             for lang in SEO_LANGS:
                 parts.append(_sitemap_url(cp, lang, lm, "daily"))
@@ -8407,8 +8437,8 @@ async def admin_list_users(
         going = await db.interests.count_documents({"user_id": u["user_id"], "status": "voy"})
         attended = await db.interests.count_documents({"user_id": u["user_id"], "status": "estuve"})
         friends = await db.friendships.count_documents({
-            "$or": [{"from_user_id": u["user_id"], "status": "accepted"},
-                    {"to_user_id": u["user_id"], "status": "accepted"}]
+            "status": "accepted",
+            "$or": [{"requester_id": u["user_id"]}, {"addressee_id": u["user_id"]}],
         })
         groups = await db.groups.count_documents({"member_ids": u["user_id"]})
         referred = await db.users.count_documents({"referred_by": u["user_id"]})

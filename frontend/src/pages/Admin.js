@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, ArrowLeft, ImageUp, Loader2, Ticket, ExternalLink, Link as LinkIcon, Wand2, Zap, Tag, X, BellRing, BarChart3, CalendarDays, History } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowLeft, ImageUp, Loader2, Ticket, ExternalLink, Link as LinkIcon, Wand2, Zap, Tag, X, BellRing, BarChart3, CalendarDays, History, LayoutDashboard, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
 const CITIES = [
@@ -393,8 +393,8 @@ export default function Admin() {
   });
   const cityOptions = useMemo(
     () => (citiesData?.cities?.length
-      ? citiesData.cities.map((c) => ({ value: c.id, label: c.label }))
-      : CITIES),
+      ? citiesData.cities.map((c) => ({ value: c.id, label: c.label, emoji: c.emoji || "" }))
+      : CITIES.map((c) => ({ ...c, emoji: "" }))),
     [citiesData],
   );
 
@@ -491,24 +491,38 @@ export default function Admin() {
     { value: "past", label: "Pasadas", icon: History },
   ];
 
-  const Row = ({ ev, showMoment }) => (
-    <div className="flex gap-3 bg-white/5 border border-white/10 rounded-2xl p-3" data-testid={`admin-event-${ev.id}`}>
-      {ev.image_url && (
-        <img src={mediaThumb(ev.image_url, 200)} alt={ev.name} loading="lazy" className="w-16 h-16 rounded-xl object-cover shrink-0" />
-      )}
+  const Row = ({ ev, showMoment }) => {
+    const sale = SALE_STATES.find((s) => s.value === (ev.sale_state || "no_a_la_venta"));
+    const avail = (ev.price_tiers || []).filter((t) => !t.sold_out && t.price > 0).map((t) => t.price);
+    const minPrice = avail.length ? Math.min(...avail) : null;
+    const cur = ev.currency === "USD" ? "$" : ev.currency === "GBP" ? "£" : "€";
+    return (
+    <div className="flex gap-3 bg-white/[0.04] border border-white/10 rounded-2xl p-3 hover:border-white/20 transition-colors" data-testid={`admin-event-${ev.id}`}>
+      <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-white/5 flex items-center justify-center">
+        {ev.image_url ? (
+          <img src={mediaThumb(ev.image_url, 240)} alt={ev.name} loading="lazy" className="w-full h-full object-cover" />
+        ) : (
+          <CalendarDays className="w-6 h-6 text-white/20" />
+        )}
+      </div>
       <div className="flex-1 min-w-0">
-        <p className="font-semibold truncate">{ev.name}</p>
-        <p className="text-white/40 text-sm truncate">{ev.venue} · {ev.date}{ev.time ? ` · ${ev.time}` : ""}</p>
-        <span className="inline-flex items-center gap-1 text-xs mt-1 text-white/50">
-          {ev.has_commission ? <><Ticket className="w-3 h-3" /> Comisión</> : <><ExternalLink className="w-3 h-3" /> Info</>}
-        </span>
+        <p className="font-bold truncate leading-tight">{ev.name}</p>
+        <p className="text-white/40 text-xs truncate mt-0.5">{ev.venue} · {ev.date}{ev.time ? ` · ${ev.time}` : ""}</p>
+        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+          {ev.genre && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-white/60 max-w-[110px] truncate">{ev.genre}</span>}
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 ${sale?.color || "text-white/60"}`}>{sale?.label || "—"}</span>
+          {minPrice != null && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300">desde {minPrice}{cur}</span>}
+          <span className="inline-flex items-center gap-1 text-[10px] text-white/40">
+            {ev.has_commission ? <><Ticket className="w-3 h-3" /> Comisión</> : <><ExternalLink className="w-3 h-3" /> Info</>}
+          </span>
+        </div>
       </div>
       <div className="flex flex-col gap-2">
-        <button data-testid={`admin-stats-${ev.id}`} onClick={() => setStatsId(ev.id)} className="w-9 h-9 rounded-full bg-qv-secondary/20 flex items-center justify-center" title="Ver stats">
+        <button data-testid={`admin-stats-${ev.id}`} onClick={() => setStatsId(ev.id)} className="w-9 h-9 rounded-full bg-qv-secondary/20 flex items-center justify-center active:scale-90 transition-transform" title="Ver stats">
           <BarChart3 className="w-4 h-4 text-qv-secondary" />
         </button>
         {tab !== "past" && (
-          <button data-testid={`admin-edit-${ev.id}`} onClick={() => setEditing(ev)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+          <button data-testid={`admin-edit-${ev.id}`} onClick={() => setEditing(ev)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center active:scale-90 transition-transform" title="Editar">
             <Pencil className="w-4 h-4 text-white/80" />
           </button>
         )}
@@ -516,37 +530,52 @@ export default function Admin() {
           <button
             data-testid={`admin-moment-${ev.id}`}
             onClick={() => { if (window.confirm(`¿Lanzar 'El Momento' a los asistentes de ${ev.name}?`)) triggerMoment.mutate(ev.id); }}
-            className="w-9 h-9 rounded-full bg-yellow-300/20 flex items-center justify-center"
+            className="w-9 h-9 rounded-full bg-yellow-300/20 flex items-center justify-center active:scale-90 transition-transform"
             title="Lanzar Momento"
           >
             <Zap className="w-4 h-4 text-yellow-300" />
           </button>
         )}
-        <button data-testid={`admin-delete-${ev.id}`} onClick={() => del.mutate(ev.id)} className="w-9 h-9 rounded-full bg-qv-primary/20 flex items-center justify-center">
+        <button data-testid={`admin-delete-${ev.id}`} onClick={() => del.mutate(ev.id)} className="w-9 h-9 rounded-full bg-qv-primary/20 flex items-center justify-center active:scale-90 transition-transform" title="Borrar">
           <Trash2 className="w-4 h-4 text-qv-primary" />
         </button>
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen qv-app-bg">
       <div className="max-w-md mx-auto min-h-screen pb-10">
-        <header className="px-5 pt-8 pb-4 flex items-center gap-3">
-          <button data-testid="admin-back" onClick={() => navigate("/feed")} className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="font-display text-2xl font-black tracking-tighter">Panel admin</h1>
-            <p className="text-white/40 text-xs">{events.length} fiestas · {cityOptions.find((c) => c.value === city)?.label}</p>
+        <header className="px-5 pt-8 pb-4">
+          <div className="flex items-center gap-3">
+            <button data-testid="admin-back" onClick={() => navigate("/feed")} className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center active:scale-90 transition-transform">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-display text-2xl font-black tracking-tighter bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">Panel admin</h1>
+              <p className="text-white/40 text-xs flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-qv-primary" />
+                {events.length} fiestas · {cityOptions.find((c) => c.value === city)?.label}
+              </p>
+            </div>
           </div>
-          <button
-            data-testid="admin-money-btn"
-            onClick={() => navigate("/admin/dinero")}
-            className="ml-auto h-10 px-4 rounded-full bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95"
-          >
-            💶 Dinero
-          </button>
+          <div className="flex gap-2 mt-4">
+            <button
+              data-testid="admin-dashboard-link"
+              onClick={() => navigate("/admin/dashboard")}
+              className="flex-1 h-11 rounded-2xl bg-qv-secondary/15 border border-qv-secondary/40 text-qv-secondary font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+            >
+              <LayoutDashboard className="w-4 h-4" /> Panel de control
+            </button>
+            <button
+              data-testid="admin-money-btn"
+              onClick={() => navigate("/admin/dinero")}
+              className="flex-1 h-11 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+            >
+              💶 Dinero
+            </button>
+          </div>
         </header>
 
         {/* Ajuste: avisos de nuevos registros */}
@@ -568,29 +597,34 @@ export default function Admin() {
         </div>
 
         {/* City selector — a separate admin per city */}
-        <div className="px-5 mb-3 flex gap-2 overflow-x-auto no-scrollbar">
-          {cityOptions.map((c) => (
-            <button
-              key={c.value}
-              data-testid={`admin-city-${c.value}`}
-              onClick={() => setCity(c.value)}
-              className={`shrink-0 h-9 px-4 rounded-full text-sm font-semibold transition-colors ${city === c.value ? "bg-qv-primary text-white" : "bg-white/5 text-white/60 border border-white/10"}`}
-            >
-              {c.label}
-            </button>
-          ))}
+        <div className="px-5 mb-3">
+          <p className="text-[11px] uppercase tracking-widest text-white/35 font-bold mb-1.5">Ciudad</p>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            {cityOptions.map((c) => (
+              <button
+                key={c.value}
+                data-testid={`admin-city-${c.value}`}
+                onClick={() => setCity(c.value)}
+                className={`shrink-0 h-9 px-4 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-all ${city === c.value ? "bg-qv-primary text-white shadow-[0_0_18px_rgba(255,0,85,0.35)]" : "bg-white/5 text-white/60 border border-white/10 hover:text-white"}`}
+              >
+                {c.emoji && <span className="text-base leading-none">{c.emoji}</span>}
+                {c.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Sub-sections within Fiestas */}
-        <div className="px-5 mb-4 flex gap-2">
+        <div className="px-5 mb-4 flex gap-1.5 p-1 rounded-2xl bg-white/[0.04] border border-white/10">
           {TABS.map((t) => {
             const Icon = t.icon;
+            const active = tab === t.value;
             return (
               <button
                 key={t.value}
                 data-testid={`admin-tab-${t.value}`}
                 onClick={() => setTab(t.value)}
-                className={`relative flex-1 h-10 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${tab === t.value ? "bg-white/15 text-white" : "bg-white/5 text-white/50"}`}
+                className={`relative flex-1 h-10 rounded-xl text-[13px] font-bold flex items-center justify-center gap-1.5 transition-all ${active ? "bg-white text-black shadow-sm" : "text-white/50 hover:text-white/80"}`}
               >
                 <Icon className="w-4 h-4" /> {t.label}
                 {t.value === "enlaces" && brokenCount > 0 && (
@@ -678,9 +712,17 @@ export default function Admin() {
         {tab !== "enlaces" && (isLoading ? (
           <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-qv-primary" /></div>
         ) : events.length === 0 ? (
-          <p className="px-5 py-10 text-center text-white/40 text-sm">
-            {tab === "past" ? "No hay fiestas pasadas todavía." : "No hay fiestas en esta ciudad."}
-          </p>
+          <div className="px-5 py-14 flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-3">
+              <CalendarDays className="w-6 h-6 text-white/30" />
+            </div>
+            <p className="text-white/50 text-sm font-semibold">
+              {tab === "past" ? "No hay fiestas pasadas todavía." : "No hay fiestas en esta ciudad."}
+            </p>
+            {tab !== "past" && (
+              <p className="text-white/30 text-xs mt-1">Pulsa “Nueva fiesta” para crear la primera.</p>
+            )}
+          </div>
         ) : tab === "momentos" ? (
           <div className="px-5 flex flex-col gap-4">
             {byDay.map(([day, evs]) => (

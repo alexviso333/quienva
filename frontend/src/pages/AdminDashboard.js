@@ -21,10 +21,26 @@ import AdminInviteNudge from "@/components/AdminInviteNudge";
 
 function StatBox({ icon: Icon, value, label, color = "text-qv-primary" }) {
   return (
-    <div className="rounded-2xl bg-white/[0.04] border border-white/10 hover:border-white/20 transition-colors p-3 sm:p-4 flex flex-col justify-between">
-      <Icon className={`w-4 h-4 ${color}`} />
-      <p className="font-display text-2xl font-bold text-white mt-1">{value ?? 0}</p>
-      <p className="text-white/50 text-xs">{label}</p>
+    <div className="relative rounded-2xl bg-white/[0.04] border border-white/10 hover:border-white/20 hover:bg-white/[0.06] transition-all p-3 sm:p-4 overflow-hidden">
+      <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.06] border border-white/10">
+        <Icon className={`w-4 h-4 ${color}`} />
+      </span>
+      <p className="font-display text-2xl font-black text-white mt-2 leading-none">{value ?? 0}</p>
+      <p className="text-white/45 text-[11px] mt-1">{label}</p>
+    </div>
+  );
+}
+
+// Consistent labelled section header — the backbone of the decluttered dashboard.
+function SectionTitle({ icon: Icon, children, color = "text-qv-secondary", className = "" }) {
+  return (
+    <div className={`flex items-center gap-2 mb-2.5 ${className}`}>
+      {Icon && (
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-white/[0.06] border border-white/10">
+          <Icon className={`w-3.5 h-3.5 ${color}`} />
+        </span>
+      )}
+      <h2 className="font-display text-[15px] font-black text-white tracking-tight">{children}</h2>
     </div>
   );
 }
@@ -185,9 +201,9 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen qv-app-bg pb-16" data-testid="admin-dashboard">
       <div className="sticky top-0 z-20 qv-glass px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate("/profile")}><ArrowLeft className="w-5 h-5 text-white" /></button>
-        <h1 className="font-display text-lg font-bold">Panel de control</h1>
-        <button onClick={() => navigate("/admin")} className="ml-auto text-xs text-qv-secondary font-semibold flex items-center gap-1">
+        <button onClick={() => navigate("/profile")} className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center active:scale-90 transition-transform"><ArrowLeft className="w-5 h-5 text-white" /></button>
+        <h1 className="font-display text-lg font-black tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">Panel de control</h1>
+        <button onClick={() => navigate("/admin")} className="ml-auto h-9 px-3 rounded-full bg-qv-primary/15 border border-qv-primary/40 text-qv-primary text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-transform">
           <Ticket className="w-3.5 h-3.5" /> Fiestas
         </button>
       </div>
@@ -215,21 +231,32 @@ export default function AdminDashboard() {
       {/* ---------------- RESUMEN ---------------- */}
       {tab === "resumen" && (
         <>
-          <div className="px-4 pt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            <StatBox icon={Users} value={stats?.totals.users} label="usuarios" color="text-qv-secondary" />
-            <StatBox icon={UserCheck} value={stats?.totals.active_week} label="activos 7d" color="text-emerald-400" />
-            <StatBox icon={PartyPopper} value={stats?.totals.upcoming} label="próximas" color="text-qv-primary" />
-            <StatBox icon={Ticket} value={stats?.totals.going} label='"voy"' color="text-orange-300" />
-            <StatBox icon={Star} value={stats?.totals.interested} label="me interesa" color="text-yellow-300" />
-            <StatBox icon={Calendar} value={stats?.totals.attended} label="estuve" color="text-fuchsia-300" />
-            <StatBox icon={BookOpen} value={stats?.totals.stories} label="stories" color="text-blue-300" />
-            <StatBox icon={Users} value={stats?.totals.friendships} label="amistades" color="text-green-300" />
-            <StatBox icon={TrendingUp} value={stats?.totals.events} label="total fiestas" color="text-pink-300" />
+          <div className="px-4 pt-4">
+            <SectionTitle icon={Users} color="text-qv-secondary">Comunidad</SectionTitle>
+            <div className="grid grid-cols-3 gap-2">
+              <StatBox icon={Users} value={stats?.totals.users} label="usuarios" color="text-qv-secondary" />
+              <StatBox icon={UserCheck} value={stats?.totals.active_week} label="activos 7d" color="text-emerald-400" />
+              <StatBox icon={Users} value={stats?.totals.friendships} label="amistades" color="text-green-300" />
+            </div>
+
+            <SectionTitle icon={Ticket} color="text-orange-300" className="mt-6">Interés en fiestas</SectionTitle>
+            <div className="grid grid-cols-3 gap-2">
+              <StatBox icon={Ticket} value={stats?.totals.going} label='"voy"' color="text-orange-300" />
+              <StatBox icon={Star} value={stats?.totals.interested} label="me interesa" color="text-yellow-300" />
+              <StatBox icon={Calendar} value={stats?.totals.attended} label="estuve" color="text-fuchsia-300" />
+            </div>
+
+            <SectionTitle icon={PartyPopper} color="text-qv-primary" className="mt-6">Fiestas y contenido</SectionTitle>
+            <div className="grid grid-cols-3 gap-2">
+              <StatBox icon={PartyPopper} value={stats?.totals.upcoming} label="próximas" color="text-qv-primary" />
+              <StatBox icon={TrendingUp} value={stats?.totals.events} label="total fiestas" color="text-pink-300" />
+              <StatBox icon={BookOpen} value={stats?.totals.stories} label="stories" color="text-blue-300" />
+            </div>
           </div>
 
           {dashboard?.activity_30d && (
             <div className="px-4 mt-6">
-              <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-qv-secondary" /> Actividad · 30 días</h2>
+              <SectionTitle icon={TrendingUp} color="text-qv-secondary">Actividad · 30 días</SectionTitle>
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                 <div style={{ width: "100%", height: 220 }}>
                   <ResponsiveContainer>
@@ -251,17 +278,20 @@ export default function AdminDashboard() {
           )}
 
           {dashboard?.extras && (
-            <div className="px-4 mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <StatBox icon={MessageCircle} value={dashboard.extras.dms} label="DM" color="text-blue-300" />
-              <StatBox icon={Users} value={dashboard.extras.groups} label="grupos" color="text-emerald-300" />
-              <StatBox icon={Images} value={dashboard.extras.album_items} label="álbum" color="text-fuchsia-300" />
-              <StatBox icon={Zap} value={dashboard.extras.captures} label="momentos" color="text-yellow-300" />
+            <div className="px-4 mt-6">
+              <SectionTitle icon={MessageCircle} color="text-blue-300">Social y momentos</SectionTitle>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <StatBox icon={MessageCircle} value={dashboard.extras.dms} label="DM" color="text-blue-300" />
+                <StatBox icon={Users} value={dashboard.extras.groups} label="grupos" color="text-emerald-300" />
+                <StatBox icon={Images} value={dashboard.extras.album_items} label="álbum" color="text-fuchsia-300" />
+                <StatBox icon={Zap} value={dashboard.extras.captures} label="momentos" color="text-yellow-300" />
+              </div>
             </div>
           )}
 
           {dashboard?.top_users && dashboard.top_users.length > 0 && (
             <div className="px-4 mt-6">
-              <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2"><Trophy className="w-4 h-4 text-yellow-300" /> Top usuarios por puntos</h2>
+              <SectionTitle icon={Trophy} color="text-yellow-300">Top usuarios por puntos</SectionTitle>
               <div className="flex flex-col gap-1.5" data-testid="admin-top-users">
                 {dashboard.top_users.map((u) => (
                   <button key={u.user_id} onClick={() => navigate(`/users/${u.user_id}`)} className="text-left rounded-xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center gap-3 active:scale-[0.99]">
@@ -277,7 +307,7 @@ export default function AdminDashboard() {
 
           {stats?.genres && stats.genres.length > 0 && (
             <div className="px-4 mt-6">
-              <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2"><Star className="w-4 h-4 text-qv-secondary" /> Géneros populares</h2>
+              <SectionTitle icon={Star} color="text-qv-secondary">Géneros populares</SectionTitle>
               <div className="flex flex-wrap gap-1.5">
                 {stats.genres.map((g) => (
                   <span key={g.genre} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-white/90 font-semibold">{g.genre} · <span className="text-qv-primary">{g.count}</span></span>
@@ -300,8 +330,8 @@ export default function AdminDashboard() {
           </button>
           {momentOpen && <AdminMomentPanel embedded />}
 
-          <h2 className="font-display text-base font-bold text-white mb-2 mt-6 flex items-center gap-2"><PartyPopper className="w-4 h-4 text-qv-primary" /> Todas las fiestas</h2>
-          <p className="text-white/40 text-xs mb-3">Toca una fiesta para ver estadísticas completas e historial de precio/estado.</p>
+          <SectionTitle icon={PartyPopper} color="text-qv-primary" className="mt-6">Todas las fiestas</SectionTitle>
+          <p className="text-white/40 text-xs mb-3 -mt-1">Toca una fiesta para ver estadísticas completas e historial de precio/estado.</p>
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
             <Input data-testid="admin-event-search" value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} placeholder="Buscar fiesta o local..." className="h-10 pl-9 bg-white/5 border-white/15 rounded-xl text-white placeholder:text-white/40" />
@@ -409,7 +439,7 @@ export default function AdminDashboard() {
 
           {pendingTickets.length > 0 && (
             <div className="mb-6">
-              <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2"><Ticket className="w-4 h-4 text-orange-300" /> Entradas pendientes <span className="text-xs font-normal text-white/40">({pendingTickets.length})</span></h2>
+              <SectionTitle icon={Ticket} color="text-orange-300">Entradas pendientes <span className="text-xs font-normal text-white/40">({pendingTickets.length})</span></SectionTitle>
               <div className="flex flex-col gap-1.5" data-testid="admin-pending-tickets">
                 {pendingTickets.map((t) => (
                   <div key={t.id} className="rounded-xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center gap-3">
@@ -422,7 +452,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <h2 className="font-display text-base font-bold text-white mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-qv-secondary" /> Usuarios</h2>
+          <SectionTitle icon={Users} color="text-qv-secondary">Usuarios</SectionTitle>
           <div className="relative mb-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
             <Input data-testid="admin-search-users" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre o email..." className="h-10 pl-9 bg-white/5 border-white/15 rounded-xl text-white placeholder:text-white/40" />
@@ -437,7 +467,25 @@ export default function AdminDashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm text-white truncate flex items-center gap-1.5">{u.name}{u.role === "admin" && <span className="text-[9px] uppercase tracking-widest bg-qv-secondary/20 text-qv-secondary px-1.5 py-0.5 rounded-full">Admin</span>}</p>
                     <p className="text-white/40 text-xs truncate">{u.email}</p>
-                    <p className="text-white/40 text-[10px] mt-0.5">{u._stats?.attended || 0} estuve · {u._stats?.going || 0} voy · {u._stats?.friends || 0} amigos · {u._stats?.groups || 0} grupos · {u._stats?.referred || 0} reg. · {u._stats?.invites_sent || 0} env.</p>
+                    <div className="flex flex-wrap items-center gap-1 mt-1">
+                      {[
+                        { icon: Calendar, v: u._stats?.attended || 0, t: "estuve", c: "text-fuchsia-300" },
+                        { icon: Ticket, v: u._stats?.going || 0, t: "voy", c: "text-orange-300" },
+                        { icon: Users, v: u._stats?.friends || 0, t: "amigos", c: "text-green-300" },
+                        { icon: MessageCircle, v: u._stats?.groups || 0, t: "grupos", c: "text-emerald-300" },
+                        { icon: UserCheck, v: u._stats?.referred || 0, t: "reg.", c: "text-qv-secondary" },
+                        { icon: Zap, v: u._stats?.invites_sent || 0, t: "env.", c: "text-yellow-300" },
+                      ].map((s, i) => {
+                        const SIcon = s.icon;
+                        return (
+                          <span key={i} className="inline-flex items-center gap-1 text-[10px] text-white/70 bg-white/[0.04] border border-white/10 rounded-full pl-1.5 pr-2 py-0.5">
+                            <SIcon className={`w-2.5 h-2.5 ${s.c}`} />
+                            <b className="text-white">{s.v}</b>
+                            <span className="text-white/35">{s.t}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                   <button onClick={() => setRole.mutate({ userId: u.user_id, role: u.role === "admin" ? "user" : "admin" })} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" data-testid={`admin-toggle-role-${u.user_id}`}>{u.role === "admin" ? <ShieldOff className="w-4 h-4 text-white/60" /> : <ShieldCheck className="w-4 h-4 text-qv-secondary" />}</button>
                   <button onClick={() => { if (window.confirm(`¿Borrar a ${u.name}?`)) deleteUser.mutate(u.user_id); }} className="p-2 rounded-lg bg-white/5 hover:bg-red-500/20" data-testid={`admin-delete-${u.user_id}`}><Trash2 className="w-4 h-4 text-red-400" /></button>

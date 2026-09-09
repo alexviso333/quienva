@@ -2073,10 +2073,95 @@ frontend:
           
           Test file: /app/backend_test_broken_link_alerts.py
 
+  - task: "Admin users friend count bug fix (GET /api/admin/users _stats.friends)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          BUG FIX (2026-09-09): GET /api/admin/users returned _stats.friends=0 for ALL users
+          because it counted friendships using non-existent fields (from_user_id/to_user_id).
+          The friendships collection actually uses requester_id and addressee_id with
+          status: "accepted" (see helper accepted_friend_ids around line 5635). Fixed the
+          count_documents in admin_list_users (server.py line 8409-8412) to use the correct
+          fields:
+          friends = await db.friendships.count_documents({
+              "status": "accepted",
+              "$or": [{"requester_id": u["user_id"]}, {"addressee_id": u["user_id"]}],
+          })
+      - working: true
+        agent: "testing"
+        comment: |
+          TESTED ADMIN USERS FRIEND COUNT BUG FIX (6 test scenarios, 100% pass):
+          
+          🎉 ALL TESTS PASSED - BUG FIX VERIFIED
+          
+          ✅ TEST 1: ADMIN LOGIN
+          - POST /api/auth/login with admin@quienva.app / admin123 → 200
+          - Session token received successfully
+          
+          ✅ TEST 2: CREATE 3 TEST USERS
+          - Created User 1: user_81767ed16949 (testuser1_1788984178@test.com)
+          - Created User 2: user_3a36eda4f542 (testuser2_1788984178@test.com)
+          - Created User 3: user_3e819377a1c7 (testuser3_1788984178@test.com)
+          - All users created with proper registration data (email, password, name, username, city, birthdate)
+          - All users are adults (birthdate validation working)
+          
+          ✅ TEST 3: ESTABLISH ACCEPTED FRIENDSHIP
+          - User 1 sent friend request to User 2 via POST /api/friends/request → 200
+          - Request status: pending, request_id: 8e4bec23-f38d-42da-901f-fb4ff2c345ef
+          - User 2 accepted friend request via POST /api/friends/respond → 200
+          - Friendship status: accepted
+          
+          ✅ TEST 4: VERIFY _stats.friends COUNT
+          - GET /api/admin/users as admin → 200 with 6 users
+          - User 1 _stats: {'going': 0, 'attended': 0, 'friends': 1, 'groups': 0, 'referred': 0, 'invites_sent': 0}
+          - User 1 _stats.friends = 1 (CORRECT, expected >= 1) ✓
+          - User 2 _stats: {'going': 0, 'attended': 0, 'friends': 1, 'groups': 0, 'referred': 0, 'invites_sent': 0}
+          - User 2 _stats.friends = 1 (CORRECT, expected >= 1) ✓
+          - User 3 _stats: {'going': 0, 'attended': 0, 'friends': 0, 'groups': 0, 'referred': 0, 'invites_sent': 0}
+          - User 3 _stats.friends = 0 (CORRECT, expected = 0) ✓
+          
+          ✅ TEST 5: VERIFY OTHER _stats FIELDS
+          - All required _stats fields present and valid for all users:
+            * going (int) ✓
+            * attended (int) ✓
+            * friends (int) ✓
+            * groups (int) ✓
+            * referred (int) ✓
+            * invites_sent (int) ✓
+          
+          ✅ TEST 6: VERIFY ADMIN AUTHORIZATION
+          - GET /api/admin/users without auth → 401 (CORRECT) ✓
+          - GET /api/admin/users as non-admin user → 403 (CORRECT) ✓
+          
+          CONCLUSION:
+          The bug fix is working correctly. The admin users endpoint now properly counts
+          accepted friendships using the correct fields (requester_id/addressee_id with
+          status='accepted') instead of the non-existent from_user_id/to_user_id fields.
+          
+          Before the fix: _stats.friends was always 0 for all users
+          After the fix: _stats.friends correctly reflects the number of accepted friendships
+          
+          The fix ensures that:
+          ✅ Users with accepted friendships show friends count >= 1
+          ✅ Users without friendships show friends count = 0
+          ✅ The count is bidirectional (both requester and addressee are counted)
+          ✅ Only "accepted" status friendships are counted (not "pending" or "rejected")
+          ✅ All other _stats fields continue to work correctly
+          ✅ Admin authorization is properly enforced
+          
+          Test file: /app/backend_test_admin_users_friends.py
+
 metadata:
   created_by: "main_agent"
-  version: "2.13"
-  test_sequence: 18
+  version: "2.14"
+  test_sequence: 19
   run_ui: false
 
 test_plan:
@@ -2086,6 +2171,46 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      BUG FIX (2026-09-09): GET /api/admin/users devolvia _stats.friends=0 para TODOS los usuarios
+      porque contaba con campos inexistentes (from_user_id/to_user_id). La coleccion friendships usa
+      requester_id/addressee_id con status "accepted" (ver accepted_friend_ids). Corregido el
+      count_documents en admin_list_users (server.py ~L8409) para usar requester_id/addressee_id.
+      POR FAVOR VERIFICAR: crear 2+ usuarios, aceptar una amistad entre ellos, y confirmar que
+      GET /api/admin/users devuelve _stats.friends >= 1 para ambos (antes salia 0). Admin:
+      admin@quienva.app / admin123. NO probar frontend. Solo este endpoint del bug.
+
+  - agent: "testing"
+    message: |
+      ADMIN USERS FRIEND COUNT BUG FIX TESTING COMPLETE (2026-09-09)
+      
+      ✅ ALL 6 TESTS PASSED (100% SUCCESS RATE)
+      
+      Verified the bug fix for GET /api/admin/users endpoint where _stats.friends was always 0.
+      
+      TEST RESULTS:
+      1. ✅ Admin login successful (admin@quienva.app)
+      2. ✅ Created 3 test users with proper registration data
+      3. ✅ Established accepted friendship between User 1 and User 2
+      4. ✅ GET /api/admin/users returns correct _stats.friends count:
+         - User 1: 1 friend (expected >= 1) ✓
+         - User 2: 1 friend (expected >= 1) ✓
+         - User 3: 0 friends (expected = 0) ✓
+      5. ✅ All other _stats fields present and valid (going, attended, groups, referred, invites_sent)
+      6. ✅ Admin authorization working (401 without auth, 403 for non-admin)
+      
+      CONCLUSION:
+      The bug fix is working correctly. The endpoint now properly counts accepted friendships
+      using the correct fields (requester_id/addressee_id with status='accepted') instead of
+      the non-existent from_user_id/to_user_id fields.
+      
+      Before fix: _stats.friends was always 0 for all users
+      After fix: _stats.friends correctly reflects the number of accepted friendships
+      
+      Test file: /app/backend_test_admin_users_friends.py
+      Test users created (will remain in DB): user_81767ed16949, user_3a36eda4f542, user_3e819377a1c7
+
   - agent: "testing"
     message: |
       DYNAMIC CITIES ADMIN FEATURE (Fase 1) TESTING COMPLETE (2026-09-09)
