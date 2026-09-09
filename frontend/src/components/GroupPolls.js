@@ -107,7 +107,31 @@ function PollCreator({ groupId, onClose }) {
     queryFn: async () =>
       (await api.get("/events", { params: { date_filter: "all", genre: "all" } })).data,
   });
-  const list = Array.isArray(events) ? events : events.items || events.events || [];
+  // Poll candidates = the next parties BY DATE (independent of venue), for the
+  // user's own city, within a window from today until the Sunday of NEXT week
+  // (e.g. if today is Wednesday, up to the following Sunday). The /events feed is
+  // ordered by club/affiliate priority, so we re-sort strictly chronologically.
+  const list = useMemo(() => {
+    const raw = Array.isArray(events) ? events : events.items || events.events || [];
+    const arr = Array.isArray(raw) ? [...raw] : [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const wd = today.getDay(); // 0 Sun .. 6 Sat
+    const daysToSunday = (7 - wd) % 7; // upcoming Sunday (0 if today is Sunday)
+    const end = new Date(today);
+    end.setDate(today.getDate() + daysToSunday + 7); // Sunday of the following week
+    const iso = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const startISO = iso(today);
+    const endISO = iso(end);
+    const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    const inWindow = arr.filter((ev) => ev.date && ev.date >= startISO && ev.date <= endISO).sort(byDate);
+    // Never leave the poll near-empty: if the window is thin, show all upcoming
+    // parties sorted by date instead.
+    return inWindow.length >= 4
+      ? inWindow
+      : arr.filter((ev) => ev.date && ev.date >= startISO).sort(byDate);
+  }, [events]);
 
   const toggle = (eid) =>
     setSelected((prev) => (prev.includes(eid) ? prev.filter((x) => x !== eid) : prev.length + customs.length >= 4 ? prev : [...prev, eid]));
@@ -158,7 +182,7 @@ function PollCreator({ groupId, onClose }) {
           ) : list.length === 0 ? (
             <p className="text-white/40 text-sm py-2">{t("polls.no_events", "No hay planes próximos — añade opciones a mano abajo.")}</p>
           ) : (
-            list.slice(0, 50).map((ev) => {
+            list.slice(0, 60).map((ev) => {
               const on = selected.includes(ev.id);
               return (
                 <button

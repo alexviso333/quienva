@@ -1264,6 +1264,9 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .finder .fic{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.55;font-size:16px}
 .qvsug{display:inline-block;margin:-8px 0 18px;padding:8px 14px;border-radius:999px;background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.3);color:var(--cyan);font-size:14px;font-weight:700;text-decoration:none}
 .qvsug:hover{background:rgba(0,240,255,.18)}
+.qvbtn{display:flex;align-items:center;justify-content:center;gap:8px;margin:2px 0 26px;padding:16px 22px;border-radius:16px;background:linear-gradient(135deg,rgba(0,240,255,.92),rgba(123,92,255,.92));color:#fff;font-size:16px;font-weight:800;letter-spacing:.2px;text-decoration:none;box-shadow:0 10px 34px rgba(0,240,255,.22)}
+.qvbtn:hover{filter:brightness(1.06)}
+.qvbtn:active{transform:scale(.98)}
 .sech{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:32px 0 14px}
 .sech h2{font-family:'Unbounded',system-ui,sans-serif;font-weight:700;font-size:20px;margin:0}
 .sech span{color:var(--muted);font-size:13px}
@@ -2122,11 +2125,19 @@ def _event_intro(ev: dict, lang: str, when: str, pl: str, genre_disp: str, city:
     return f'<section class="lead"><p>{variants[idx]}</p></section>'
 
 
-def _seo_card(ev, ev_url, lang, e, nofollow: bool = False, eager: bool = False) -> str:
+def _seo_card(ev, ev_url, lang, e, nofollow: bool = False, eager: bool = False,
+              extra_s: str = "", hidden: bool = False) -> str:
     """App-style poster card for SEO listings.
 
     nofollow=True is used for links to PAST parties (which are noindex): it stops
     Googlebot from spending crawl budget following into pages it will drop anyway.
+
+    extra_s: extra keywords appended to the client-side search index (data-s),
+      e.g. the event's city, so the home search bar can surface a party by city.
+    hidden: render the card collapsed (display:none) so it adds ZERO load cost
+      (lazy images inside a display:none node are never fetched) yet the home
+      search can reveal it on demand. Used to pack many more parties into the
+      landing page without hurting the Lighthouse score.
     """
     pl = _seo_price_line(ev, lang)
     when = _seo_date(ev.get("date", ""), lang, ev.get("time", ""))
@@ -2148,8 +2159,11 @@ def _seo_card(ev, ev_url, lang, e, nofollow: bool = False, eager: bool = False) 
     badge = f'<span class="sb {bcls}">{e(blabel)}</span>'
     price = f'<span class="pp">{e(pl)}</span>' if pl else ''
     rel_attr = ' rel="nofollow"' if nofollow else ''
+    _s = (str(ev.get("name", "")) + " " + str(ev.get("venue", "")) + " " + (extra_s or "")).lower().strip()
+    _cls = "card glow-card reveal" + (" xtra" if hidden else "")
+    _style = ' style="display:none"' if hidden else ''
     return (
-        f'<a class="card glow-card reveal" data-testid="seo-event-card" data-s="{e((str(ev.get("name","")) + " " + str(ev.get("venue","")) ).lower())}" href="{e(ev_url)}"{rel_attr}>'
+        f'<a class="{_cls}" data-testid="seo-event-card" data-s="{e(_s)}" href="{e(ev_url)}"{rel_attr}{_style}>'
         f'<div class="poster">{poster}<div class="badges">{badge}{price}</div></div>'
         f'<div class="body"><span class="n">{e(ev.get("name","Fiesta"))}</span>'
         f'<span class="m">{meta}</span></div></a>')
@@ -2930,9 +2944,19 @@ async def _all_cities_match() -> list:
     return [{"city": city_query_value(c["id"])} for c in SUPPORTED_CITIES]
 
 
-async def _top_events_global(limit: int = 12) -> list:
+async def _top_events_global(limit: int = 15) -> list:
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
     q = {"date": {"$gte": today}, "$or": await _all_cities_match()}
+    cur = db.events.find(q, {"_id": 0}).sort("date", 1).limit(limit)
+    return [ev async for ev in cur]
+
+
+async def _city_events_pool(city_id: str, limit: int = 10) -> list:
+    """Next `limit` upcoming parties for ONE app-city, chronological. Used to
+    build the (hidden) home search pool so typing a city surfaces many of its
+    real parties without loading anything extra on first paint."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    q = {"date": {"$gte": today}, "city": city_query_value(city_id)}
     cur = db.events.find(q, {"_id": 0}).sort("date", 1).limit(limit)
     return [ev async for ev in cur]
 
@@ -3008,12 +3032,41 @@ async def _render_home(lang: str, request: Request):
                "ve_h": "Top-Clubs", "parties": "Partys", "nores": "Keine Ergebnisse"},
     }.get(lang, None) or {"search": "Buscar\u2026", "ev_h": "Pr\u00f3ximas fiestas", "ve_h": "Discotecas",
                           "parties": "fiestas", "nores": "Sin resultados"}
-    top_events = await _top_events_global(12)
+    # Map each app-city to search keywords so the home search can surface a party
+    # by its CITY (data-s otherwise only holds the party name + venue).
+    city_extra_map = {}
+    for _c in SUPPORTED_CITIES:
+        _kws = city_kw_map.get(_c["id"], [_c["id"].lower()])
+        city_extra_map[_c["id"]] = " ".join(_kws) + " " + _c["label"]
+
+    def _ev_extra(ev):
+        return city_extra_map.get(region_for_city(ev.get("city", "")), "")
+
+    # Visible: the next 15 parties across ALL cities, chronological (by date).
+    top_events = await _top_events_global(15)
+    seen_ids = {ev.get("id") for ev in top_events}
+    # Hidden search pool: up to 10 upcoming parties PER city, collapsed
+    # (display:none). Lazy images inside a hidden node are never fetched, so this
+    # costs nothing on first paint / Lighthouse, yet a search like "madrid"
+    # instantly reveals many real Madrid parties before the "see all" button.
+    pool_events = []
+    for _c in SUPPORTED_CITIES:
+        for ev in await _city_events_pool(_c["id"], 10):
+            eid = ev.get("id")
+            if eid in seen_ids:
+                continue
+            seen_ids.add(eid)
+            pool_events.append(ev)
+
     top_venues = await _top_venues_global(12)
     ev_grid = ""
     if top_events:
-        ecards = [_seo_card(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], lang, e, eager=(_i == 0))
+        ecards = [_seo_card(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], lang, e,
+                            eager=(_i == 0), extra_s=_ev_extra(ev))
                   for _i, ev in enumerate(top_events)]
+        ecards += [_seo_card(ev, _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang], lang, e,
+                             extra_s=_ev_extra(ev), hidden=True)
+                   for ev in pool_events]
         ev_grid = (f'<div class="sech"><h2>{e(HL["ev_h"])}</h2><span>{len(top_events)}</span></div>'
                    f'<ul class="grid">{"".join(ecards)}<li class="nores" id="qvnores">{e(HL["nores"])}</li></ul>')
     ve_grid = ""
@@ -3025,13 +3078,16 @@ async def _render_home(lang: str, request: Request):
             vc.append(f'<a class="vcard glow-card reveal" data-s="{e(v["venue"].lower())}" href="{e(_venue_paths(front, v["slug"])[lang])}">'
                       f'{thumb}<span class="vmeta"><b>{e(v["venue"])}</b><small>{v["count"]} {e(HL["parties"])}</small></span></a>')
         ve_grid = f'<div class="sech"><h2>{e(HL["ve_h"])}</h2></div><div class="venues">{"".join(vc)}</div>'
-    sug_prompt = {"es": "Ver todas las fiestas en", "en": "See all parties in",
-                  "de": "Alle Partys in"}.get(lang, "Ver todas las fiestas en")
+    sug_prompt = {"es": "Ver todas las fiestas de", "en": "See all parties in",
+                  "de": "Alle Partys in"}.get(lang, "Ver todas las fiestas de")
     finder_html = (f'<form class="finder" role="search" onsubmit="return qvGo(event)">'
                    f'<span class="fic">\U0001F50D</span>'
                    f'<input id="qvf" type="search" autocomplete="off" enterkeyhint="search" '
                    f'placeholder="{e(HL["search"])}" oninput="qvFilter(this.value)" aria-label="{e(HL["search"])}">'
-                   f'</form><a id="qvsug" class="qvsug" href="#" style="display:none"></a>')
+                   f'</form>')
+    # Prominent "see all parties in <city>" button, shown BELOW the results while
+    # searching a city (so many parties appear before it).
+    sug_html = '<a id="qvsug" class="qvbtn" href="#" style="display:none"></a>'
     _qv_js_body = (
         'function qvn(s){return (s||"").toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").trim();}'
         'function qvCity(q){q=qvn(q);if(q.length<2)return null;'
@@ -3047,7 +3103,8 @@ async def _render_home(lang: str, request: Request):
         'q=(q||"").toLowerCase().trim();'
         'var c=document.querySelectorAll(".grid .card,.venues .vcard"),'
         'nr=document.getElementById("qvnores"),shown=0;'
-        'c.forEach(function(el){var m=!q||(el.getAttribute("data-s")||el.textContent||"").toLowerCase().indexOf(q)>=0;'
+        'c.forEach(function(el){var xtra=el.classList.contains("xtra");'
+        'var m=q?((el.getAttribute("data-s")||el.textContent||"").toLowerCase().indexOf(q)>=0):!xtra;'
         'el.style.display=m?"":"none";if(m&&el.classList.contains("card"))shown++;});'
         'if(nr)nr.style.display=(shown===0&&q&&!city)?"block":"none";}')
     home_search_js = ('<script>var QVNAV=' + json.dumps(city_nav, ensure_ascii=False)
@@ -3106,6 +3163,7 @@ async def _render_home(lang: str, request: Request):
 {finder_html}
 </section>
 {ev_grid}
+{sug_html}
 {ve_grid}
 <h2 class="sectitle">{e(T["cities_h"])}</h2>
 <div class="hgrid">{cities_html}</div>

@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://seo-audit-fix-18.preview.emergentagent.com/api"
+BASE_URL = "https://quienva-events.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://seo-audit-fix-18.preview.emergentagent.com/api"
+BASE_URL = "https://quienva-events.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

@@ -9,7 +9,7 @@ import sys
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://seo-audit-fix-18.preview.emergentagent.com/api"
+BASE_URL = "https://quienva-events.preview.emergentagent.com/api"
 
 # Test credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@qvtest.com"
