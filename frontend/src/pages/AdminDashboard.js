@@ -99,11 +99,24 @@ export default function AdminDashboard() {
   const [statsEventId, setStatsEventId] = useState(null);
   const [momentOpen, setMomentOpen] = useState(false);
   const [pastOpen, setPastOpen] = useState(false);
-  const [openSections, setOpenSections] = useState({ cities: true, sources: true });
+  const [openSections, setOpenSections] = useState(() => {
+    // Remember which Scrapers groups the admin left open, so they reappear the
+    // same next time (per-device, persisted in localStorage).
+    try {
+      const saved = JSON.parse(localStorage.getItem("qv_admin_open_sections") || "null");
+      if (saved && typeof saved === "object") return saved;
+    } catch (e) { /* ignore */ }
+    return { cities: true, sources: true };
+  });
 
-  const toggleSection = (id) => setOpenSections((s) => ({ ...s, [id]: !s[id] }));
+  const persistSections = (next) => {
+    try { localStorage.setItem("qv_admin_open_sections", JSON.stringify(next)); } catch (e) { /* ignore */ }
+    return next;
+  };
+
+  const toggleSection = (id) => setOpenSections((s) => persistSections({ ...s, [id]: !s[id] }));
   const jumpToSection = (id) => {
-    setOpenSections((s) => ({ ...s, [id]: true }));
+    setOpenSections((s) => persistSections({ ...s, [id]: true }));
     setTimeout(() => {
       const el = document.getElementById(`scrapers-${id}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });

@@ -21,9 +21,14 @@ export default function AuthCallback() {
       if (code) {
         try {
           const redirectUri = window.location.origin + "/auth/callback";
+          // Inherit the city the guest was exploring (validated server-side; used
+          // only when creating a brand-new account).
+          let guestCity = null;
+          try { guestCity = localStorage.getItem("qv_guest_city") || null; } catch { /* ignore */ }
           const { data } = await api.post("/auth/google/callback", {
             code,
             redirect_uri: redirectUri,
+            guest_city: guestCity,
           });
           // NATIVE app login: this page is running in the phone's Safari, so we
           // bounce the session token back INTO the app via its custom URL scheme.

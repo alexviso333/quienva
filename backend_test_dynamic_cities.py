@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 
 # Get backend URL from environment
-BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://c176aa5e-fa1a-4cd0-9f68-6d25e6970a56.preview.emergentagent.com")
+BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://city-memory-hub.preview.emergentagent.com")
 BASE_URL = f"{BACKEND_URL}/api"
 
 # Admin credentials from backend/.env

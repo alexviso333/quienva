@@ -26,7 +26,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://party-hub-control.preview.emergentagent.com/api"
+BASE_URL = "https://city-memory-hub.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

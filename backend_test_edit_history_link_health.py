@@ -11,7 +11,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 
-BASE_URL = "https://party-hub-control.preview.emergentagent.com/api"
+BASE_URL = "https://city-memory-hub.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

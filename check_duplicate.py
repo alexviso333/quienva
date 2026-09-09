@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://party-hub-control.preview.emergentagent.com"
+BACKEND_URL = "https://city-memory-hub.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

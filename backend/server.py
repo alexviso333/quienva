@@ -5394,6 +5394,9 @@ async def login(inp: LoginInput, response: Response):
 class GoogleCallbackInput(BaseModel):
     code: str
     redirect_uri: str
+    # City the guest was exploring before signing up; inherited on NEW accounts
+    # only (validated against the supported list, else falls back to default).
+    guest_city: Optional[str] = None
 
 
 @api_router.get("/auth/google/config")
@@ -5448,7 +5451,7 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
             "username": username,
             "name": data.get("name", "Usuario"),
             "picture": data.get("picture", ""),
-            "city": "Palma de Mallorca",
+            "city": (inp.guest_city if inp.guest_city in CITY_IDS else GUEST_CITY),
             "role": "user",
             "auth_provider": "google",
             "attendance_privacy": "amigos",
@@ -5472,6 +5475,9 @@ class AppleCallbackInput(BaseModel):
     # proof of identity (the verified JWT claims are authoritative).
     name: Optional[str] = None
     email: Optional[str] = None
+    # City the guest was exploring before signing up; inherited on NEW accounts
+    # only (validated against the supported list, else falls back to default).
+    guest_city: Optional[str] = None
 
 
 APPLE_BUNDLE_ID = os.environ.get("APPLE_BUNDLE_ID", "me.quienva.app")
@@ -5533,7 +5539,7 @@ async def apple_callback(inp: AppleCallbackInput, response: Response):
             "username": username,
             "name": name,
             "picture": "",
-            "city": "Palma de Mallorca",
+            "city": (inp.guest_city if inp.guest_city in CITY_IDS else GUEST_CITY),
             "role": "user",
             "auth_provider": "apple",
             "apple_sub": apple_sub,

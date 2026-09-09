@@ -35,11 +35,16 @@ export async function startAppleLogin() {
   if (!r.identityToken) throw new Error("Apple no devolvió el token de identidad");
   // Apple only sends the name on the FIRST authorization — capture it now.
   const name = [r.givenName, r.familyName].filter(Boolean).join(" ").trim() || null;
+  // Inherit the city the guest was exploring (validated server-side; used only
+  // when creating a brand-new account).
+  let guestCity = null;
+  try { guestCity = localStorage.getItem("qv_guest_city") || null; } catch (e) { /* ignore */ }
   const { data } = await api.post("/auth/apple/callback", {
     identity_token: r.identityToken,
     code: r.authorizationCode || null,
     name,
     email: r.email || null,
+    guest_city: guestCity,
   });
   return data; // { user, token }
 }
