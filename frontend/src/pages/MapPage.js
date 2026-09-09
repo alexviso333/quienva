@@ -85,7 +85,20 @@ export default function MapPage() {
   const { user } = useAuth();
   const { t } = useTranslation();
   const cityLabel = user?.city || t("map.your_city");
-  const cityCenter = CITY_CENTER[user?.city] || CITY_CENTER["Palma de Mallorca"];
+
+  // City map centre comes from the backend (/api/cities → lat/lng) so a city
+  // added from the admin centres correctly WITHOUT an app update. Falls back to
+  // the built-in table, then Palma.
+  const { data: citiesData } = useQuery({
+    queryKey: ["cities"],
+    queryFn: async () => (await api.get("/cities")).data,
+    staleTime: 60 * 60_000,
+  });
+  const cityCenter = useMemo(() => {
+    const c = (citiesData?.cities || []).find((x) => x.id === user?.city);
+    if (c && typeof c.lat === "number" && typeof c.lng === "number") return [c.lat, c.lng];
+    return CITY_CENTER[user?.city] || CITY_CENTER["Palma de Mallorca"];
+  }, [citiesData, user?.city]);
 
   const [myPos, setMyPos] = useState(null);     // [lat, lng] of the viewer
   const [geoState, setGeoState] = useState("idle"); // idle | locating | ok | denied

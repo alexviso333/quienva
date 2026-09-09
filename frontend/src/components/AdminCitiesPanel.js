@@ -13,7 +13,7 @@ import { toast } from "sonner";
 export default function AdminCitiesPanel() {
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
-  const [nc, setNc] = useState({ label: "", emoji: "" });
+  const [nc, setNc] = useState({ label: "", emoji: "", lat: "", lng: "" });
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-cities"],
@@ -29,11 +29,19 @@ export default function AdminCitiesPanel() {
   };
 
   const create = useMutation({
-    mutationFn: async () => (await api.post("/admin/cities", nc)).data,
+    mutationFn: async () => {
+      const payload = {
+        label: nc.label,
+        emoji: nc.emoji,
+        lat: nc.lat !== "" && !isNaN(parseFloat(nc.lat)) ? parseFloat(nc.lat) : null,
+        lng: nc.lng !== "" && !isNaN(parseFloat(nc.lng)) ? parseFloat(nc.lng) : null,
+      };
+      return (await api.post("/admin/cities", payload)).data;
+    },
     onSuccess: () => {
       toast.success("Ciudad añadida");
       setAdding(false);
-      setNc({ label: "", emoji: "" });
+      setNc({ label: "", emoji: "", lat: "", lng: "" });
       inv();
     },
     onError: (e) => toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Error"),
@@ -138,6 +146,25 @@ export default function AdminCitiesPanel() {
             />
           </div>
           <div className="flex gap-2">
+            <input
+              placeholder="Lat (opcional, ej. 37.3891)"
+              value={nc.lat}
+              onChange={(e) => setNc({ ...nc, lat: e.target.value })}
+              className="flex-1 h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm placeholder:text-white/40"
+              data-testid="admin-city-lat"
+            />
+            <input
+              placeholder="Lng (opcional, ej. -5.9845)"
+              value={nc.lng}
+              onChange={(e) => setNc({ ...nc, lng: e.target.value })}
+              className="flex-1 h-10 bg-white/5 border border-white/10 rounded-lg px-3 text-white text-sm placeholder:text-white/40"
+              data-testid="admin-city-lng"
+            />
+          </div>
+          <p className="text-white/35 text-[11px] leading-snug -mt-0.5">
+            Las coordenadas centran el mapa de la ciudad. Si lo dejas vacío, usamos el centro conocido de la ciudad automáticamente.
+          </p>
+          <div className="flex gap-2">
             <button
               onClick={() => create.mutate()}
               disabled={!nc.label.trim() || create.isPending}
@@ -146,7 +173,7 @@ export default function AdminCitiesPanel() {
             >
               {create.isPending ? "Guardando..." : "Añadir"}
             </button>
-            <button onClick={() => { setAdding(false); setNc({ label: "", emoji: "" }); }} className="px-4 h-10 rounded-lg bg-white/10 text-white text-sm">
+            <button onClick={() => { setAdding(false); setNc({ label: "", emoji: "", lat: "", lng: "" }); }} className="px-4 h-10 rounded-lg bg-white/10 text-white text-sm">
               Cancelar
             </button>
           </div>

@@ -2160,17 +2160,36 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.14"
-  test_sequence: 19
+  version: "2.15"
+  test_sequence: 20
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "SEO noindex + sitemap exclusion for empty city pages"
+    - "Dynamic city map coordinates in /api/cities + admin create/update"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NUEVOS CAMBIOS BACKEND (2026-09-09) a verificar (el fix de amigos ya fue verificado antes):
+      (A) SEO ciudades vacias -> noindex + fuera del sitemap:
+        - GET /api/ciudad/{slug} y /en/city/{slug}: si la ciudad NO tiene eventos proximos
+          (n==0) la pagina trae meta robots "noindex,follow" y header X-Robots-Tag
+          "noindex, follow". Si tiene eventos -> "index,follow,...".
+        - GET /api/sitemap-cities.xml: NO lista ciudades sin eventos; SI lista las que
+          tienen (ej. Ibiza). Homepage siempre presente. (Hay scrapers corriendo: para el
+          caso vacio, crear una ciudad nueva sin eventos.)
+      (B) Coordenadas dinamicas de ciudad:
+        - GET /api/cities: cada ciudad trae lat/lng (Sevilla ~[37.3891,-5.9845]).
+        - POST /api/admin/cities {label,emoji,lat,lng} crea la ciudad con esas coords y
+          aparecen en GET /api/cities. Sin lat/lng, si el nombre esta en la tabla por
+          defecto (ej. Valencia) tambien trae coords. Limpiar ciudades de prueba (DELETE).
+      Admin: admin@quienva.app / admin123. Solo backend, NO frontend.
+
   - agent: "main"
     message: |
       BUG FIX (2026-09-09): GET /api/admin/users devolvia _stats.friends=0 para TODOS los usuarios

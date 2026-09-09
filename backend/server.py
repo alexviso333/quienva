@@ -1082,6 +1082,44 @@ async def seed_app_cities():
         logger.warning(f"seed_app_cities warn: {e}")
 
 
+# Default map centers [lat, lng] for Spanish nightlife cities. Served via
+# /api/cities so the app (web + native iOS) centres the map on any city WITHOUT
+# an app update — adding/adjusting a city only touches the backend (instant on
+# Render, no App Store review). A city's own stored lat/lng (set in the admin)
+# always wins over this table.
+CITY_CENTER_DEFAULTS = {
+    "palma de mallorca": [39.5696, 2.6502], "mallorca": [39.5696, 2.6502],
+    "ibiza": [38.9067, 1.4206], "eivissa": [38.9067, 1.4206],
+    "madrid": [40.4168, -3.7038], "barcelona": [41.3874, 2.1686],
+    "marbella": [36.5099, -4.8858], "marbella / puerto banús": [36.5099, -4.8858],
+    "sevilla": [37.3891, -5.9845], "valencia": [39.4699, -0.3763],
+    "málaga": [36.7213, -4.4214], "malaga": [36.7213, -4.4214],
+    "bilbao": [43.263, -2.935], "zaragoza": [41.6488, -0.8891],
+    "granada": [37.1773, -3.5986], "alicante": [38.3452, -0.4815],
+    "murcia": [37.9922, -1.1307], "córdoba": [37.8882, -4.7794],
+    "cordoba": [37.8882, -4.7794], "valladolid": [41.6523, -4.7245],
+    "vigo": [42.2406, -8.7207], "gijón": [43.5322, -5.6611],
+    "gijon": [43.5322, -5.6611], "santander": [43.4623, -3.8099],
+    "san sebastián": [43.3183, -1.9812], "san sebastian": [43.3183, -1.9812],
+    "las palmas": [28.1235, -15.4363], "santa cruz de tenerife": [28.4636, -16.2518],
+    "salamanca": [40.9701, -5.6635], "pamplona": [42.8125, -1.6458],
+    "a coruña": [43.3623, -8.4115], "la coruña": [43.3623, -8.4115],
+    "cádiz": [36.5271, -6.2886], "cadiz": [36.5271, -6.2886],
+}
+
+
+def _city_center(city_row: dict):
+    """[lat, lng] for a city: its own stored coords win, else a built-in default."""
+    try:
+        lat, lng = city_row.get("lat"), city_row.get("lng")
+        if isinstance(lat, (int, float)) and isinstance(lng, (int, float)):
+            return [float(lat), float(lng)]
+    except Exception:
+        pass
+    key = (city_row.get("id") or city_row.get("label") or "").strip().lower()
+    return CITY_CENTER_DEFAULTS.get(key)
+
+
 async def load_app_cities():
     """Repopulate the in-memory city containers from the DB (ENABLED cities only).
     Called on startup, after any admin change, and periodically (safety net)."""
@@ -1096,8 +1134,11 @@ async def load_app_cities():
     supported, regions, seo_slug, slugs_rev, ids = [], {}, {}, {}, set()
     for c in rows:
         cid = c["id"]
-        supported.append({"id": cid, "label": c.get("label", cid),
-                          "emoji": c.get("emoji", "")})
+        entry = {"id": cid, "label": c.get("label", cid), "emoji": c.get("emoji", "")}
+        center = _city_center(c)
+        if center:
+            entry["lat"], entry["lng"] = center[0], center[1]
+        supported.append(entry)
         members = [m for m in (c.get("members") or [cid]) if m] or [cid]
         regions[cid] = members
         ids.add(cid)
@@ -14091,6 +14132,8 @@ class AppCityInput(BaseModel):
     order: int = 0
     enabled: bool = True
     members: List[str] = []
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 @app.get("/api/admin/cities")
@@ -14128,6 +14171,8 @@ async def admin_create_city(inp: AppCityInput, admin: dict = Depends(require_adm
     doc = {"id": cid, "label": label, "emoji": (inp.emoji or "").strip(),
            "slug": slug, "members": members, "enabled": bool(inp.enabled),
            "order": order, "created_at": datetime.now(timezone.utc).isoformat()}
+    if inp.lat is not None and inp.lng is not None:
+        doc["lat"], doc["lng"] = float(inp.lat), float(inp.lng)
     await db.app_cities.insert_one(doc)
     await load_app_cities()
     doc.pop("_id", None)
@@ -14149,6 +14194,8 @@ async def admin_update_city(city_id: str, inp: AppCityInput, admin: dict = Depen
         if city_id not in m:
             m = [city_id] + m
         upd["members"] = m
+    if inp.lat is not None and inp.lng is not None:
+        upd["lat"], upd["lng"] = float(inp.lat), float(inp.lng)
     await db.app_cities.update_one({"id": city_id}, {"$set": upd})
     await load_app_cities()
     return await db.app_cities.find_one({"id": city_id}, {"_id": 0})
