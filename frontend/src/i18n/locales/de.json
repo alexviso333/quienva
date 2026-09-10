@@ -969,7 +969,7 @@
   "polls": {
     "closed": "Geschlossen",
     "close_action": "Schließen & entscheiden",
-    "launch": "Wochenend-Umfrage starten",
+    "launch": "Umfrage starten: wohin gehen wir?",
     "new_title": "Wochenend-Umfrage",
     "title_ph": "Wohin gehen wir am Wochenende?",
     "pick_hint": "Wähle 2-4 mögliche Pläne",

@@ -969,7 +969,7 @@
   "polls": {
     "closed": "Cerrada",
     "close_action": "Cerrar y decidir",
-    "launch": "Montar encuesta del finde",
+    "launch": "Montar encuesta: ¿a dónde vamos?",
     "new_title": "Encuesta del finde",
     "title_ph": "¿Dónde vamos el finde?",
     "pick_hint": "Elige 2-4 planes candidatos",

@@ -969,7 +969,7 @@
   "polls": {
     "closed": "Closed",
     "close_action": "Close & decide",
-    "launch": "Start a weekend poll",
+    "launch": "Start a poll: where to go?",
     "new_title": "Weekend poll",
     "title_ph": "Where are we going this weekend?",
     "pick_hint": "Pick 2-4 candidate plans",

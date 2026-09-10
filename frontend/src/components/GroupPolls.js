@@ -250,9 +250,9 @@ export default function GroupPolls({ groupId }) {
         <button
           data-testid="create-poll-btn"
           onClick={() => setCreating(true)}
-          className="h-11 rounded-2xl bg-white/5 border border-dashed border-white/20 text-white/80 font-semibold text-sm flex items-center justify-center gap-2 active:scale-95"
+          className="h-12 rounded-2xl bg-gradient-to-r from-qv-primary/25 to-qv-secondary/15 border border-qv-primary/50 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95 shadow-[0_0_16px_-4px_rgba(255,0,85,0.55)]"
         >
-          <BarChart3 className="w-4 h-4 text-qv-primary" /> {t("polls.launch", "Montar encuesta del finde")}
+          <BarChart3 className="w-4 h-4 text-qv-primary" /> {t("polls.launch", "Montar encuesta: ¿a dónde vamos?")}
         </button>
       )}
       {creating && <PollCreator groupId={groupId} onClose={() => setCreating(false)} />}

@@ -8510,6 +8510,35 @@ async def _notify_new_event_city(event: dict):
     return count
 
 
+async def _notify_new_events_batch(venue: dict, events: list) -> int:
+    """Send ONE "new parties" push per club per scrape run. A user complained a
+    club that added ~9 events at once triggered a burst of pushes that woke them
+    up. Now: if a club created 2+ new parties in a single run we send the first
+    party's name + "+N fiestas más" (a single notification) instead of one push
+    per event. Same opt-in audience as _notify_new_event_city (notif_prefs.new_event)."""
+    if not events:
+        return 0
+    if len(events) == 1:
+        return await _notify_new_event_city(events[0])
+    first = events[0]
+    region = region_for_city(first.get("city") or venue.get("city") or "Palma de Mallorca")
+    club = (venue.get("name") or first.get("venue") or "una discoteca").strip()
+    n = len(events)
+    body = f"🆕 {club} ha añadido {n} fiestas nuevas. ¡Échales un vistazo!"
+    count = 0
+    async for u in db.users.find(
+        {"city": region, "notif_prefs.new_event": True},
+        {"_id": 0, "user_id": 1},
+    ):
+        await create_notification(
+            u["user_id"], "new_event", body,
+            {"type": "new_event", "venue": club, "count": n},
+        )
+        count += 1
+    logger.info(f"[notify] new_events_batch club='{club}' n={n} → {count} opted-in users in {region}")
+    return count
+
+
 def _describe_sale_transition(old: str, new: str) -> Optional[tuple]:
     """Return (kind, body_template) for a sale state transition, or None if
     the transition doesn't warrant a notification."""
@@ -13605,9 +13634,12 @@ async def _ct_affiliate_url_for(ct_slug: str, date_str: str, name: str):
     return None
 
 
-async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "") -> str:
+async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "",
+                               new_events_sink: Optional[list] = None) -> str:
     """Diff a single scraped event against the DB and apply changes:
-    - CREATE if not found → fires "new event" push to city.
+    - CREATE if not found → queues a "new event" push for the city (batched per
+      club when new_events_sink is provided, so a club adding many parties at once
+      sends ONE push instead of waking users with one push per event).
     - UPDATE fields if found; if sale_state transitioned or price went up,
       fires the corresponding notification (same logic as manual admin).
     Returns: 'created' | 'updated' | 'unchanged' | 'skipped'.
@@ -13702,12 +13734,16 @@ async def _apply_scraped_event(venue: dict, se: _ScrapedEvent, batch_id: str = "
         # Fire "new event" push (fire-and-forget). Skip on the venue's FIRST
         # ever run to avoid flooding users when a new club/city is onboarded
         # (that run bulk-creates its whole calendar). Real new events on later
-        # runs still notify.
+        # runs still notify — but BATCHED per club (see new_events_sink) so a
+        # club posting many parties at once no longer sends a push per event.
         if venue.get("last_run_at"):
-            try:
-                asyncio.create_task(_notify_new_event_city(ev))
-            except Exception:
-                pass
+            if new_events_sink is not None:
+                new_events_sink.append(ev)
+            else:
+                try:
+                    asyncio.create_task(_notify_new_event_city(ev))
+                except Exception:
+                    pass
         await _record_scrape_change(batch_id, "new", ev, {
             "current_price": ev.get("price_tiers", [{}])[0].get("price") if ev.get("price_tiers") else None,
             "sale_state": ev.get("sale_state"),
@@ -13990,10 +14026,11 @@ async def run_scraper_for_venue(venue: dict, batch_id: str = "",
             raise _primary_err
         summary["events"] = len(events)
         _seen_ext: set = set()
+        _new_events: list = []
         for se in events:
             try:
                 _seen_ext.add(se.external_id)
-                r = await _apply_scraped_event(venue, se, batch_id)
+                r = await _apply_scraped_event(venue, se, batch_id, new_events_sink=_new_events)
                 if r in summary:
                     summary[r] += 1
             except Exception as e:
@@ -14013,6 +14050,13 @@ async def run_scraper_for_venue(venue: dict, batch_id: str = "",
                 })
             except Exception as e:
                 logger.warning(f"[scraper {venue.get('name')}] reconcile failed: {e}")
+        # Batched "new parties" push: ONE notification per club per run (fixes the
+        # burst of pushes when a club adds many events at once).
+        if _new_events:
+            try:
+                asyncio.create_task(_notify_new_events_batch(venue, _new_events))
+            except Exception as e:
+                logger.warning(f"[scraper {venue.get('name')}] new-events notify failed: {e}")
         summary["ok"] = True
     except Exception as e:
         summary["error"] = str(e)[:400]

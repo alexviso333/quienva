@@ -289,13 +289,13 @@ export default function Feed() {
             <button
               onClick={() => setCitySheetOpen(true)}
               data-testid="feed-city-switch-btn"
-              className="group inline-flex items-center gap-1.5 rounded-full bg-white/[0.07] border border-qv-secondary/30 pl-2.5 pr-2.5 py-1.5 active:scale-95 transition-transform shadow-[0_0_16px_-6px_rgba(0,240,255,0.5)]"
+              className="group inline-flex items-center gap-1.5 rounded-full bg-qv-secondary/15 border border-qv-secondary/70 pl-2.5 pr-2.5 py-1.5 active:scale-95 transition-transform shadow-[0_0_20px_-2px_rgba(0,240,255,0.75)]"
             >
               <MapPin className="w-4 h-4 shrink-0 text-qv-secondary" />
-              <span className="truncate max-w-[46vw] text-sm font-extrabold text-white">
+              <span className="truncate max-w-[46vw] text-sm font-extrabold text-qv-secondary drop-shadow-[0_0_6px_rgba(0,240,255,0.6)]">
                 {user ? (user.city || "Palma de Mallorca") : ((cities.find((c) => c.id === guestCity) || {}).label || guestCity)}
               </span>
-              <ChevronDown className="w-4 h-4 shrink-0 text-qv-secondary opacity-90 group-active:translate-y-0.5 transition-transform" />
+              <ChevronDown className="w-4 h-4 shrink-0 text-qv-secondary group-active:translate-y-0.5 transition-transform" />
             </button>
             <span className="mt-1 block pl-1 text-[10px] font-semibold text-white/45">
               {t("feed.change_city")}
