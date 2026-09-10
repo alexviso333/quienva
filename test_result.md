@@ -13330,3 +13330,157 @@ agent_communication:
       
       All backend functionality working correctly. No issues found.
 
+
+#=====================================================================================
+# ITERATION 4 (2026-09-10) — New-party alerts ON by default for everyone (still batched)
+#=====================================================================================
+backend:
+  - task: "New-party alerts (new_event) ON by default for ALL users (opt-out), still batched per club"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Owner wants new-party alerts delivered to EVERYONE by default (previously
+            opt-in), but still BATCHED when a club adds 2+ at once. Changes:
+            - _OPT_IN_PREF_KEYS = set() → new_event is now opt-OUT (DEFAULT_NOTIF_PREFS
+              new_event = True). create_notification delivers unless explicitly False.
+            - _notify_new_event_city + _notify_new_events_batch audience changed from
+              {"notif_prefs.new_event": True} to {"notif_prefs.new_event": {"$ne": False}}
+              → every user in the (region) city gets it unless they turned it off.
+            - One-time idempotent migration new_event_default_on_v1: flips users who had
+              new_event stored as False from the OLD opt-in default → True (ran on boot:
+              logged "new_event default ON → N users updated").
+            Verified locally: user with NO notif_prefs → notified; new_event False → NOT
+            notified; new_event True → notified; and the per-club batch (9 events) still
+            sends ONE notification per user with "N fiestas nuevas".
+        - working: true
+          agent: "testing"
+          comment: |
+            TESTED ALL 3 NOTIFICATION OPT-OUT ASSERTIONS (100% pass):
+            
+            ✅ ASSERTION 1: OPT-OUT DEFAULT (single event) - PASSED
+            - Created 3 test users in Barcelona:
+              * vb_noprefs: NO notif_prefs field (explicitly $unset)
+              * vb_off: notif_prefs.new_event = False (opted out)
+              * vb_on: notif_prefs.new_event = True (explicitly opted in)
+            - Created fake event in Barcelona
+            - Deleted existing new_event notifications for test users
+            - Called await server._notify_new_event_city(event)
+            - RESULTS:
+              * vb_noprefs: 1 notification ✓ (ON by default)
+              * vb_on: 1 notification ✓ (explicitly ON)
+              * vb_off: 0 notifications ✓ (explicitly OFF)
+            - Verified: Users without notif_prefs field get notifications by default
+            - Verified: Only explicit False excludes users from notifications
+            
+            ✅ ASSERTION 2: BATCH still works with opt-out audience - PASSED
+            - Used same 3 test users in Barcelona
+            - Cleared existing new_event notifications
+            - Created 9 fake events in Barcelona
+            - Called await server._notify_new_events_batch({"name":"Club B","city":"Barcelona"}, events)
+            - RESULTS:
+              * vb_noprefs: EXACTLY 1 notification (NOT 9) ✓
+                Message: "🆕 Club B ha añadido 9 fiestas nuevas. ¡Échales un vistazo!"
+              * vb_on: EXACTLY 1 notification (NOT 9) ✓
+                Message: "🆕 Club B ha añadido 9 fiestas nuevas. ¡Échales un vistazo!"
+              * vb_off: 0 notifications ✓
+            - Verified: Batching works correctly with opt-out model
+            - Verified: Message contains "9 fiestas nuevas" as expected
+            
+            ✅ ASSERTION 3: API default - PASSED
+            - Registered fresh unique adult user via POST /api/auth/register
+              * Email: test_user_59122348@test.com
+              * City: Barcelona
+              * Birthdate: 1990-01-01 (adult)
+            - Retrieved session token from registration response
+            - Called GET /api/me/notif-prefs with token
+            - RESULT: prefs.new_event = True ✓ (ON by default)
+            - Verified: New users have new_event notifications enabled by default
+            
+            CONCLUSION:
+            All notification opt-out behavior requirements met perfectly:
+            ✅ Users without notif_prefs field receive notifications (ON by default)
+            ✅ Users with notif_prefs.new_event=True receive notifications
+            ✅ Users with notif_prefs.new_event=False do NOT receive notifications (opt-out working)
+            ✅ Batching still works: multiple events from same club = 1 notification per user
+            ✅ Batch message contains correct count ("9 fiestas nuevas")
+            ✅ API registration creates users with new_event=true by default
+            ✅ Opt-out model working correctly: everyone gets notifications unless explicitly disabled
+            
+            The notification system now correctly implements opt-out behavior:
+            - Default state: ON (everyone receives new-party alerts)
+            - Users can opt out by setting notif_prefs.new_event = False
+            - Batching prevents notification spam when clubs add multiple events
+            - New registrations have notifications enabled by default
+            
+            Test file: /app/backend_test_notification_opt_out.py
+            Test method: Python script importing server module (SAFE - no uvicorn/scheduler started)
+            Database: MongoDB local (server.db)
+
+metadata:
+  created_by: "main_agent"
+  version: "1.5"
+  test_sequence: 5
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Verify (BACKEND only) that new-party alerts are now ON by default for everyone and
+      still batched. Use a Python script importing server (PYTHONPATH=/app/backend; import
+      does NOT start uvicorn/scheduler):
+      1) Seed 3 users in city "Barcelona": one with NO notif_prefs, one with
+         notif_prefs.new_event=False, one with notif_prefs.new_event=True. Clear their
+         new_event notifications, then `await server._notify_new_event_city(fake_event_in_Barcelona)`.
+         ASSERT: the no-prefs user AND the True user each get 1 notification; the False user
+         gets 0.
+      2) Batch: `await server._notify_new_events_batch({"name":"Club B","city":"Barcelona"}, [9 fake events])`
+         for the same 3 users (clear first). ASSERT: no-prefs + True users get EXACTLY 1
+         notification each (message contains "9 fiestas nuevas"); False user gets 0.
+      3) API: register a brand-new user, then GET /api/me/notif-prefs with their token and
+         confirm prefs.new_event == true (on by default).
+      Report pass/fail per assertion. Do NOT test frontend.
+  
+  - agent: "testing"
+    message: |
+      NOTIFICATION OPT-OUT BEHAVIOR VERIFICATION COMPLETE (2026-09-10)
+      
+      🎉 ALL 3 ASSERTIONS PASSED (100% SUCCESS RATE)
+      
+      Created comprehensive Python test script that imports server module (SAFE - no uvicorn/scheduler).
+      Test file: /app/backend_test_notification_opt_out.py
+      
+      ASSERTION 1: OPT-OUT DEFAULT (single event) ✅ PASSED
+      - Created 3 users in Barcelona with different notif_prefs states
+      - Called _notify_new_event_city with fake event
+      - Verified: vb_noprefs (no field) = 1 notif, vb_on (True) = 1 notif, vb_off (False) = 0 notif
+      - Confirms: ON by default, only explicit False excludes users
+      
+      ASSERTION 2: BATCH with opt-out audience ✅ PASSED
+      - Called _notify_new_events_batch with 9 fake events
+      - Verified: vb_noprefs = 1 notif (NOT 9), vb_on = 1 notif (NOT 9), vb_off = 0 notif
+      - Verified: Messages contain "9 fiestas nuevas"
+      - Confirms: Batching works correctly with opt-out model
+      
+      ASSERTION 3: API default ✅ PASSED
+      - Registered fresh user via POST /api/auth/register
+      - Called GET /api/me/notif-prefs with token
+      - Verified: prefs.new_event = True
+      - Confirms: New users have notifications ON by default
+      
+      The notification opt-out behavior is working perfectly. All users receive new-party
+      alerts by default unless they explicitly opt out (notif_prefs.new_event = False).
+      Batching prevents spam when clubs add multiple events at once.
+

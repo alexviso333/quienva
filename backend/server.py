@@ -8489,16 +8489,16 @@ async def _notify_event_audience(event_id: str, kind: str, title: str, body: str
 
 
 async def _notify_new_event_city(event: dict):
-    """When a new event is created, notify users in the same app-city (region-aware:
-    e.g. a Magaluf event notifies Palma de Mallorca users) who OPTED IN to new-party
-    alerts (notif_prefs.new_event == True). This is opt-in: users who never enabled
-    it get nothing, so the city is no longer auto-broadcast to everyone."""
+    """When a new event is created, notify EVERY user in the same app-city
+    (region-aware: e.g. a Magaluf event notifies Palma de Mallorca users) UNLESS
+    they turned new-party alerts OFF (notif_prefs.new_event == False). New-party
+    alerts are ON by default for everyone."""
     region = region_for_city(event.get("city") or "Palma de Mallorca")
     body = f"🆕 Nueva fiesta: {event['name']} · {event.get('venue', '')} ({event['date']})"
     count = 0
-    # Only users who explicitly enabled new-party alerts for their city.
+    # Everyone in the city except users who explicitly disabled new-party alerts.
     async for u in db.users.find(
-        {"city": region, "notif_prefs.new_event": True},
+        {"city": region, "notif_prefs.new_event": {"$ne": False}},
         {"_id": 0, "user_id": 1},
     ):
         await create_notification(
@@ -8506,16 +8506,17 @@ async def _notify_new_event_city(event: dict):
             {"event_id": event["id"], "type": "new_event"},
         )
         count += 1
-    logger.info(f"[notify] new_event {event['id']} → {count} opted-in users in {region}")
+    logger.info(f"[notify] new_event {event['id']} → {count} users in {region}")
     return count
 
 
 async def _notify_new_events_batch(venue: dict, events: list) -> int:
     """Send ONE "new parties" push per club per scrape run. A user complained a
     club that added ~9 events at once triggered a burst of pushes that woke them
-    up. Now: if a club created 2+ new parties in a single run we send the first
-    party's name + "+N fiestas más" (a single notification) instead of one push
-    per event. Same opt-in audience as _notify_new_event_city (notif_prefs.new_event)."""
+    up. Now: if a club created 2+ new parties in a single run we send a single
+    "<Club> ha añadido N fiestas nuevas" notification instead of one push per
+    event. Audience = EVERY user in the city (new-party alerts are ON by default)
+    except those who turned them OFF (notif_prefs.new_event == False)."""
     if not events:
         return 0
     if len(events) == 1:
@@ -8527,7 +8528,7 @@ async def _notify_new_events_batch(venue: dict, events: list) -> int:
     body = f"🆕 {club} ha añadido {n} fiestas nuevas. ¡Échales un vistazo!"
     count = 0
     async for u in db.users.find(
-        {"city": region, "notif_prefs.new_event": True},
+        {"city": region, "notif_prefs.new_event": {"$ne": False}},
         {"_id": 0, "user_id": 1},
     ):
         await create_notification(
@@ -8535,7 +8536,7 @@ async def _notify_new_events_batch(venue: dict, events: list) -> int:
             {"type": "new_event", "venue": club, "count": n},
         )
         count += 1
-    logger.info(f"[notify] new_events_batch club='{club}' n={n} → {count} opted-in users in {region}")
+    logger.info(f"[notify] new_events_batch club='{club}' n={n} → {count} users in {region}")
     return count
 
 
@@ -9714,12 +9715,13 @@ _NOTIF_PREF_KEYS = [
     "tickets_price_down", "tickets_price_up", "friend_going",
 ]
 # Opt-IN categories: OFF by default; only delivered if the user explicitly turned
-# them ON in Settings. "new_event" (new parties in your city) was previously a
-# blanket auto-broadcast to everyone in the city — now it's opt-in so users only
-# get city-wide new-party alerts if they choose to. Everything else stays opt-OUT
-# (on by default). Ticket-state changes for events the user follows/marked are
-# unaffected (they go through _notify_event_audience, not the city broadcast).
-_OPT_IN_PREF_KEYS = {"new_event"}
+# them ON in Settings. Everything NOT listed here is opt-OUT (ON by default).
+# "new_event" (new parties in your city) is opt-OUT: EVERY user in the city gets
+# new-party alerts by default, and only stops if they turn them off in Settings.
+# (Bursts are prevented by batching many new parties from the same club into a
+# single push — see _notify_new_events_batch.) Ticket-state changes for events the
+# user follows/marked go through _notify_event_audience, not the city broadcast.
+_OPT_IN_PREF_KEYS = set()
 DEFAULT_NOTIF_PREFS = {k: (k not in _OPT_IN_PREF_KEYS) for k in _NOTIF_PREF_KEYS}
 
 
@@ -12434,6 +12436,29 @@ async def on_startup():
             logger.info(f"[migration] city_change_alerts default OFF → {getattr(res,'modified_count',0)} users updated")
     except Exception as e:
         logger.warning(f"[migration] city_alerts default failed: {e}")
+    # One-time migration: new-party alerts are now ON by default for EVERYONE
+    # (owner wants all users to hear about new parties, delivered BATCHED per club).
+    # Under the previous opt-in regime some users had notif_prefs.new_event stored
+    # as False purely because that was the old default (not a real opt-out), so we
+    # flip those to True once. Idempotent via a settings flag; users who later turn
+    # it off in Settings are respected (runtime check is notif_prefs.new_event != False).
+    try:
+        _flag2 = await db.app_settings.find_one({"key": "new_event_default_on_v1"}, {"_id": 0})
+        if not _flag2:
+            res2 = await db.users.update_many(
+                {"notif_prefs.new_event": False},
+                {"$set": {"notif_prefs.new_event": True}},
+            )
+            await db.app_settings.update_one(
+                {"key": "new_event_default_on_v1"},
+                {"$set": {"key": "new_event_default_on_v1", "value": True,
+                          "migrated": getattr(res2, "modified_count", 0),
+                          "at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True,
+            )
+            logger.info(f"[migration] new_event default ON → {getattr(res2,'modified_count',0)} users updated")
+    except Exception as e:
+        logger.warning(f"[migration] new_event default-on failed: {e}")
     global scheduler
     try:
         scheduler = AsyncIOScheduler(timezone="Europe/Madrid")
