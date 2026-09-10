@@ -1151,6 +1151,99 @@ def _city_center(city_row: dict):
     return CITY_CENTER_DEFAULTS.get(key)
 
 
+def _nearest_supported_city(lat: float, lng: float) -> Optional[str]:
+    """Closest supported app-city to a lat/lng (equirectangular approx is more
+    than enough to rank a handful of cities). Used to pick a sensible city for a
+    brand-new Google/Apple user from their IP, instead of always defaulting to
+    Palma de Mallorca."""
+    import math
+    best_id, best_d = None, None
+    for c in SUPPORTED_CITIES:
+        key = (c.get("id") or "").strip().lower()
+        coords = CITY_CENTER_DEFAULTS.get(key)
+        if not coords:
+            continue
+        clat, clng = coords
+        x = math.radians(clng - lng) * math.cos(math.radians((clat + lat) / 2))
+        y = math.radians(clat - lat)
+        d = x * x + y * y
+        if best_d is None or d < best_d:
+            best_d, best_id = d, c["id"]
+    return best_id
+
+
+def _client_ip(request: Request) -> Optional[str]:
+    """Real caller IP behind the Render/Vercel proxy chain."""
+    try:
+        xff = request.headers.get("x-forwarded-for") or ""
+        if xff:
+            ip = xff.split(",")[0].strip()
+            if ip:
+                return ip
+        xr = request.headers.get("x-real-ip")
+        if xr:
+            return xr.strip()
+        if request.client:
+            return request.client.host
+    except Exception:
+        pass
+    return None
+
+
+def _is_public_ip(ip: str) -> bool:
+    try:
+        import ipaddress
+        addr = ipaddress.ip_address(ip)
+        return not (addr.is_private or addr.is_loopback or addr.is_reserved
+                    or addr.is_link_local or addr.is_unspecified)
+    except Exception:
+        return False
+
+
+async def geolocate_city_from_request(request: Request) -> Optional[str]:
+    """Best-effort IP → nearest supported city. Keyless, free (ipwho.is), with a
+    tight timeout and a graceful fallback: returns None on ANY failure so a
+    sign-up is never blocked or slowed down meaningfully. Runs the blocking HTTP
+    call in a thread so the event loop stays responsive."""
+    ip = _client_ip(request)
+    if not ip or not _is_public_ip(ip):
+        return None
+
+    def _lookup():
+        r = requests.get(
+            f"https://ipwho.is/{ip}",
+            params={"fields": "success,latitude,longitude,country_code"},
+            timeout=2.5,
+        )
+        return r.json()
+
+    try:
+        data = await asyncio.to_thread(_lookup)
+        if not data or data.get("success") is False:
+            return None
+        lat, lng = data.get("latitude"), data.get("longitude")
+        if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+            return None
+        city = _nearest_supported_city(float(lat), float(lng))
+        logger.info(f"[geo] ip={ip} -> {city}")
+        return city
+    except Exception as ex:
+        logger.info(f"[geo] IP geolocation failed for {ip}: {ex}")
+        return None
+
+
+async def _new_user_city(inp_guest_city: Optional[str], request: Request) -> str:
+    """City assigned to a brand-new social-login (Google/Apple) account.
+    An EXPLICIT guest choice (a real city that is NOT the browsing default) wins;
+    otherwise we geolocate by IP so users are no longer dumped into Palma de
+    Mallorca by default. Palma stays only as the last-resort fallback."""
+    gc = inp_guest_city if inp_guest_city in CITY_IDS else None
+    if gc and gc != GUEST_CITY:
+        return gc
+    geo = await geolocate_city_from_request(request)
+    return geo or gc or GUEST_CITY
+
+
 async def load_app_cities():
     """Repopulate the in-memory city containers from the DB (ENABLED cities only).
     Called on startup, after any admin change, and periodically (safety net)."""
@@ -2515,7 +2608,10 @@ def _weekend_range(today):
 
 async def _events_for_timeframe(city_id: str, timeframe: str) -> list:
     if timeframe == "all":
-        return await _upcoming_for_city(city_id)
+        # City landing page: show EVERY upcoming party for the city (posters are
+        # lazy-loaded below the fold, so a long list stays fast). The high cap is
+        # just a safety limit, effectively "all" for real city volumes.
+        return await _upcoming_for_city(city_id, limit=400)
     today = datetime.now(ZoneInfo("Europe/Madrid")).date()
     if timeframe == "tonight":
         start = end = today.isoformat()
@@ -2570,10 +2666,16 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 
     items_html = []
     jsonld = []
-    for ev in events[:24]:
+    for idx, ev in enumerate(events):
         ev_url = _event_paths(front, ev.get("id", ""), _event_slug(ev))[lang]
-        items_html.append(f'<li>{_seo_card(ev, ev_url, lang, e)}</li>')
-        jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, ev_url, front, lang=lang)}</script>')
+        # Render a card for EVERY event (users + Google see them all). Posters are
+        # eager only for the first few (fast LCP) and lazy for the rest, so a long
+        # city page never front-loads hundreds of images. Structured data (JSON-LD)
+        # is capped to keep the HTML payload lean — rich results don't need one per
+        # event, but every party still appears in the visible list.
+        items_html.append(f'<li>{_seo_card(ev, ev_url, lang, e, eager=(idx < 6))}</li>')
+        if idx < 30:
+            jsonld.append(f'<script type="application/ld+json">{_event_jsonld(ev, ev_url, front, lang=lang)}</script>')
     if not items_html:
         items_html.append(f'<li class="empty">{e(empty)}</li>')
 
@@ -5540,7 +5642,7 @@ async def google_config():
 
 
 @api_router.post("/auth/google/callback")
-async def google_callback(inp: GoogleCallbackInput, response: Response):
+async def google_callback(inp: GoogleCallbackInput, request: Request, response: Response):
     # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
     if not GOOGLE_ENABLED:
         raise HTTPException(status_code=400, detail="Google login no está configurado")
@@ -5566,6 +5668,7 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
     if not email:
         raise HTTPException(status_code=401, detail="Google no devolvió email")
     existing = await db.users.find_one({"email": email})
+    is_new = existing is None
     if existing:
         user = existing
         if not user.get("picture") and data.get("picture"):
@@ -5582,7 +5685,7 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
             "username": username,
             "name": data.get("name", "Usuario"),
             "picture": data.get("picture", ""),
-            "city": (inp.guest_city if inp.guest_city in CITY_IDS else GUEST_CITY),
+            "city": await _new_user_city(inp.guest_city, request),
             "role": "user",
             "auth_provider": "google",
             "attendance_privacy": "amigos",
@@ -5596,7 +5699,7 @@ async def google_callback(inp: GoogleCallbackInput, response: Response):
 
     token = await create_session(user["user_id"])
     set_session_cookie(response, token)
-    return {"user": public_user(user), "token": token}
+    return {"user": public_user(user), "token": token, "is_new": is_new}
 
 
 class AppleCallbackInput(BaseModel):
@@ -5619,7 +5722,7 @@ _APPLE_JWK_CLIENT = jwt.PyJWKClient("https://appleid.apple.com/auth/keys")
 
 
 @api_router.post("/auth/apple/callback")
-async def apple_callback(inp: AppleCallbackInput, response: Response):
+async def apple_callback(inp: AppleCallbackInput, request: Request, response: Response):
     """Native 'Sign in with Apple' (iOS). Verifies the identity token (JWT)
     against Apple's public keys, validates audience (our bundle id) + issuer,
     then creates/logs in a user and issues our own session token — same
@@ -5657,7 +5760,9 @@ async def apple_callback(inp: AppleCallbackInput, response: Response):
             user = existing
     # 3) Else create a new account (mirrors the Google flow; birthdate is asked
     #    later via the profile, same as Google users).
+    is_new = False
     if not user:
+        is_new = True
         name = (inp.name or "").strip() or (token_email.split("@")[0] if token_email else "Usuario")
         base_username = ((token_email.split("@")[0] if token_email else f"apple{secrets.randbelow(999999)}")
                          .lower().replace(".", "").replace("+", ""))[:20] or "user"
@@ -5670,7 +5775,7 @@ async def apple_callback(inp: AppleCallbackInput, response: Response):
             "username": username,
             "name": name,
             "picture": "",
-            "city": (inp.guest_city if inp.guest_city in CITY_IDS else GUEST_CITY),
+            "city": await _new_user_city(inp.guest_city, request),
             "role": "user",
             "auth_provider": "apple",
             "apple_sub": apple_sub,
@@ -5685,7 +5790,7 @@ async def apple_callback(inp: AppleCallbackInput, response: Response):
 
     token = await create_session(user["user_id"])
     set_session_cookie(response, token)
-    return {"user": public_user(user), "token": token}
+    return {"user": public_user(user), "token": token, "is_new": is_new}
 
 
 @api_router.post("/auth/logout")

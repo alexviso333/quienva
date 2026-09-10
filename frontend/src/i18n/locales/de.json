@@ -93,7 +93,8 @@
     "enter": "Los geht's",
     "invited_suffix": "hat dich eingeladen 🎉",
     "invited_sub": "Registriere dich, um die Freundschaft anzunehmen und zu sehen, wohin sie gehen.",
-    "accept": "Annehmen"
+    "accept": "Annehmen",
+    "change_city": "Tippen, um deine Stadt zu ändern"
   },
   "plans": {
     "view_dia": "Tag",

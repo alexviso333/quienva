@@ -73,13 +73,21 @@ export function AuthProvider({ children }) {
           try {
             if (!url || url.indexOf("auth-callback") === -1) return;
             let token = null;
-            try { token = new URL(url).searchParams.get("token"); } catch (e) { /* ignore */ }
+            let isNew = false;
+            try {
+              const u = new URL(url);
+              token = u.searchParams.get("token");
+              isNew = u.searchParams.get("is_new") === "1";
+            } catch (e) { /* ignore */ }
             if (!token) {
               const m = url.match(/[?&]token=([^&]+)/);
               token = m ? decodeURIComponent(m[1]) : null;
+              if (/[?&]is_new=1/.test(url)) isNew = true;
             }
             if (token) {
               localStorage.setItem("qv_token", token);
+              // Brand-new account → let the Feed prompt for the city on arrival.
+              if (isNew) { try { localStorage.setItem("qv_pick_city", "1"); } catch (e) { /* ignore */ } }
               try {
                 const { Browser } = await import("@capacitor/browser");
                 await Browser.close();

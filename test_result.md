@@ -12696,3 +12696,290 @@ agent_communication:
       
       Test file: /app/backend_test_affiliate_ssr.py
       No issues found. Ready for main agent to summarize and finish.
+
+
+#=====================================================================================
+# ITERATION (2026-09-10) — OAuth city (IP geolocation) + SEO city pages show ALL events
+#=====================================================================================
+backend:
+  - task: "New Google/Apple users: assign city by IP geolocation instead of always Palma de Mallorca"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Root cause: brand-new Google/Apple accounts were assigned city =
+            (guest_city or GUEST_CITY='Palma de Mallorca'). The shipped app sends a
+            null/default guest_city, so nearly everyone was dropped into Palma.
+            Fix (backend-only, deploys instantly to Render → reaches the ALREADY
+            published app with no App Store review):
+            - Added _new_user_city(guest_city, request): an EXPLICIT non-default guest
+              choice wins; otherwise geolocate by IP (ipwho.is, keyless, 2.5s timeout,
+              graceful fallback that NEVER blocks signup) and pick the nearest supported
+              city via _nearest_supported_city() (equirectangular distance over
+              CITY_CENTER_DEFAULTS). Palma stays only as the last-resort fallback.
+            - google_callback + apple_callback now take `request: Request`, use
+              _new_user_city for NEW accounts, and return `is_new` in the response
+              (used by the frontend to open the city sheet). Backward compatible.
+            Manually verified: nearest-city math (Madrid->Madrid, Malaga->Marbella,
+            Ibiza->Ibiza, London->Barcelona, Canarias->Sevilla) and ipwho.is reachable.
+            NOTE: full OAuth flow can't be exercised locally (needs real Google code /
+            Apple identity token). Please verify endpoints don't crash with the new
+            `request` param and still return proper 400/401 for invalid input.
+  - task: "SEO city landing pages render ALL upcoming events (not just 24)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: |
+            _render_city rendered only events[:24] while the query returned up to 60,
+            so city pages showed very few parties. Fix (scoped to city landing pages,
+            timeframe='all' — the quienva.me HOME page is untouched):
+            - _events_for_timeframe('all') now fetches up to 400 upcoming events.
+            - _render_city renders a card for EVERY event; posters stay lazy-loaded
+              (eager only for the first 6) so a long page doesn't front-load hundreds
+              of images → no performance regression. JSON-LD capped at first 30 to keep
+              the HTML payload lean.
+            Manually verified with 30 seeded Madrid events: /api/ciudad/madrid renders
+            30 seo-event-card items, stats show "30 planes", JSON-LD count = 34 (30
+            events + org/breadcrumb/faq). Tonight/weekend timeframes unchanged.
+
+frontend:
+  - task: "City switcher in Feed clearly visible + auto-open city sheet after new Google/Apple signup"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Feed.js, frontend/src/pages/Login.js, frontend/src/pages/AuthCallback.js, frontend/src/context/AuthContext.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            (Ships with v1.4 App Store review — bundled app.)
+            1) Feed header city control redesigned into an obvious tappable pill
+               (bg + cyan border + glow + MapPin + city + ChevronDown) with a small
+               caption t('feed.change_city') so logged-in users clearly see where to
+               change city. Works for logged-in users (persists to profile via
+               PUT /auth/profile) and guests. i18n key feed.change_city added es/en/de.
+            2) After a BRAND-NEW Google/Apple signup, the semi-floating CitySelectorSheet
+               auto-opens on the Feed: backend returns is_new -> flows set localStorage
+               'qv_pick_city'='1' (Login.appleLogin web+native; AuthCallback google web;
+               AuthContext appUrlOpen for native google via &is_new=1 on the URL scheme)
+               -> Feed mount effect opens the sheet and clears the flag.
+
+metadata:
+  created_by: "main_agent"
+  version: "1.1"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "New Google/Apple users: assign city by IP geolocation instead of always Palma de Mallorca"
+    - "SEO city landing pages render ALL upcoming events (not just 24)"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Please run BACKEND tests only (do NOT touch frontend yet — awaiting user permission).
+      Local Mongo is fresh/empty except test events I can seed. Focus:
+      1) SEO city pages: seed >24 upcoming events for one supported city (e.g. Madrid)
+         and GET /api/ciudad/madrid — confirm it renders MORE than 24 seo-event-card
+         items (all of them) and the stats count matches. Also confirm /api/ciudad/madrid/esta-noche
+         and /este-finde still work and the quienva.me HOME (/api/home) is unchanged.
+      2) Auth regression: POST /api/auth/google/callback and /api/auth/apple/callback with
+         invalid/dummy payloads must NOT 500 — expect 400/401 (the new `request` param
+         and is_new/geolocation additions must not break the handlers). Also verify
+         /api/auth/register + /api/auth/login + /api/auth/me still work end-to-end.
+      3) General regression on core endpoints (/api/cities, /api/events).
+      If /app/memory/test_credentials.md is empty, create a test user via /api/auth/register
+      and record the credentials there.
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅ BACKEND TESTING COMPLETE (2026-09-10) - ALL TESTS PASSED (17/17)
+            
+            Tested all 3 focus areas from the review request with comprehensive coverage.
+            
+            🎉 TEST RESULTS SUMMARY:
+            
+            ================================================================================
+            TEST 1: SEO CITY LANDING PAGES SHOW ALL EVENTS (HIGH PRIORITY) - 7/7 PASSED
+            ================================================================================
+            
+            ✅ 1a. GET /api/ciudad/madrid returns 200 HTML
+            - Seeded 30 upcoming events for Madrid (>24 as required)
+            - Page renders 60 event cards with data-testid="seo-event-card" (>24 ✓)
+            - Stats header shows "60 planes" matching the actual event count ✓
+            - JSON-LD blocks capped at 34 (30 events + org/breadcrumb/faq) ✓
+            - Previously capped at 24, now shows ALL upcoming events ✓
+            
+            ✅ 1b. Timeframe pages still work
+            - GET /api/ciudad/madrid/esta-noche → 200 ✓
+            - GET /api/ciudad/madrid/este-finde → 200 ✓
+            - No regressions in timeframe filtering ✓
+            
+            ✅ 1c. Home page is UNCHANGED
+            - GET /api/home → 200 with text/html ✓
+            - Home page behavior not affected by city page changes ✓
+            
+            ================================================================================
+            TEST 2: AUTH REGRESSION (HIGH PRIORITY) - 5/5 PASSED
+            ================================================================================
+            
+            ✅ 2a. Google callback with invalid code (graceful error handling)
+            - POST /api/auth/google/callback with dummy code → 400 (NOT 500) ✓
+            - New `request: Request` parameter does NOT break the endpoint ✓
+            - Graceful error handling working correctly ✓
+            
+            ✅ 2b. Apple callback with invalid identity_token (graceful error handling)
+            - POST /api/auth/apple/callback with invalid token → 401 (NOT 500) ✓
+            - Backend log shows "Not enough segments" error (expected) ✓
+            - New `request: Request` parameter does NOT break the endpoint ✓
+            - Graceful error handling working correctly ✓
+            
+            ✅ 2c. Email/password flow (full end-to-end test)
+            - POST /api/auth/register → 200 with token ✓
+            - POST /api/auth/login → 200 with token ✓
+            - GET /api/auth/me → 200 with user data (email verified) ✓
+            - Test credentials saved to /app/memory/test_credentials.md ✓
+            - Full auth flow working correctly ✓
+            
+            ================================================================================
+            TEST 3: GENERAL REGRESSION - 5/5 PASSED
+            ================================================================================
+            
+            ✅ 3a. GET /api/cities
+            - Returns 200 with valid JSON ✓
+            - Contains 6 supported cities ✓
+            
+            ✅ 3b. GET /api/events (with and without ?city=)
+            - GET /api/events → 200 with valid JSON array ✓
+            - GET /api/events?city=Madrid → 200 with valid JSON array ✓
+            - Returns 60 Madrid events (including 30 seeded test events) ✓
+            
+            ================================================================================
+            DETAILED FINDINGS
+            ================================================================================
+            
+            1. SEO CITY PAGES NOW SHOW ALL EVENTS:
+               - Previously: City pages capped at 24 events (events[:24])
+               - Now: City pages render ALL upcoming events (up to 400)
+               - Verified: Madrid page with 30 seeded events shows 60 total cards
+               - Performance: Lazy loading maintained (only first 6 eager-loaded)
+               - JSON-LD: Correctly capped at ~30-35 blocks to keep payload lean
+               - Stats header: Correctly shows actual event count
+               - Timeframe pages: esta-noche and este-finde still work correctly
+               - Home page: Unchanged (only "today" behavior, not affected)
+            
+            2. AUTH REGRESSION TESTS PASSED:
+               - Google/Apple callbacks: New `request: Request` param does NOT break endpoints
+               - Invalid inputs: Return 400/401 gracefully (NOT 500)
+               - IP geolocation: Cannot be fully tested without real OAuth tokens, but:
+                 * Endpoints accept the new parameter without crashing
+                 * Error handling is graceful (400/401 for invalid input)
+                 * Backend logs show expected error messages
+               - Email/password flow: Fully functional end-to-end
+               - Test user created and credentials saved
+            
+            3. GENERAL REGRESSION PASSED:
+               - GET /api/cities: Returns 6 supported cities
+               - GET /api/events: Returns events correctly
+               - GET /api/events?city=Madrid: Filters by city correctly
+               - No 500 errors detected in any endpoint
+            
+            ================================================================================
+            BACKEND LOGS ANALYSIS
+            ================================================================================
+            
+            - No 500 errors during test execution ✓
+            - Expected scraper errors (FourVenues token missing) - not a bug ✓
+            - Apple Sign In error "Not enough segments" - expected for invalid token ✓
+            - All API endpoints responded correctly ✓
+            
+            ================================================================================
+            CONCLUSION
+            ================================================================================
+            
+            🎉 ALL BACKEND TESTS PASSED (17/17 tests, 100% success rate)
+            
+            ✅ SEO city landing pages now show ALL upcoming events (>24)
+            ✅ Auth regression tests passed (google/apple callbacks graceful, email/password working)
+            ✅ General regression tests passed (cities, events endpoints working)
+            ✅ No 500 errors detected
+            ✅ Test credentials created and saved
+            
+            The backend changes are working perfectly. The SEO city pages now render all 
+            upcoming events (not capped at 24), and the auth endpoints handle the new 
+            `request: Request` parameter gracefully without breaking existing functionality.
+            
+            Test file: /app/backend_test.py
+            Test credentials: /app/memory/test_credentials.md
+            All tests executed successfully with no failures.
+
+  - agent: "testing"
+    message: |
+      ✅✅✅ BACKEND TESTING COMPLETE - ALL TESTS PASSED (2026-09-10)
+      
+      Completed comprehensive backend testing for the "¿Quién va?" FastAPI app as requested.
+      Tested all 3 high-priority focus areas with 17 test scenarios.
+      
+      ### SUMMARY
+      
+      ✅ SEO city landing pages show ALL events (7/7 tests passed)
+      ✅ Auth regression tests (5/5 tests passed)
+      ✅ General regression tests (5/5 tests passed)
+      
+      ### DETAILED FINDINGS
+      
+      1. SEO CITY LANDING PAGES (HIGH PRIORITY) - ✅ WORKING PERFECTLY
+         - Seeded 30 events for Madrid (>24 as required)
+         - GET /api/ciudad/madrid renders 60 event cards (>24 ✓)
+         - Stats header shows correct count: "60 planes"
+         - JSON-LD blocks capped at 34 (30 events + org/breadcrumb/faq)
+         - Timeframe pages (esta-noche, este-finde) still work
+         - Home page unchanged (only "today" behavior)
+         - Previously capped at 24, now shows ALL upcoming events ✓
+      
+      2. AUTH REGRESSION (HIGH PRIORITY) - ✅ WORKING PERFECTLY
+         - Google callback: Invalid code → 400 (NOT 500) ✓
+         - Apple callback: Invalid token → 401 (NOT 500) ✓
+         - New `request: Request` parameter does NOT break endpoints ✓
+         - Email/password flow: register → login → /me all working ✓
+         - Test credentials saved to /app/memory/test_credentials.md ✓
+         - Backend logs show expected error messages (graceful handling) ✓
+      
+      3. GENERAL REGRESSION - ✅ WORKING PERFECTLY
+         - GET /api/cities → 200 with 6 supported cities ✓
+         - GET /api/events → 200 with valid JSON array ✓
+         - GET /api/events?city=Madrid → 200 with 60 events ✓
+         - No 500 errors detected ✓
+      
+      ### Need Research
+      None - all tests passed with no issues.
+      
+      ### ACTION ITEMS FOR MAIN AGENT
+      - ✅ All backend tests passed (17/17, 100% success rate)
+      - ✅ SEO city pages now show ALL events (>24) - requirement met
+      - ✅ Auth endpoints handle new `request` param gracefully - no crashes
+      - ✅ Email/password flow fully functional
+      - ✅ General regression tests passed - no breaking changes
+      - ✅ Test credentials created and saved
+      - Summarize and finish - all backend requirements met
+      
+      YOU MUST ASK USER BEFORE DOING FRONTEND TESTING
+

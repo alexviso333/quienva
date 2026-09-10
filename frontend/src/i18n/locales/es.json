@@ -93,7 +93,8 @@
     "enter": "Entrar",
     "invited_suffix": "te ha invitado 🎉",
     "invited_sub": "Regístrate para aceptar la amistad y ver a dónde va.",
-    "accept": "Aceptar"
+    "accept": "Aceptar",
+    "change_city": "Toca para cambiar tu ciudad"
   },
   "plans": {
     "view_dia": "Día",

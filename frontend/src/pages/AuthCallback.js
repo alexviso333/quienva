@@ -33,10 +33,13 @@ export default function AuthCallback() {
           // NATIVE app login: this page is running in the phone's Safari, so we
           // bounce the session token back INTO the app via its custom URL scheme.
           if (isNativeLogin && data.token) {
-            window.location.href = `quienva://auth-callback?token=${encodeURIComponent(data.token)}`;
+            const isNew = data.is_new ? "&is_new=1" : "";
+            window.location.href = `quienva://auth-callback?token=${encodeURIComponent(data.token)}${isNew}`;
             return;
           }
           if (data.token) localStorage.setItem("qv_token", data.token);
+          // Brand-new account → prompt for the city right after landing on the feed.
+          if (data.is_new) { try { localStorage.setItem("qv_pick_city", "1"); } catch { /* ignore */ } }
           setUser(data.user);
           window.history.replaceState(null, "", "/feed");
           const onboarded = localStorage.getItem("qv_onboarded") === "1";

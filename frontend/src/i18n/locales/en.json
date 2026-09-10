@@ -93,7 +93,8 @@
     "enter": "Get in",
     "invited_suffix": "invited you 🎉",
     "invited_sub": "Sign up to accept the friendship and see where they're going.",
-    "accept": "Accept"
+    "accept": "Accept",
+    "change_city": "Tap to change your city"
   },
   "plans": {
     "view_dia": "Day",

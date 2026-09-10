@@ -120,6 +120,8 @@ export default function Login() {
     try {
       const data = await startAppleLogin();
       if (data.token) localStorage.setItem("qv_token", data.token);
+      // Brand-new account → prompt for the city right after landing on the feed.
+      if (data.is_new) { try { localStorage.setItem("qv_pick_city", "1"); } catch (e) { /* ignore */ } }
       setUser(data.user);
       try { localStorage.setItem("qv_user", JSON.stringify(data.user)); } catch (e) { /* ignore */ }
       await goAfterAuth();

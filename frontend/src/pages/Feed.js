@@ -70,7 +70,17 @@ export default function Feed() {
 
   // First launch on the installed app: gently offer to pick a city once. It's
   // semi-blocking (dismissible) and never shows again after the first time.
+  // ALSO: right after a brand-new Google/Apple sign-up (flagged by the auth
+  // flow via `qv_pick_city`), open the same sheet so the user confirms/changes
+  // the city we auto-detected — this replaces being silently dropped in Palma.
   useEffect(() => {
+    let forcePick = false;
+    try { forcePick = localStorage.getItem("qv_pick_city") === "1"; } catch { /* ignore */ }
+    if (forcePick) {
+      try { localStorage.removeItem("qv_pick_city"); } catch { /* ignore */ }
+      setCitySheetOpen(true);
+      return;
+    }
     if (!isNativeApp()) return;
     let seen = false;
     try { seen = localStorage.getItem("qv_city_gate_seen") === "1"; } catch { /* ignore */ }
@@ -279,14 +289,17 @@ export default function Feed() {
             <button
               onClick={() => setCitySheetOpen(true)}
               data-testid="feed-city-switch-btn"
-              className="group flex items-center gap-1 text-xs tracking-[0.25em] uppercase text-qv-secondary font-bold max-w-full active:scale-95 transition-transform"
+              className="group inline-flex items-center gap-1.5 rounded-full bg-white/[0.07] border border-qv-secondary/30 pl-2.5 pr-2.5 py-1.5 active:scale-95 transition-transform shadow-[0_0_16px_-6px_rgba(0,240,255,0.5)]"
             >
-              <MapPin className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">
+              <MapPin className="w-4 h-4 shrink-0 text-qv-secondary" />
+              <span className="truncate max-w-[46vw] text-sm font-extrabold text-white">
                 {user ? (user.city || "Palma de Mallorca") : ((cities.find((c) => c.id === guestCity) || {}).label || guestCity)}
               </span>
-              <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100" />
+              <ChevronDown className="w-4 h-4 shrink-0 text-qv-secondary opacity-90 group-active:translate-y-0.5 transition-transform" />
             </button>
+            <span className="mt-1 block pl-1 text-[10px] font-semibold text-white/45">
+              {t("feed.change_city")}
+            </span>
             <h1 className="font-display text-4xl lg:text-5xl font-black tracking-tighter mt-1">
               {t("feed.title")}<span className="text-qv-primary">.</span>
             </h1>
