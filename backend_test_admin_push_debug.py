@@ -8,7 +8,7 @@ import sys
 import os
 
 # Backend URL from frontend/.env
-BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://party-finder-55.preview.emergentagent.com")
+BACKEND_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://geolocation-bug.preview.emergentagent.com")
 API_BASE = f"{BACKEND_URL}/api"
 
 # Admin credentials from test_credentials.md

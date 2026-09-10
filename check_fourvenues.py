@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
-BASE_URL = "https://party-finder-55.preview.emergentagent.com/api"
+BASE_URL = "https://geolocation-bug.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

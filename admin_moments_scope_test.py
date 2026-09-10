@@ -8,7 +8,7 @@ import requests
 import sys
 
 # Base URL from frontend/.env
-BASE_URL = "https://party-finder-55.preview.emergentagent.com/api"
+BASE_URL = "https://geolocation-bug.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

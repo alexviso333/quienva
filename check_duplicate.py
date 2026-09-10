@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://party-finder-55.preview.emergentagent.com"
+BACKEND_URL = "https://geolocation-bug.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

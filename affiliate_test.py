@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Backend URL from environment
-BASE_URL = "https://party-finder-55.preview.emergentagent.com/api"
+BASE_URL = "https://geolocation-bug.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"
