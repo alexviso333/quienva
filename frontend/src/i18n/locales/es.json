@@ -983,10 +983,10 @@
     "total": "{{count}} votos"
   },
   "montagrupo": {
-    "title": "Crea e invita a tu grupo",
-    "sub": "Trae a tus amigos y ved a qué fiesta va cada uno",
+    "title": "Cread vuestra encuesta de a dónde ir",
+    "sub": "Monta un grupo y decidid juntos la fiesta con una encuesta",
     "cta": "Crear",
-    "dialog_sub": "Ponle nombre, créalo y trae a tu gente de un toque."
+    "dialog_sub": "Ponle nombre y crea tu grupo: dentro podréis lanzar una encuesta de a dónde ir."
   },
   "nudge": {
     "title": "Trae a tu gente 🎉",

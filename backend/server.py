@@ -8642,18 +8642,49 @@ async def admin_list_users(
         q = {"$or": [{"name": rx}, {"email": rx}]}
     users = []
     async for u in db.users.find(q, {"_id": 0, "password": 0}).sort("created_at", -1).limit(limit):
-        going = await db.interests.count_documents({"user_id": u["user_id"], "status": "voy"})
-        attended = await db.interests.count_documents({"user_id": u["user_id"], "status": "estuve"})
-        friends = await db.friendships.count_documents({
-            "status": "accepted",
-            "$or": [{"requester_id": u["user_id"]}, {"addressee_id": u["user_id"]}],
-        })
-        groups = await db.groups.count_documents({"member_ids": u["user_id"]})
-        referred = await db.users.count_documents({"referred_by": u["user_id"]})
-        u["_stats"] = {"going": going, "attended": attended, "friends": friends,
-                       "groups": groups, "referred": referred,
-                       "invites_sent": int(u.get("invites_sent", 0))}
         users.append(u)
+    ids = [u["user_id"] for u in users]
+
+    # Per-user stats used to be an N+1 (5 count queries PER user → up to 1000
+    # sequential round-trips). Now: a handful of grouped aggregations for the
+    # whole page, mapped back in memory.
+    going_c, attended_c, friends_c, groups_c, referred_c = {}, {}, {}, {}, {}
+    if ids:
+        async def _load_stats():
+            async for row in db.interests.aggregate([
+                {"$match": {"user_id": {"$in": ids}, "status": {"$in": ["voy", "estuve"]}}},
+                {"$group": {"_id": {"u": "$user_id", "s": "$status"}, "n": {"$sum": 1}}},
+            ]):
+                (going_c if row["_id"]["s"] == "voy" else attended_c)[row["_id"]["u"]] = row["n"]
+            async for row in db.friendships.aggregate([
+                {"$match": {"status": "accepted",
+                            "$or": [{"requester_id": {"$in": ids}}, {"addressee_id": {"$in": ids}}]}},
+                {"$project": {"p": ["$requester_id", "$addressee_id"]}},
+                {"$unwind": "$p"},
+                {"$match": {"p": {"$in": ids}}},
+                {"$group": {"_id": "$p", "n": {"$sum": 1}}},
+            ]):
+                friends_c[row["_id"]] = row["n"]
+            async for row in db.groups.aggregate([
+                {"$match": {"member_ids": {"$in": ids}}},
+                {"$unwind": "$member_ids"},
+                {"$match": {"member_ids": {"$in": ids}}},
+                {"$group": {"_id": "$member_ids", "n": {"$sum": 1}}},
+            ]):
+                groups_c[row["_id"]] = row["n"]
+            async for row in db.users.aggregate([
+                {"$match": {"referred_by": {"$in": ids}}},
+                {"$group": {"_id": "$referred_by", "n": {"$sum": 1}}},
+            ]):
+                referred_c[row["_id"]] = row["n"]
+        await _load_stats()
+
+    for u in users:
+        uid = u["user_id"]
+        u["_stats"] = {"going": going_c.get(uid, 0), "attended": attended_c.get(uid, 0),
+                       "friends": friends_c.get(uid, 0), "groups": groups_c.get(uid, 0),
+                       "referred": referred_c.get(uid, 0),
+                       "invites_sent": int(u.get("invites_sent", 0))}
     return users
 
 
@@ -8688,32 +8719,60 @@ async def admin_stats(admin: dict = Depends(require_admin)):
     """High-level dashboard stats for the admin panel."""
     today = datetime.now(ZoneInfo("Europe/Madrid")).date()
     week_ago = (today - timedelta(days=7)).isoformat()
-    total_users = await db.users.count_documents({})
-    active_week = await db.interests.distinct("user_id", {"created_at": {"$gte": week_ago}})
-    total_events = await db.events.count_documents({})
-    upcoming_events = await db.events.count_documents({"date": {"$gte": today.isoformat()}})
-    total_going = await db.interests.count_documents({"status": "voy"})
-    total_interested = await db.interests.count_documents({"status": "me_interesa"})
-    total_attended = await db.interests.count_documents({"status": "estuve"})
-    total_stories = await db.stories.count_documents({})
-    total_friendships = await db.friendships.count_documents({"status": "accepted"})
-
-    # Top events by attendance in the next 30 days
+    today_iso = today.isoformat()
     horizon = (today + timedelta(days=30)).isoformat()
-    top_events = []
-    async for ev in db.events.find({"date": {"$gte": today.isoformat(), "$lte": horizon}}, {"_id": 0}):
-        cnt = await db.interests.count_documents({"event_id": ev["id"], "status": {"$in": ["voy", "me_interesa"]}})
-        if cnt > 0:
-            top_events.append({"id": ev["id"], "name": ev["name"], "date": ev["date"], "venue": ev.get("venue", ""), "signups": cnt})
-    top_events.sort(key=lambda e: -e["signups"])
-    top_events = top_events[:8]
 
-    # Genre popularity
+    # All independent counters run CONCURRENTLY instead of one after another.
+    (total_users, active_week, total_events, upcoming_events, total_going,
+     total_interested, total_attended, total_stories, total_friendships) = await asyncio.gather(
+        db.users.count_documents({}),
+        db.interests.distinct("user_id", {"created_at": {"$gte": week_ago}}),
+        db.events.count_documents({}),
+        db.events.count_documents({"date": {"$gte": today_iso}}),
+        db.interests.count_documents({"status": "voy"}),
+        db.interests.count_documents({"status": "me_interesa"}),
+        db.interests.count_documents({"status": "estuve"}),
+        db.stories.count_documents({}),
+        db.friendships.count_documents({"status": "accepted"}),
+    )
+
+    # Top upcoming events by signups — ONE grouped aggregation over interests
+    # (was an N+1: a count query per event).
+    upcoming = {}
+    async for ev in db.events.find(
+        {"date": {"$gte": today_iso, "$lte": horizon}},
+        {"_id": 0, "id": 1, "name": 1, "date": 1, "venue": 1},
+    ):
+        upcoming[ev["id"]] = ev
+    top_events = []
+    if upcoming:
+        async for row in db.interests.aggregate([
+            {"$match": {"event_id": {"$in": list(upcoming.keys())},
+                        "status": {"$in": ["voy", "me_interesa"]}}},
+            {"$group": {"_id": "$event_id", "n": {"$sum": 1}}},
+            {"$sort": {"n": -1}},
+            {"$limit": 8},
+        ]):
+            ev = upcoming.get(row["_id"])
+            if ev:
+                top_events.append({"id": ev["id"], "name": ev["name"], "date": ev["date"],
+                                   "venue": ev.get("venue", ""), "signups": row["n"]})
+
+    # Genre popularity — group interests by event ONCE, then roll up by each
+    # event's genre with a single events read (was an N+1: a find_one per interest).
+    ev_signups = {}
+    async for row in db.interests.aggregate([
+        {"$match": {"status": {"$in": ["voy", "estuve"]}}},
+        {"$group": {"_id": "$event_id", "n": {"$sum": 1}}},
+    ]):
+        ev_signups[row["_id"]] = row["n"]
     genre_counts = {}
-    async for it in db.interests.find({"status": {"$in": ["voy", "estuve"]}}, {"_id": 0, "event_id": 1}):
-        ev = await db.events.find_one({"id": it["event_id"]}, {"_id": 0, "genre": 1})
-        if ev and ev.get("genre"):
-            genre_counts[ev["genre"]] = genre_counts.get(ev["genre"], 0) + 1
+    if ev_signups:
+        async for ev in db.events.find({"id": {"$in": list(ev_signups.keys())}},
+                                       {"_id": 0, "id": 1, "genre": 1}):
+            g = ev.get("genre")
+            if g:
+                genre_counts[g] = genre_counts.get(g, 0) + ev_signups.get(ev["id"], 0)
     genres_ranked = sorted([{"genre": g, "count": c} for g, c in genre_counts.items()], key=lambda x: -x["count"])[:8]
 
     return {

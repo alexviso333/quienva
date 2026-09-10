@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Users, ChevronRight, X } from "lucide-react";
+import { Users, ChevronRight, X, BarChart3 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import api from "@/lib/api";
 import GroupInviteStep from "@/components/GroupInviteStep";
@@ -39,7 +39,7 @@ export default function MontaGrupoBanner() {
         className="w-full rounded-2xl border border-qv-primary/40 bg-gradient-to-r from-qv-primary/15 to-qv-secondary/12 p-3 flex items-center gap-3"
       >
         <div className="w-10 h-10 rounded-full bg-qv-primary/20 flex items-center justify-center shrink-0">
-          <Users className="w-5 h-5 text-qv-primary" />
+          <BarChart3 className="w-5 h-5 text-qv-primary" />
         </div>
         <button
           type="button"
@@ -48,10 +48,10 @@ export default function MontaGrupoBanner() {
           className="flex-1 min-w-0 text-left active:scale-[0.99] transition-transform"
         >
           <p className="font-display font-black text-white text-sm leading-tight">
-            {t("montagrupo.title", "Crea e invita a tu grupo")}
+            {t("montagrupo.title", "Cread vuestra encuesta de a dónde ir")}
           </p>
           <p className="text-white/60 text-xs leading-tight truncate">
-            {t("montagrupo.sub", "Trae a tus amigos y ved a qué fiesta va cada uno")}
+            {t("montagrupo.sub", "Monta un grupo y decidid juntos la fiesta con una encuesta")}
           </p>
         </button>
         <button
@@ -81,7 +81,7 @@ export default function MontaGrupoBanner() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-white/60 text-sm -mt-1 mb-1 leading-relaxed">
-            {t("montagrupo.dialog_sub", "Ponle nombre, créalo y trae a tu gente de un toque.")}
+            {t("montagrupo.dialog_sub", "Ponle nombre y crea tu grupo: dentro podréis lanzar una encuesta de a dónde ir.")}
           </p>
           <GroupInviteStep />
         </DialogContent>
