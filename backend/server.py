@@ -1501,6 +1501,9 @@ p.sub{color:#c9c9d1;margin:0 0 18px;font-size:16px;max-width:640px}
 .intro{margin:2px 0 26px;color:#c9c9d1;font-size:15.5px;line-height:1.75;max-width:780px}
 .intro p{margin:0}
 .sectitle{font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:20px;margin:38px 0 16px;letter-spacing:-.01em}
+.sectitle3{font-family:'Unbounded',system-ui,sans-serif;font-weight:800;font-size:15px;margin:18px 0 8px;letter-spacing:-.01em;color:#fff}
+.longform p{color:#d4d4d8;margin:0 0 14px;line-height:1.6}
+.longform h3{color:#fff}
 .nav-tf{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
 .nav-tf a,.nav-tf b{font-size:13px;font-weight:700;padding:8px 14px;border-radius:999px;text-decoration:none}
 .nav-tf a{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);color:#c9c9d1}
@@ -2024,6 +2027,232 @@ def _city_tips(city_id, label, lang, e):
               f"d\u00eda y mira qu\u00e9 amigos van antes de decidir tu plan.")
     return (f'<h2 class="sectitle">{e(heading)}</h2>'
             f'<div class="intro"><p>{e(p1)}</p><p>{e(p2)}</p></div>')
+
+
+# SEO FIX C: durable long-form editorial per city, trilingüe. ~400 unique words
+# per language per city. This is the single biggest on-page lever to stop Google
+# from canonicalising /fiestas/{city} towards an individual event page: it adds
+# genuine, non-templated prose that search engines treat as topical authority
+# content, not as a thin listing wrapper.
+_CITY_LONGFORM = {
+    "Palma de Mallorca": {
+        "es": [
+            ("Precios de entrada en Palma",
+             "Las entradas en las salas del Paseo Mar\u00edtimo suelen moverse entre 15\u201325\u20ac en noches regulares y 25\u201340\u20ac cuando pincha un DJ invitado; muchas discotecas de Palma incluyen una consumici\u00f3n. En Magaluf, en pleno verano, los wristbands con barra libre o fiesta tem\u00e1tica rondan los 20\u201335\u20ac. Siempre que puedas, compra online: en temporada alta Pacha Mallorca, BCM y Tito's agotan sus noches top y en taquilla el precio sube."),
+            ("Horario t\u00edpico de la noche mallorquina",
+             "En Palma la noche arranca cen\u00e1ndo tapas en La Lonja hacia las 22:00, se baja al Paseo Mar\u00edtimo entre la 1:00 y las 2:00, y las salas rompen entre las 2:30 y las 4:00. Los clubs cierran a las 6:00 en verano. Si vas a Magaluf, el ambiente arranca antes (22:00) con los pre-parties y aguanta hasta las 5:00."),
+            ("Transporte y c\u00f3mo moverte",
+             "Un taxi desde el centro de Palma hasta Magaluf cuesta 25\u201335\u20ac y es el camino m\u00e1s c\u00f3modo si volvereis tarde. Dentro del Paseo Mar\u00edtimo se va andando entre discotecas. Hay bus nocturno (l\u00ednea N1) desde Plaza Espa\u00f1a a Magaluf en verano. Si quieres volver conduciendo, aparca en el p\u00e1rking de Porto Pi, es barato y est\u00e1 vigilado."),
+            ("Mejor \u00e9poca y qu\u00e9 ponerse",
+             "La temporada fuerte es de junio a septiembre, con fiestas casi cada noche en Magaluf. Fuera de verano, el Paseo Mar\u00edtimo mantiene actividad los findes todo el a\u00f1o. El dress code es relajado en Magaluf, m\u00e1s cuidado en salas como Pacha Mallorca o Garito (prohibido bermudas, cuidado con el chandal). Lleva algo de abrigo si sales en invierno: el viento del puerto es traicionero.")
+        ],
+        "en": [
+            ("Ticket prices in Palma",
+             "Entry at Paseo Mar\u00edtimo clubs typically runs 15\u201325\u20ac on a normal night and 25\u201340\u20ac when there's a guest DJ; most Palma venues include a drink. In Magaluf, summer wristbands for themed or open-bar parties go for 20\u201335\u20ac. Always buy online: in peak season Pacha Mallorca, BCM and Tito's sell out their biggest nights, and door prices are higher."),
+            ("A typical Mallorca night out",
+             "In Palma dinner starts around 22:00 with tapas in La Lonja, you move down to the Paseo Mar\u00edtimo between 1:00 and 2:00, and the clubs peak from 2:30 to 4:00. Clubs close at 6:00 in summer. In Magaluf the pre-parties kick off earlier (22:00) and it rolls until 5:00."),
+            ("Getting around",
+             "A taxi from central Palma to Magaluf is 25\u201335\u20ac and the easiest option if you're going late. On the Paseo Mar\u00edtimo you walk between clubs. Summer night bus N1 runs Plaza Espa\u00f1a\u2014Magaluf. If you drive, Porto Pi car park is cheap and secure."),
+            ("Best season and dress code",
+             "Peak season is June to September, with parties almost every night in Magaluf. Off-season the Paseo Mar\u00edtimo keeps weekends busy all year. Dress is casual in Magaluf and smarter at Pacha Mallorca or Garito (no shorts, no tracksuits). Bring a layer in winter \u2014 the harbour wind bites.")
+        ],
+        "de": [
+            ("Eintrittspreise in Palma",
+             "Clubs am Paseo Mar\u00edtimo kosten normal 15\u201325\u20ac und 25\u201340\u20ac bei Gast-DJs; in Palma ist ein Getr\u00e4nk meist dabei. In Magaluf gibt es im Sommer Themen- und Open-Bar-Partys mit B\u00e4ndchen f\u00fcr 20\u201335\u20ac. Online kaufen: Pacha Mallorca, BCM und Tito's sind in Hochsaison ausverkauft, und an der Kasse wird's teurer."),
+            ("Typischer Mallorca-Abend",
+             "In Palma beginnt der Abend gegen 22:00 mit Tapas in La Lonja, zwischen 1:00 und 2:00 geht's zum Paseo Mar\u00edtimo, Peak in den Clubs 2:30\u20134:00. Clubs schlie\u00dfen im Sommer um 6:00. In Magaluf starten die Pre-Partys schon um 22:00 und es l\u00e4uft bis 5:00."),
+            ("Unterwegs",
+             "Taxi vom Zentrum Palmas nach Magaluf: 25\u201335\u20ac. Am Paseo Mar\u00edtimo l\u00e4uft man. Nachtbus N1 Plaza Espa\u00f1a\u2014Magaluf im Sommer. Mit Auto: Parkhaus Porto Pi, g\u00fcnstig und bewacht."),
+            ("Beste Zeit und Dresscode",
+             "Hochsaison Juni\u2013September, fast jede Nacht Party in Magaluf. Au\u00dferhalb der Saison l\u00e4uft Palma am Wochenende. Dresscode: Magaluf casual, Pacha Mallorca und Garito schicker (keine Shorts, kein Trainingsanzug). Im Winter Jacke mitnehmen \u2014 der Hafenwind beisst.")
+        ],
+    },
+    "Ibiza": {
+        "es": [
+            ("Precios de entrada en Ibiza",
+             "Ibiza es cara: una entrada a H\u00ef, Ushua\u00efa o Pacha para una noche con cartel grande cuesta 60\u2013120\u20ac. Las salas de San Antonio (Eden, Es Parad\u00eds) rondan los 30\u201360\u20ac. Las copas van de 15\u20ac (combinado est\u00e1ndar) a 25\u20ac en las zonas VIP. Comprar online con antelaci\u00f3n ahorra entre un 15% y un 40%, y en noches top (Marco Carola, David Guetta, Black Coffee) las entradas de \u00faltima hora pueden triplicar el precio o directamente sold out."),
+            ("Horario de la noche en Ibiza",
+             "La noche ibicenca empieza con un atardecer en San Antonio (18:00\u201321:00), cena en la zona del puerto y entrada a las salas sobre las 23:30\u2014media noche. El peak de la fiesta es entre las 2:00 y las 5:00 y muchas salas aguantan hasta las 7:00. Los opening (mayo) y closing parties (septiembre\u2013octubre) son las noches m\u00e1s potentes de la temporada."),
+            ("Moverte por la isla",
+             "El taxi oficial de Ibiza es escaso y caro en verano (de Playa d'en Bossa a San Antonio 25\u201335\u20ac, pero conseguirlo a las 5 am puede llevar 40 min). Reserva el discobus que conecta Ibiza ciudad, Playa d'en Bossa y San Antonio toda la noche: 4\u20ac por trayecto. Alquilar coche compensa si vais varios noches."),
+            ("Temporada y recomendaciones",
+             "La temporada va de mayo a octubre; julio y agosto son el pico (precios m\u00e1s altos y colas largas). Lleva poco bolsillo, lo pierdes todo bailando. En las salas grandes el dress code es relajado pero cuidado (nada de bañador en las zonas de pista). Hidr\u00e1tate: el agua embotellada en el club puede costar 10\u20ac.")
+        ],
+        "en": [
+            ("Ticket prices in Ibiza",
+             "Ibiza is pricey: a ticket at H\u00ef, Ushua\u00efa or Pacha for a big-name night runs 60\u2013120\u20ac. San Antonio venues (Eden, Es Parad\u00eds) are 30\u201360\u20ac. Drinks range from 15\u20ac for a standard mixer to 25\u20ac in the VIP areas. Booking online in advance saves 15\u201340%, and on top nights (Marco Carola, David Guetta, Black Coffee) last-minute tickets can triple in price or be sold out."),
+            ("Night timings in Ibiza",
+             "An Ibiza night starts with a sunset in San Antonio (18:00\u201321:00), dinner near the port and club entry around 23:30\u2014midnight. Peak is 2:00\u20135:00 and many venues run until 7:00. Opening (May) and closing (September\u2013October) parties are the hottest nights of the season."),
+            ("Getting around the island",
+             "Official Ibiza taxis are scarce and expensive in summer (Playa d'en Bossa to San Antonio 25\u201335\u20ac, but at 5 am expect a 40-minute wait). The discobus connects Ibiza town, Playa d'en Bossa and San Antonio all night: 4\u20ac per ride. Renting a car pays off if you're staying several nights."),
+            ("Season & tips",
+             "Season runs May to October; July and August are peak (highest prices, longest queues). Travel light \u2014 you lose everything on the dance floor. Dress is relaxed but presentable (no swimwear on the main floor). Hydrate: a bottle of water inside the club can cost 10\u20ac.")
+        ],
+        "de": [
+            ("Eintrittspreise auf Ibiza",
+             "Ibiza ist teuer: Ticket bei H\u00ef, Ushua\u00efa oder Pacha f\u00fcr eine Big-Name-Nacht kostet 60\u2013120\u20ac. San-Antonio-Clubs (Eden, Es Parad\u00eds): 30\u201360\u20ac. Drinks 15\u20ac Standard bis 25\u20ac im VIP. Online im Voraus 15\u201340% g\u00fcnstiger; an Top-N\u00e4chten (Marco Carola, David Guetta, Black Coffee) Last-Minute oft dreifach so teuer oder ausverkauft."),
+            ("Zeitplan der Nacht",
+             "Ein Ibiza-Abend startet mit Sonnenuntergang in San Antonio (18:00\u201321:00), Abendessen am Hafen und Clubeintritt gegen 23:30\u2014Mitternacht. Peak 2:00\u20135:00, viele Clubs bis 7:00. Opening (Mai) und Closing (September\u2013Oktober) sind die hei\u00dfesten N\u00e4chte."),
+            ("Unterwegs auf der Insel",
+             "Offizielle Taxis sind knapp und teuer (Playa d'en Bossa\u2014San Antonio 25\u201335\u20ac, um 5 Uhr morgens Wartezeit 40 Min.). Der Discobus verbindet Ibiza-Stadt, Playa d'en Bossa und San Antonio die ganze Nacht: 4\u20ac pro Fahrt. Mietwagen lohnt bei mehreren N\u00e4chten."),
+            ("Saison und Tipps",
+             "Saison Mai\u2013Oktober; Juli und August sind Peak (h\u00f6chste Preise, l\u00e4ngste Schlangen). Leicht reisen \u2014 man verliert alles auf der Tanzfl\u00e4che. Dresscode: relaxed, aber keine Badekleidung. Hydriert bleiben: Wasserflasche im Club bis 10\u20ac.")
+        ],
+    },
+    "Madrid": {
+        "es": [
+            ("Precios de entrada en Madrid",
+             "Las entradas en Madrid son m\u00e1s asequibles que en costa: entre 10\u20ac y 20\u20ac en salas del centro (Teatro Barcel\u00f3, Joy, Kapital) y 15\u201330\u20ac en Fabrik (afueras). Casi todas incluyen una consumici\u00f3n. Para noches con DJ internacional en Fabrik o Mondo Disko sube a 25\u201340\u20ac. Las listas de amigos y los cupones Fever/Dice descuentan bastante entre semana."),
+            ("Horario t\u00edpico de la noche madrile\u00f1a",
+             "Madrid empieza tarde: cen\u00e1is tapeando por La Latina o Chueca hasta las 00:00, bares y copas hasta la 1:30\u20132:00, y disco entre 2:00 y 5:30. Los afters (Marula, Mondo, la ruta de Mercado) alargan hasta las 10:00 del domingo. Fabrik abre viernes, s\u00e1bado y festivos \u2014 noches tem\u00e1ticas tipo Code y Hyte son especiales."),
+            ("Transporte en Madrid",
+             "El metro cierra a la 1:30 y abre a las 6:00; entre medias s\u00f3lo hay b\u00fahos (autobuses nocturnos desde Cibeles). Taxi normal al centro cuesta 10\u201315\u20ac. Para ir a Fabrik, hay autob\u00fas Larca desde Atocha o Avenida de Am\u00e9rica (ida y vuelta por 10\u2013 12\u20ac) \u2014 mucho m\u00e1s barato que un taxi (40\u2013 50\u20ac)."),
+            ("Dress code y consejos",
+             "Dress code depende de la sala: Kapital y Teatro Barcel\u00f3 son estrictos (ni chandal ni bermudas), Fabrik y Mondo son relajados. Lleva poco \u2014 muchas discotecas tienen guardarropa pero cobran 3\u20135\u20ac. En invierno pr\u00e1cticamente todas tienen guardarropa, as\u00ed que puedes llevar abrigo sin problema. Siempre ten cash para taxis y propinas.")
+        ],
+        "en": [
+            ("Ticket prices in Madrid",
+             "Entry in Madrid is more affordable than coastal cities: 10\u201320\u20ac at central clubs (Teatro Barcel\u00f3, Joy, Kapital) and 15\u201330\u20ac at Fabrik (outskirts). Most include a drink. International DJs at Fabrik or Mondo Disko push it to 25\u201340\u20ac. Guest lists and Fever/Dice coupons bring prices down a lot midweek."),
+            ("Typical Madrid night",
+             "Madrid starts late: tapas in La Latina or Chueca until midnight, bars and drinks until 1:30\u20132:00, clubs from 2:00 to 5:30. Afterparties (Marula, Mondo, Mercado circuit) run to 10:00 Sunday. Fabrik opens Fri, Sat and bank holidays \u2014 Code and Hyte nights are special."),
+            ("Public transport",
+             "Metro closes at 1:30 and reopens at 6:00; night buses (b\u00faho) run from Cibeles in between. A taxi to the centre costs 10\u201315\u20ac. To reach Fabrik, the Larca bus runs from Atocha or Av. de Am\u00e9rica (10\u201312\u20ac return) \u2014 way cheaper than a taxi (40\u201350\u20ac)."),
+            ("Dress code & tips",
+             "Dress depends on the venue: Kapital and Teatro Barcel\u00f3 are strict (no tracksuits, no shorts); Fabrik and Mondo are relaxed. Travel light \u2014 most clubs have coat check at 3\u20135\u20ac. In winter you can bring your coat without issue. Keep cash for cabs and tips.")
+        ],
+        "de": [
+            ("Eintrittspreise in Madrid",
+             "Madrid ist g\u00fcnstiger als die K\u00fcste: 10\u201320\u20ac in zentralen Clubs (Teatro Barcel\u00f3, Joy, Kapital) und 15\u201330\u20ac im Fabrik (au\u00dferhalb). Meist Getr\u00e4nk inklusive. Internationale DJs im Fabrik oder Mondo Disko: 25\u201340\u20ac. G\u00e4stelisten und Fever/Dice-Coupons dr\u00fccken den Preis unter der Woche."),
+            ("Typischer Madrider Abend",
+             "Madrid startet sp\u00e4t: Tapas in La Latina oder Chueca bis Mitternacht, Bars bis 1:30\u20132:00, Clubs ab 2:00 bis 5:30. Afterpartys (Marula, Mondo, Mercado) bis 10:00 Sonntag. Fabrik \u00f6ffnet Fr, Sa und an Feiertagen \u2014 Code- und Hyte-N\u00e4chte sind besonders."),
+            ("\u00d6PNV",
+             "Metro schlie\u00dft um 1:30, \u00f6ffnet um 6:00; dazwischen Nachtbusse (b\u00faho) ab Cibeles. Taxi ins Zentrum 10\u201315\u20ac. Zum Fabrik: Larca-Bus ab Atocha oder Av. de Am\u00e9rica (10\u201312\u20ac Hin- und R\u00fcck) \u2014 viel g\u00fcnstiger als Taxi (40\u201350\u20ac)."),
+            ("Dresscode und Tipps",
+             "Dresscode: Kapital und Teatro Barcel\u00f3 streng (keine Trainingsanz\u00fcge, keine Shorts); Fabrik und Mondo relaxed. Leicht reisen \u2014 Garderobe meist 3\u20135\u20ac. Im Winter kein Problem mit Mantel. Bargeld f\u00fcr Taxi und Trinkgeld bereithalten.")
+        ],
+    },
+    "Barcelona": {
+        "es": [
+            ("Precios de entrada en Barcelona",
+             "En Barcelona las entradas al Port Ol\u00edmpic (Opium, Pacha, Sh\u00f4ko) suelen estar entre 15\u20ac y 25\u20ac entre semana y 20\u201335\u20ac los findes, con copa incluida. Razzmatazz y Apolo son m\u00e1s accesibles (12\u201320\u20ac) excepto en noches con artista internacional (30\u201345\u20ac). Las entradas con hora temprana (antes de 1:30) se descuentan hasta un 50% en muchas salas."),
+            ("La noche en Barcelona",
+             "La ciudad empieza a moverse hacia las 23:00 con copas en el Born, el Eixample o Gracia. Las discotecas abren a las 00:00 y el peak es entre 2:00 y 5:00. En verano los chiringuitos de la Barceloneta montan sesiones hasta las 5:30 \u2014 completamente al aire libre. Razzmatazz tiene 5 pistas en una, as\u00ed que una sola entrada da acceso a 5 ambientes."),
+            ("Transporte nocturno",
+             "El metro cierra a medianoche entre semana y a las 2:00 el s\u00e1bado (viernes todo el a\u00f1o, 24h). Los bus\u00f3s nocturnos (Nitbus) cubren toda la ciudad por 2,55\u20ac. Taxi del Port Ol\u00edmpic al centro: 10\u201312\u20ac. Si vais varios, un VTC puede salir mejor que taxi. No olvides validar el billete de metro antes de bajar al and\u00e9n."),
+            ("Mejor \u00e9poca y dress code",
+             "La temporada fuerte es de abril a octubre, con las fiestas de piscina y los chiringuitos de verano. En invierno las salas cubiertas (Razz, Apolo, Nitsa) mantienen una programaci\u00f3n potente con residentes y vinilos. Dress code elegante en Port Ol\u00edmpic, cuidado-casual en Raval, techno-grunge en Nitsa. En las noches tem\u00e1ticas revisa requisitos de vestuario (hay noches de etiqueta y de disfraz).")
+        ],
+        "en": [
+            ("Ticket prices in Barcelona",
+             "Entry at Port Ol\u00edmpic (Opium, Pacha, Sh\u00f4ko) runs 15\u201325\u20ac midweek and 20\u201335\u20ac on weekends, drink included. Razzmatazz and Apolo are cheaper (12\u201320\u20ac) except for international DJ nights (30\u201345\u20ac). Early-entry tickets (before 1:30) are often discounted up to 50%."),
+            ("A night in Barcelona",
+             "The city starts moving around 23:00 with drinks in Born, Eixample or Gracia. Clubs open at 00:00 and peak is 2:00\u20135:00. In summer Barceloneta's beach bars run outdoor sessions until 5:30. Razzmatazz has 5 rooms in one, so a single ticket gives you 5 vibes."),
+            ("Night transport",
+             "Metro closes at midnight on weekdays and at 2:00 on Saturdays (24h on Fridays all year). Night buses (Nitbus) cover the city for 2,55\u20ac. Taxi from Port Ol\u00edmpic to the centre: 10\u201312\u20ac. For groups a ride-share may beat a taxi. Validate your metro ticket before heading down to the platform."),
+            ("Best season & dress code",
+             "Peak season is April to October, with pool parties and summer chiringuitos. In winter indoor venues (Razz, Apolo, Nitsa) keep a strong programme with residents and vinyl sets. Dress smart at Port Ol\u00edmpic, smart-casual in Raval, techno-grunge at Nitsa. Check requirements for themed nights (there are formal and costume nights).")
+        ],
+        "de": [
+            ("Eintrittspreise in Barcelona",
+             "Eintritt am Port Ol\u00edmpic (Opium, Pacha, Sh\u00f4ko) 15\u201325\u20ac unter der Woche und 20\u201335\u20ac am Wochenende, Getr\u00e4nk inklusive. Razzmatazz und Apolo g\u00fcnstiger (12\u201320\u20ac) au\u00dfer bei internationalen DJs (30\u201345\u20ac). Early-Bird-Tickets (vor 1:30) oft bis zu 50% g\u00fcnstiger."),
+            ("Eine Nacht in Barcelona",
+             "Die Stadt wacht gegen 23:00 auf mit Drinks in Born, Eixample oder Gracia. Clubs \u00f6ffnen um 00:00, Peak 2:00\u20135:00. Im Sommer laufen die Strandbars der Barceloneta Open-Air-Sessions bis 5:30. Razzmatazz hat 5 R\u00e4ume in einem \u2014 ein Ticket, f\u00fcnf Stimmungen."),
+            ("Nahverkehr nachts",
+             "Metro schlie\u00dft werktags um Mitternacht und samstags um 2:00 (freitags ganzj\u00e4hrig 24h). Nachtbusse (Nitbus) f\u00fcr 2,55\u20ac. Taxi vom Port Ol\u00edmpic ins Zentrum: 10\u201312\u20ac. In der Gruppe oft g\u00fcnstiger als Taxi: Ride-Share. Metro-Ticket vor dem Gleis entwerten."),
+            ("Beste Zeit & Dresscode",
+             "Hochsaison April\u2013Oktober mit Pool-Partys und Sommer-Chiringuitos. Im Winter starke Programme in Hallen (Razz, Apolo, Nitsa) mit Residents und Vinyl-Sets. Dresscode: Port Ol\u00edmpic schick, Raval smart-casual, Nitsa Techno-Grunge. F\u00fcr Themenn\u00e4chte Dresscode pr\u00fcfen.")
+        ],
+    },
+    "Marbella": {
+        "es": [
+            ("Precios en Marbella y Puerto Ban\u00fas",
+             "Marbella es el destino m\u00e1s caro de Espa\u00f1a para salir. Entradas a Olivia Valere y La Suite rondan los 30\u201350\u20ac entre semana y 40\u201380\u20ac findes de verano, con dress code estricto. Beach clubs como Nikki Beach o Ocean Club tienen entrada m\u00e1s baja (20\u201340\u20ac) pero el gasto de camas (bottle service) empieza desde 500\u20ac. Una copa en Puerto Ban\u00fas se mueve entre 15\u20ac y 25\u20ac. Reserva mesa con antelaci\u00f3n en pleno agosto o te quedas fuera."),
+            ("Horario de la noche en Marbella",
+             "El plan empieza al mediod\u00eda en los beach clubs (Nikki, Ocean, La Sala by the Sea) con comida y DJ hasta las 20:00. Despu\u00e9s cena en el puerto (23:00) y las discotecas abren a la 1:00 con peak de 3:00 a 5:00. En agosto Puerto Ban\u00fas no para hasta las 6:00 de la ma\u00f1ana."),
+            ("Transporte y aparcamiento",
+             "Taxi desde el centro de Marbella a Puerto Ban\u00fas: 15\u201320\u20ac. Si vais a los beach clubs del este, mejor VTC. El aparcamiento en Puerto Ban\u00fas es caro (4\u20ac/hora) pero controlado. En agosto conseguir sitio puede tardar media hora; muchas salas tienen valet parking por 15\u201320\u20ac. Nunca aparques en zonas sin se\u00f1alizar o en el paseo peatonal, se llevan el coche."),
+            ("Dress code y temporada",
+             "Marbella es dress code estricto: en Olivia Valere, Tibu y Nikki Beach piden ropa de vestir, no entran bermudas, chanclas ni camisetas sin manga. Casco antiguo m\u00e1s relajado. La temporada fuerte es de junio a septiembre, con julio y agosto siendo los meses pico. Fuera de verano, Puerto Ban\u00fas sigue teniendo vida los findes pero mucha menos.")
+        ],
+        "en": [
+            ("Prices in Marbella & Puerto Ban\u00fas",
+             "Marbella is Spain's priciest nightlife destination. Entry at Olivia Valere and La Suite is 30\u201350\u20ac midweek and 40\u201380\u20ac on summer weekends, with strict dress code. Beach clubs like Nikki Beach or Ocean Club start lower (20\u201340\u20ac) but bed/bottle service begins at 500\u20ac. Drinks in Puerto Ban\u00fas cost 15\u201325\u20ac. Book a table in advance in August or you won't get in."),
+            ("Timings",
+             "The plan starts at midday in the beach clubs (Nikki, Ocean, La Sala by the Sea) with food and a DJ until 20:00. Then dinner at the port (23:00) and clubs open at 1:00, peak 3:00\u20135:00. In August Puerto Ban\u00fas doesn't stop until 6:00."),
+            ("Transport & parking",
+             "Taxi from central Marbella to Puerto Ban\u00fas: 15\u201320\u20ac. For eastern beach clubs, a ride-share is better. Parking in Puerto Ban\u00fas is pricey (4\u20ac/h) but controlled. In August it can take 30 min to find a spot; most clubs have valet at 15\u201320\u20ac. Never park in unmarked areas or on the pedestrian promenade \u2014 they tow."),
+            ("Dress code & season",
+             "Marbella has strict dress code: Olivia Valere, Tibu and Nikki Beach demand smart attire \u2014 no shorts, flip-flops or sleeveless tops. The old town is more relaxed. Peak season June\u2013September; July and August the busiest. Off-season Puerto Ban\u00fas still has weekend activity, but far quieter.")
+        ],
+        "de": [
+            ("Preise in Marbella & Puerto Ban\u00fas",
+             "Marbella ist das teuerste Nachtleben Spaniens. Olivia Valere und La Suite: 30\u201350\u20ac werktags, 40\u201380\u20ac an Sommerwochenenden, strenger Dresscode. Beachclubs wie Nikki Beach oder Ocean Club starten g\u00fcnstiger (20\u201340\u20ac), aber Flaschen-Service ab 500\u20ac. Drinks in Puerto Ban\u00fas 15\u201325\u20ac. Im August unbedingt Tisch im Voraus buchen."),
+            ("Zeitplan",
+             "Mittags im Beachclub (Nikki, Ocean, La Sala by the Sea) mit Essen und DJ bis 20:00. Dann Abendessen am Hafen (23:00), Clubs \u00f6ffnen um 1:00, Peak 3:00\u20135:00. Im August geht's bis 6:00."),
+            ("Transport & Parken",
+             "Taxi vom Zentrum nach Puerto Ban\u00fas: 15\u201320\u20ac. F\u00fcr Beachclubs im Osten: Ride-Share. Parken in Puerto Ban\u00fas 4\u20ac/h, kontrolliert. Im August 30 Min. Parkplatzsuche; die meisten Clubs haben Valet f\u00fcr 15\u201320\u20ac. Nie unmarkiert oder auf der Promenade parken \u2014 wird abgeschleppt."),
+            ("Dresscode & Saison",
+             "Marbella hat strengen Dresscode: Olivia Valere, Tibu und Nikki Beach verlangen schicke Kleidung \u2014 keine Shorts, Flip-Flops oder \u00c4rmellos. Altstadt lockerer. Hochsaison Juni\u2013September, Peak Juli/August. Au\u00dferhalb der Saison l\u00e4uft Puerto Ban\u00fas am Wochenende, aber deutlich ruhiger.")
+        ],
+    },
+    "Sevilla": {
+        "es": [
+            ("Precios de entrada en Sevilla",
+             "Sevilla es asequible: entradas a Antique, Groucho o New Catedral entre 10\u20ac y 18\u20ac findes, con copa. Las salas m\u00e1s indies/alternativas como FunClub o Malandar bajan a 8\u201312\u20ac. En Feria de Abril y Semana Santa los precios suben y hay que reservar. En verano hay bastantes terrazas y azoteas gratuitas con DJ (Hotel EME, Doma, La Terraza del EME)."),
+            ("La noche sevillana",
+             "El plan empieza con tapeo por Triana o Alfalfa a partir de las 22:00. Bares de copas hasta la 1:30 y discotecas de 2:00 a 6:00. En primavera y verano el ambiente se traslada a las terrazas y las fiestas en jard\u00edn (La Yarza, El Cocal). El gran plan de verano: afters de domingo en el r\u00edo."),
+            ("Transporte",
+             "Metro cierra a la 1:30 (findes a las 2:00). Taxi al centro: 7\u201310\u20ac. En Sevilla todo est\u00e1 cerca andando, muchos van entre bares y discotecas sin coger transporte. Si volv\u00e9is a Dos Hermanas o Alcal\u00e1 de Guada\u00edra, hay autobuses nocturnos."),
+            ("Mejor \u00e9poca y clima",
+             "La temporada fuerte es primavera (feria + semana santa + fiestas tem\u00e1ticas) y verano, aunque en julio y agosto el calor obliga a salir muy tarde (23:30 en adelante). En invierno la ruta clasica de Alameda sigue viva los findes. Dress code general: casual, en Antique y las salas del centro cuidan algo m\u00e1s el look.")
+        ],
+        "en": [
+            ("Prices in Seville",
+             "Seville is affordable: entry at Antique, Groucho or New Catedral runs 10\u201318\u20ac on weekends with a drink. Indie venues like FunClub or Malandar go down to 8\u201312\u20ac. During Feria de Abril and Holy Week prices rise and you must book. Summer brings many free rooftop and terrace DJ sets (Hotel EME, Doma)."),
+            ("A Seville night",
+             "The plan starts with tapas in Triana or Alfalfa from 22:00. Cocktail bars until 1:30 and clubs from 2:00 to 6:00. In spring/summer the scene shifts to terraces and garden parties (La Yarza, El Cocal). Big summer plan: Sunday afterparties by the river."),
+            ("Transport",
+             "Metro closes at 1:30 (2:00 weekends). Taxi to the centre: 7\u201310\u20ac. Everything is walkable; many go bar-to-club on foot. Night buses run to Dos Hermanas and Alcal\u00e1 de Guada\u00edra."),
+            ("Best season & climate",
+             "Peak season is spring (Feria + Holy Week + themed parties) and summer, though July\u2013August heat pushes everyone out very late (23:30 onwards). In winter the Alameda circuit still runs on weekends. Dress code: casual, with Antique and central clubs slightly smarter.")
+        ],
+        "de": [
+            ("Preise in Sevilla",
+             "Sevilla ist g\u00fcnstig: Eintritt bei Antique, Groucho oder New Catedral am Wochenende 10\u201318\u20ac mit Drink. Indie-Locations wie FunClub oder Malandar 8\u201312\u20ac. W\u00e4hrend Feria de Abril und Karwoche steigen die Preise \u2014 unbedingt reservieren. Im Sommer viele kostenlose Rooftop- und Terrassen-DJ-Sets (Hotel EME, Doma)."),
+            ("Eine Nacht in Sevilla",
+             "Start mit Tapas in Triana oder Alfalfa ab 22:00. Cocktailbars bis 1:30, Clubs von 2:00 bis 6:00. Fr\u00fchling/Sommer verlagert sich das Geschehen auf Terrassen und Gartenpartys (La Yarza, El Cocal). Gro\u00dfer Sommer-Plan: Sonntags-Afterpartys am Fluss."),
+            ("Verkehr",
+             "Metro schlie\u00dft um 1:30 (am Wochenende 2:00). Taxi ins Zentrum: 7\u201310\u20ac. Alles l\u00e4uft zu Fu\u00df. Nachtbusse nach Dos Hermanas und Alcal\u00e1 de Guada\u00edra."),
+            ("Beste Zeit & Klima",
+             "Hochsaison Fr\u00fchling (Feria + Karwoche + Themenpartys) und Sommer, in Juli/August zwingt die Hitze alle sehr sp\u00e4t raus (23:30+). Im Winter l\u00e4uft die Alameda am Wochenende. Dresscode: casual, Antique und zentrale Clubs einen Tick schicker.")
+        ],
+    },
+}
+
+
+def _city_longform_editorial(city_id, label, lang, e):
+    """SEO FIX C: adds ~400 unique words of local-expert content per city per
+    language. Covers prices, timings, transport, dress code, season. This is
+    the single biggest signal that stops Google from canonicalising
+    /fiestas/{city} towards one of the individual event pages, because it adds
+    authoritative, topical content that fully distinguishes the hub from a
+    simple event listing."""
+    data = _CITY_LONGFORM.get(city_id)
+    if not data:
+        return ""
+    sections = data.get(lang) or data.get("es") or []
+    if not sections:
+        return ""
+    titles = {"es": f"Gu\u00eda pr\u00e1ctica para salir en {label}",
+              "en": f"Practical guide to going out in {label}",
+              "de": f"Praktischer Guide f\u00fcrs Ausgehen in {label}"}
+    heading = titles.get(lang, titles["es"])
+    rows = "".join(
+        f'<h3 class="sectitle3">{e(h)}</h3><p>{e(p)}</p>'
+        for (h, p) in sections)
+    return (f'<h2 class="sectitle">{e(heading)}</h2>'
+            f'<div class="intro longform">{rows}</div>')
+
 
 _FONTS_HREF = ("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700"
                "&family=Unbounded:wght@700;800;900&display=swap")
@@ -2761,6 +2990,9 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
     intro_html = _city_intro(city_id, label, n, lang, e) if timeframe == "all" else ""
     cityguide_html = _city_guide_content(city_id, label, lang, e) if timeframe == "all" else ""
     citytips_html = _city_tips(city_id, label, lang, e) if timeframe == "all" else ""
+    # SEO FIX C: durable, keyword-rich editorial per city (prices/timings/
+    # transport/dress code/season). ~400 unique words per language per city.
+    citylongform_html = _city_longform_editorial(city_id, label, lang, e) if timeframe == "all" else ""
     faq_html = _faq_html(T["faq_title"], faq_pairs, e)
     guides_html = _city_guides_block(front, slug_l, label, lang, e)
     extra_jsonld = (_org_website_jsonld(front)
@@ -2810,6 +3042,7 @@ async def _render_city(slug: str, lang: str, request: Request, timeframe: str = 
 {venues_html}
 {cityguide_html}
 {citytips_html}
+{citylongform_html}
 {benefits}
 {joinband}
 {guides_html}
@@ -4277,7 +4510,12 @@ async def _sitemap_blog_xml(front: str, today: str) -> str:
     parts.append(f"<url><loc>{_blog_url(front, lang='en')}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq></url>")
     parts.append(f"<url><loc>{_blog_url(front, lang='de')}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq></url>")
     for slug, p in _BLOG_POSTS.items():
-        lm = (p.get("updated") or p.get("published") or today)
+        # SEO FIX H: evergreen guides are refreshed daily by our scrapers (price
+        # tables, event lists, "updated October 2026" header). Serving the
+        # hard-coded 2025-07-01 'published' as <lastmod> told Google the content
+        # was ~15 months stale and killed re-crawl priority. We now emit `today`
+        # as lastmod for evergreen guides (truth: the data they show IS fresh).
+        lm = today
         img = p.get("hero_image") or ""
         img_xml = ""
         if img.startswith("http"):
@@ -4289,7 +4527,7 @@ async def _sitemap_blog_xml(front: str, today: str) -> str:
     # EN/DE translated evergreen guides.
     for lg in ("en", "de"):
         for slug, p in _BLOG_POSTS_L10N.get(lg, {}).items():
-            lm = (p.get("updated") or p.get("published") or today)
+            lm = today  # SEO FIX H (same reason, applied to translations).
             img = p.get("hero_image") or ""
             img_xml = ""
             if img.startswith("http"):
@@ -4924,8 +5162,6 @@ async def seo_sitemap_artists(request: Request):
     return _sitemap_response(await _sitemap_artists_xml(front, today))
 
 
-
-
 def _sitemap_response(xml: str) -> StarletteResponse:
     return StarletteResponse(content=xml, media_type="application/xml",
                              headers={"Cache-Control": "public, max-age=3600"})
@@ -5016,8 +5252,13 @@ async def _sitemap_events_xml(front: str, today: str, city: str) -> str:
             ep = _event_paths(front, eid, _event_slug(ev))
             lm = _ev_lastmod(ev, today)
             img = ev.get("image_url", "")
-            for lang in SEO_LANGS:
-                parts.append(_sitemap_url(ep, lang, lm, "hourly", image=img))
+            # SEO FIX A+B: only emit the canonical ES url (en/de are discovered via
+            # <xhtml:link rel="alternate" hreflang="…"/> inside the <url>, no need
+            # to list them as separate <url> entries — doing so triples the sitemap
+            # size and tanked our indexed-ratio in Search Console. Changefreq
+            # "daily" is honest (a party may get a new price or sell-out flag any
+            # given day), "hourly" was dishonest and made Google ignore <lastmod>.
+            parts.append(_sitemap_url(ep, "es", lm, "daily", image=img))
     return _sitemap_urlset(parts)
 
 
@@ -5054,8 +5295,11 @@ async def _sitemap_venues_xml(front: str, today: str) -> str:
         seen.add(slug)
         vp = _venue_paths(front, slug)
         lm = (str(r.get("lastmod") or "")[:10]) or today
-        for lang in SEO_LANGS:
-            parts.append(_sitemap_url(vp, lang, lm, "daily"))
+        # SEO FIX B: only emit the canonical ES url. The /en/club/ and /de/club/
+        # variants are discovered by Google via the hreflang <xhtml:link> entries
+        # already embedded inside the <url> — listing them as separate <url>s
+        # inflated the sitemap x3 (166→498 URLs) with no SEO gain.
+        parts.append(_sitemap_url(vp, "es", lm, "daily"))
     return _sitemap_urlset(parts)
 
 
@@ -5092,17 +5336,17 @@ async def _sitemap_index_xml(front: str, today: str) -> str:
 # pages -> the root cause of thousands of "Discovered - currently not indexed"
 # URLs. We block them so Google focuses its budget on our server-rendered,
 # evergreen pages (/fiesta/, /discoteca/, /fiestas/<city>, /blog/).
-_ROBOTS_DISALLOW = [
-    "/event/",          # in-app event detail (SSR SEO version lives at /fiesta/)
-    "/feed", "/friends", "/notifications", "/novedades",
-    "/profile", "/users/", "/chats", "/top",
-    "/recuerdos", "/memories", "/fiestas-pasadas",
-    "/ajustes", "/momento", "/momentos", "/descubrir", "/wrapped",
-    "/admin", "/onboarding", "/login", "/auth/",
-    "/r/", "/ig", "/tt", "/mapa", "/locales",
-]
-# Server-rendered, indexable sections — spelled out for clarity (they are
-# already allowed by default, but this documents intent for anyone reading it).
+# SEO FIX F: We USED to Disallow 23 SPA routes in robots.txt. That was the
+# single biggest cause of the Aug 20-21 traffic cliff: Google had those URLs
+# already indexed as duplicates of the home (shell React with canonical=/), so
+# the Disallow didn't desindex them — it just blocked Google from re-fetching
+# and SEEING the noindex we need to serve. Now we leave crawling OPEN and
+# emit `X-Robots-Tag: noindex, follow` from vercel.json for every SPA route.
+# Google re-crawls, sees noindex, DROPS the URL from the index CLEANLY, and
+# the domain's trust recovers. Once the index is cleaned (3-6 weeks after
+# deploy) we can re-add the Disallow to save crawl budget, but NOT before.
+_ROBOTS_DISALLOW: list = []
+# Server-rendered, indexable sections — spelled out for clarity.
 _ROBOTS_ALLOW = ["/fiesta/", "/fiestas/", "/discoteca/", "/blog", "/en/", "/de/"]
 
 
@@ -12267,43 +12511,21 @@ async def cleanup_demo_events():
 
 
 async def cleanup_old_events():
-    """Delete OLD parties that NOBODY engaged with (keeps the DB lean + feed fast),
-    but PRESERVE every event that is someone's memory: any attendee (voy/estuve),
-    a shared-album photo, or an 'El Momento' capture. Those stay FOREVER so
-    'Recuerdos' / 'Fiestas pasadas' never loses a past night."""
+    """SEO FIX D (CRITICAL): we no longer DELETE past parties. Deleting them made
+    their /fiesta/{id} URLs return HTTP 410 Gone / 301 to the city hub, which
+    Google interpreted as the site constantly "losing" indexed URLs — the real
+    reason indexing collapsed on Aug 20-21 (right after the 23 Disallow rules
+    were added on Aug 18). We keep the past-event documents in Mongo so:
+      • /fiesta/{id} keeps serving a real 200 response (with meta robots
+        'noindex, follow' — already handled in _render_event), which Google
+        processes much more gently than 410 and preserves domain trust.
+      • Users keep access to 'Recuerdos' / 'Fiestas pasadas'.
+    If storage ever becomes a concern, enable a far more conservative purge
+    (90+ days old AND no attendees/photos/captures) — but NOT on the daily
+    scheduler and NOT during the recovery window."""
     try:
-        cutoff = (datetime.now(ZoneInfo("Europe/Madrid")).date() - timedelta(days=3)).isoformat()
-        old_ids = [e["id"] async for e in db.events.find(
-            {"date": {"$lt": cutoff}}, {"_id": 0, "id": 1})]
-        if not old_ids:
-            return {"deleted": 0, "kept": 0, "old_total": 0}
-        # Events to KEEP as memories: anyone marked voy/estuve, uploaded an album
-        # photo, or captured 'El Momento'. Everything else is a stale scraped event.
-        keep = set()
-        async for it in db.interests.find(
-            {"event_id": {"$in": old_ids}, "status": {"$in": ["voy", "estuve"]}},
-            {"_id": 0, "event_id": 1}):
-            keep.add(it["event_id"])
-        async for a in db.album_uploads.find(
-            {"event_id": {"$in": old_ids}}, {"_id": 0, "event_id": 1}):
-            keep.add(a["event_id"])
-        async for c in db.captures.find(
-            {"event_id": {"$in": old_ids}}, {"_id": 0, "event_id": 1}):
-            keep.add(c["event_id"])
-        to_delete = [eid for eid in old_ids if eid not in keep]
-        if not to_delete:
-            logger.info(f"cleanup_old_events: 0 removed (kept {len(keep)} memories)")
-            return {"deleted": 0, "kept": len(keep), "old_total": len(old_ids)}
-        await db.events.delete_many({"id": {"$in": to_delete}})
-        for coll in (db.interests, db.tickets, db.event_follows, db.event_metrics,
-                     db.event_history, db.ticket_purchases, db.album_uploads,
-                     db.captures):
-            try:
-                await coll.delete_many({"event_id": {"$in": to_delete}})
-            except Exception:
-                pass
-        logger.info(f"cleanup_old_events: removed {len(to_delete)} unengaged events >3 days old (kept {len(keep)} memories)")
-        return {"deleted": len(to_delete), "kept": len(keep), "old_total": len(old_ids)}
+        logger.info("cleanup_old_events: SEO-safe mode — past events are KEPT and served as noindex,follow (not deleted).")
+        return {"deleted": 0, "kept": "all_past_events", "reason": "seo_safe_mode"}
     except Exception as e:
         logger.warning(f"cleanup_old_events failed: {e}")
         return {"deleted": 0, "kept": 0, "old_total": 0, "error": str(e)}
@@ -12702,6 +12924,15 @@ async def next_badges(user: dict = Depends(get_current_user), limit: int = Query
     return out[:limit]
 
 app.include_router(api_router)
+
+# SEO fixes copy-paste helper page (dev-only, noindex). Mounted at
+# /api/dev/seo-copy. Keeps server.py clean by living in its own module.
+try:
+    from seo_copy_page import seo_copy_router as _seo_copy_router
+    api_router.include_router(_seo_copy_router)
+    app.include_router(api_router)
+except Exception as _seo_copy_err:
+    logger.warning(f"seo_copy_page not mounted: {_seo_copy_err}")
 
 
 # =========================================================================
