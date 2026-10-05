@@ -327,6 +327,22 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           </p>
         )}
 
+        {/* Urgencia en vivo: cuánta gente se ha apuntado hoy (solo si es relevante) */}
+        {!isPast && (event.signups_today ?? 0) >= 2 && (
+          <p
+            data-testid={`event-signups-today-${event.id}`}
+            className="flex items-center gap-1.5 -mt-0.5 text-[11px] font-semibold text-emerald-300/90 leading-tight"
+          >
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400/50 animate-ping" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+            {event.signups_today === 1
+              ? t("eventcard.signups_today_one")
+              : t("eventcard.signups_today_other", { count: event.signups_today })}
+          </p>
+        )}
+
         {/* FOMO: friends are going and you are not (only when there's real social pressure) */}
         {!isPast && !isVoy && going.length >= 2 && (
           <button

@@ -630,6 +630,8 @@
     "eq_notify": "= we notify you on the day",
     "btn_ticket": "Get ticket",
     "btn_more_info": "More info",
+    "signups_today_one": "1 person signed up today",
+    "signups_today_other": "{{count}} people signed up today",
     "going": {
       "you": "You're going",
       "you_plus": "You and {{count}} more are going",

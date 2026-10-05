@@ -525,6 +525,20 @@ export default function EventDetail() {
                 </button>
               </div>
             )}
+            {!isPast && (event.signups_today ?? 0) >= 2 && (
+              <p
+                data-testid="detail-signups-today"
+                className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-300/90 leading-tight"
+              >
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400/50 animate-ping" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                {event.signups_today === 1
+                  ? t("eventcard.signups_today_one")
+                  : t("eventcard.signups_today_other", { count: event.signups_today })}
+              </p>
+            )}
             </>
           )}
 
@@ -611,6 +625,21 @@ export default function EventDetail() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* Compartir en Stories — sobrio, para difundir cada fiesta en Instagram */}
+          {!isPast && (
+            <button
+              data-testid="detail-share-story-btn"
+              onClick={() => shareStory("neon")}
+              disabled={storyBusy}
+              className="qv-btn h-12 rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-2.5 bg-white/[0.06] border border-white/12 text-white/85 disabled:opacity-60"
+            >
+              <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-[#feda75] via-[#d62976] to-[#4f5bd5]">
+                {storyBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : <Instagram className="w-3.5 h-3.5 text-white" />}
+              </span>
+              {t("event.share_story", "Compartir en Stories")}
+            </button>
           )}
 
           {/* Friends */}

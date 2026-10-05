@@ -6500,6 +6500,32 @@ def date_in_filter(event_date_str: str, flt: str) -> bool:
     return d >= today
 
 
+def _signups_recent(interests: list, hours: int = 24) -> int:
+    """Nº de personas que se han apuntado (voy / me_interesa) en las últimas
+    `hours` horas — señal de urgencia "X se han apuntado hoy". Respeta privacidad
+    'nadie' y usa el timestamp más reciente (updated_at o created_at)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    n = 0
+    for it in interests:
+        if it.get("status") not in ("voy", "me_interesa"):
+            continue
+        if it.get("privacy", "todos") == "nadie":
+            continue
+        ts = it.get("updated_at") or it.get("created_at")
+        if not ts:
+            continue
+        try:
+            dt = datetime.fromisoformat(ts)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if dt >= cutoff:
+            n += 1
+    return n
+
+
+
 async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map: dict | None = None,
                           interests_by_event: dict | None = None,
                           follows_set: set | None = None,
@@ -6609,6 +6635,8 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         # them separated ("17 van · 42 interesados"), never summed.
         "going_count": sum(1 for it in interests if it["status"] == "voy" and it.get("privacy", "todos") != "nadie"),
         "interested_count": sum(1 for it in interests if it["status"] == "me_interesa" and it.get("privacy", "todos") != "nadie"),
+        # Urgencia: cuántas personas se han apuntado (voy/interesa) en las últimas 24h.
+        "signups_today": _signups_recent(interests),
         "my_intent": STATUS_TO_INTENT.get(my_status, "none"),
         # Tickets
         "my_has_ticket": my_has_ticket,

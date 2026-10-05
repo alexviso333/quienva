@@ -630,6 +630,8 @@
     "eq_notify": "= te avisamos el día",
     "btn_ticket": "Conseguir entrada",
     "btn_more_info": "Más información",
+    "signups_today_one": "1 persona se ha apuntado hoy",
+    "signups_today_other": "{{count}} personas se han apuntado hoy",
     "going": {
       "you": "Vas",
       "you_plus": "Tú y {{count}} más vais",
