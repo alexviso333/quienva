@@ -170,6 +170,37 @@ user_problem_statement: |
           meet the requirements.
 
 frontend:
+  - task: "SPRINT 1 — Feed rediseñado como TONIGHT (3 bloques: Esta noche / Tu gente / Próximamente)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Feed.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          SPRINT 1 (solo frontend). Reescrito Feed.js como "TONIGHT". El feed pasó de ~13 bloques a
+          EXACTAMENTE 3, calculados en cliente desde GET /api/events?date_filter=all (sin tocar backend):
+            A) 🔥 Esta noche  = eventos de HOY (date==hoy), ordenados por actividad social
+               (total_going+total_interested), featured como desempate, máx 5. data-testid=tonight-block-today
+            B) ⚡ Tu gente     = eventos (cualquier día) con ≥1 amigo (friends_going+friends_interested),
+               excluye los ya mostrados en A, máx 3. OCULTO si no hay. data-testid=tonight-block-friends
+            C) 🌙 Próximamente = eventos futuros (date>hoy, CUALQUIER día, no solo findes), excluye A y B,
+               orden por fecha, máx 5. data-testid=tonight-block-upcoming
+          Hero nuevo: "[Ciudad] · [día] [hora]" + "¿Dónde está la noche?". Mantiene CitySelectorSheet,
+          StoriesBar, chips de ciudad (las 5 ciudades, NO se reduce a una) y un buscador discreto que, al
+          escribir, muestra lista plana filtrada. RETIRADOS del render (componentes conservados en codebase):
+          StreakBanner, MontaGrupoBanner, MomentFeedBanner, RecapCard, AppStorePromo, FeedPlans/Controls,
+          FriendsActivity, FeedVenuesTonight, EventCarousel, y el auto-redirect a /descubrir.
+          Verificado visualmente en preview (invitado Palma): hero OK, Bloque A con 3 eventos de hoy
+          (featured arriba), Bloque C con 3 próximos, Bloque B oculto. Lint limpio. NOTA ENTORNO: faltaban
+          backend/.env y frontend/.env en el workspace; recreados con valores locales (MONGO_URL local,
+          DB_NAME=quienva, REACT_APP_BACKEND_URL=preview) con permiso del usuario. BD local vacía: se
+          insertaron 6 eventos de prueba en Palma para la verificación visual. Falta (opcional) testing
+          de frontend con el agente — pendiente de permiso del usuario.
+
   - task: "Admin event edit + sticky buy-link override (PUT /api/admin/events/{id}/admin-edit)"
     implemented: true
     working: true

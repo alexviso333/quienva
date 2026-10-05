@@ -145,25 +145,32 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
     <motion.article
       ref={cardRef}
       data-testid={`event-card-${event.id}`}
-      initial={{ opacity: 0, y: 18 }}
+      initial={{ opacity: 0, y: 22 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: Math.min(index * 0.05, 0.3), ease: "easeOut" }}
-      className={`relative rounded-2xl overflow-hidden bg-[#121215] border transition-colors duration-500 ${
-        highlight ? "border-qv-secondary shadow-[0_0_0_2px_rgba(0,240,255,0.5)]" : "border-white/10"
+      whileHover={{ y: -5 }}
+      transition={{ duration: 0.45, delay: Math.min(index * 0.05, 0.3), ease: [0.22, 1, 0.36, 1] }}
+      className={`group relative rounded-[26px] p-[1.5px] transition-[background,box-shadow] duration-500 bg-gradient-to-br ${
+        highlight
+          ? "from-qv-secondary via-qv-secondary/40 to-qv-primary shadow-[0_0_0_1px_rgba(0,240,255,0.5),0_22px_60px_-18px_rgba(0,240,255,0.45)]"
+          : "from-white/15 via-white/[0.05] to-white/10 shadow-[0_10px_34px_-16px_rgba(0,0,0,0.9)] hover:from-qv-primary/60 hover:via-white/10 hover:to-qv-secondary/55 hover:shadow-[0_26px_70px_-20px_rgba(255,0,85,0.4)]"
       }`}
     >
+     <div className="relative rounded-[25px] overflow-hidden bg-[#0e0e12]">
+      {/* subtle top gloss highlight */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent z-20" />
       {/* Image banner */}
       <div
-        className="relative h-40 cursor-pointer"
+        className="relative h-52 lg:h-56 cursor-pointer overflow-hidden"
         onClick={() => navigate(`/event/${event.id}`)}
         data-testid={`event-open-${event.id}`}
       >
         {event.image_url ? (
-          <img src={mediaThumb(event.image_url, 900)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
+          <img src={mediaThumb(event.image_url, 900)} alt={event.name} className="w-full h-full object-cover transition-transform duration-[900ms] ease-out group-hover:scale-[1.07]" loading="lazy" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#2a0a1a] via-[#121215] to-[#0a1a1f]" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121215] via-[#121215]/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0e0e12] via-[#0e0e12]/55 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-transparent" />
 
         <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
             {event.is_affiliate && (
@@ -228,15 +235,16 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           </button>
         </div>
 
-        <div className="absolute bottom-0 w-full p-3 z-10">
-          <h2 className="font-display text-lg font-bold tracking-tight text-white leading-tight line-clamp-1">
+        <div className="absolute bottom-0 w-full p-4 z-10">
+          <h2 className="font-display text-xl lg:text-[22px] font-black tracking-tight text-white leading-[1.05] line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
             {event.name}
           </h2>
-          <div className="flex items-center gap-2 text-white/70 text-xs mt-0.5">
+          <div className="flex items-center gap-2 text-white/75 text-xs mt-1.5 font-medium">
             <span className="flex items-center gap-1 min-w-0">
               <MapPin className="w-3.5 h-3.5 text-qv-secondary shrink-0" />
               <span className="truncate">{event.venue}</span>
             </span>
+            <span className="w-1 h-1 rounded-full bg-white/30 shrink-0" />
             <span className="flex items-center gap-1 shrink-0">
               <Clock className="w-3.5 h-3.5" /> {formatPartyDate(event.date, event.time)}
             </span>
@@ -245,7 +253,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
       </div>
 
       {/* Content */}
-      <div className="p-3 flex flex-col gap-2.5">
+      <div className="p-4 flex flex-col gap-3">
         {/* Social proof — core value */}
         <div className="flex items-center gap-2.5 min-h-[34px]" data-testid={`event-social-${event.id}`}>
           {!user && !isPast && event.total_going > 0 ? (
@@ -318,23 +326,25 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
             data-testid={`event-estuve-btn-${event.id}`}
             disabled={pending}
             onClick={() => toggle("estuve")}
-            className={`h-10 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors duration-300 active:scale-95 ${
+            className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-300 active:scale-95 ${
               isEstuve
-                ? "bg-qv-primary text-white shadow-[0_0_18px_rgba(255,0,85,0.4)]"
-                : "bg-white/5 border border-white/20 text-white/80"
+                ? "bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
+                : "bg-white/[0.06] border border-white/15 text-white/80 hover:border-qv-primary/50 hover:bg-qv-primary/10"
             }`}
           >
             {isEstuve ? <><CheckCircle2 className="w-4 h-4" /> {t("eventcard.btn_was_here")}</> : t("eventcard.btn_was_here")}
           </button>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 data-testid={`event-voy-btn-${event.id}`}
                 disabled={pending}
                 onClick={() => toggle("voy")}
-                className={`h-10 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 transition-colors duration-300 active:scale-95 ${
-                  isVoy ? "bg-qv-primary text-white shadow-[0_0_18px_rgba(255,0,85,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
+                className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 ${
+                  isVoy
+                    ? "bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
+                    : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-primary/50 hover:bg-qv-primary/10"
                 }`}
               >
                 {isVoy && <Check className="w-4 h-4" />} {t("eventcard.btn_going")}
@@ -343,8 +353,10 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 data-testid={`event-interesa-btn-${event.id}`}
                 disabled={pending}
                 onClick={() => toggle("me_interesa")}
-                className={`h-10 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 transition-colors duration-300 active:scale-95 ${
-                  isInteresa ? "bg-qv-secondary text-black shadow-[0_0_18px_rgba(0,240,255,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
+                className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 ${
+                  isInteresa
+                    ? "bg-gradient-to-r from-qv-secondary to-[#4df3ff] text-black shadow-[0_8px_22px_-6px_rgba(0,240,255,0.6)]"
+                    : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-secondary/50 hover:bg-qv-secondary/10"
                 }`}
               >
                 {isInteresa && <Star className="w-4 h-4" />} {t("eventcard.btn_interested")}
@@ -363,8 +375,9 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => api.post("/tickets/click", { event_id: event.id }).catch(() => {})}
-                className="h-9 rounded-xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-bold text-sm flex items-center justify-center gap-2 transition-transform duration-300 hover:-translate-y-0.5 active:scale-95"
+                className="group/tk relative h-11 rounded-2xl overflow-hidden text-black font-bold text-sm flex items-center justify-center gap-2 transition-transform duration-300 hover:-translate-y-0.5 active:scale-95 bg-gradient-to-r from-qv-primary via-[#ff5fa2] to-qv-secondary shadow-[0_10px_26px_-8px_rgba(255,0,85,0.5)]"
               >
+                <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover/tk:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
                 <Ticket className="w-4 h-4" /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
               </a>
             ) : event.more_info_url ? (
@@ -373,7 +386,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 href={event.more_info_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="h-9 rounded-xl bg-white/5 border border-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors duration-300 active:scale-95"
+                className="h-11 rounded-2xl bg-white/[0.06] border border-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors duration-300 hover:border-white/30 active:scale-95"
               >
                 <ExternalLink className="w-4 h-4" /> {t("eventcard.btn_more_info")}
               </a>
@@ -381,6 +394,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           </>
         )}
       </div>
+     </div>
     </motion.article>
   );
 }
