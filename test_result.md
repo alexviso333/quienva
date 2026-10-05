@@ -2189,21 +2189,162 @@ frontend:
           
           Test file: /app/backend_test_admin_users_friends.py
 
+  - task: "SPRINT 2+3 — intent granularity (PATCH /intent), counts split (going_count/interested_count/my_intent), people list, conversion metrics (guest_views/signups), admin landing-metrics"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Cierre Sprint 2 + Sprint 3 (backend). Cambios en server.py:
+          (1) serialize_event (GET /events y GET /events/{id}) ahora expone SIEMPRE:
+              going_count (int, real sin guest-boost), interested_count (int) y
+              my_intent ("interested"|"going"|"attended"|"none"). total_going/
+              total_interested/total_attended se mantienen (compat).
+          (2) PATCH /api/events/{id}/intent  body {intent:"interested"|"going"|"attended"|"none"}.
+              Mapea al status interno (me_interesa/voy/estuve/none) reusando set_interest
+              (idempotente, no borra/recrea; mantiene notificaciones/puntos). Devuelve
+              {status, intent}. intent inválido -> 400. Sin auth -> 401.
+          (3) GET /api/events/{id}/people?status=voy|me_interesa|estuve (SOLO logueado).
+              Lista quién va/interesado/estuvo. Respeta privacidad "nadie" (oculta).
+              Usa display_name (@username, nunca nombre real). Cada persona: user_id,
+              name, username, picture, is_friend, is_me. Orden: yo -> amigos -> resto.
+              status inválido -> 400; evento inexistente -> 404; sin auth -> 401.
+          (4) GET /events/{id}: incrementa guest_views cuando el visitante es invitado
+              (user_id None), además del views normal. (Funnel WhatsApp -> signup.)
+          (5) POST /api/metrics/event-signup {event_id} (auth opcional): incrementa
+              signups en event_metrics para atribuir la conversión del visitante.
+          (6) GET /api/admin/landing-metrics (admin): totals {views,guest_views,signups,
+              conversion} + events[] por evento con guest_views/signups/conversion.
+              non-admin -> 403; sin auth -> 401.
+          VERIFICAR con admin admin@quienva.app/admin123. Para counts/people crear 2-3
+          usuarios de prueba, marcar intents con PATCH /intent y POST /events/{id}/interest,
+          y comprobar que going_count/interested_count/my_intent y /people son coherentes.
+      - working: true
+        agent: "testing"
+        comment: |
+          SPRINT 2+3 BACKEND TESTING COMPLETE (2026-10-05)
+          
+          🎉 ALL 20 TESTS PASSED - 100% SUCCESS RATE
+          
+          Completed comprehensive end-to-end testing of all Sprint 2+3 backend changes as specified
+          in the review request. All functionality working correctly with no issues.
+          
+          ✅ (A) COUNTS SPLIT IN SERIALIZER (2/2 tests passed):
+          - GET /api/events as guest → 200 with going_count (int), interested_count (int), my_intent='none' ✓
+          - GET /api/events/{id} as guest → 200 with same fields ✓
+          - Backward compatibility maintained: total_going, total_interested, total_attended still present ✓
+          - All counts are integers, my_intent is string ✓
+          
+          ✅ (B) PATCH /api/events/{event_id}/intent (5/5 tests passed):
+          - PATCH with intent='interested' → 200 {status:'me_interesa', intent:'interested'} ✓
+          - interested_count incremented by 1, my_intent='interested' ✓
+          - PATCH with intent='going' on SAME event → 200 {status:'voy', intent:'going'} ✓
+          - going_count +1, interested_count back to baseline (record updated, not duplicated) ✓
+          - PATCH with intent='xxx' → 400 (invalid intent rejected) ✓
+          - PATCH on non-existent event → 404 ✓
+          - PATCH without auth → 401 ✓
+          
+          ✅ (C) GET /api/events/{event_id}/people (5/5 tests passed):
+          - Created 3 test users, all marked 'going' on test event
+          - GET people?status=voy as logged-in user → 200 with correct structure ✓
+          - Response has event_id, status='voy', count (int), people (array) ✓
+          - count matches people array length (3 users) ✓
+          - Each person has all required fields: user_id, name, username, picture, is_friend, is_me ✓
+          - Names are @username format (NOT real names) ✓
+          - Requesting user appears first with is_me=true ✓
+          - Privacy test: user with attendance_privacy='nadie' does NOT appear in list ✓
+          - GET people?status=foo → 400 (invalid status rejected) ✓
+          - GET people for non-existent event → 404 ✓
+          - GET people without auth → 401 ✓
+          
+          ✅ (D) CONVERSION METRICS (6/6 tests passed):
+          - GET /api/events/{id} as guest (no token) → 200 and increments guest_views ✓
+          - Verified guest_views increased from 1 to 2 in admin metrics ✓
+          - POST /api/metrics/event-signup {event_id} → 200 {ok:true} ✓
+          - Verified signups increased from 0 to 1 in admin metrics ✓
+          - GET /api/admin/landing-metrics as admin → 200 with correct structure ✓
+          - Response has totals {views, guest_views, signups, conversion} ✓
+          - Response has events array with per-event metrics ✓
+          - Test event appears in events list with guest_views>=1 and signups>=1 ✓
+          - GET /api/admin/landing-metrics as non-admin → 403 ✓
+          - GET /api/admin/landing-metrics without auth → 401 ✓
+          
+          ✅ REGRESSION TEST (1/1 passed):
+          - GET /api/events → 200 (no regressions) ✓
+          
+          CONCLUSION:
+          All Sprint 2+3 backend requirements met perfectly:
+          ✅ Counts split in serializer working (going_count, interested_count, my_intent)
+          ✅ PATCH /api/events/{id}/intent endpoint working (idempotent updates, no duplication)
+          ✅ GET /api/events/{id}/people endpoint working (privacy respected, correct sorting)
+          ✅ Conversion metrics tracking working (guest_views, signups, admin dashboard)
+          ✅ All authorization checks working (401 for no auth, 403 for non-admin)
+          ✅ All validation working (400 for invalid inputs, 404 for non-existent resources)
+          ✅ No regressions detected
+          
+          Test file: /app/backend_test_sprint2_3.py
+          Test credentials: admin@quienva.app / admin123 + 3 fresh test users
+          Test event: EL CONGRESO vol.2 (id: 888857b2-11fa-46eb-964d-bee534229709)
+          Database: 82 events seeded via scrapers (Xceed, Ushuaïa, Hï, [UNVRS], ClubTickets venues)
+
 metadata:
   created_by: "main_agent"
-  version: "2.15"
-  test_sequence: 20
+  version: "2.16"
+  test_sequence: 21
   run_ui: false
 
 test_plan:
   current_focus:
-    - "SEO noindex + sitemap exclusion for empty city pages"
-    - "Dynamic city map coordinates in /api/cities + admin create/update"
+    - "SPRINT 2+3 — intent granularity (PATCH /intent), counts split (going_count/interested_count/my_intent), people list, conversion metrics (guest_views/signups), admin landing-metrics"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      SPRINT 2+3 BACKEND (2026) — a verificar SOLO backend (NO frontend sin permiso).
+      Admin: admin@quienva.app / admin123. DB local tiene ~50 eventos; interests empieza vacío.
+      Probar:
+      (A) GET /api/events y GET /api/events/{id} -> cada evento trae going_count,
+          interested_count (ints) y my_intent ("none" para invitado).
+      (B) PATCH /api/events/{id}/intent {intent:"interested"} como usuario -> 200
+          {status:"me_interesa", intent:"interested"}. Luego {intent:"going"} -> cambia a
+          voy SIN borrar/recrear. {intent:"xxx"} -> 400. Sin auth -> 401.
+          Confirmar que going_count/interested_count del evento reflejan el cambio.
+      (C) GET /api/events/{id}/people?status=voy (logueado): lista con is_me/is_friend;
+          respeta privacidad "nadie"; status inválido -> 400; evento inexistente -> 404;
+          sin auth -> 401. Crear 2-3 usuarios y marcar intents para poblar la lista.
+      (D) GET /api/events/{id} como INVITADO (sin token) incrementa guest_views.
+          POST /api/metrics/event-signup {event_id} -> {ok:true} incrementa signups.
+          GET /api/admin/landing-metrics (admin) -> totals + events[] con conversion;
+          non-admin -> 403; sin auth -> 401.
+
+  - agent: "testing"
+    message: |
+      SPRINT 2+3 BACKEND TESTING COMPLETE (2026-10-05)
+      
+      ✅ ALL 20 TESTS PASSED - 100% SUCCESS RATE
+      
+      Tested all Sprint 2+3 backend changes as specified in the review request:
+      - (A) COUNTS SPLIT: going_count, interested_count, my_intent fields present in GET /api/events and GET /api/events/{id} ✓
+      - (B) PATCH /api/events/{id}/intent: idempotent updates working, no duplication, all validation working ✓
+      - (C) GET /api/events/{id}/people: correct structure, privacy respected, sorting correct ✓
+      - (D) CONVERSION METRICS: guest_views tracking, signups tracking, admin dashboard working ✓
+      
+      All authorization checks working (401/403), all validation working (400/404), no regressions.
+      
+      Database had 0 events initially, ran scrapers to seed 82 events from Xceed, Ushuaïa, Hï, [UNVRS], 
+      and ClubTickets venues. Created 3 test users to test intent changes and people list.
+      
+      Test file: /app/backend_test_sprint2_3.py
+      See full test results in task status_history above.
+
   - agent: "main"
     message: |
       NUEVOS CAMBIOS BACKEND (2026-09-09) a verificar (el fix de amigos ya fue verificado antes):

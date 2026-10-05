@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
+import { consumeReturnEvent } from "@/lib/returnEvent";
 import { Loader2 } from "lucide-react";
 
 export default function AuthCallback() {
@@ -41,6 +42,15 @@ export default function AuthCallback() {
           // Brand-new account → prompt for the city right after landing on the feed.
           if (data.is_new) { try { localStorage.setItem("qv_pick_city", "1"); } catch { /* ignore */ } }
           setUser(data.user);
+          // Sprint 3: if the visitor came from a public event landing, send them
+          // straight back to that event (avatars now unlocked) + attribute the
+          // signup conversion.
+          const returnPath = consumeReturnEvent();
+          if (returnPath) {
+            window.history.replaceState(null, "", returnPath);
+            navigate(returnPath, { replace: true });
+            return;
+          }
           window.history.replaceState(null, "", "/feed");
           const onboarded = localStorage.getItem("qv_onboarded") === "1";
           navigate(onboarded ? "/feed" : "/onboarding", { replace: true });

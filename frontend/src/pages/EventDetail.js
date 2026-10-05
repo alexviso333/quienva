@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { mediaThumb, API } from "@/lib/api";
+import { setReturnEvent } from "@/lib/returnEvent";
 import { formatPartyDate } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
@@ -12,7 +13,7 @@ import { NightRecapCard } from "@/components/NightRecapCard";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import {
-  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram, Pencil, X, RotateCcw,
+  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram, Pencil, X, RotateCcw, Users, Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -63,6 +64,7 @@ export default function EventDetail() {
   const isAdmin = user?.role === "admin";
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState(null);
+  const [peopleSheet, setPeopleSheet] = useState(null); // null | "voy" | "me_interesa"
   const location = useLocation();
   // Robust "back": if the user landed here directly (shared link, notification,
   // refresh) there is no in-app history to pop, so navigate(-1) would do nothing
@@ -107,6 +109,20 @@ export default function EventDetail() {
     // A genuine 404 (party removed/rescheduled) must NOT retry — show the
     // friendly "no longer available" screen immediately instead of hanging.
     retry: (count, err) => (err?.response?.status === 404 ? false : count < 2),
+  });
+
+  // Sprint 3: a guest who lands on this public event (e.g. from a WhatsApp
+  // share) should return right here after signing up, with avatars unlocked.
+  useEffect(() => {
+    if (!user && id) setReturnEvent(id);
+  }, [user, id]);
+
+  // Who's going / interested — loaded only when the sheet is open (logged-in).
+  const { data: peopleData, isLoading: peopleLoading } = useQuery({
+    queryKey: ["event-people", id, peopleSheet],
+    queryFn: async () => (await api.get(`/events/${id}/people`, { params: { status: peopleSheet } })).data,
+    enabled: !!peopleSheet && !!user,
+    staleTime: 15_000,
   });
 
   const setStatus = useMutation({
@@ -423,7 +439,28 @@ export default function EventDetail() {
             >
               {isEstuve ? <><CheckCircle2 className="w-5 h-5" /> {t("event.was_here")}</> : t("event.was_here")}
             </button>
+          ) : !user ? (
+            /* Sprint 3 — guest CTA stack (arrived from WhatsApp, not logged in).
+               Primary = low-friction "Me interesa" (opens signup), tertiary =
+               share back to WhatsApp. "Ver quién va" lives just below (teaser). */
+            <div className="flex flex-col gap-2.5" data-testid="detail-guest-cta">
+              <button
+                data-testid="detail-guest-interesa"
+                onClick={() => toggle("me_interesa")}
+                className="h-14 rounded-2xl font-display font-black text-base flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary to-qv-secondary text-black shadow-[0_0_24px_rgba(255,0,85,0.3)] active:scale-95 transition-transform"
+              >
+                👀 {t("event.interested")}
+              </button>
+              <button
+                data-testid="detail-guest-whatsapp"
+                onClick={shareWhatsApp}
+                className="h-11 rounded-2xl bg-[#25D366]/15 border border-[#25D366]/40 text-[#25D366] font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              >
+                <Send className="w-4 h-4" /> {t("event.share_whatsapp", "Compartir por WhatsApp")}
+              </button>
+            </div>
           ) : (
+            <>
             <div className="grid grid-cols-2 gap-3">
               <button
                 data-testid="detail-voy-btn"
@@ -444,6 +481,29 @@ export default function EventDetail() {
                 {isInteresa && <Star className="w-5 h-5" />} {t("event.interested")}
               </button>
             </div>
+            {/* Crowd counts — tap to see exactly who's going / interested. */}
+            {(((event.going_count ?? 0) > 0) || ((event.interested_count ?? 0) > 0)) && (
+              <div className="flex items-center gap-3 text-sm" data-testid="detail-crowd-counts">
+                <button
+                  data-testid="detail-count-going"
+                  onClick={() => setPeopleSheet("voy")}
+                  disabled={(event.going_count ?? 0) === 0}
+                  className="flex items-center gap-1.5 text-white/70 active:scale-95 transition-transform disabled:opacity-50"
+                >
+                  <b className="text-white">{event.going_count ?? 0}</b> {t("event.count_going", "van")}
+                </button>
+                <span className="text-white/20">·</span>
+                <button
+                  data-testid="detail-count-interested"
+                  onClick={() => setPeopleSheet("me_interesa")}
+                  disabled={(event.interested_count ?? 0) === 0}
+                  className="flex items-center gap-1.5 text-white/70 active:scale-95 transition-transform disabled:opacity-50"
+                >
+                  <b className="text-qv-secondary">{event.interested_count ?? 0}</b> {t("event.count_interested", "interesados")}
+                </button>
+              </div>
+            )}
+            </>
           )}
 
           {!isPast && (event.has_commission && event.commission_url ? (
@@ -719,6 +779,64 @@ export default function EventDetail() {
               {saveEdit.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Guardar cambios"}
             </button>
           </form>
+        </div>
+      )}
+
+      {/* People sheet — who's going / interested (Sprint 2 reciprocity) */}
+      {user && peopleSheet && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm"
+          data-testid="people-sheet"
+          onClick={() => setPeopleSheet(null)}
+        >
+          <div
+            className="w-full max-w-md max-h-[80vh] overflow-y-auto qv-app-bg border border-white/15 rounded-t-3xl sm:rounded-3xl p-5 flex flex-col gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-xl font-black text-white flex items-center gap-2">
+                {peopleSheet === "voy"
+                  ? <><Users className="w-5 h-5 text-qv-primary" /> {t("event.count_going", "van")}</>
+                  : <><Eye className="w-5 h-5 text-qv-secondary" /> {t("event.count_interested", "interesados")}</>}
+                <span className="text-white/40 font-bold">{peopleData?.count ?? ""}</span>
+              </h2>
+              <button
+                type="button"
+                data-testid="people-sheet-close"
+                onClick={() => setPeopleSheet(null)}
+                className="w-9 h-9 rounded-full bg-white/5 border border-white/15 flex items-center justify-center text-white active:scale-90"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {peopleLoading ? (
+              <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 text-qv-primary animate-spin" /></div>
+            ) : (peopleData?.people || []).length === 0 ? (
+              <p className="text-white/40 text-sm py-6 text-center">{t("event.people_empty", "Aún nadie por aquí")}</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {peopleData.people.map((p) => (
+                  <button
+                    key={p.user_id}
+                    type="button"
+                    onClick={() => { if (!p.is_me) { setPeopleSheet(null); navigate(`/users/${p.user_id}`); } }}
+                    className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-2.5 text-left active:scale-[0.99] transition-transform"
+                    data-testid={`people-row-${p.user_id}`}
+                  >
+                    <AvatarCircle name={p.name} picture={p.picture} size={40} ring={p.is_friend} />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-semibold text-sm text-white block truncate">
+                        {p.is_me ? t("eventcard.you", "Tú") : p.name}
+                      </span>
+                      {p.is_friend && !p.is_me && (
+                        <span className="text-[11px] text-qv-primary font-semibold">{t("event.people_friend", "Amigo")}</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

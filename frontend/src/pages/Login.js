@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { startGoogleLogin } from "@/lib/googleAuth";
+import { consumeReturnEvent } from "@/lib/returnEvent";
 import { isAppleSignInAvailable, startAppleLogin, isAppleCancel } from "@/lib/appleAuth";
 import { Input } from "@/components/ui/input";
 import { Loader2, UserPlus } from "lucide-react";
@@ -111,6 +112,8 @@ export default function Login() {
 
   const goAfterAuth = async () => {
     await claimPendingInvites();
+    const returnPath = consumeReturnEvent();
+    if (returnPath) { navigate(returnPath); return; }
     const onboarded = localStorage.getItem("qv_onboarded") === "1";
     navigate(onboarded ? "/feed" : "/onboarding");
   };
@@ -202,7 +205,8 @@ export default function Login() {
         queryKey: ["top-weekend"],
         queryFn: async () => (await api.get("/events/top-weekend")).data,
       });
-      navigate(onboarded ? "/feed" : "/onboarding");
+      const returnPath = consumeReturnEvent();
+      navigate(returnPath || (onboarded ? "/feed" : "/onboarding"));
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || err.message);
     } finally {

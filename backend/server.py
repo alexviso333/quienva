@@ -817,6 +817,20 @@ class InterestInput(BaseModel):
     status: str          # "voy" | "me_interesa" | "none"
 
 
+class IntentInput(BaseModel):
+    # Sprint 2 contract: low-friction intent granularity. Maps to the existing
+    # interest `status` field so nothing in the data model changes.
+    #   interested -> me_interesa | going -> voy | attended -> estuve
+    intent: str
+
+
+# Canonical mapping between the public "intent" vocabulary (brief/API contract)
+# and the internal interest `status` stored in Mongo. Kept in one place so the
+# PATCH /intent alias and the serializer stay in sync.
+INTENT_TO_STATUS = {"interested": "me_interesa", "going": "voy", "attended": "estuve", "none": "none"}
+STATUS_TO_INTENT = {"me_interesa": "interested", "voy": "going", "estuve": "attended", "none": "none"}
+
+
 class UsernameInput(BaseModel):
     username: str
 
@@ -6590,6 +6604,12 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         ),
         "total_interested": sum(1 for it in interests if it["status"] == "me_interesa" and it.get("privacy", "todos") != "nadie"),
         "total_attended": sum(1 for it in interests if it["status"] == "estuve" and it.get("privacy", "todos") != "nadie"),
+        # Sprint 2 contract aliases: the REAL (non-boosted) crowd counts, split by
+        # intent, plus my own intent in the public vocabulary. The frontend shows
+        # them separated ("17 van · 42 interesados"), never summed.
+        "going_count": sum(1 for it in interests if it["status"] == "voy" and it.get("privacy", "todos") != "nadie"),
+        "interested_count": sum(1 for it in interests if it["status"] == "me_interesa" and it.get("privacy", "todos") != "nadie"),
+        "my_intent": STATUS_TO_INTENT.get(my_status, "none"),
         # Tickets
         "my_has_ticket": my_has_ticket,
         "total_tickets": total_tickets,
@@ -7757,9 +7777,14 @@ async def get_event(event_id: str, user: dict = Depends(get_optional_user)):
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado")
     # Track a view for the conversion funnel (fire-and-forget, deduped per open).
+    # guest_views isolates anonymous visitors (e.g. arriving from a WhatsApp
+    # share link) so Sprint 3 can measure visitor -> signup conversion.
     try:
+        _inc = {"views": 1}
+        if user["user_id"] is None:
+            _inc["guest_views"] = 1
         await db.event_metrics.update_one(
-            {"event_id": event_id}, {"$inc": {"views": 1}}, upsert=True)
+            {"event_id": event_id}, {"$inc": _inc}, upsert=True)
     except Exception:
         pass
     friend_ids = await accepted_friend_ids(user["user_id"])
@@ -7843,6 +7868,111 @@ async def set_interest(event_id: str, inp: InterestInput, user: dict = Depends(g
 
     return {"status": inp.status}
 
+
+@api_router.patch("/events/{event_id}/intent")
+async def patch_intent(event_id: str, inp: IntentInput, user: dict = Depends(get_current_user)):
+    """Sprint 2 contract alias. Change the user's intent (interested/going/
+    attended/none) without deleting+recreating the record — it maps to the same
+    interest `status` and reuses set_interest so notifications/points stay intact."""
+    status = INTENT_TO_STATUS.get(inp.intent)
+    if status is None:
+        raise HTTPException(status_code=400, detail="intent inválido")
+    res = await set_interest(event_id, InterestInput(status=status), user)
+    return {"status": res["status"], "intent": STATUS_TO_INTENT.get(res["status"], "none")}
+
+
+@api_router.get("/events/{event_id}/people")
+async def event_people(event_id: str, status: str = "voy", user: dict = Depends(get_current_user)):
+    """Who is going / interested / attended (Sprint 2: tapping "17 van" shows
+    the list). Logged-in only (reciprocity). Respects the "nadie" (ghost)
+    attendance privacy and uses the public @username, never the real name."""
+    if status not in ("voy", "me_interesa", "estuve"):
+        raise HTTPException(status_code=400, detail="status inválido")
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    friend_ids = set(await accepted_friend_ids(user["user_id"]))
+    rows = []
+    async for it in db.interests.find({"event_id": event_id, "status": status}, {"_id": 0}):
+        if it.get("privacy", "todos") == "nadie":
+            continue
+        rows.append(it["user_id"])
+    users_map = {}
+    if rows:
+        async for u in db.users.find({"user_id": {"$in": rows}},
+                                     {"_id": 0, "user_id": 1, "name": 1, "username": 1, "picture": 1}):
+            users_map[u["user_id"]] = u
+    people = []
+    for uid in rows:
+        u = users_map.get(uid)
+        if not u:
+            continue
+        people.append({
+            "user_id": uid,
+            "name": display_name(u),
+            "username": u.get("username"),
+            "picture": u.get("picture", ""),
+            "is_friend": uid in friend_ids,
+            "is_me": uid == user["user_id"],
+        })
+    # Me first, then friends, then everyone else alphabetically.
+    people.sort(key=lambda p: (not p["is_me"], not p["is_friend"], (p["name"] or "").lower()))
+    return {"event_id": event_id, "status": status, "count": len(people), "people": people}
+
+
+class EventSignupMetricInput(BaseModel):
+    event_id: str
+
+
+@api_router.post("/metrics/event-signup")
+async def metrics_event_signup(inp: EventSignupMetricInput, user: dict = Depends(get_optional_user)):
+    """Sprint 3 funnel: a visitor who landed on an event page (e.g. from a
+    WhatsApp share) just created/entered an account. Fire-and-forget; attributes
+    the conversion to the originating event so the founder can read
+    visitor -> signup rate per party."""
+    try:
+        await db.event_metrics.update_one(
+            {"event_id": inp.event_id}, {"$inc": {"signups": 1}}, upsert=True)
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@api_router.get("/admin/landing-metrics")
+async def admin_landing_metrics(user: dict = Depends(require_admin)):
+    """Sprint 3 instrumentation. Per-event guest views and signups from the
+    public event landings, plus overall conversion rate."""
+    rows = []
+    tot_views = tot_guest = tot_signups = 0
+    async for m in db.event_metrics.find(
+        {"$or": [{"guest_views": {"$gt": 0}}, {"signups": {"$gt": 0}}]}, {"_id": 0}):
+        gv = int(m.get("guest_views", 0) or 0)
+        su = int(m.get("signups", 0) or 0)
+        tot_views += int(m.get("views", 0) or 0)
+        tot_guest += gv
+        tot_signups += su
+        ev = await db.events.find_one({"id": m.get("event_id")}, {"_id": 0, "name": 1, "venue": 1, "city": 1, "date": 1})
+        rows.append({
+            "event_id": m.get("event_id"),
+            "name": (ev or {}).get("name", "(evento borrado)"),
+            "venue": (ev or {}).get("venue", ""),
+            "city": (ev or {}).get("city", ""),
+            "date": (ev or {}).get("date", ""),
+            "views": int(m.get("views", 0) or 0),
+            "guest_views": gv,
+            "signups": su,
+            "conversion": round(su / gv, 4) if gv else 0,
+        })
+    rows.sort(key=lambda r: (r["signups"], r["guest_views"]), reverse=True)
+    return {
+        "totals": {
+            "views": tot_views,
+            "guest_views": tot_guest,
+            "signups": tot_signups,
+            "conversion": round(tot_signups / tot_guest, 4) if tot_guest else 0,
+        },
+        "events": rows,
+    }
 
 
 class TicketInput(BaseModel):

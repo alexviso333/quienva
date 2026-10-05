@@ -310,6 +310,16 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           )}
         </div>
 
+        {/* Crowd counts — separated intent signal ("17 van · 42 interesados"),
+            never summed. Shown whenever there is any real activity. */}
+        {!isPast && (((event.going_count ?? event.total_going ?? 0) > 0) || ((event.interested_count ?? event.total_interested ?? 0) > 0)) && (
+          <p className="text-[11px] text-white/45 -mt-1 leading-tight" data-testid={`event-counts-${event.id}`}>
+            <b className="text-white/80">{event.going_count ?? event.total_going ?? 0}</b> {t("eventcard.count_going", "van")}
+            <span className="text-white/25"> · </span>
+            <b className="text-white/70">{event.interested_count ?? event.total_interested ?? 0}</b> {t("eventcard.count_interested", "interesados")}
+          </p>
+        )}
+
         {/* FOMO: friends are going and you are not (only when there's real social pressure) */}
         {!isPast && !isVoy && going.length >= 2 && (
           <button
