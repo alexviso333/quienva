@@ -10,11 +10,12 @@ import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
 import FourvenuesEmbed from "@/components/FourvenuesEmbed";
 import { NightRecapCard } from "@/components/NightRecapCard";
+import { EventOpenPlans } from "@/components/EventOpenPlans";
 import { VoyCelebration } from "@/components/VoyCelebration";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import {
-  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram, Pencil, X, RotateCcw, Users, Eye,
+  ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram, Pencil, X, RotateCcw, Users, Eye, ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -478,6 +479,13 @@ export default function EventDetail() {
             </div>
           ) : (
             <>
+            <button
+              data-testid="detail-propose-btn"
+              onClick={() => { window.location.href = `${API}/p/nuevo?evento=${event.id}`; }}
+              className="qv-btn w-full h-[52px] rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)] mb-3"
+            >
+              <ClipboardList className="w-5 h-5" /> {t("eventcard.btn_propose", "Proponer a mi grupo")}
+            </button>
             <div className="grid grid-cols-2 gap-3">
               <button
                 data-testid="detail-voy-btn"
@@ -541,6 +549,8 @@ export default function EventDetail() {
             )}
             </>
           )}
+
+          {!isPast && <EventOpenPlans eventId={event.id} />}
 
           {!isPast && (event.has_commission && event.commission_url ? (
             event.fv_embed_url ? (

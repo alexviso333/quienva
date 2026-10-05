@@ -373,6 +373,13 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           </button>
         ) : (
           <>
+            <button
+              data-testid={`event-propose-btn-${event.id}`}
+              onClick={(e) => { e.stopPropagation(); window.location.href = `${API}/p/nuevo?evento=${event.id}`; }}
+              className="qv-btn h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
+            >
+              <ClipboardList className="w-4 h-4" /> {t("eventcard.btn_propose", "Proponer a mi grupo")}
+            </button>
             <div className="grid grid-cols-2 gap-2.5">
               <button
                 data-testid={`event-voy-btn-${event.id}`}

@@ -13459,6 +13459,29 @@ async def cancel_plan(slug: str, request: Request):
 
 
 # ---- Open Graph dinamico 1200x630 -------------------------------------------
+@api_router.get("/events/{event_id}/plans")
+async def event_open_plans(event_id: str):
+    cur = db.plans.find(
+        {"estado": "abierto", "opciones.evento_id": event_id}, {"_id": 0}
+    ).sort("created_at", -1)
+    plans = await cur.to_list(20)
+    out = []
+    for p in plans:
+        dentro = await db.plan_participants.count_documents(
+            {"plan_id": p["id"], "intencion": "dentro"})
+        total = await db.plan_participants.count_documents({"plan_id": p["id"]})
+        out.append({
+            "slug": p["slug"],
+            "titulo": p.get("titulo") or "Plan",
+            "creador_apodo": p.get("creador_apodo"),
+            "umbral_personas": p.get("umbral_personas"),
+            "dentro": dentro,
+            "total": total,
+            "hora_limite": p.get("hora_limite"),
+        })
+    return {"plans": out, "count": len(out)}
+
+
 @api_router.get("/og/plan/{slug}")
 async def og_plan_image(slug: str):
     from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -13560,7 +13583,23 @@ async def plan_public_page(slug: str, request: Request):
     front = _frontend_base(request)
     api_public = (os.environ.get("API_PUBLIC_BASE") or front).rstrip("/")
     if slug == "nuevo":
-        html = _plan_new_page_html(front, api_public, request)
+        preset = None
+        ev_id = request.query_params.get("evento")
+        if ev_id:
+            ev = await db.events.find_one({"id": ev_id}, {"_id": 0})
+            if ev:
+                tiers = ev.get("price_tiers") or []
+                prices = [t.get("price") for t in tiers if isinstance(t, dict) and t.get("price")]
+                preset = {
+                    "evento_id": ev.get("id"),
+                    "venue_nombre": ev.get("venue") or ev.get("name") or "",
+                    "nombre": ev.get("name") or "",
+                    "hora": ev.get("time") or "",
+                    "precio_desde": (min(prices) if prices else None),
+                    "image_url": ev.get("image_url") or "",
+                    "ciudad": ev.get("city") or "Madrid",
+                }
+        html = _plan_new_page_html(front, api_public, preset)
         return StarletteResponse(content=html, media_type="text/html")
     plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
     if not plan:
@@ -13690,8 +13729,25 @@ window.__SHARE__ = "__SHARE_URL__";
     return head + body
 
 
-def _plan_new_page_html(front, api_public, request):
+def _plan_new_page_html(front, api_public, preset=None):
     import html as _h
+    preset_card = ""
+    ciudad_val = "Madrid"
+    titulo_ph = "Jueves en Chueca"
+    if preset:
+        ciudad_val = _h.escape(preset.get("ciudad") or "Madrid")
+        vn = _h.escape(preset.get("venue_nombre") or preset.get("nombre") or "")
+        titulo_ph = _h.escape(("Vamos a " + (preset.get("venue_nombre") or preset.get("nombre") or "")).strip()) or titulo_ph
+        meta = []
+        if preset.get("hora"):
+            meta.append(_h.escape(preset["hora"]))
+        if preset.get("precio_desde"):
+            meta.append("desde " + str(preset["precio_desde"]) + "\u20ac")
+        img = ("<img src='" + _h.escape(preset.get("image_url")) + "' alt=''>") if preset.get("image_url") else ""
+        preset_card = (
+            "<div class=preset>" + img +
+            "<div><div class=pv>" + vn + "</div><div class=pm>" + _h.escape(" \u00b7 ".join(meta)) +
+            "</div></div><span class=ptag>Incluido</span></div>")
     head = _plan_head("Monta tu plan", "Elige el sitio, comparte el link y mira qui\u00e9n va.",
                       f"{api_public}/api/og/plan/_", f"{front}/p/nuevo")
     body = """
@@ -13700,13 +13756,15 @@ def _plan_new_page_html(front, api_public, request):
 <h1>Monta tu plan</h1>
 <p style='color:#b9a8c9;margin-bottom:16px'>Dale un t\u00edtulo, a\u00f1ade hasta 3 sitios y comp\u00e1rtelo con tu grupo.</p>
 <label style='font-size:13px;color:#b9a8c9'>T\u00edtulo</label>
-<input id=titulo class=np placeholder='Jueves en Chueca' maxlength=60>
+<input id=titulo class=np placeholder='__TITULO_PH__' maxlength=60>
 <label style='font-size:13px;color:#b9a8c9'>Mensaje para tu grupo (opcional)</label>
 <input id=msg class=np placeholder='\u00bfNos cuadra esto?' maxlength=140>
 <label style='font-size:13px;color:#b9a8c9'>Ciudad</label>
-<input id=ciudad class=np value='Madrid'>
+<input id=ciudad class=np value='__CIUDAD__'>
+__PRESET_CARD__
+<label style='font-size:13px;color:#b9a8c9'>Opciones</label>
 <div id=opts></div>
-<button id=addOpt class=addbtn>+ A\u00f1adir sitio</button>
+<button id=addOpt class=addbtn>+ A\u00f1adir otro sitio</button>
 <label style='font-size:13px;color:#b9a8c9'>Se cierra si somos (opcional)</label>
 <input id=umbral class=np type=number inputmode=numeric placeholder='p. ej. 6'>
 <button id=createBtn class=go2>Crear plan y compartir</button>
@@ -13718,11 +13776,21 @@ def _plan_new_page_html(front, api_public, request):
 .go2{width:100%;background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;border:none;border-radius:14px;padding:16px;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;margin-top:14px}
 .optrow{display:flex;gap:8px;margin-bottom:8px}
 .optrow input{flex:1}
+.preset{display:flex;gap:12px;align-items:center;background:#140f1c;border:1px solid #ec4899;border-radius:16px;padding:10px;margin:8px 0 6px}
+.preset img{width:56px;height:56px;border-radius:12px;object-fit:cover;background:#241a30}
+.preset .pv{font-weight:700}
+.preset .pm{color:#b9a8c9;font-size:13px;margin-top:2px}
+.preset .ptag{margin-left:auto;font-size:11px;color:#f0a8d8;border:1px solid #3a2e46;border-radius:999px;padding:5px 9px}
 </style>
-<script>window.__API__="__API_BASE__";</script>
+<script>window.__API__="__API_BASE__";window.__PRESET__=__PRESET_JSON__;</script>
 <script>__NEW_JS__</script>
 </body></html>"""
-    body = body.replace("__API_BASE__", api_public + "/api").replace("__NEW_JS__", _PLAN_NEW_JS)
+    body = (body.replace("__API_BASE__", api_public + "/api")
+                .replace("__NEW_JS__", _PLAN_NEW_JS)
+                .replace("__PRESET_CARD__", preset_card)
+                .replace("__TITULO_PH__", titulo_ph)
+                .replace("__CIUDAD__", ciudad_val)
+                .replace("__PRESET_JSON__", json.dumps(preset) if preset else "null"))
     return head + body
 
 
@@ -13875,17 +13943,19 @@ _PLAN_JS = r'''
 _PLAN_NEW_JS = r'''
 (function(){
   var API=window.__API__;
+  var PRESET=window.__PRESET__||null;
   var opts=document.getElementById('opts');
   function addRow(){
-    if(opts.children.length>=3){return;}
+    if(opts.children.length>=(PRESET?2:3)){return;}
     var d=document.createElement('div');d.className='optrow';
-    d.innerHTML='<input class="np ov" placeholder="Sitio (p. ej. Fitz)"><input class="np oh" placeholder="Hora" style="max-width:90px"><input class="np op" placeholder="\u20ac" inputmode=numeric style="max-width:70px">';
+    d.innerHTML='<input class="np ov" placeholder="Otro sitio (p. ej. Fitz)"><input class="np oh" placeholder="Hora" style="max-width:90px"><input class="np op" placeholder="\u20ac" inputmode=numeric style="max-width:70px">';
     opts.appendChild(d);
   }
-  addRow();
+  if(!PRESET){addRow();}
   document.getElementById('addOpt').onclick=addRow;
   document.getElementById('createBtn').onclick=function(){
     var opciones=[];
+    if(PRESET&&PRESET.evento_id){opciones.push({evento_id:PRESET.evento_id,venue_nombre:PRESET.venue_nombre||'',hora:PRESET.hora||'',precio_desde:PRESET.precio_desde||null});}
     Array.prototype.forEach.call(document.querySelectorAll('.optrow'),function(r){
       var v=r.querySelector('.ov').value.trim();
       if(v){opciones.push({texto_libre:v,venue_nombre:v,hora:r.querySelector('.oh').value.trim(),precio_desde:parseFloat(r.querySelector('.op').value)||null});}
