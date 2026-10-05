@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList, Euro } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
@@ -94,6 +94,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const { requireAuth } = useGuestGate();
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const prefersReduced = useReducedMotion();
   const isPast = event.date < todayStr();
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
@@ -145,10 +146,11 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
     <motion.article
       ref={cardRef}
       data-testid={`event-card-${event.id}`}
-      initial={{ opacity: 0, y: 22 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -5 }}
-      transition={{ duration: 0.45, delay: Math.min(index * 0.05, 0.3), ease: [0.22, 1, 0.36, 1] }}
+      initial={prefersReduced ? false : { opacity: 0, y: 26, scale: 0.985 }}
+      whileInView={prefersReduced ? undefined : { opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: true, margin: "-60px" }}
+      whileHover={prefersReduced ? undefined : { y: -6 }}
+      transition={{ duration: 0.5, delay: Math.min(index * 0.06, 0.28), ease: [0.16, 1, 0.3, 1] }}
       className={`group relative rounded-[26px] p-[1.5px] transition-[background,box-shadow] duration-500 bg-gradient-to-br ${
         highlight
           ? "from-qv-secondary via-qv-secondary/40 to-qv-primary shadow-[0_0_0_1px_rgba(0,240,255,0.5),0_22px_60px_-18px_rgba(0,240,255,0.45)]"
@@ -165,12 +167,14 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
         data-testid={`event-open-${event.id}`}
       >
         {event.image_url ? (
-          <img src={mediaThumb(event.image_url, 900)} alt={event.name} className="w-full h-full object-cover transition-transform duration-[900ms] ease-out group-hover:scale-[1.07]" loading="lazy" />
+          <img src={mediaThumb(event.image_url, 900)} alt={event.name} className="w-full h-full object-cover transform-gpu will-change-transform transition-transform duration-[900ms] ease-out group-hover:scale-[1.07]" loading="lazy" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#2a0a1a] via-[#121215] to-[#0a1a1f]" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#0e0e12] via-[#0e0e12]/55 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-transparent" />
+        {/* hover neon sheen — opacity-only, GPU friendly */}
+        <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(255,0,85,0.2),transparent_60%)]" />
 
         <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
             {event.is_affiliate && (

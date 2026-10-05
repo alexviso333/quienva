@@ -624,3 +624,24 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 - **Recordar secciones abiertas del admin**: `AdminDashboard.js` (`/admin/dashboard`) persiste `openSections` en `localStorage` (`qv_admin_open_sections`); se restaura al abrir. Verificado: colapsar "Ciudades" persiste tras recargar.
 - **INCIDENCIA de entorno (pod nuevo)**: al crearse el pod `d7a5fd3a` ambos `.env` (backend y frontend) faltaban y el Mongo local estaba vacío. Restaurados: `backend/.env` (MONGO_URL local + DB_NAME=quienva_database + CORS=*), `frontend/.env` (REACT_APP_BACKEND_URL del pod). BD sembrada con 6 ciudades + admin por defecto (admin@quienva.app / admin123). Producción (Render/Vercel/Atlas/Cloudinary) intacta.
 
+
+
+---
+
+## 2026-06 — Restauración del diseño premium del Feed TONIGHT + upgrade de animaciones
+
+**Contexto:** El agente anterior (ChatGPT "Astra 6") dejó el Feed demasiado minimalista en cambios SIN commitear sobre el commit `94dc701` (que era el diseño premium aprobado tras el primer prompt del usuario). El usuario pidió volver a esa base premium y hacerla aún más atractiva (animaciones, movimiento, esquinas suaves), sin añadir más colores/opciones y SIN perder rendimiento. También cuidar el móvil.
+
+**Qué se hizo:**
+- **Restaurado el diseño premium** (HEAD `94dc701`): revert a HEAD de `Feed.js`, `EventCard.js`, `AppShell.js`, `BlurredGoingTeaser.js`, `CitySelectorSheet.js`, `LanguageSwitcher.js`, `i18n/index.js`, `design_guidelines.json`. Eliminados los archivos minimalistas de Astra 6: `styles/tonight.css`, `styles/night-event.css`, `components/FeedHeader.js`, `components/EventSocial.js`, `i18n/tonight.js`, `design_feed_guidelines.md`, `tonight-build.log`.
+- **Nuevo blueprint** generado por el design_agent en `/app/design_guidelines.json` (Awwwards-level, paleta 2 colores neón sobre #0A0A0C).
+- **Upgrades de animación premium (GPU-friendly, solo transform/opacity):**
+  - `EventCard.js`: entrada con scroll-reveal `whileInView` (opacity+y+scale, easing [0.16,1,0.3,1]), hover lift `y:-6`, zoom de póster `transform-gpu will-change-transform`, sheen neón magenta en hover del póster (opacity-only). Respeta `prefers-reduced-motion` vía `useReducedMotion`.
+  - `Feed.js`: hero con glows ambientales animados (`.qv-glow-a/.qv-glow-b`), entrada del título, cabeceras de sección animadas (`whileInView` + spring en el icono), chip de conteo con degradado magenta→cian.
+  - `index.css`: keyframes `qv-float-a/b` (drift ambiental) y `qv-shimmer` + clase `.qv-skeleton` (skeletons con barrido premium). Todo bajo `prefers-reduced-motion`.
+- Estructura de 3 bloques intacta: 🔥 Esta noche · ⚡ Tu gente · 🌙 Próximamente (scroll infinito).
+
+**Estado:** Compila sin errores (solo warnings preexistentes de capacitor source-maps). Sin errores JS en consola (solo 401 esperado de invitado en `/auth/me`). API devuelve 35 eventos mock para Palma. Verificación visual por el usuario en el preview PENDIENTE (el screenshot_tool solo capturaba el splash de arranque en frío del dev-server).
+
+**Archivos modificados:** `frontend/src/pages/Feed.js`, `frontend/src/components/EventCard.js`, `frontend/src/index.css`, `design_guidelines.json`.
+

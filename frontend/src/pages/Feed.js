@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
@@ -36,15 +37,16 @@ const friendScore = (e) => (e.friends_going?.length || 0) + (e.friends_intereste
 
 function SkeletonList() {
   return (
-    <div className="flex flex-col gap-4" data-testid="feed-skeleton">
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:gap-4 xl:grid-cols-3" data-testid="feed-skeleton">
       {[0, 1, 2].map((k) => (
-        <div key={k} className="rounded-2xl overflow-hidden bg-[#121215] border border-white/10">
-          <div className="h-40 bg-white/[0.06] animate-pulse" />
-          <div className="p-3 flex flex-col gap-2.5">
-            <div className="h-8 w-2/3 bg-white/[0.06] rounded animate-pulse" />
-            <div className="grid grid-cols-2 gap-2">
-              <div className="h-10 bg-white/[0.06] rounded-xl animate-pulse" />
-              <div className="h-10 bg-white/[0.06] rounded-xl animate-pulse" />
+        <div key={k} className="rounded-[26px] overflow-hidden bg-[#121217] border border-white/10">
+          <div className="h-44 qv-skeleton" />
+          <div className="p-4 flex flex-col gap-3">
+            <div className="h-7 w-2/3 qv-skeleton rounded-lg" />
+            <div className="h-4 w-1/2 qv-skeleton rounded-md" />
+            <div className="grid grid-cols-2 gap-2.5 mt-1">
+              <div className="h-11 qv-skeleton rounded-xl" />
+              <div className="h-11 qv-skeleton rounded-xl" />
             </div>
           </div>
         </div>
@@ -60,16 +62,28 @@ function SectionHeader({ icon: Icon, title, count, tint = "primary" }) {
     muted: "text-white/80 bg-white/[0.08] border-white/15",
   };
   return (
-    <div className="flex items-center gap-3 mb-4">
-      <span className={`w-9 h-9 rounded-2xl border flex items-center justify-center ${tints[tint]}`}>
+    <motion.div
+      className="flex items-center gap-3 mb-4"
+      initial={{ opacity: 0, x: -14 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <motion.span
+        className={`w-9 h-9 rounded-2xl border flex items-center justify-center ${tints[tint]}`}
+        initial={{ scale: 0.6, opacity: 0 }}
+        whileInView={{ scale: 1, opacity: 1 }}
+        viewport={{ once: true }}
+        transition={{ type: "spring", stiffness: 420, damping: 18, delay: 0.08 }}
+      >
         <Icon className="w-[18px] h-[18px]" />
-      </span>
+      </motion.span>
       <h2 className="font-display font-black text-[22px] leading-none tracking-[-0.01em] text-white">{title}</h2>
       {count != null && count > 0 && (
-        <span className="text-[11px] font-bold text-white/55 bg-white/[0.07] border border-white/10 rounded-full px-2 py-0.5">{count}</span>
+        <span className="text-[11px] font-bold text-white/80 bg-gradient-to-r from-qv-primary/25 to-qv-secondary/25 border border-white/10 rounded-full px-2.5 py-0.5">{count}</span>
       )}
       <div className="flex-1 h-px bg-gradient-to-r from-white/15 via-white/5 to-transparent" />
-    </div>
+    </motion.div>
   );
 }
 
@@ -364,8 +378,8 @@ export default function Feed() {
       {/* ---- HERO ---- */}
       <header className="relative px-5 pt-9 pb-2">
         {/* ambient neon glow */}
-        <div aria-hidden className="pointer-events-none absolute -top-16 -left-16 w-72 h-72 rounded-full bg-qv-primary/20 blur-[90px]" />
-        <div aria-hidden className="pointer-events-none absolute -top-10 right-0 w-64 h-64 rounded-full bg-qv-secondary/15 blur-[90px]" />
+        <div aria-hidden className="qv-glow-a pointer-events-none absolute -top-16 -left-16 w-72 h-72 rounded-full bg-qv-primary/20 blur-[90px]" />
+        <div aria-hidden className="qv-glow-b pointer-events-none absolute -top-10 right-0 w-64 h-64 rounded-full bg-qv-secondary/15 blur-[90px]" />
         <div className="relative">
           <div className="flex items-start justify-between gap-3">
             <button
@@ -391,6 +405,11 @@ export default function Feed() {
             </div>
           </div>
 
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          >
           <p className="flex items-center gap-2 mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-qv-primary/70" />
@@ -401,6 +420,7 @@ export default function Feed() {
           <h1 className="font-display text-[44px] lg:text-6xl font-black tracking-[-0.035em] mt-2 leading-[0.9]">
             ¿Dónde está<br />la noche<span className="text-qv-primary">?</span>
           </h1>
+          </motion.div>
         </div>
       </header>
 
