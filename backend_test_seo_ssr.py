@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 import re
 
 # Backend base URL from frontend/.env
-BASE_URL = "https://tonight-party.preview.emergentagent.com/api"
+BASE_URL = "https://reciprocal-landing.preview.emergentagent.com/api"
 
 # Googlebot User-Agent for SSR pages
 GOOGLEBOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"

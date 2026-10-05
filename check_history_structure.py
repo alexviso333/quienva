@@ -6,7 +6,7 @@ Check actual history entry structure
 import requests
 import json
 
-BASE_URL = "https://tonight-party.preview.emergentagent.com/api"
+BASE_URL = "https://reciprocal-landing.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 
