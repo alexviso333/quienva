@@ -3391,7 +3391,7 @@ _HOME_EXTRA_CSS = (
 _HOME_T = {
     "es": {
         "title": "\u00bfQui\u00e9n va? \u2014 Fiestas y discotecas de hoy y este finde en tu ciudad",
-        "desc": "Descubre todas las fiestas y discotecas de esta semana en Marbella, Ibiza, Madrid, Barcelona y Palma. Horarios, precios reales y qu\u00e9 amigos van. Consigue tus entradas en \u00bfQui\u00e9n va?",
+        "desc": "Descubre todas las fiestas y discotecas de esta semana en Marbella, Ibiza, Madrid, Barcelona, Palma y Sevilla. Horarios, precios reales y qu\u00e9 amigos van. Consigue tus entradas en \u00bfQui\u00e9n va?",
         "h1": "Todas las fiestas de tu ciudad, en un solo sitio",
         "sub": "Descubre qu\u00e9 discotecas y fiestas hay hoy y este finde, mira qu\u00e9 amigos van y consigue tus entradas al mejor precio.",
         "cities_h": "Elige tu ciudad",
@@ -3403,14 +3403,14 @@ _HOME_T = {
             ("\u00bfQu\u00e9 es \u00bfQui\u00e9n va?",
              "\u00bfQui\u00e9n va? re\u00fane todas las fiestas y discotecas de tu ciudad con horarios, precios reales y qu\u00e9 amigos van, para que no te pierdas ning\u00fan plan y consigas tus entradas f\u00e1cil."),
             ("\u00bfEn qu\u00e9 ciudades est\u00e1 disponible?",
-             "Ahora mismo en Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona y Palma de Mallorca, y cada semana a\u00f1adimos m\u00e1s fiestas."),
+             "Ahora mismo en Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona, Palma de Mallorca y Sevilla, y cada semana a\u00f1adimos m\u00e1s fiestas."),
             ("\u00bfCu\u00e1nto cuesta?",
              "Es gratis. Reg\u00edstrate, mira qu\u00e9 fiestas hay, qui\u00e9n va y consigue tus entradas al mejor precio."),
         ],
     },
     "en": {
         "title": "\u00bfQui\u00e9n va? \u2014 Parties & clubs tonight and this weekend in your city",
-        "desc": "Discover every party and club this week in Marbella, Ibiza, Madrid, Barcelona and Palma. Times, real prices and which friends are going. Get your tickets on \u00bfQui\u00e9n va?",
+        "desc": "Discover every party and club this week in Marbella, Ibiza, Madrid, Barcelona, Palma and Sevilla. Times, real prices and which friends are going. Get your tickets on \u00bfQui\u00e9n va?",
         "h1": "Every party in your city, in one place",
         "sub": "Discover which clubs and parties are on tonight and this weekend, see which friends are going and get your tickets at the best price.",
         "cities_h": "Choose your city",
@@ -3422,14 +3422,14 @@ _HOME_T = {
             ("What is \u00bfQui\u00e9n va?",
              "\u00bfQui\u00e9n va? brings together every party and club in your city with times, real prices and which friends are going, so you never miss a plan and grab tickets easily."),
             ("Which cities are available?",
-             "Right now Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona and Palma de Mallorca \u2014 and we add more parties every week."),
+             "Right now Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona, Palma de Mallorca and Sevilla \u2014 and we add more parties every week."),
             ("How much does it cost?",
              "It's free. Sign up, see what's on, who's going and get your tickets at the best price."),
         ],
     },
     "de": {
         "title": "\u00bfQui\u00e9n va? \u2014 Partys & Clubs heute und am Wochenende in deiner Stadt",
-        "desc": "Entdecke alle Partys und Clubs dieser Woche in Marbella, Ibiza, Madrid, Barcelona und Palma. Zeiten, echte Preise und welche Freunde hingehen. Hol dir deine Tickets bei \u00bfQui\u00e9n va?",
+        "desc": "Entdecke alle Partys und Clubs dieser Woche in Marbella, Ibiza, Madrid, Barcelona, Palma und Sevilla. Zeiten, echte Preise und welche Freunde hingehen. Hol dir deine Tickets bei \u00bfQui\u00e9n va?",
         "h1": "Alle Partys deiner Stadt an einem Ort",
         "sub": "Entdecke, welche Clubs und Partys heute und am Wochenende stattfinden, sieh wer hingeht und hol dir deine Tickets zum besten Preis.",
         "cities_h": "W\u00e4hle deine Stadt",
@@ -3441,7 +3441,7 @@ _HOME_T = {
             ("Was ist \u00bfQui\u00e9n va?",
              "\u00bfQui\u00e9n va? b\u00fcndelt alle Partys und Clubs deiner Stadt mit Zeiten, echten Preisen und welche Freunde hingehen \u2014 damit du keinen Plan verpasst und einfach Tickets bekommst."),
             ("Welche St\u00e4dte sind verf\u00fcgbar?",
-             "Aktuell Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona und Palma de Mallorca \u2014 und jede Woche kommen neue Partys dazu."),
+             "Aktuell Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona, Palma de Mallorca und Sevilla \u2014 und jede Woche kommen neue Partys dazu."),
             ("Was kostet es?",
              "Es ist kostenlos. Melde dich an, sieh was l\u00e4uft, wer hingeht und hol dir deine Tickets zum besten Preis."),
         ],
@@ -3522,6 +3522,17 @@ _HOME_HTML_TTL = 300  # seconds
 
 
 
+def _week_range_madrid() -> tuple:
+    """(monday_iso, sunday_iso) para la SEMANA actual en Europe/Madrid. Fuente
+    ÚNICA de verdad para cualquier contador 'esta semana' (lun 00:00 → dom 23:59),
+    para que home, páginas de ciudad y feed usen el MISMO rango (spec 1.1)."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+    return monday.isoformat(), sunday.isoformat()
+
+
+
 async def _render_home(lang: str, request: Request):
     import html as _html
     e = _html.escape
@@ -3548,6 +3559,7 @@ async def _render_home(lang: str, request: Request):
         "Marbella": ["marbella", "puerto banus", "banus"],
     }
     total = 0
+    week_start, week_end = _week_range_madrid()
     for i, c in enumerate(SUPPORTED_CITIES, start=1):
         cid = c["id"]
         slug = _city_slug(cid)
@@ -3555,14 +3567,15 @@ async def _render_home(lang: str, request: Request):
         tf_t = _city_tf_paths(front, slug, "tonight")[lang]
         tf_w = _city_tf_paths(front, slug, "weekend")[lang]
         try:
-            n = await db.events.count_documents({"city": city_query_value(cid), "date": {"$gte": today}})
+            n = await db.events.count_documents({"city": city_query_value(cid), "date": {"$gte": week_start, "$lte": week_end}})
         except Exception:
             n = 0
         total += n
+        count_small = f'<small>{n} {e(T["n_plans"])}</small>' if n > 0 else ''
         city_cards.append(
             f'<div class="hcity"><a class="hcity-main" href="{e(cp)}">'
             f'<span class="he">{c.get("emoji","")}</span><b>{e(c["label"])}</b>'
-            f'<small>{n} {e(T["n_plans"])}</small></a>'
+            f'{count_small}</a>'
             f'<div class="hcity-tf"><a href="{e(tf_t)}">{e(T["tonight"])}</a>'
             f'<a href="{e(tf_w)}">{e(T["weekend"])}</a></div></div>')
         itemlist.append({"@type": "ListItem", "position": i, "url": cp, "name": c["label"]})
@@ -3685,7 +3698,8 @@ async def _render_home(lang: str, request: Request):
     ogloc = {'es': 'es_ES', 'en': 'en_US', 'de': 'de_DE'}[lang]
     title = e(T["title"])
     desc = e(T["desc"])
-    stats_html = (f'<div class="stats"><span class="stat"><b>{total}</b> {e(T["n_plans"])}</span>'
+    plans_stat = f'<span class="stat"><b>{total}</b> {e(T["n_plans"])}</span>' if total > 0 else ''
+    stats_html = (f'<div class="stats">{plans_stat}'
                   f'<span class="stat">\U0001F3AB {e(ST["st_on_sale"])}</span>'
                   f'<span class="stat">\U0001F465 {e(_HOME_T[lang]["tonight"])}</span></div>')
     # OPTION B (owner): do NOT auto-redirect logged-in users to /feed. quienva.me
@@ -3945,7 +3959,7 @@ _BLOG_POSTS = {
             ("Sal con tu grupo, no en solitario", "El mejor finde es el que compartes. En ¿Quién va? ves a qué fiestas van tus amigos, te avisamos cuando alguien de tu grupo se apunta a un plan y podéis coordinar la noche desde la app para no perderos entre tanta oferta."),
         ],
         "faq": [
-            ("¿Cuáles son las mejores fiestas de este fin de semana?", "Depende de tu ciudad. En ¿Quién va? tienes la agenda del finde de Madrid, Barcelona, Ibiza, Palma y Marbella ordenada por fecha, con precios reales y qué amigos van a cada fiesta."),
+            ("¿Cuáles son las mejores fiestas de este fin de semana?", "Depende de tu ciudad. En ¿Quién va? tienes la agenda del finde de Madrid, Barcelona, Ibiza, Palma, Marbella y Sevilla ordenada por fecha, con precios reales y qué amigos van a cada fiesta."),
             ("¿Conviene comprar la entrada con antelación para el finde?", "Sí. Las fiestas del fin de semana con DJ conocido suelen agotarse, y comprar online anticipado es más barato que en taquilla y te evita la cola."),
             ("¿Qué ciudad tiene mejor ambiente de fiesta el fin de semana?", "En verano Ibiza y Marbella son imbatibles; durante todo el año Madrid y Barcelona tienen la escena más constante. Palma sube muchísimo en temporada alta."),
             ("¿Cómo organizo el finde con mis amigos?", "En ¿Quién va? cada uno marca las fiestas a las que va y todos lo veis en tiempo real, así elegís el plan donde esté vuestro grupo y compráis la entrada juntos."),
@@ -4294,12 +4308,12 @@ _BLOG_UI = {
 }
 _BLOG_IDX = {
     "es": {"title": "Blog: gu\u00edas de fiestas y discotecas en Espa\u00f1a | \u00bfQui\u00e9n va?",
-           "desc": "Gu\u00edas y consejos para salir de fiesta: mejores discotecas de Ibiza, Madrid, Barcelona, Palma y Marbella; entradas baratas y agenda del finde por ciudad.",
+           "desc": "Gu\u00edas y consejos para salir de fiesta: mejores discotecas de Ibiza, Madrid, Barcelona, Palma, Marbella y Sevilla; entradas baratas y agenda del finde por ciudad.",
            "h1": "Blog: gu\u00edas de fiestas por ciudad",
            "sub": "Aprende a moverte por la noche espa\u00f1ola: gu\u00edas por ciudad, precios reales, trucos de entradas y la agenda actualizada del finde.",
            "il": "Art\u00edculos del blog", "html_lang": "es"},
     "en": {"title": "Blog: party & nightclub guides in Spain | \u00bfQui\u00e9n va?",
-           "desc": "Guides and tips to go out in Spain: the best clubs in Ibiza, Madrid, Barcelona, Palma and Marbella, plus this weekend's party agenda by city.",
+           "desc": "Guides and tips to go out in Spain: the best clubs in Ibiza, Madrid, Barcelona, Palma, Marbella and Sevilla, plus this weekend's party agenda by city.",
            "h1": "Blog: weekend party agendas by city",
            "sub": "The updated weekend party agenda for every city in Spain, plus tips to make the most of the night.",
            "il": "Blog articles", "html_lang": "en"},
