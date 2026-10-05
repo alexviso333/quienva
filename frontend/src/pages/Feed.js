@@ -412,7 +412,7 @@ export default function Feed() {
       />
 
       {/* ---- HERO ---- */}
-      <header className="relative px-5 pt-9 pb-2">
+      <header className="relative px-5 pt-6 pb-1 lg:pt-9 lg:pb-2">
         {/* ambient neon glow */}
         <div aria-hidden className="qv-glow-a pointer-events-none absolute -top-16 -left-16 w-72 h-72 rounded-full bg-qv-primary/20 blur-[90px]" />
         <div aria-hidden className="qv-glow-b pointer-events-none absolute -top-10 right-0 w-64 h-64 rounded-full bg-qv-secondary/15 blur-[90px]" />
@@ -454,14 +454,14 @@ export default function Feed() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           >
-          <p className="flex items-center gap-2 mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
+          <p className="flex items-center gap-2 mt-4 lg:mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-qv-primary/70" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-qv-primary" />
             </span>
             {cityLabel.split(",")[0]} · {WEEKDAYS_ES[now.getDay()]} {pad2(now.getHours())}:{pad2(now.getMinutes())}
           </p>
-          <h1 className="font-display text-[44px] lg:text-6xl font-black tracking-[-0.035em] mt-2 leading-[0.9]">
+          <h1 className="font-display text-[34px] sm:text-[42px] lg:text-6xl font-black tracking-[-0.035em] mt-1.5 lg:mt-2 leading-[0.95] lg:leading-[0.9]">
             ¿Dónde está<br />la noche<span className="text-qv-primary">?</span>
           </h1>
           </motion.div>
@@ -530,7 +530,7 @@ export default function Feed() {
       )}
 
       {/* Discreet search */}
-      <div className="px-4 pt-2 pb-1">
+      <div className="px-4 pt-3 pb-1 lg:pt-2">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
           <input
