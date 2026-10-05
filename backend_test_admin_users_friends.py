@@ -26,7 +26,7 @@ import time
 import random
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://reciprocal-landing.preview.emergentagent.com/api"
+BACKEND_URL = "https://quienva-tonight.preview.emergentagent.com/api"
 
 # Admin credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

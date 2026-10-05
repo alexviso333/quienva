@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://reciprocal-landing.preview.emergentagent.com"
+BACKEND_URL = "https://quienva-tonight.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

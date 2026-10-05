@@ -6,7 +6,7 @@ This ensures the N+1 fix produces correct results, not just fast results.
 import requests
 import json
 
-BACKEND_URL = "https://reciprocal-landing.preview.emergentagent.com/api"
+BACKEND_URL = "https://quienva-tonight.preview.emergentagent.com/api"
 ADMIN_EMAIL = "test_20e12f5b@example.com"
 ADMIN_PASSWORD = "TestPass123!"
 
