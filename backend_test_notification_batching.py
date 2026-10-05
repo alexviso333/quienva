@@ -19,7 +19,7 @@ import server
 # Test configuration
 TEST_CITY = "Madrid"
 TEST_CLUB_NAME = "Club Test"
-BACKEND_URL = "https://52f22d20-4a7c-40e4-a7f5-9a81517956ee.preview.emergentagent.com"
+BACKEND_URL = "https://tonight-party.preview.emergentagent.com"
 
 async def cleanup_test_data(user_ids):
     """Remove test users and their notifications"""

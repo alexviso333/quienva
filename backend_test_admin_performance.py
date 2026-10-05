@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, date
 import uuid
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://52f22d20-4a7c-40e4-a7f5-9a81517956ee.preview.emergentagent.com/api"
+BACKEND_URL = "https://tonight-party.preview.emergentagent.com/api"
 
 # Admin credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "test_20e12f5b@example.com"

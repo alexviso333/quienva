@@ -6,7 +6,7 @@ the actual data returned vs what we expect.
 import requests
 import json
 
-BACKEND_URL = "https://52f22d20-4a7c-40e4-a7f5-9a81517956ee.preview.emergentagent.com/api"
+BACKEND_URL = "https://tonight-party.preview.emergentagent.com/api"
 ADMIN_EMAIL = "test_20e12f5b@example.com"
 ADMIN_PASSWORD = "TestPass123!"
 

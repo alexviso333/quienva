@@ -12,7 +12,7 @@ import io
 from datetime import datetime
 
 # Backend URL from frontend/.env
-BASE_URL = "https://geolocation-bug.preview.emergentagent.com/api"
+BASE_URL = "https://tonight-party.preview.emergentagent.com/api"
 
 def log(msg):
     print(f"[TEST] {msg}")
