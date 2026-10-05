@@ -687,6 +687,8 @@
     "title": "Benachrichtigungen aktivieren",
     "body": "Aktiviere sie, um nichts zu verpassen: Wir informieren dich, wenn <strong>Der Moment</strong> startet, wenn ein Freund zu einer Party geht oder wenn neue Tickets erscheinen. Du kannst es jederzeit in den Einstellungen ändern.",
     "activate": "Ja, aktivieren",
+    "banner_text": "Aktiviere Hinweise, um die Pläne deiner Gruppe nicht zu verpassen.",
+    "activate_short": "Aktivieren",
     "hint": "Tippe auf <strong>Ja, aktivieren</strong> und wähle <strong>Zulassen</strong> oder <strong>Blockieren</strong> in deinem Browser. Du kannst es jederzeit in den Einstellungen ändern.",
     "blocked": "Dein Browser blockiert Benachrichtigungen. Aktiviere sie in den Browsereinstellungen für das volle Erlebnis.",
     "continue_anyway": "Trotzdem fortfahren",

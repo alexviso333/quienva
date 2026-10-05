@@ -687,6 +687,8 @@
     "title": "Activa las notificaciones",
     "body": "Actívalas para no perderte nada: te avisamos cuando salte <strong>El Momento</strong>, cuando un amigo diga que va a una fiesta o cuando salgan entradas nuevas. Puedes cambiarlo cuando quieras en Ajustes.",
     "activate": "Sí, activar",
+    "banner_text": "Activa los avisos para no perderte los planes de tu grupo.",
+    "activate_short": "Activar",
     "hint": "Pulsa <strong>Sí, activar</strong> y elige <strong>Permitir</strong> o <strong>Bloquear</strong> en tu navegador. Podrás cambiarlo cuando quieras en Ajustes.",
     "blocked": "Tu navegador tiene las notificaciones bloqueadas. Actívalas en los ajustes del navegador para vivir la experiencia completa.",
     "continue_anyway": "Continuar de todas formas",

@@ -1,64 +1,74 @@
 import { useEffect, useState } from "react";
-import { useTranslation, Trans } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { isPushSupported, subscribeToPush } from "@/lib/push";
-import { Bell, Loader2 } from "lucide-react";
+import { Bell, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 /**
- * Blocking modal that asks for browser notification permission on the very
- * first login. If the user has already been asked (regardless of outcome)
- * or already granted/denied, the modal never shows.
+ * NON-BLOCKING notification prompt (spec 1.4).
  *
- * Design: full-screen, cannot be dismissed by clicking outside — user must
- * pick "Activar" or "Ahora no".
+ * Previously a full-screen modal (z-[100] fixed inset-0) that intercepted every
+ * click and blocked the whole UI. Now it's a slim banner anchored at the bottom
+ * (above the bottom nav) that NEVER covers the screen: the wrapper is
+ * pointer-events-none so taps pass through everywhere except the banner itself.
+ *
+ * Behaviour:
+ *  - Only shows once onboarded, push is supported, and permission isn't granted.
+ *  - "Activar" asks the browser for permission.
+ *  - X dismisses and snoozes the banner for 7 days (per user).
  */
+const SNOOZE_DAYS = 7;
+
 export default function PushPermissionGate() {
   const { t } = useTranslation();
   const { user, loading } = useAuth();
   const [show, setShow] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (loading || !user) {
       setShow(false);
       return;
     }
-    // Only stop asking once notifications are actually granted for this user.
     const grantedKey = `qv_push_granted_${user.user_id}`;
+    const snoozeKey = `qv_push_snooze_until_${user.user_id}`;
     if (localStorage.getItem(grantedKey) === "1") {
       setShow(false);
       return;
     }
-    // Users still in the intro flow (/onboarding) haven't finished setup yet —
-    // don't stack this gate on top of it.
+    // Still in the intro flow — don't stack on top of onboarding.
     if (localStorage.getItem("qv_onboarded") !== "1") {
       setShow(false);
       return;
     }
     if (!isPushSupported()) {
-      // Browser doesn't support push — don't trap the user.
       localStorage.setItem(grantedKey, "1");
       setShow(false);
       return;
     }
-    // Already granted at the browser level -> record and skip.
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
       localStorage.setItem(grantedKey, "1");
       setShow(false);
       return;
     }
-    // If the browser has hard-denied, we cannot force it — show the escape hatch.
-    if (typeof Notification !== "undefined" && Notification.permission === "denied") {
-      setFailed(true);
+    // Snoozed (user tapped X within the last 7 days) — stay quiet.
+    const snoozeUntil = Number(localStorage.getItem(snoozeKey) || 0);
+    if (snoozeUntil && Date.now() < snoozeUntil) {
+      setShow(false);
+      return;
     }
-    const timer = setTimeout(() => setShow(true), 400);
+    const timer = setTimeout(() => setShow(true), 1200);
     return () => clearTimeout(timer);
   }, [user, loading]);
 
-  const markDone = () => {
-    if (user) localStorage.setItem(`qv_push_granted_${user.user_id}`, "1");
+  const dismiss = () => {
+    if (user) {
+      localStorage.setItem(
+        `qv_push_snooze_until_${user.user_id}`,
+        String(Date.now() + SNOOZE_DAYS * 24 * 60 * 60 * 1000)
+      );
+    }
     setShow(false);
   };
 
@@ -67,11 +77,12 @@ export default function PushPermissionGate() {
     try {
       await subscribeToPush();
       toast.success(t("push.toast_activated"));
-      markDone();
+      if (user) localStorage.setItem(`qv_push_granted_${user.user_id}`, "1");
+      setShow(false);
     } catch (e) {
-      // Could not enable (denied at OS/browser level). Let them continue.
       toast.error(e.message || t("push.toast_error"));
-      setFailed(true);
+      // Can't enable (denied at browser level) — snooze so we don't nag.
+      dismiss();
     } finally {
       setSubmitting(false);
     }
@@ -81,47 +92,33 @@ export default function PushPermissionGate() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/85 backdrop-blur-sm"
+      className="pointer-events-none fixed inset-x-0 bottom-[78px] lg:bottom-5 z-40 px-3"
       data-testid="push-permission-gate"
     >
-      <div className="relative w-full max-w-sm rounded-3xl qv-glass border border-white/10 p-6 text-center">
-        <div className="mx-auto w-16 h-16 rounded-full bg-qv-primary/20 flex items-center justify-center mb-4">
-          <Bell className="w-8 h-8 text-qv-primary" />
+      <div className="pointer-events-auto mx-auto max-w-md flex items-center gap-3 rounded-2xl qv-glass border border-white/12 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.8)] p-3">
+        <div className="w-9 h-9 rounded-full bg-qv-primary/20 flex items-center justify-center shrink-0">
+          <Bell className="w-4 h-4 text-qv-primary" />
         </div>
-        <h2 className="font-display text-xl font-black text-white leading-tight">
-          {t("push.title")}
-        </h2>
-        <p className="text-white/70 text-sm mt-2 leading-relaxed">
-          <Trans i18nKey="push.body" components={{ strong: <span className="text-qv-secondary font-semibold" /> }} />
+        <p className="flex-1 min-w-0 text-[13px] leading-tight text-white/85">
+          {t("push.banner_text", "Activa los avisos para no perderte los planes de tu grupo.")}
         </p>
         <button
           onClick={activate}
           disabled={submitting}
-          className="mt-5 w-full py-3 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60"
           data-testid="push-permission-activate"
+          className="qv-btn shrink-0 h-9 px-4 rounded-full bg-qv-primary text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60"
         >
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-          {t("push.activate")}
+          {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+          {t("push.activate_short", "Activar")}
         </button>
-        {!failed && (
-          <p className="mt-3 text-white/45 text-xs leading-relaxed">
-            <Trans i18nKey="push.hint" components={{ strong: <span className="text-white/70 font-semibold" /> }} />
-          </p>
-        )}
-        {failed && (
-          <p className="mt-4 text-amber-300/90 text-xs leading-relaxed">
-            {t("push.blocked")}
-          </p>
-        )}
-        {/* Always-available escape hatch: notifications are never a blocking wall
-            (Sprint 4). The user can continue to the app at any time. */}
         <button
-          onClick={markDone}
+          onClick={dismiss}
           disabled={submitting}
-          className="mt-2 w-full py-2.5 rounded-2xl text-white/50 text-xs font-semibold hover:text-white/80"
-          data-testid="push-permission-later"
+          data-testid="push-permission-dismiss"
+          aria-label={t("feed.dismiss", "Cerrar")}
+          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white/45 hover:text-white/80 active:scale-90"
         >
-          {t("push.continue_anyway", "Ahora no")}
+          <X className="w-4 h-4" />
         </button>
       </div>
     </div>

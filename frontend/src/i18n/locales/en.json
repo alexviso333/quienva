@@ -687,6 +687,8 @@
     "title": "Turn on notifications",
     "body": "Turn them on so you don't miss a thing: we'll alert you when <strong>The Moment</strong> drops, when a friend says they're going to a party, or when new tickets go on sale. You can change it anytime in Settings.",
     "activate": "Yes, turn on",
+    "banner_text": "Turn on alerts so you don't miss your group's plans.",
+    "activate_short": "Turn on",
     "hint": "Tap <strong>Yes, turn on</strong> and choose <strong>Allow</strong> or <strong>Block</strong> in your browser. You can change it anytime in Settings.",
     "blocked": "Your browser has notifications blocked. Turn them on in your browser settings for the full experience.",
     "continue_anyway": "Continue anyway",
