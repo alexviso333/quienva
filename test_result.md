@@ -116,6 +116,90 @@ user_problem_statement: |
   código único y puntos para ambas partes.
 
 
+backend:
+  - task: "Plan compartible /p/{slug} — crear, responder (sin login), autocierre por quórum, SSR y OG dinámico"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          PLAN COMPARTIBLE BACKEND TESTING COMPLETE (2026-10)
+          
+          🎉 ALL 16 TESTS PASSED (100% SUCCESS RATE)
+          
+          Tested the NEW "Plan compartible" feature as specified in the review request.
+          All endpoints and behaviors working correctly with no issues.
+          
+          ✅ TEST RESULTS (16/16 scenarios PASSED):
+          
+          1. POST /api/plans - CREATE PLAN (2 tests):
+             ✅ Create plan with 2 free-text options → 200 with {slug, creador_token, plan}
+             ✅ Each option has opt_id (UUID), no Mongo ObjectId leaks
+             ✅ Create with empty opciones [] → 400 (correctly rejected)
+          
+          2. GET /api/plans/{slug} - PUBLIC PLAN (2 tests):
+             ✅ Get existing plan → 200 with counts, participants, opciones, estado
+             ✅ Get non-existent plan → 404 (correctly handled)
+          
+          3. POST /api/plans/{slug}/respond - RESPOND WITHOUT LOGIN (5 tests):
+             ✅ Missing apodo → 400 (validation working)
+             ✅ Invalid intencion → 400 (validation working)
+             ✅ First response → 200 with participante_token, counts.dentro increments
+             ✅ Re-send with SAME participante_token + different intencion → updates same participant
+                (total participants stays same, NOT duplicated) ✓
+             ✅ Invalid opcion_preferida (opt_id) → ignored, stored as null ✓
+          
+          4. AUTOCIERRE BY QUORUM (3 tests):
+             ✅ Created plan with umbral_personas=2, no hora_limite
+             ✅ After 1st "dentro" response → estado still "abierto"
+             ✅ After 2nd "dentro" response → estado "cerrado", opcion_ganadora set ✓
+             ✅ Try to respond to closed plan → 409 (correctly rejected)
+          
+          5. CLOSE/CANCEL AUTHORIZATION (2 tests):
+             ✅ POST /api/plans/{slug}/close with WRONG x-participante-token → 403 ✓
+             ✅ POST /api/plans/{slug}/close with correct creador_token → 200, estado "cerrado" ✓
+             ✅ POST /api/plans/{slug}/cancel with WRONG token → 403 ✓
+             ✅ POST /api/plans/{slug}/cancel with correct token → 200, estado "cancelado" ✓
+          
+          6. SSR HTML PAGES (3 tests):
+             ✅ GET /api/p/{slug} → 200 text/html with og:title, og:image, window.__PLAN__ ✓
+             ✅ GET /api/p/nuevo → 200 text/html (creation page) ✓
+             ✅ GET /api/p/nonexistent → 404 HTML ✓
+          
+          7. OG IMAGE (1 test):
+             ✅ GET /api/og/plan/{slug} → 200 image/png, size 102KB (non-trivial) ✓
+          
+          CONCLUSION:
+          All Plan compartible backend requirements met perfectly:
+          ✅ POST /api/plans creates plan with validation (empty opciones rejected)
+          ✅ Each option receives opt_id (UUID), no Mongo ObjectId leaks
+          ✅ GET /api/plans/{slug} returns public plan (404 for unknown)
+          ✅ POST /api/plans/{slug}/respond works WITHOUT login
+          ✅ Response validation working (apodo required, intencion validated)
+          ✅ Re-sending with same participante_token UPDATES (no duplication)
+          ✅ Invalid opcion_preferida ignored (stored as null)
+          ✅ AUTOCIERRE triggers when quorum reached (estado → "cerrado", opcion_ganadora set)
+          ✅ Responding to closed plan returns 409
+          ✅ POST close/cancel require correct creador_token (403 for wrong token)
+          ✅ GET /api/p/{slug} returns HTML with OG tags and window.__PLAN__
+          ✅ GET /api/p/nuevo returns creation HTML page
+          ✅ GET /api/og/plan/{slug} returns PNG image (1200x630, non-trivial size)
+          
+          CONTEXT:
+          - Event DB is empty (environment was reset), so used FREE-TEXT options (texto_libre / venue_nombre)
+          - Collections: db.plans and db.plan_participants (UUIDs, no ObjectId)
+          - No external secrets required
+          - Base URL: REACT_APP_BACKEND_URL with /api prefix
+          
+          Test file: /app/backend_test_plan_compartible.py
+          All tests executed successfully with concrete evidence for each scenario.
+
+
   - task: "iOS app icon pixel verification (no white borders/corners, logo intact)"
     implemented: true
     working: true
@@ -2295,17 +2379,86 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "2.17"
-  test_sequence: 22
+  test_sequence: 23
   run_ui: true
 
 test_plan:
   current_focus:
-    - "BACKEND: nuevo campo signups_today en serialize_event (apuntados en las últimas 24h)"
+    - "BACKEND: Plan compartible /p/{slug} — crear, responder (sin login), autocierre por quórum, SSR y OG dinámico"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      TEST BACKEND ONLY (2026-10) — NUEVA FEATURE "Plan compartible" (/p/{slug}). Todo en
+      backend/server.py (bloque insertado antes de app.include_router). Colecciones nuevas:
+      db.plans y db.plan_participants (UUIDs, nunca ObjectId). NO requiere secretos externos.
+      ENDPOINTS A VERIFICAR:
+       1. POST /api/plans  — crea plan. Body: {titulo, mensaje_creador, ciudad, umbral_personas,
+          hora_limite, creador_apodo, opciones:[{texto_libre|evento_id, venue_nombre, hora, precio_desde}]}.
+          Máx 3 opciones; exige >=1 opción válida (400 si vacío). Devuelve {slug, creador_token, plan}.
+          Cada opción recibe un opt_id (uuid). Si una opción trae evento_id existente, se enriquece
+          con venue/hora/imagen/precio del evento.
+       2. GET /api/plans/{slug} — devuelve el plan público (counts, participants, opciones, estado).
+          404 si no existe.
+       3. POST /api/plans/{slug}/respond — SIN login. Body {apodo (obligatorio, 400 si falta),
+          intencion in [dentro,voy_si,depende,paso] (400 si no válida), opcion_preferida (opt_id|null),
+          telefono?, participante_token?}. Primera vez devuelve participante_token nuevo; reenviar
+          con ese token DEBE actualizar la misma respuesta (no duplicar participante).
+       4. AUTOCIERRE: si al responder "dentro" se cumple count(dentro) >= umbral_personas y (sin
+          hora_limite o ahora <= hora_limite), el plan pasa a estado "cerrado" con opcion_ganadora
+          (la opción más votada por opcion_preferida; si ninguna, la de orden 1). Responder a un
+          plan ya cerrado => 409.
+       5. POST /api/plans/{slug}/close y /cancel — solo creador (header x-participante-token =
+          creador_token, o usuario logueado = creator_user_id). 403 con token incorrecto. close
+          fija opcion_ganadora; cancel pone estado "cancelado".
+       6. GET /api/p/{slug} — HTML SSR con meta og:title/og:description/og:image y window.__PLAN__.
+          GET /api/p/nuevo — HTML de creación. 404 HTML si slug no existe.
+       7. GET /api/og/plan/{slug} — imagen PNG (content-type image/png).
+      IMPORTANTE: NO pedir tests de frontend. NO tocar otras features. El feed de eventos está
+      vacío (se perdió la BD + .env en un reset de entorno; se restauró .env con Mongo local,
+      DB_NAME=quienva, admin admin@quienva.app / QuienVa2025!). Por eso usa opciones de texto
+      libre para probar los planes (no hay eventos reales todavía).
+  - agent: "testing"
+    message: |
+      PLAN COMPARTIBLE BACKEND TESTING COMPLETE (2026-10)
+      
+      ✅ ALL 16 TESTS PASSED (100% SUCCESS RATE)
+      
+      Tested the NEW "Plan compartible" backend feature as requested. All endpoints and behaviors
+      working correctly with concrete evidence for each scenario.
+      
+      TEST SUMMARY:
+      1. ✅ POST /api/plans - create plan with validation (empty opciones rejected with 400)
+      2. ✅ GET /api/plans/{slug} - public plan retrieval (404 for unknown slug)
+      3. ✅ POST /api/plans/{slug}/respond - respond WITHOUT login (validation working)
+      4. ✅ Re-sending with same participante_token UPDATES (no duplication)
+      5. ✅ Invalid opcion_preferida ignored (stored as null)
+      6. ✅ AUTOCIERRE triggers when quorum reached (estado → "cerrado", opcion_ganadora set)
+      7. ✅ Responding to closed plan returns 409
+      8. ✅ POST close/cancel require correct creador_token (403 for wrong token)
+      9. ✅ GET /api/p/{slug} returns HTML with og:title, og:image, window.__PLAN__
+      10. ✅ GET /api/p/nuevo returns creation HTML page
+      11. ✅ GET /api/og/plan/{slug} returns PNG image (102KB, non-trivial size)
+      
+      KEY VERIFICATIONS:
+      ✅ Each option receives opt_id (UUID), no Mongo ObjectId leaks
+      ✅ Participant deduplication working (same token updates, not duplicates)
+      ✅ Autocierre logic correct (quorum reached → plan closes automatically)
+      ✅ Authorization working (only creator can close/cancel)
+      ✅ SSR HTML pages with OG tags for social sharing
+      ✅ Dynamic OG image generation (1200x630 PNG)
+      
+      CONTEXT:
+      - Event DB is empty (environment reset), used FREE-TEXT options as instructed
+      - Collections: db.plans and db.plan_participants (UUIDs only)
+      - Base URL: REACT_APP_BACKEND_URL with /api prefix
+      
+      Test file: /app/backend_test_plan_compartible.py
+      See full test results in backend task status_history above.
+
   - agent: "main"
     message: |
       TEST BACKEND ONLY (2026-10) — cambio pequeño y aislado. He añadido un campo nuevo

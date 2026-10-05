@@ -645,3 +645,31 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 
 **Archivos modificados:** `frontend/src/pages/Feed.js`, `frontend/src/components/EventCard.js`, `frontend/src/index.css`, `design_guidelines.json`.
 
+
+## 2026-10-05 — Continuación (spec "inmejorable")
+### Bloque 1.3 (confianza) — DONE
+- Reescritos TODOS los textos editoriales SEO de Madrid para mencionar solo salas del
+  catálogo (Fitz, Tiffany's, LuLa Club, Perro Negro, Chango, Vandido, Teatro Magno, Opium,
+  Medias Puri, Deseo/Nazca). Eliminadas menciones a Kapital/Fabrik/Teatro Barceló/Mondo/Joy/
+  Icon/Independance/Goya/Panda de la prosa (/fiestas/madrid, guía de precios, blog, esta-noche,
+  este-finde). Barcelona ya usaba salas reales (Shôko/Opium/Pacha en catálogo). 35 ediciones.
+
+### Bloque 3 — Plan compartible /p/{slug} (objeto viral central) — MVP DONE
+- Colecciones: db.plans, db.plan_participants (UUIDs).
+- Endpoints: POST /api/plans, GET /api/plans/{slug}, POST /respond (sin login, apodo+token),
+  POST /close, POST /cancel (solo creador vía creador_token), GET /api/p/{slug} (SSR+OG),
+  GET /api/p/nuevo (creación), GET /api/og/plan/{slug} (PNG 1200x630 con PIL).
+- Lógica: autocierre por quórum (dentro>=umbral dentro de hora_limite) con opción ganadora;
+  respuesta sin cuenta (participante_token en localStorage); share wa.me; intenciones
+  dentro/voy_si/depende/paso. Verificado: 16/16 backend tests + capturas (página + OG).
+- Vercel rewrites añadidos: /p/:slug y /og-plan/:slug.png → backend.
+- PENDIENTE (requiere config/claves): notificación WhatsApp/SMS al cerrar (guarda teléfono,
+  envío no implementado); cron de conversión a Noche (3.7); instrumentación PostHog (bloque 2);
+  entradas "Proponer a mi grupo" en feed/ficha (3.8); API_PUBLIC_BASE + CORS para prod.
+
+### INCIDENCIA DE ENTORNO (2026-10-05)
+- Al retomar, backend/.env, frontend/.env y la BD de la app estaban VACÍOS/ausentes (reset).
+- Restaurado: .env backend (MONGO_URL local, DB_NAME=quienva, URLs de preview, VAPID nuevas,
+  admin admin@quienva.app / QuienVa2025!), frontend .env (REACT_APP_BACKEND_URL=preview).
+- SECRETOS PERDIDOS a re-aportar por el usuario: FourVenues (token+slug → feed de eventos),
+  ClubTickets (afiliado), Google OAuth, Cloudinary, PostHog project key.

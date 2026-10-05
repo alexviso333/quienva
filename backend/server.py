@@ -13095,6 +13095,819 @@ async def next_badges(user: dict = Depends(get_current_user), limit: int = Query
     out.sort(key=lambda x: (x["remaining"], -x["progress"]))
     return out[:limit]
 
+
+# =========================================================================
+# PLAN COMPARTIBLE  (/p/{slug})  — objeto viral central
+# Backend: modelos + endpoints + pagina SSR autocontenida + OG dinamico (PIL)
+# No depende de secretos externos. Las notificaciones al cerrar (WhatsApp/SMS)
+# quedan como no-op hasta que haya proveedor; se guarda el telefono.
+# =========================================================================
+
+_PLAN_INTENTS = {"dentro", "voy_si", "depende", "paso"}
+_PLAN_INTENT_EMOJI = {"dentro": "\U0001F7E2", "voy_si": "\U0001F7E1",
+                      "depende": "\U0001F7E0", "paso": "\u26AB"}
+_PLAN_INTENT_LABEL = {"dentro": "Dentro", "voy_si": "Voy si", "depende": "Depende", "paso": "Paso"}
+
+
+def _plan_now():
+    return datetime.now(timezone.utc)
+
+
+def _plan_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
+async def _plan_unique_slug(titulo: str, ciudad: str) -> str:
+    base = _slugify(titulo or ciudad or "plan")[:40] or "plan"
+    for _ in range(6):
+        slug = f"{base}-{secrets.token_hex(2)}"
+        if not await db.plans.find_one({"slug": slug}, {"_id": 1}):
+            return slug
+    return f"{base}-{secrets.token_hex(4)}"
+
+
+def _plan_ip_hash(request: Request) -> str:
+    ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "") or ""
+    ip = ip.split(",")[0].strip()
+    return hashlib.sha256((ip + "|qvplan").encode()).hexdigest()[:16]
+
+
+async def _plan_optional_user(request: Request):
+    try:
+        return await get_current_user(request)
+    except Exception:
+        return None
+
+
+def _plan_track(event: str, **props):
+    # Hook de instrumentacion (PostHog) — se conectara en el Bloque 2.
+    try:
+        logger.info(f"[plan_event] {event} {json.dumps(props, default=str)}")
+    except Exception:
+        pass
+
+
+class PlanOptionIn(BaseModel):
+    evento_id: Optional[str] = None
+    texto_libre: Optional[str] = None
+    venue_nombre: str = ""
+    venue_direccion: str = ""
+    hora: str = ""
+    precio_desde: Optional[float] = None
+
+
+class PlanCreateIn(BaseModel):
+    ciudad: str = "Madrid"
+    titulo: str = ""
+    mensaje_creador: str = ""
+    fecha_objetivo: Optional[str] = None
+    opciones: List[PlanOptionIn] = Field(default_factory=list)
+    umbral_personas: Optional[int] = None
+    hora_limite: Optional[str] = None
+    creador_apodo: str = ""
+
+
+class PlanRespondIn(BaseModel):
+    apodo: str = ""
+    intencion: str = ""
+    opcion_preferida: Optional[str] = None
+    telefono: Optional[str] = None
+    participante_token: Optional[str] = None
+    crear_cuenta: bool = False
+
+
+async def _plan_build_option(opt: "PlanOptionIn", orden: int) -> dict:
+    o = {
+        "opt_id": str(uuid.uuid4()),
+        "orden": orden,
+        "evento_id": opt.evento_id or None,
+        "texto_libre": (opt.texto_libre or "").strip() or None,
+        "venue_nombre": (opt.venue_nombre or "").strip(),
+        "venue_direccion": (opt.venue_direccion or "").strip(),
+        "hora": (opt.hora or "").strip(),
+        "precio_desde": opt.precio_desde,
+        "image_url": "",
+    }
+    if o["evento_id"]:
+        ev = await db.events.find_one({"id": o["evento_id"]}, {"_id": 0})
+        if ev:
+            o["venue_nombre"] = o["venue_nombre"] or ev.get("venue") or ev.get("name") or ""
+            o["venue_direccion"] = o["venue_direccion"] or ev.get("address") or ""
+            o["hora"] = o["hora"] or ev.get("time") or ""
+            o["image_url"] = ev.get("image_url") or ""
+            if o["precio_desde"] is None:
+                tiers = ev.get("price_tiers") or []
+                prices = [t.get("price") for t in tiers if isinstance(t, dict) and t.get("price")]
+                if prices:
+                    o["precio_desde"] = min(prices)
+    if not o["venue_nombre"] and o["texto_libre"]:
+        o["venue_nombre"] = o["texto_libre"]
+    return o
+
+
+def _plan_counts(participants: list) -> dict:
+    c = {k: 0 for k in _PLAN_INTENTS}
+    for p in participants:
+        if p.get("intencion") in c:
+            c[p["intencion"]] += 1
+    c["total"] = len(participants)
+    return c
+
+
+def _plan_pick_winner(plan: dict, participants: list):
+    opts = plan.get("opciones") or []
+    if not opts:
+        return None
+    if len(opts) == 1:
+        return opts[0]["opt_id"]
+    tally = {}
+    for p in participants:
+        if p.get("intencion") in ("dentro", "voy_si") and p.get("opcion_preferida"):
+            tally[p["opcion_preferida"]] = tally.get(p["opcion_preferida"], 0) + 1
+    if tally:
+        best = max(tally.items(), key=lambda kv: kv[1])[0]
+        return best
+    return opts[0]["opt_id"]
+
+
+async def _plan_maybe_autoclose(plan: dict) -> dict:
+    """If quorum reached (within deadline) close the plan and pick winner."""
+    if plan.get("estado") != "abierto":
+        return plan
+    umbral = plan.get("umbral_personas")
+    if not umbral:
+        return plan
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    dentro = sum(1 for p in participants if p.get("intencion") == "dentro")
+    hora_limite = plan.get("hora_limite")
+    past_deadline = False
+    if hora_limite:
+        try:
+            dl = datetime.fromisoformat(hora_limite)
+            if dl.tzinfo is None:
+                dl = dl.replace(tzinfo=ZoneInfo("Europe/Madrid"))
+            past_deadline = _plan_now() > dl
+        except Exception:
+            past_deadline = False
+    if dentro >= umbral and not past_deadline:
+        winner = _plan_pick_winner(plan, participants)
+        now = _plan_now()
+        await db.plans.update_one({"id": plan["id"]}, {"$set": {
+            "estado": "cerrado", "closed_at": now, "opcion_ganadora": winner,
+            "cierre_motivo": "quorum"}})
+        plan.update({"estado": "cerrado", "closed_at": now, "opcion_ganadora": winner,
+                     "cierre_motivo": "quorum"})
+        _plan_track("plan_closed_by_quorum", plan_id=plan["id"],
+                    participants_count=len(participants))
+    return plan
+
+
+def _plan_public(plan: dict, participants: list, viewer_token: str = None, viewer_user=None) -> dict:
+    counts = _plan_counts(participants)
+    parts_pub = [{
+        "apodo": p.get("apodo") or "Alguien",
+        "intencion": p.get("intencion"),
+        "emoji": _PLAN_INTENT_EMOJI.get(p.get("intencion"), ""),
+        "opcion_preferida": p.get("opcion_preferida"),
+        "is_creator": bool(p.get("is_creator")),
+    } for p in participants]
+    mine = None
+    for p in participants:
+        if viewer_token and p.get("participante_token") == viewer_token:
+            mine = {"apodo": p.get("apodo"), "intencion": p.get("intencion"),
+                    "opcion_preferida": p.get("opcion_preferida")}
+            break
+        if viewer_user and p.get("user_id") and p.get("user_id") == viewer_user.get("id"):
+            mine = {"apodo": p.get("apodo"), "intencion": p.get("intencion"),
+                    "opcion_preferida": p.get("opcion_preferida")}
+    is_creator = False
+    if viewer_token and plan.get("creador_token") == viewer_token:
+        is_creator = True
+    if viewer_user and viewer_user.get("id") and viewer_user.get("id") == plan.get("creator_user_id"):
+        is_creator = True
+    return {
+        "slug": plan.get("slug"),
+        "ciudad": plan.get("ciudad"),
+        "titulo": plan.get("titulo"),
+        "mensaje_creador": plan.get("mensaje_creador"),
+        "creador_apodo": plan.get("creador_apodo"),
+        "fecha_objetivo": plan.get("fecha_objetivo"),
+        "opciones": plan.get("opciones") or [],
+        "umbral_personas": plan.get("umbral_personas"),
+        "hora_limite": plan.get("hora_limite"),
+        "estado": plan.get("estado"),
+        "opcion_ganadora": plan.get("opcion_ganadora"),
+        "cierre_motivo": plan.get("cierre_motivo"),
+        "counts": counts,
+        "participants": parts_pub,
+        "mine": mine,
+        "is_creator": is_creator,
+    }
+
+
+@api_router.post("/plans")
+async def create_plan(body: PlanCreateIn, request: Request):
+    user = await _plan_optional_user(request)
+    opciones_in = (body.opciones or [])[:3]
+    opciones = []
+    for i, o in enumerate(opciones_in, start=1):
+        if not (o.evento_id or (o.texto_libre and o.texto_libre.strip()) or (o.venue_nombre and o.venue_nombre.strip())):
+            continue
+        opciones.append(await _plan_build_option(o, i))
+    if not opciones:
+        raise HTTPException(status_code=400, detail="Anade al menos una opcion de plan")
+    titulo = (body.titulo or "").strip()[:60]
+    slug = await _plan_unique_slug(titulo, body.ciudad)
+    creador_token = _plan_token()
+    creador_apodo = (body.creador_apodo or (user.get("name") if user else "") or "Yo").strip()[:40]
+    plan = {
+        "id": str(uuid.uuid4()),
+        "slug": slug,
+        "creator_user_id": user.get("id") if user else None,
+        "creador_token": creador_token,
+        "creador_apodo": creador_apodo,
+        "ciudad": (body.ciudad or "Madrid").strip(),
+        "titulo": titulo,
+        "mensaje_creador": (body.mensaje_creador or "").strip()[:140],
+        "fecha_objetivo": (body.fecha_objetivo or None),
+        "opciones": opciones,
+        "umbral_personas": body.umbral_personas if (body.umbral_personas and body.umbral_personas > 1) else None,
+        "hora_limite": (body.hora_limite or None),
+        "estado": "abierto",
+        "opcion_ganadora": None,
+        "cierre_motivo": None,
+        "created_at": _plan_now(),
+        "closed_at": None,
+        "noche_id": None,
+    }
+    await db.plans.insert_one(plan)
+    _plan_track("plan_created", plan_id=plan["id"], num_opciones=len(opciones),
+                has_quorum=bool(plan["umbral_personas"]), has_hora_limite=bool(plan["hora_limite"]))
+    return {"slug": slug, "creador_token": creador_token,
+            "plan": _plan_public(plan, [], viewer_token=creador_token)}
+
+
+@api_router.get("/plans/{slug}")
+async def get_plan(slug: str, request: Request):
+    plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+    plan = await _plan_maybe_autoclose(plan)
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    viewer_token = request.headers.get("x-participante-token") or request.query_params.get("pt")
+    user = await _plan_optional_user(request)
+    return _plan_public(plan, participants, viewer_token=viewer_token, viewer_user=user)
+
+
+@api_router.post("/plans/{slug}/respond")
+async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
+    plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+    if plan.get("estado") != "abierto":
+        raise HTTPException(status_code=409, detail="El plan ya esta cerrado")
+    if body.intencion not in _PLAN_INTENTS:
+        raise HTTPException(status_code=400, detail="Intencion no valida")
+    apodo = (body.apodo or "").strip()[:40]
+    if not apodo:
+        raise HTTPException(status_code=400, detail="Dinos como te llaman")
+    user = await _plan_optional_user(request)
+    opt_ids = {o["opt_id"] for o in (plan.get("opciones") or [])}
+    opcion = body.opcion_preferida if body.opcion_preferida in opt_ids else None
+    token = body.participante_token or _plan_token()
+    existing = None
+    if body.participante_token:
+        existing = await db.plan_participants.find_one(
+            {"plan_id": plan["id"], "participante_token": body.participante_token}, {"_id": 0})
+    if not existing and user:
+        existing = await db.plan_participants.find_one(
+            {"plan_id": plan["id"], "user_id": user.get("id")}, {"_id": 0})
+        if existing:
+            token = existing.get("participante_token") or token
+    doc = {
+        "apodo": apodo,
+        "intencion": body.intencion,
+        "opcion_preferida": opcion,
+        "telefono": (body.telefono or "").strip() or None,
+        "user_id": user.get("id") if user else (existing.get("user_id") if existing else None),
+        "updated_at": _plan_now(),
+    }
+    if existing:
+        await db.plan_participants.update_one(
+            {"id": existing["id"]}, {"$set": doc})
+        pid = existing["id"]
+    else:
+        doc.update({
+            "id": str(uuid.uuid4()),
+            "plan_id": plan["id"],
+            "participante_token": token,
+            "is_creator": bool(plan.get("creador_token") and False),
+            "ip_hash": _plan_ip_hash(request),
+            "created_at": _plan_now(),
+        })
+        await db.plan_participants.insert_one(doc)
+        pid = doc["id"]
+        _plan_track("plan_response_submitted", plan_id=plan["id"],
+                    intencion=body.intencion, opcion_preferida=opcion)
+    plan = await _plan_maybe_autoclose(plan)
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    pub = _plan_public(plan, participants, viewer_token=token, viewer_user=user)
+    return {"participante_token": token, "plan": pub}
+
+
+@api_router.post("/plans/{slug}/close")
+async def close_plan(slug: str, request: Request):
+    plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+    token = request.headers.get("x-participante-token") or request.query_params.get("pt")
+    user = await _plan_optional_user(request)
+    allowed = (token and token == plan.get("creador_token")) or \
+              (user and user.get("id") and user.get("id") == plan.get("creator_user_id"))
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Solo el creador puede cerrar el plan")
+    if plan.get("estado") != "abierto":
+        participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+        return _plan_public(plan, participants, viewer_token=token, viewer_user=user)
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    winner = _plan_pick_winner(plan, participants)
+    now = _plan_now()
+    await db.plans.update_one({"id": plan["id"]}, {"$set": {
+        "estado": "cerrado", "closed_at": now, "opcion_ganadora": winner, "cierre_motivo": "manual"}})
+    plan.update({"estado": "cerrado", "closed_at": now, "opcion_ganadora": winner, "cierre_motivo": "manual"})
+    _plan_track("plan_closed_manually", plan_id=plan["id"])
+    return _plan_public(plan, participants, viewer_token=token, viewer_user=user)
+
+
+@api_router.post("/plans/{slug}/cancel")
+async def cancel_plan(slug: str, request: Request):
+    plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+    token = request.headers.get("x-participante-token") or request.query_params.get("pt")
+    user = await _plan_optional_user(request)
+    allowed = (token and token == plan.get("creador_token")) or \
+              (user and user.get("id") and user.get("id") == plan.get("creator_user_id"))
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Solo el creador puede cancelar el plan")
+    await db.plans.update_one({"id": plan["id"]}, {"$set": {
+        "estado": "cancelado", "closed_at": _plan_now(), "cierre_motivo": "cancelado"}})
+    _plan_track("plan_cancelled", plan_id=plan["id"])
+    plan["estado"] = "cancelado"
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    return _plan_public(plan, participants, viewer_token=token, viewer_user=user)
+
+
+# ---- Open Graph dinamico 1200x630 -------------------------------------------
+@api_router.get("/og/plan/{slug}")
+async def og_plan_image(slug: str):
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
+    W, H = 1200, 630
+
+    def font(kind, size):
+        fname = "Unbounded.ttf" if kind == "title" else "Outfit.ttf"
+        try:
+            return ImageFont.truetype(os.path.join(_ASSETS_FONTS, fname), size)
+        except Exception:
+            return ImageFont.load_default()
+
+    img = Image.new("RGB", (W, H), (10, 7, 18))
+    for y in range(H):
+        t = y / H
+        r = int(18 + 150 * (1 - t))
+        g = int(8 + 10 * (1 - t))
+        b = int(32 + 90 * t)
+        img.paste((min(255, r), min(255, g), min(255, b)), (0, y, W, y + 1))
+    glow = Image.new("RGB", (W, H), (0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    gd.ellipse([W - 520, -260, W + 160, 300], fill=(236, 72, 153))
+    glow = glow.filter(ImageFilter.GaussianBlur(180))
+    img = Image.blend(img, glow, 0.35)
+    draw = ImageDraw.Draw(img)
+
+    draw.text((60, 54), "\u00bfQui\u00e9n va?", font=font("title", 40), fill=(255, 255, 255))
+
+    if not plan:
+        draw.text((60, 280), "Plan no encontrado", font=font("title", 60), fill=(255, 255, 255))
+        buf = io.BytesIO(); img.save(buf, "PNG")
+        return StarletteResponse(content=buf.getvalue(), media_type="image/png")
+
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    counts = _plan_counts(participants)
+    titulo = plan.get("titulo") or (f"\u00bfQui\u00e9n va a {plan['opciones'][0]['venue_nombre']}?"
+                                    if plan.get("opciones") else "Monta tu plan")
+
+    # Titulo (wrap a 2 lineas)
+    tf = font("title", 72)
+    words = titulo.split(); lines = []; cur = ""
+    for w in words:
+        test = (cur + " " + w).strip()
+        if draw.textlength(test, font=tf) <= W - 120 or not cur:
+            cur = test
+        else:
+            lines.append(cur); cur = w
+    if cur:
+        lines.append(cur)
+    y = 200
+    for ln in lines[:2]:
+        draw.text((60, y), ln, font=tf, fill=(255, 255, 255)); y += 86
+
+    sub = plan.get("ciudad") or ""
+    if plan.get("opciones"):
+        vn = plan["opciones"][0].get("venue_nombre") or ""
+        if vn and vn.lower() not in (titulo or "").lower():
+            sub = f"{vn} \u00b7 {sub}" if sub else vn
+    if sub:
+        draw.text((60, y + 10), sub, font=font("body", 38), fill=(226, 206, 240)); y += 60
+
+    # Barra de progreso visual
+    umbral = plan.get("umbral_personas") or max(counts["dentro"], 1)
+    dentro = counts["dentro"]
+    dots_y = 470
+    dot = 34; gap = 14
+    for i in range(min(umbral, 12)):
+        x0 = 60 + i * (dot + gap)
+        on = i < dentro
+        col = (236, 72, 153) if on else (70, 60, 86)
+        draw.ellipse([x0, dots_y, x0 + dot, dots_y + dot], fill=col)
+    prog_txt = f"{dentro}/{plan.get('umbral_personas')} dentro" if plan.get("umbral_personas") else f"{dentro} dentro"
+    draw.text((60, dots_y + 50), prog_txt, font=font("title", 40), fill=(255, 255, 255))
+
+    bottom = "Vota tu plan"
+    if plan.get("estado") == "cerrado":
+        bottom = "Plan cerrado"
+    elif plan.get("hora_limite"):
+        try:
+            dl = datetime.fromisoformat(plan["hora_limite"])
+            bottom = f"Cierra {dl.strftime('%H:%M')}"
+        except Exception:
+            bottom = "Vota tu plan"
+    bf = font("body", 38)
+    bw = draw.textlength(bottom, font=bf)
+    draw.rounded_rectangle([W - bw - 120, dots_y + 44, W - 60, dots_y + 108], radius=32,
+                           fill=(236, 72, 153))
+    draw.text((W - bw - 90, dots_y + 56), bottom, font=bf, fill=(255, 255, 255))
+
+    buf = io.BytesIO(); img.save(buf, "PNG")
+    return StarletteResponse(content=buf.getvalue(), media_type="image/png",
+                             headers={"Cache-Control": "public, max-age=120"})
+
+
+# ---- Pagina publica SSR (OG + interactiva, sin login) -----------------------
+@api_router.api_route("/p/{slug}", methods=["GET", "HEAD"])
+async def plan_public_page(slug: str, request: Request):
+    front = _frontend_base(request)
+    api_public = (os.environ.get("API_PUBLIC_BASE") or front).rstrip("/")
+    if slug == "nuevo":
+        html = _plan_new_page_html(front, api_public, request)
+        return StarletteResponse(content=html, media_type="text/html")
+    plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
+    if not plan:
+        return StarletteResponse(content="<h1>Plan no encontrado</h1>", status_code=404,
+                                 media_type="text/html")
+    plan = await _plan_maybe_autoclose(plan)
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    counts = _plan_counts(participants)
+    pub = _plan_public(plan, participants)
+    share_url = f"{front}/p/{slug}"
+    og_img = f"{api_public}/api/og/plan/{slug}"
+    titulo = plan.get("titulo") or (f"\u00bfQui\u00e9n va a {plan['opciones'][0]['venue_nombre']}?"
+                                    if plan.get("opciones") else "Monta tu plan")
+    desc = (f"{counts['dentro']}/{plan['umbral_personas']} dentro" if plan.get("umbral_personas")
+            else f"{counts['dentro']} dentro \u00b7 {counts['total']} respuestas")
+    if plan.get("hora_limite"):
+        try:
+            dl = datetime.fromisoformat(plan["hora_limite"]); desc += f" \u00b7 cierra {dl.strftime('%H:%M')}"
+        except Exception:
+            pass
+    html = _plan_page_html(titulo, desc, og_img, share_url, api_public, pub)
+    return StarletteResponse(content=html, media_type="text/html")
+
+
+def _plan_head(title, desc, og_img, url):
+    import html as _h
+    t = _h.escape(title); d = _h.escape(desc)
+    return (
+        "<!doctype html><html lang=es><head><meta charset=utf-8>"
+        "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
+        f"<title>{t} \u00b7 \u00bfQui\u00e9n va?</title>"
+        f"<meta name=description content='{d}'>"
+        f"<meta property='og:title' content='{t}'>"
+        f"<meta property='og:description' content='{d}'>"
+        f"<meta property='og:image' content='{og_img}'>"
+        f"<meta property='og:url' content='{url}'>"
+        "<meta property='og:type' content='website'>"
+        "<meta name='twitter:card' content='summary_large_image'>"
+        f"<meta name='twitter:image' content='{og_img}'>"
+        "<meta name='theme-color' content='#0a0712'>"
+        + _plan_css()
+        + "</head>"
+    )
+
+
+def _plan_css():
+    return """<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0712;color:#fff;font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
+.wrap{max-width:520px;margin:0 auto;padding:18px 16px 140px}
+.brand{font-weight:800;font-size:15px;letter-spacing:.3px;color:#f0a8d8;margin-bottom:10px}
+.hdr{font-size:13px;color:#b9a8c9;text-transform:uppercase;letter-spacing:1px}
+h1{font-size:28px;line-height:1.1;margin:6px 0 14px;font-weight:800}
+.msg{display:flex;gap:10px;align-items:center;background:#17111f;border:1px solid #2a2033;border-radius:16px;padding:12px 14px;margin-bottom:16px}
+.av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#ec4899,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto}
+.opt{display:flex;gap:12px;background:#140f1c;border:1px solid #2a2033;border-radius:18px;padding:12px;margin-bottom:10px;align-items:center}
+.opt img{width:66px;height:66px;border-radius:12px;object-fit:cover;flex:0 0 auto;background:#241a30}
+.opt .on{font-weight:700;font-size:16px}
+.opt .meta{color:#b9a8c9;font-size:13px;margin-top:3px}
+.opt.win{border-color:#ec4899;box-shadow:0 0 0 1px #ec4899}
+.pref{margin-left:auto;font-size:12px;border:1px solid #3a2e46;background:transparent;color:#f0a8d8;border-radius:999px;padding:7px 11px;cursor:pointer}
+.pref.sel{background:#ec4899;color:#fff;border-color:#ec4899}
+.prog{background:#17111f;border:1px solid #2a2033;border-radius:16px;padding:14px;margin:4px 0 16px}
+.bar{height:10px;border-radius:999px;background:#2a2033;overflow:hidden;margin-top:8px}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,#ec4899,#8b5cf6);border-radius:999px;transition:width .4s}
+.progtxt{display:flex;justify-content:space-between;font-size:14px;font-weight:600}
+.parts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.chip{display:flex;align-items:center;gap:6px;background:#140f1c;border:1px solid #2a2033;border-radius:999px;padding:6px 11px;font-size:13px}
+.sticky{position:fixed;left:0;right:0;bottom:0;background:linear-gradient(180deg,rgba(10,7,18,0),#0a0712 32%);padding:16px;z-index:50}
+.sticky .inner{max-width:520px;margin:0 auto}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.btn{border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.b1{grid-column:1/3;background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff}
+.b2{background:#17111f;color:#fff;border:1px solid #3a2e46}
+.b3{background:#17111f;color:#f0a8d8;border:1px solid #3a2e46}
+.b4{grid-column:1/3;background:transparent;color:#8a7a99;border:none;font-weight:600;font-size:14px;padding:8px}
+.mine{background:#140f1c;border:1px solid #2a2033;border-radius:16px;padding:14px;text-align:center}
+.mine b{color:#f0a8d8}
+.share{width:100%;margin-top:10px;background:#140f1c;border:1px solid #3a2e46;color:#fff;border-radius:14px;padding:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.creator{margin-top:14px;display:flex;gap:8px}
+.creator button{flex:1;background:transparent;border:1px solid #3a2e46;color:#8a7a99;border-radius:12px;padding:11px;font-size:13px;cursor:pointer;font-family:inherit}
+.status{text-align:center;background:linear-gradient(135deg,rgba(236,72,153,.18),rgba(139,92,246,.18));border:1px solid #ec4899;border-radius:16px;padding:16px;margin-bottom:16px;font-weight:700}
+.modal{position:fixed;inset:0;background:rgba(5,3,10,.72);display:none;align-items:flex-end;z-index:100}
+.modal.on{display:flex}
+.sheet{background:#140f1c;border-top:1px solid #2a2033;border-radius:22px 22px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom));width:100%;max-width:520px;margin:0 auto}
+.sheet h3{font-size:19px;margin-bottom:14px}
+.sheet label{display:block;font-size:13px;color:#b9a8c9;margin:12px 0 6px}
+.sheet input{width:100%;background:#0a0712;border:1px solid #2a2033;color:#fff;border-radius:12px;padding:13px;font-size:15px;font-family:inherit}
+.sheet .row{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:#b9a8c9}
+.sheet .go{width:100%;margin-top:16px;background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;border:none;border-radius:14px;padding:15px;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}
+.sheet .cancel{width:100%;margin-top:8px;background:transparent;border:none;color:#8a7a99;padding:8px;cursor:pointer;font-family:inherit}
+.toast{position:fixed;bottom:150px;left:50%;transform:translateX(-50%);background:#ec4899;color:#fff;padding:11px 18px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none}
+.toast.on{opacity:1}
+a{color:#f0a8d8}
+</style>"""
+
+
+def _plan_page_html(title, desc, og_img, share_url, api_public, pub):
+    data = json.dumps(pub, default=str)
+    head = _plan_head(title, desc, og_img, share_url)
+    body = """
+<body>
+<div class=wrap id=app></div>
+<div class=sticky id=sticky></div>
+<div class=modal id=modal><div class=sheet>
+  <h3 id=sheetTitle>Confirma tu respuesta</h3>
+  <label>\u00bfC\u00f3mo te llaman?</label>
+  <input id=apodo placeholder='Tu nombre o apodo' maxlength=40>
+  <label>Tel\u00e9fono para avisarte si cierra el plan (opcional)</label>
+  <input id=tel placeholder='+34 ...' inputmode=tel>
+  <div class=row><input type=checkbox id=acc style='width:auto'> <span>Crear cuenta para guardar la noche</span></div>
+  <button class=go id=confirmBtn>Confirmar</button>
+  <button class=cancel id=cancelBtn>Cancelar</button>
+</div></div>
+<div class=toast id=toast></div>
+<script>
+window.__PLAN__ = __PLAN_JSON__;
+window.__API__ = "__API_BASE__";
+window.__SHARE__ = "__SHARE_URL__";
+</script>
+<script>__PLAN_JS__</script>
+</body></html>"""
+    body = (body.replace("__PLAN_JSON__", data)
+                .replace("__API_BASE__", api_public + "/api")
+                .replace("__SHARE_URL__", share_url)
+                .replace("__PLAN_JS__", _PLAN_JS))
+    return head + body
+
+
+def _plan_new_page_html(front, api_public, request):
+    import html as _h
+    head = _plan_head("Monta tu plan", "Elige el sitio, comparte el link y mira qui\u00e9n va.",
+                      f"{api_public}/api/og/plan/_", f"{front}/p/nuevo")
+    body = """
+<body><div class=wrap>
+<div class=brand>\u00bfQui\u00e9n va?</div>
+<h1>Monta tu plan</h1>
+<p style='color:#b9a8c9;margin-bottom:16px'>Dale un t\u00edtulo, a\u00f1ade hasta 3 sitios y comp\u00e1rtelo con tu grupo.</p>
+<label style='font-size:13px;color:#b9a8c9'>T\u00edtulo</label>
+<input id=titulo class=np placeholder='Jueves en Chueca' maxlength=60>
+<label style='font-size:13px;color:#b9a8c9'>Mensaje para tu grupo (opcional)</label>
+<input id=msg class=np placeholder='\u00bfNos cuadra esto?' maxlength=140>
+<label style='font-size:13px;color:#b9a8c9'>Ciudad</label>
+<input id=ciudad class=np value='Madrid'>
+<div id=opts></div>
+<button id=addOpt class=addbtn>+ A\u00f1adir sitio</button>
+<label style='font-size:13px;color:#b9a8c9'>Se cierra si somos (opcional)</label>
+<input id=umbral class=np type=number inputmode=numeric placeholder='p. ej. 6'>
+<button id=createBtn class=go2>Crear plan y compartir</button>
+</div>
+<div class=toast id=toast></div>
+<style>
+.np{width:100%;background:#0a0712;border:1px solid #2a2033;color:#fff;border-radius:12px;padding:13px;font-size:15px;font-family:inherit;margin:6px 0 4px}
+.addbtn{width:100%;background:#17111f;border:1px dashed #3a2e46;color:#f0a8d8;border-radius:12px;padding:13px;font-weight:700;cursor:pointer;font-family:inherit;margin:8px 0 14px}
+.go2{width:100%;background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;border:none;border-radius:14px;padding:16px;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;margin-top:14px}
+.optrow{display:flex;gap:8px;margin-bottom:8px}
+.optrow input{flex:1}
+</style>
+<script>window.__API__="__API_BASE__";</script>
+<script>__NEW_JS__</script>
+</body></html>"""
+    body = body.replace("__API_BASE__", api_public + "/api").replace("__NEW_JS__", _PLAN_NEW_JS)
+    return head + body
+
+
+_PLAN_JS = r'''
+(function(){
+  var P = window.__PLAN__, API = window.__API__, SHARE = window.__SHARE__;
+  var slug = P.slug;
+  var ptKey = 'qv_pt_'+slug, ctKey = 'qv_ct_'+slug;
+  var pt = localStorage.getItem(ptKey) || '';
+  var ct = localStorage.getItem(ctKey) || '';
+  var pendingIntent = null;
+  var selectedOpt = (P.mine && P.mine.opcion_preferida) || null;
+  var INTENT_LABEL = {dentro:'Dentro',voy_si:'Voy si somos',depende:'Depende',paso:'Paso'};
+  var INTENT_EMOJI = {dentro:'\uD83D\uDFE2',voy_si:'\uD83D\uDFE1',depende:'\uD83D\uDFE0',paso:'\u26AB'};
+
+  function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function toast(t){var el=document.getElementById('toast');el.textContent=t;el.classList.add('on');setTimeout(function(){el.classList.remove('on');},1800);}
+
+  function winnerId(){ return P.estado==='cerrado'?P.opcion_ganadora:null; }
+
+  function render(){
+    var app=document.getElementById('app');
+    var h='';
+    h+='<div class=brand>\u00bfQui\u00e9n va?</div>';
+    var fecha = P.fecha_objetivo ? new Date(P.fecha_objetivo) : null;
+    var fechaTxt = fecha && !isNaN(fecha) ? fecha.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}) : '';
+    h+='<div class=hdr>'+esc((fechaTxt?fechaTxt+' \u00b7 ':'')+(P.ciudad||''))+'</div>';
+    h+='<h1>'+esc(P.titulo || (P.opciones[0]?('\u00bfQui\u00e9n va a '+P.opciones[0].venue_nombre+'?'):'Plan'))+'</h1>';
+    if(P.estado==='cerrado'){
+      var w=(P.opciones||[]).filter(function(o){return o.opt_id===P.opcion_ganadora;})[0];
+      h+='<div class=status>'+(w?('\u2705 Cerrado \u00b7 Quedamos en '+esc(w.venue_nombre)+(w.hora?(' a las '+esc(w.hora)):'')):'Plan cerrado sin suficientes personas')+'</div>';
+    } else if(P.estado==='cancelado'){
+      h+='<div class=status>Plan cancelado</div>';
+    }
+    if(P.mensaje_creador){
+      h+='<div class=msg><div class=av>'+esc((P.creador_apodo||'?').slice(0,1).toUpperCase())+'</div><div><b>'+esc(P.creador_apodo||'')+':</b> '+esc(P.mensaje_creador)+'</div></div>';
+    }
+    (P.opciones||[]).forEach(function(o){
+      var win = o.opt_id===winnerId();
+      h+='<div class="opt'+(win?' win':'')+'">';
+      if(o.image_url){h+='<img src="'+esc(o.image_url)+'" alt="">';}
+      h+='<div style="flex:1"><div class=on>'+esc(o.venue_nombre||o.texto_libre||'Opci\u00f3n')+'</div>';
+      var meta=[];if(o.hora)meta.push(o.hora);if(o.precio_desde)meta.push('desde '+o.precio_desde+'\u20ac');
+      h+='<div class=meta>'+esc(meta.join(' \u00b7 '))+'</div></div>';
+      if((P.opciones.length>1)&&P.estado==='abierto'){
+        h+='<button class="pref'+(selectedOpt===o.opt_id?' sel':'')+'" data-opt="'+o.opt_id+'">'+(selectedOpt===o.opt_id?'Tu voto':'Prefiero esta')+'</button>';
+      }
+      h+='</div>';
+    });
+    if(P.umbral_personas){
+      var pct=Math.min(100,Math.round(P.counts.dentro/P.umbral_personas*100));
+      var dl=P.hora_limite?new Date(P.hora_limite):null;
+      var dlTxt=dl&&!isNaN(dl)?(' \u00b7 cierra '+dl.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})):'';
+      h+='<div class=prog><div class=progtxt><span>'+P.counts.dentro+'/'+P.umbral_personas+' dentro'+dlTxt+'</span><span>'+pct+'%</span></div><div class=bar><i style="width:'+pct+'%"></i></div></div>';
+    }
+    if((P.participants||[]).length){
+      h+='<div class=parts>';
+      P.participants.forEach(function(p){h+='<div class=chip>'+(INTENT_EMOJI[p.intencion]||'')+' '+esc(p.apodo)+'</div>';});
+      h+='</div>';
+    }
+    app.innerHTML=h;
+    Array.prototype.forEach.call(document.querySelectorAll('.pref'),function(b){
+      b.onclick=function(){ selectedOpt=b.getAttribute('data-opt'); if(P.mine){ submit(P.mine.intencion, true); } else { render(); } };
+    });
+    renderSticky();
+  }
+
+  function renderSticky(){
+    var s=document.getElementById('sticky'); var h='<div class=inner>';
+    if(P.estado!=='abierto'){
+      h+='<button class=share id=shareBtn>Compartir con m\u00e1s gente</button>';
+    } else if(P.mine){
+      h+='<div class=mine>Tu respuesta: <b>'+esc(INTENT_LABEL[P.mine.intencion]||P.mine.intencion)+'</b> &nbsp; <a href="#" id=changeBtn>Cambiar</a></div>';
+      h+='<button class=share id=shareBtn>Compartir con m\u00e1s gente</button>';
+    } else {
+      h+='<div class=btns>';
+      h+='<button class="btn b1" data-i=dentro>Yo voy</button>';
+      h+='<button class="btn b2" data-i=voy_si>Voy si somos</button>';
+      h+='<button class="btn b3" data-i=depende>Depende</button>';
+      h+='<button class="btn b4" data-i=paso>Paso</button>';
+      h+='</div>';
+    }
+    if(ct && P.estado==='abierto'){
+      h+='<div class=creator><button id=closeBtn>Cerrar plan ahora</button><button id=cancelPlanBtn>Cancelar</button></div>';
+    }
+    h+='</div>'; s.innerHTML=h;
+    Array.prototype.forEach.call(document.querySelectorAll('.sticky [data-i]'),function(b){
+      b.onclick=function(){ openModal(b.getAttribute('data-i')); };
+    });
+    var cb=document.getElementById('changeBtn'); if(cb)cb.onclick=function(e){e.preventDefault();P.mine=null;renderSticky();};
+    var sb=document.getElementById('shareBtn'); if(sb)sb.onclick=doShare;
+    var xb=document.getElementById('closeBtn'); if(xb)xb.onclick=function(){creatorAction('close');};
+    var cp=document.getElementById('cancelPlanBtn'); if(cp)cp.onclick=function(){if(confirm('\u00bfCancelar el plan?'))creatorAction('cancel');};
+  }
+
+  function openModal(intent){
+    pendingIntent=intent;
+    document.getElementById('apodo').value=localStorage.getItem('qv_apodo')||'';
+    document.getElementById('sheetTitle').textContent=INTENT_LABEL[intent]+' \u2014 confirma';
+    document.getElementById('modal').classList.add('on');
+  }
+  function closeModal(){document.getElementById('modal').classList.remove('on');}
+
+  function submit(intent, keepClosed){
+    var apodo=(P.mine&&P.mine.apodo)||localStorage.getItem('qv_apodo')||'';
+    if(!apodo){openModal(intent);return;}
+    post(intent, apodo, null);
+  }
+
+  function post(intent, apodo, tel){
+    fetch(API+'/plans/'+slug+'/respond',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({apodo:apodo,intencion:intent,opcion_preferida:selectedOpt,telefono:tel,participante_token:pt})})
+      .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+      .then(function(res){
+        if(!res.ok){toast(res.j.detail||'Error');return;}
+        pt=res.j.participante_token; localStorage.setItem(ptKey,pt); localStorage.setItem('qv_apodo',apodo);
+        P=res.j.plan; closeModal(); render(); toast('\u00a1Hecho!');
+      }).catch(function(){toast('Error de red');});
+  }
+
+  function creatorAction(kind){
+    fetch(API+'/plans/'+slug+'/'+kind,{method:'POST',headers:{'x-participante-token':ct}})
+      .then(function(r){return r.json();}).then(function(j){ if(j&&j.slug){P=j;} render(); toast(kind==='close'?'Plan cerrado':'Plan cancelado'); })
+      .catch(function(){toast('Error');});
+  }
+
+  function doShare(){
+    var txt;
+    if(P.umbral_personas){txt=(P.titulo||'Plan')+' \uD83D\uDD25 Se cierra si somos '+P.umbral_personas+'. Dinos si est\u00e1s dentro: '+SHARE;}
+    else {txt='\uD83D\uDC40 '+(P.titulo||'\u00bfQui\u00e9n va?')+' Dinos si te apuntas: '+SHARE;}
+    if(navigator.share){navigator.share({title:P.titulo||'\u00bfQui\u00e9n va?',text:txt,url:SHARE}).catch(function(){});}
+    else{navigator.clipboard.writeText(SHARE).then(function(){toast('Link copiado');});
+      window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');}
+  }
+
+  document.getElementById('confirmBtn').onclick=function(){
+    var apodo=document.getElementById('apodo').value.trim();
+    if(!apodo){toast('Dinos c\u00f3mo te llaman');return;}
+    var tel=document.getElementById('tel').value.trim()||null;
+    post(pendingIntent, apodo, tel);
+  };
+  document.getElementById('cancelBtn').onclick=closeModal;
+  document.getElementById('modal').onclick=function(e){if(e.target.id==='modal')closeModal();};
+
+  render();
+})();
+'''
+
+
+_PLAN_NEW_JS = r'''
+(function(){
+  var API=window.__API__;
+  var opts=document.getElementById('opts');
+  function addRow(){
+    if(opts.children.length>=3){return;}
+    var d=document.createElement('div');d.className='optrow';
+    d.innerHTML='<input class="np ov" placeholder="Sitio (p. ej. Fitz)"><input class="np oh" placeholder="Hora" style="max-width:90px"><input class="np op" placeholder="\u20ac" inputmode=numeric style="max-width:70px">';
+    opts.appendChild(d);
+  }
+  addRow();
+  document.getElementById('addOpt').onclick=addRow;
+  document.getElementById('createBtn').onclick=function(){
+    var opciones=[];
+    Array.prototype.forEach.call(document.querySelectorAll('.optrow'),function(r){
+      var v=r.querySelector('.ov').value.trim();
+      if(v){opciones.push({texto_libre:v,venue_nombre:v,hora:r.querySelector('.oh').value.trim(),precio_desde:parseFloat(r.querySelector('.op').value)||null});}
+    });
+    if(!opciones.length){toast('A\u00f1ade al menos un sitio');return;}
+    var umbral=parseInt(document.getElementById('umbral').value,10)||null;
+    var body={titulo:document.getElementById('titulo').value.trim(),mensaje_creador:document.getElementById('msg').value.trim(),
+      ciudad:document.getElementById('ciudad').value.trim()||'Madrid',opciones:opciones,umbral_personas:umbral};
+    fetch(API+'/plans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});})
+      .then(function(res){
+        if(!res.ok){toast(res.j.detail||'Error');return;}
+        localStorage.setItem('qv_ct_'+res.j.slug,res.j.creador_token);
+        var prefix=location.pathname.indexOf('/api/')===0?'/api/p/':'/p/';
+        location.href=location.origin+prefix+res.j.slug;
+      }).catch(function(){toast('Error de red');});
+  };
+  function toast(t){var el=document.getElementById('toast');el.textContent=t;el.classList.add('on');setTimeout(function(){el.classList.remove('on');},1800);}
+})();
+'''
+
+
 app.include_router(api_router)
 
 # SEO fixes copy-paste helper page (dev-only, noindex). Mounted at

@@ -52,6 +52,8 @@
     { "source": "/en/blog/:slug", "destination": "https://quienva.onrender.com/api/en/blog/:slug" },
     { "source": "/de/blog", "destination": "https://quienva.onrender.com/api/de/blog" },
     { "source": "/de/blog/:slug", "destination": "https://quienva.onrender.com/api/de/blog/:slug" },
+    { "source": "/p/:slug", "destination": "https://quienva.onrender.com/api/p/:slug" },
+    { "source": "/og-plan/:slug.png", "destination": "https://quienva.onrender.com/api/og/plan/:slug" },
     { "source": "/robots.txt", "destination": "https://quienva.onrender.com/api/robots.txt" },
     { "source": "/llms.txt", "destination": "https://quienva.onrender.com/api/llms.txt" },
     { "source": "/privacidad", "destination": "/privacidad.html" },
