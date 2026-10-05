@@ -456,20 +456,24 @@ export default function EventDetail() {
             /* Sprint 3 — guest CTA stack (arrived from WhatsApp, not logged in).
                Primary = low-friction "Me interesa" (opens signup), tertiary =
                share back to WhatsApp. "Ver quién va" lives just below (teaser). */
-            <div className="flex flex-col gap-2.5" data-testid="detail-guest-cta">
+            <div className="flex flex-col gap-3" data-testid="detail-guest-cta">
               <button
                 data-testid="detail-guest-interesa"
                 onClick={() => toggle("me_interesa")}
-                className="h-14 rounded-2xl font-display font-black text-base flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary to-qv-secondary text-black shadow-[0_0_24px_rgba(255,0,85,0.3)] active:scale-95 transition-transform"
+                className="qv-btn qv-btn-sheen qv-btn-breathe-cyan h-16 rounded-[20px] font-display font-black text-lg flex items-center justify-center gap-2.5 bg-gradient-to-r from-qv-secondary via-[#38f6ff] to-qv-primary text-[#05060a]"
               >
-                👀 {t("event.interested")}
+                <Eye className="w-6 h-6 qv-btn-icon-pop" strokeWidth={2.6} />
+                {t("event.interested")}
               </button>
               <button
                 data-testid="detail-guest-whatsapp"
                 onClick={shareWhatsApp}
-                className="h-11 rounded-2xl bg-[#25D366]/15 border border-[#25D366]/40 text-[#25D366] font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                className="qv-btn qv-btn-sheen h-12 rounded-[18px] font-bold text-[15px] flex items-center justify-center gap-2.5 text-white bg-gradient-to-r from-[#1faa52] to-[#25D366] shadow-[0_10px_28px_-10px_rgba(37,211,102,0.65)]"
               >
-                <Send className="w-4 h-4" /> {t("event.share_whatsapp", "Compartir por WhatsApp")}
+                <span className="qv-wa-dot flex items-center justify-center w-5 h-5 rounded-full bg-white/20">
+                  <Send className="w-3.5 h-3.5" />
+                </span>
+                {t("event.share_whatsapp", "Compartir por WhatsApp")}
               </button>
             </div>
           ) : (
@@ -478,8 +482,10 @@ export default function EventDetail() {
               <button
                 data-testid="detail-voy-btn"
                 onClick={() => toggle("voy")}
-                className={`h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors duration-150 ${
-                  isVoy ? "bg-qv-primary text-white shadow-[0_0_20px_rgba(255,0,85,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
+                className={`qv-btn h-[52px] rounded-[18px] font-display font-black text-[15px] flex items-center justify-center gap-2 ${
+                  isVoy
+                    ? "qv-btn-sheen qv-btn-breathe-pink bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white"
+                    : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-primary/50 hover:bg-qv-primary/10"
                 }`}
               >
                 {isVoy && <Check className="w-5 h-5" />} {t("event.going")}
@@ -487,11 +493,13 @@ export default function EventDetail() {
               <button
                 data-testid="detail-interesa-btn"
                 onClick={() => toggle("me_interesa")}
-                className={`h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors duration-150 ${
-                  isInteresa ? "bg-qv-secondary text-black shadow-[0_0_20px_rgba(0,240,255,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
+                className={`qv-btn h-[52px] rounded-[18px] font-display font-black text-[15px] flex items-center justify-center gap-2 ${
+                  isInteresa
+                    ? "qv-btn-sheen qv-btn-breathe-cyan bg-gradient-to-r from-qv-secondary to-[#4df3ff] text-[#05060a]"
+                    : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-secondary/50 hover:bg-qv-secondary/10"
                 }`}
               >
-                {isInteresa && <Star className="w-5 h-5" />} {t("event.interested")}
+                {isInteresa ? <Star className="w-5 h-5" fill="currentColor" /> : <Eye className="w-5 h-5" />} {t("event.interested")}
               </button>
             </div>
             {/* Crowd counts — tap to see exactly who's going / interested. */}
@@ -536,13 +544,13 @@ export default function EventDetail() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={onTicketClick}
-                className={`h-14 rounded-2xl font-display font-black text-base flex items-center justify-center gap-2 active:scale-95 transition-transform ${
+                className={`qv-btn h-[58px] rounded-[20px] font-display font-black text-base flex items-center justify-center gap-2.5 ${
                   event.sale_state === "agotado"
                     ? "bg-white/10 text-white/70 border border-white/20"
-                    : "bg-gradient-to-r from-qv-primary to-qv-secondary text-black shadow-[0_0_24px_rgba(255,0,85,0.35)]"
+                    : "qv-btn-sheen qv-btn-breathe-pink bg-gradient-to-r from-qv-primary via-[#ff5fa2] to-qv-secondary text-[#05060a]"
                 }`}
               >
-                <Ticket className="w-5 h-5" />
+                <Ticket className={`w-5 h-5 ${event.sale_state === "agotado" ? "" : "qv-btn-icon-pop"}`} strokeWidth={2.6} />
                 {event.sale_state === "agotado"
                   ? t("event.cta_soldout")
                   : event.sale_state === "solo_lista"

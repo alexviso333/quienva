@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
-import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList, Euro } from "lucide-react";
+import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList, Euro, Eye } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import api, { mediaThumb, API } from "@/lib/api";
@@ -355,9 +355,9 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 data-testid={`event-voy-btn-${event.id}`}
                 disabled={pending}
                 onClick={() => toggle("voy")}
-                className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-colors duration-150 active:scale-95 ${
+                className={`qv-btn h-11 rounded-2xl font-display font-black text-sm flex items-center justify-center gap-1.5 ${
                   isVoy
-                    ? "bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
+                    ? "qv-btn-sheen qv-btn-breathe-pink bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white"
                     : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-primary/50 hover:bg-qv-primary/10"
                 }`}
               >
@@ -367,13 +367,13 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 data-testid={`event-interesa-btn-${event.id}`}
                 disabled={pending}
                 onClick={() => toggle("me_interesa")}
-                className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-colors duration-150 active:scale-95 ${
+                className={`qv-btn h-11 rounded-2xl font-display font-black text-sm flex items-center justify-center gap-1.5 ${
                   isInteresa
-                    ? "bg-gradient-to-r from-qv-secondary to-[#4df3ff] text-black shadow-[0_8px_22px_-6px_rgba(0,240,255,0.6)]"
+                    ? "qv-btn-sheen qv-btn-breathe-cyan bg-gradient-to-r from-qv-secondary to-[#4df3ff] text-[#05060a]"
                     : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-secondary/50 hover:bg-qv-secondary/10"
                 }`}
               >
-                {isInteresa && <Star className="w-4 h-4" />} {t("eventcard.btn_interested")}
+                {isInteresa ? <Star className="w-4 h-4" fill="currentColor" /> : <Eye className="w-4 h-4" />} {t("eventcard.btn_interested")}
               </button>
             </div>
 
@@ -389,10 +389,9 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => api.post("/tickets/click", { event_id: event.id }).catch(() => {})}
-                className="group/tk relative h-11 rounded-2xl overflow-hidden text-black font-bold text-sm flex items-center justify-center gap-2 transition-transform duration-300 hover:-translate-y-0.5 active:scale-95 bg-gradient-to-r from-qv-primary via-[#ff5fa2] to-qv-secondary shadow-[0_10px_26px_-8px_rgba(255,0,85,0.5)]"
+                className="qv-btn qv-btn-sheen qv-btn-breathe-pink h-11 rounded-2xl text-[#05060a] font-display font-black text-sm flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary via-[#ff5fa2] to-qv-secondary"
               >
-                <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover/tk:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-                <Ticket className="w-4 h-4" /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
+                <Ticket className="w-4 h-4 qv-btn-icon-pop" strokeWidth={2.6} /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
               </a>
             ) : event.more_info_url ? (
               <a
