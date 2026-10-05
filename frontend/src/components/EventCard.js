@@ -340,7 +340,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
             data-testid={`event-estuve-btn-${event.id}`}
             disabled={pending}
             onClick={() => toggle("estuve")}
-            className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-300 active:scale-95 ${
+            className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors duration-150 active:scale-95 ${
               isEstuve
                 ? "bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
                 : "bg-white/[0.06] border border-white/15 text-white/80 hover:border-qv-primary/50 hover:bg-qv-primary/10"
@@ -355,7 +355,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 data-testid={`event-voy-btn-${event.id}`}
                 disabled={pending}
                 onClick={() => toggle("voy")}
-                className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 ${
+                className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-colors duration-150 active:scale-95 ${
                   isVoy
                     ? "bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
                     : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-primary/50 hover:bg-qv-primary/10"
@@ -367,7 +367,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 data-testid={`event-interesa-btn-${event.id}`}
                 disabled={pending}
                 onClick={() => toggle("me_interesa")}
-                className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 ${
+                className={`h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-colors duration-150 active:scale-95 ${
                   isInteresa
                     ? "bg-gradient-to-r from-qv-secondary to-[#4df3ff] text-black shadow-[0_8px_22px_-6px_rgba(0,240,255,0.6)]"
                     : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-secondary/50 hover:bg-qv-secondary/10"

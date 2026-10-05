@@ -5,13 +5,14 @@ import { motion } from "framer-motion";
 import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
+import { CompactEventCard } from "@/components/CompactEventCard";
 import { StoriesBar } from "@/components/Stories";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { isNativeApp } from "@/lib/platform";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import CitySelectorSheet from "@/components/CitySelectorSheet";
-import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon } from "lucide-react";
+import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -108,6 +109,15 @@ export default function Feed() {
   const cardRefs = useRef({});
   const sentinelRef = useRef(null);
   const [visibleUpcoming, setVisibleUpcoming] = useState(12);
+  // "Modo compacto": 2 tarjetas por fila en móvil (persistido).
+  const [compact, setCompact] = useState(() => {
+    try { return localStorage.getItem("qv_compact") === "1"; } catch { return false; }
+  });
+  const toggleCompact = () => setCompact((c) => {
+    const n = !c;
+    try { localStorage.setItem("qv_compact", n ? "1" : "0"); } catch { /* ignore */ }
+    return n;
+  });
 
   // City is part of every event-related cache key: switching cities instantly
   // swaps to that city's cache. Registered users use their account city; guests
@@ -276,21 +286,34 @@ export default function Feed() {
     // loading while the sentinel stays on-screen (avoids a stuck spinner).
   }, [hasMoreUpcoming, isSearching, visibleUpcoming]);
 
+  // Apply an interest change to a cached event OPTIMISTICALLY: flips my_status
+  // and adjusts going_count / interested_count instantly so the UI never waits
+  // for the network (no spinner, no toast, no perceived lag).
+  const applyStatus = (e, status) => {
+    if (!e) return e;
+    const prev = e.my_status;
+    if (prev === status) return e;
+    let gc = e.going_count ?? 0;
+    let ic = e.interested_count ?? 0;
+    if (prev === "voy") gc = Math.max(0, gc - 1);
+    if (prev === "me_interesa") ic = Math.max(0, ic - 1);
+    if (status === "voy") gc += 1;
+    if (status === "me_interesa") ic += 1;
+    return { ...e, my_status: status, going_count: gc, interested_count: ic };
+  };
+
   const setStatus = useMutation({
     mutationFn: async ({ eventId, status }) => (await api.post(`/events/${eventId}/interest`, { status })).data,
     onMutate: async ({ eventId, status }) => {
       await qc.cancelQueries({ queryKey: ["events"] });
       const patchArr = (arr) =>
-        Array.isArray(arr) ? arr.map((e) => (e.id === eventId ? { ...e, my_status: status } : e)) : arr;
+        Array.isArray(arr) ? arr.map((e) => (e.id === eventId ? applyStatus(e, status) : e)) : arr;
       qc.getQueriesData({ queryKey: ["events"] }).forEach(([key, data]) => {
         qc.setQueryData(key, patchArr(data));
       });
     },
-    onSuccess: (_data, vars) => {
-      if (vars.status === "voy") toast.success("\u00a1Apuntado! Tus amigos ya lo ver\u00e1n \ud83c\udf89");
-      if (vars.status === "me_interesa") toast.success("Guardado como \"Me interesa\" \ud83d\udc40");
-      if (vars.status === "estuve") toast.success("Guardado en tus recuerdos \u2728");
-    },
+    // No success toast on purpose: the optimistic update already reflects the
+    // choice instantly, so a green toast would only highlight the round-trip.
     onError: () => {
       toast.error(t("feed.toast_error"));
       qc.invalidateQueries({ queryKey: ["events"] });
@@ -347,6 +370,18 @@ export default function Feed() {
   };
 
   const renderList = (arr) => (
+    compact ? (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="feed-grid-compact">
+        {arr.map((ev, i) => (
+          <CompactEventCard
+            key={ev.id}
+            event={ev}
+            index={i}
+            onVoy={(status) => onSetStatus(ev.id, status)}
+          />
+        ))}
+      </div>
+    ) : (
     <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4 xl:grid-cols-3 lg:items-start">
       {arr.map((ev, i) => (
         <EventCard
@@ -360,6 +395,7 @@ export default function Feed() {
         />
       ))}
     </div>
+    )
   );
 
   const nothingTonight = !isLoading && blockToday.length === 0;
@@ -396,6 +432,14 @@ export default function Feed() {
             <div className="flex items-center gap-2 shrink-0">
               <LanguageSwitcher />
               <button
+                onClick={toggleCompact}
+                aria-label={compact ? "Vista ampliada" : "Vista compacta"}
+                data-testid="feed-compact-toggle"
+                className="flex items-center justify-center w-9 h-9 text-white bg-white/[0.08] border border-white/10 rounded-full active:scale-95"
+              >
+                {compact ? <Rows3 className="w-4 h-4 text-qv-secondary" /> : <LayoutGrid className="w-4 h-4 text-qv-secondary" />}
+              </button>
+              <button
                 onClick={() => navigate("/locales")}
                 className="flex items-center gap-1.5 text-xs font-bold text-white bg-white/[0.08] border border-white/10 rounded-full px-3 py-2 active:scale-95"
                 data-testid="feed-locales-btn"
@@ -423,32 +467,6 @@ export default function Feed() {
           </motion.div>
         </div>
       </header>
-
-      {/* Guest city chips */}
-      {!user && (
-        <div className="px-4 pt-3 pb-1" data-testid="guest-city-bar">
-          <div className="flex flex-wrap items-center gap-2">
-            {cities.map((c) => {
-              const on = guestCity === c.id;
-              const short = (c.label || c.id).split(",")[0].split(" de ")[0];
-              return (
-                <button
-                  key={c.id}
-                  data-testid={`city-chip-${c.id}`}
-                  onClick={() => pickCity(c.id)}
-                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold whitespace-nowrap border active:scale-95 transition-all duration-300 ${
-                    on
-                      ? "bg-gradient-to-r from-qv-secondary to-[#4df3ff] text-black border-transparent shadow-[0_6px_18px_-6px_rgba(0,240,255,0.7)]"
-                      : "bg-white/[0.05] border-white/12 text-white/65 hover:text-white hover:border-white/25"
-                  }`}
-                >
-                  {c.emoji ? `${c.emoji} ` : ""}{short}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Stories over Block A (handles its own empty state) */}
       {user && <StoriesBar />}

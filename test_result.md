@@ -2294,13 +2294,13 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.16"
-  test_sequence: 21
-  run_ui: false
+  version: "2.17"
+  test_sequence: 22
+  run_ui: true
 
 test_plan:
   current_focus:
-    - "SPRINT 2+3 — intent granularity (PATCH /intent), counts split (going_count/interested_count/my_intent), people list, conversion metrics (guest_views/signups), admin landing-metrics"
+    - "FRONTEND Sprint 2+3+bug+modo compacto + Sprint 4 onboarding + Sprint 5 consolidación"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -2308,22 +2308,148 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      SPRINT 2+3 BACKEND (2026) — a verificar SOLO backend (NO frontend sin permiso).
-      Admin: admin@quienva.app / admin123. DB local tiene ~50 eventos; interests empieza vacío.
-      Probar:
-      (A) GET /api/events y GET /api/events/{id} -> cada evento trae going_count,
-          interested_count (ints) y my_intent ("none" para invitado).
-      (B) PATCH /api/events/{id}/intent {intent:"interested"} como usuario -> 200
-          {status:"me_interesa", intent:"interested"}. Luego {intent:"going"} -> cambia a
-          voy SIN borrar/recrear. {intent:"xxx"} -> 400. Sin auth -> 401.
-          Confirmar que going_count/interested_count del evento reflejan el cambio.
-      (C) GET /api/events/{id}/people?status=voy (logueado): lista con is_me/is_friend;
-          respeta privacidad "nadie"; status inválido -> 400; evento inexistente -> 404;
-          sin auth -> 401. Crear 2-3 usuarios y marcar intents para poblar la lista.
-      (D) GET /api/events/{id} como INVITADO (sin token) incrementa guest_views.
-          POST /api/metrics/event-signup {event_id} -> {ok:true} incrementa signups.
-          GET /api/admin/landing-metrics (admin) -> totals + events[] con conversion;
-          non-admin -> 403; sin auth -> 401.
+      FRONTEND A VERIFICAR (2026) — cambios de este sprint. Hay eventos en Ibiza/Madrid/
+      Barcelona/Palma. Para flujos logueados, registrar usuario nuevo (onboarding ahora 2 pasos).
+      BUG FIX (prioridad) — respuesta de botones + sin toast verde:
+       1. En el feed (/feed) y en EventDetail, al pulsar VOY o "Me interesa" el botón cambia de
+          color INSTANTÁNEAMENTE y los contadores "X van · Y interesados" se actualizan al
+          instante (optimista). NO debe aparecer ningún toast verde de éxito al marcar VOY/
+          me_interesa/estuve. (Sí puede salir toast de error si falla.)
+      SPRINT 1/2/3 UI:
+       2. Feed hero "¿Dónde está la noche?" + 3 bloques. Ya NO existe la barra de chips de
+          ciudad debajo del hero (data-testid guest-city-bar eliminado). Solo queda 1 selector
+          de ciudad: el botón de arriba (feed-city-switch-btn) que abre CitySelectorSheet, y
+          funciona también como invitado.
+       3. EventCard muestra "X van · Y interesados" (data-testid event-counts-<id>). En
+          EventDetail logueado, el contador es tocable (detail-count-going / detail-count-interested)
+          y abre un sheet (people-sheet) con la lista real de quién va/interesado.
+       4. Vista de evento como INVITADO (sin login): CTA primario "👀 Me interesa"
+          (detail-guest-interesa) que abre el signup, secundario "Ver quién va"
+          (detail-guest-friends con BlurredGoingTeaser), terciario "Compartir por WhatsApp"
+          (detail-guest-whatsapp).
+      MODO COMPACTO:
+       5. Botón toggle en cabecera del feed (feed-compact-toggle). Al activarlo, las tarjetas
+          pasan a una rejilla de 2 por fila en móvil (feed-grid-compact con compact-card-<id>).
+          Al desactivarlo, vuelve a 1 tarjeta por fila (EventCard normal). Persistir (localStorage).
+      SPRINT 4 (onboarding 2 pasos):
+       6. /onboarding = 2 pasos: (1) elegir ciudad (onboarding-city, botones onb-city-<id>),
+          (2) "¡Mira qué hay esta noche en [ciudad]!" (onboarding-tonight) -> botón
+          onboarding-finish lleva a /feed. Ya NO hay pasos de privacidad/notif/grupo/contactos.
+      SPRINT 5 (consolidación):
+       7. /memories, /fiestas-pasadas y /momentos redirigen a /recuerdos. /momento (captura en
+          vivo), /locales y /descubrir siguen funcionando.
+
+  - task: "FRONTEND Sprint 2+3 + bug respuesta/toasts + modo compacto + Sprint 4 onboarding + Sprint 5 consolidación"
+    implemented: true
+    working: false
+    file: "frontend/src/pages/Feed.js, frontend/src/pages/EventDetail.js, frontend/src/components/EventCard.js, frontend/src/components/CompactEventCard.js, frontend/src/pages/Onboarding.js, frontend/src/App.js, frontend/src/lib/returnEvent.js, frontend/src/components/PushPermissionGate.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Ver el mensaje de agent_communication de este sprint para el detalle completo de qué verificar."
+      - working: false
+        agent: "testing"
+        comment: |
+          FRONTEND AUTHENTICATED FLOWS RE-TEST COMPLETE (2026-10-05, Mobile 430x920)
+          
+          🚨 CRITICAL BLOCKER FOUND: PushPermissionGate modal blocks ALL authenticated interactions
+          
+          ❌ TEST 1 BLOCKED: Button responsiveness + NO green success toast
+          - Login successful as admin@quienva.app
+          - Onboarding completed successfully (2 steps working)
+          - City set to Ibiza successfully
+          - Found 16 event cards on feed
+          - BLOCKER: PushPermissionGate modal (data-testid="push-permission-gate") appears after onboarding
+            and intercepts ALL pointer events, preventing any button clicks
+          - Cannot test VOY button responsiveness, optimistic updates, or toast behavior
+          - Error: "ElementHandle.click: Timeout 30000ms exceeded - push-permission-gate intercepts pointer events"
+          
+          ❌ TEST 2 BLOCKED: Split counts + people sheet
+          - Same PushPermissionGate blocker prevents all interactions
+          - Cannot click VOY buttons to create going_count > 0
+          - Cannot navigate to event detail or test people sheet
+          
+          ❌ TEST 3 BLOCKED: Onboarding 2 steps
+          - Attempted to register brand-new user
+          - Login page does not have visible registration form fields
+          - Cannot find input[placeholder*="nombre"] to fill registration form
+          - Registration flow may be in a separate modal or page
+          
+          ✅ TEST 4 PASSED: Sprint 5 redirects (6/6 scenarios)
+          - /momentos → /recuerdos ✅
+          - /memories → /recuerdos ✅
+          - /fiestas-pasadas → /recuerdos ✅
+          - /momento loads without crashing ✅
+          - /locales loads without crashing ✅
+          - /descubrir loads without crashing ✅
+          
+          ❌ TEST 5 FAILED: Guest CTA re-check
+          - Logged out successfully, viewing feed as guest
+          - Found 16 event cards
+          - Navigated to event detail as guest
+          - FAIL: detail-guest-cta stack NOT found (expected data-testid="detail-guest-cta")
+          - FAIL: detail-guest-interesa button NOT found
+          - FAIL: detail-guest-whatsapp button NOT found
+          - WARNING: detail-guest-friends teaser NOT found (might be total_going = 0)
+          - Guest CTA is not rendering on event detail page
+          
+          ROOT CAUSE ANALYSIS:
+          
+          1. PushPermissionGate Modal Blocker (CRITICAL):
+             - File: frontend/src/components/PushPermissionGate.js
+             - Modal appears after onboarding completes (localStorage qv_onboarded = "1")
+             - Modal is BLOCKING (z-index 100, cannot dismiss by clicking outside)
+             - Only dismiss options: click "Activar" (requires browser permission) or wait for permission to fail
+             - No "Ahora no" / "Later" button visible initially
+             - This blocks ALL authenticated user interactions in the app
+             - Makes testing impossible and creates terrible UX for real users
+          
+          2. Guest CTA Missing:
+             - EventDetail.js lines 456-474 should render detail-guest-cta for non-logged-in users
+             - Condition: !user && !isPast
+             - The CTA stack is not rendering, suggesting either:
+               a) User is still considered logged-in (localStorage not cleared properly)
+               b) Event is considered past (isPast = true)
+               c) Component logic has a bug
+          
+          3. Registration Form Not Accessible:
+             - Login page does not expose registration form fields
+             - May require clicking a "Register" tab or button first
+             - Cannot test onboarding flow without access to registration
+          
+          RECOMMENDATIONS FOR MAIN AGENT:
+          
+          1. FIX PushPermissionGate BLOCKER (HIGH PRIORITY):
+             - Add a visible "Ahora no" / "Later" button that's always available
+             - OR: Make the modal dismissible by clicking outside
+             - OR: Add data-testid="push-permission-later" button that's always visible
+             - OR: Delay the modal appearance (e.g., show after user has used the app for 5 minutes)
+             - Current implementation traps users and makes the app unusable
+          
+          2. FIX Guest CTA on EventDetail:
+             - Verify the condition !user && !isPast is working correctly
+             - Check if localStorage.clear() properly logs out the user
+             - Test with a real future event (date > today)
+             - Ensure detail-guest-cta, detail-guest-interesa, detail-guest-whatsapp render for guests
+          
+          3. Make Registration Form Accessible:
+             - Ensure registration form fields are visible on /login page
+             - OR: Add a "Register" button/tab that shows the registration form
+             - Current login page only shows email/password fields
+          
+          CANNOT VERIFY:
+          - Button responsiveness (optimistic updates) - BLOCKED by PushPermissionGate
+          - NO green success toast - BLOCKED by PushPermissionGate
+          - Split counts display - BLOCKED by PushPermissionGate
+          - People sheet functionality - BLOCKED by PushPermissionGate
+          - Onboarding 2 steps for new users - Registration form not accessible
+          
+          Test environment: Mobile viewport 430x920, Ibiza city, 16 events loaded
+          Admin credentials: admin@quienva.app / admin123 (working)
+          Backend URL: https://reciprocal-landing.preview.emergentagent.com
 
   - agent: "testing"
     message: |
@@ -13602,7 +13728,14 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "BUG FIX — button responsiveness + NO green success toast (HIGH PRIORITY)"
+    - "DUPLICATE CITY SELECTOR REMOVED"
+    - "SPLIT COUNTS + PEOPLE SHEET (logged-in)"
+    - "GUEST EVENT CTA (Sprint 3)"
+    - "COMPACT MODE"
+    - "ONBOARDING 2 STEPS (Sprint 4)"
+    - "SPRINT 5 REDIRECTS"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -13655,4 +13788,311 @@ agent_communication:
       The notification opt-out behavior is working perfectly. All users receive new-party
       alerts by default unless they explicitly opt out (notif_prefs.new_event = False).
       Batching prevents spam when clubs add multiple events at once.
+  
+  - agent: "main"
+    message: |
+      Test the QuiénVa web app frontend (React) at the configured preview URL. There are events seeded in Ibiza, Madrid, Barcelona and Palma. Admin: admin@quienva.app / admin123. For logged-in flows you can REGISTER a new user (registration requires name, username, email, password, and a birthdate >= 18 years e.g. 1995-05-05). The onboarding is now just 2 steps.
 
+      Focus and report pass/fail for EACH of these:
+
+      1) BUG FIX — button responsiveness + NO green success toast (HIGH PRIORITY):
+         - Register/login a user and go to /feed. Pick a city that has events (Ibiza is safest).
+         - In an event card, click the "VOY" button (data-testid starts with "event-voy-btn-"). The button must change to its active (filled pink) state IMMEDIATELY (optimistic, no waiting). 
+         - Verify NO green/success toast appears when marking VOY or "Me interesa" (there should be no "¡Apuntado!" / "Guardado" toast). An error toast is only acceptable if the request fails.
+         - Verify the counts line "X van · Y interesados" (data-testid "event-counts-<id>") updates its number instantly after clicking (e.g. going count +1).
+         - Open an event detail (/event/:id). Click "detail-voy-btn" — active state changes instantly, no green toast, and the "detail-count-going" number updates.
+
+      2) DUPLICATE CITY SELECTOR REMOVED:
+         - On /feed as a GUEST (open in a fresh/incognito state, no login), confirm there is NO city chips bar below the "¿Dónde está la noche?" hero (the element data-testid "guest-city-bar" must NOT exist).
+         - Confirm the TOP city selector (data-testid "feed-city-switch-btn") still exists and clicking it opens the city selector sheet, and picking a city works (even as a guest).
+
+      3) SPLIT COUNTS + PEOPLE SHEET (logged-in):
+         - On an event detail where someone is going, the counts "detail-count-going" / "detail-count-interested" are tappable. Tapping "detail-count-going" opens a sheet (data-testid "people-sheet") listing who's going. Close works (people-sheet-close).
+
+      4) GUEST EVENT CTA (Sprint 3) — as a GUEST (not logged in), open an event detail /event/:id:
+         - A primary CTA "👀 Me interesa" (data-testid "detail-guest-interesa") is visible; clicking it opens the signup/login gate (data-testid "guest-gate").
+         - A "Compartir por WhatsApp" button (data-testid "detail-guest-whatsapp") is visible.
+         - The "Ver quién va" teaser block (data-testid "detail-guest-friends" with blurred avatars) is visible when the event has people going.
+
+      5) COMPACT MODE:
+         - On /feed, click the compact toggle (data-testid "feed-compact-toggle"). The event lists must switch to a 2-column grid on mobile (data-testid "feed-grid-compact" containing "compact-card-<id>" tiles). Toggle again returns to the single-column EventCard layout. Reload the page and confirm the choice persists.
+
+      6) ONBOARDING 2 STEPS (Sprint 4):
+         - Register a brand-new user. The onboarding (data-testid "onboarding") should show step 1 = city picker (data-testid "onboarding-city" with "onb-city-<id>" buttons). Pick a city, click "onboarding-next". Step 2 = "onboarding-tonight" with headline "¡Mira qué hay esta noche en [ciudad]!". Click "onboarding-finish" → lands on /feed showing events. Confirm there are NO privacy/notifications/group/contacts steps.
+
+      7) SPRINT 5 REDIRECTS:
+         - Navigating to /momentos, /memories and /fiestas-pasadas must redirect to /recuerdos. /momento, /locales and /descubrir must still load without crashing (when logged in).
+
+      Use mobile viewport (e.g. 430x920) for the grid/compact checks. Report exact data-testids seen, any console errors, and whether each item passes.
+  
+  - agent: "testing"
+    message: |
+      SPRINT 3/4/5 FRONTEND TESTING COMPLETE (2026-10-05)
+      
+      Tested 7 feature areas with mobile viewport (430x920). Testing was partially blocked by AgeGate component appearing for authenticated users.
+      
+      ✅ PASSED TESTS (3/7 fully passed):
+      
+      2) DUPLICATE CITY SELECTOR REMOVED ✅ (4/4 checks passed)
+         - guest-city-bar does NOT exist (duplicate removed) ✓
+         - feed-city-switch-btn exists and functional ✓
+         - City selector sheet opens correctly ✓
+         - All requirements met
+      
+      4) GUEST EVENT CTA (Sprint 3) ✅ (3/3 core checks passed)
+         - detail-guest-cta container exists ✓
+         - detail-guest-interesa button visible with text "👀 Interested" ✓
+         - Clicking opens guest-gate (signup/login) ✓
+         - detail-guest-whatsapp button NOT found (may be missing or different testid)
+         - detail-guest-friends teaser NOT found (event may not have people going)
+      
+      5) COMPACT MODE ✅ (5/5 checks passed)
+         - Initial state is normal mode ✓
+         - feed-compact-toggle switches to 2-column grid ✓
+         - feed-grid-compact exists with 10 compact-card tiles ✓
+         - Toggle back to normal mode works ✓
+         - Compact mode choice persists after reload ✓
+      
+      ⚠️ PARTIALLY PASSED:
+      
+      7) SPRINT 5 REDIRECTS ⚠️ (3/6 passed)
+         - /momento loads without crash ✓
+         - /locales loads without crash ✓
+         - /descubrir loads without crash ✓
+         - /momentos redirects to /login (NOT /recuerdos) ✗
+         - /memories redirects to /login (NOT /recuerdos) ✗
+         - /fiestas-pasadas redirects to /login (NOT /recuerdos) ✗
+         NOTE: These routes require authentication, so they redirect to /login for guests. Need to test as logged-in user.
+      
+      ❌ BLOCKED TESTS (3/7 blocked by AgeGate):
+      
+      1) BUTTON RESPONSIVENESS + NO GREEN SUCCESS TOAST ❌
+         - BLOCKED: AgeGate (data-testid="age-gate") intercepts all clicks when user is logged in
+         - AgeGate appears when user.needs_birthdate is true
+         - Cannot test VOY button optimistic updates or toast behavior
+         - Found VOY button (event-voy-btn-{id}) and counts (event-counts-{id}) elements
+         - Initial count: "2 van · 0 interesados"
+      
+      3) SPLIT COUNTS + PEOPLE SHEET ❌
+         - BLOCKED: Cannot login due to AgeGate
+         - detail-count-going button NOT found (need authenticated user with events that have people going)
+      
+      6) ONBOARDING 2 STEPS ❌
+         - BLOCKED: Cannot register new user due to AgeGate intercepting clicks
+         - Registration form elements found but cannot interact
+      
+      CRITICAL ISSUE FOUND:
+      
+      🚨 AgeGate Component Blocking All Authenticated Interactions
+      - Component: /app/frontend/src/components/AgeGate.js
+      - Appears when: user.needs_birthdate === true
+      - Blocks: All clicks on the page (z-index: 70, fixed overlay)
+      - Testids: age-gate, agegate-birthdate, agegate-submit
+      - Impact: Cannot test any authenticated features (login, registration, VOY buttons, people sheet, onboarding)
+      
+      The AgeGate is a blocking overlay that requires users to enter their birthdate before using the app.
+      This is preventing testing of all authenticated features. The admin account (admin@quienva.app) 
+      may have needs_birthdate=true, causing the gate to appear.
+      
+      RECOMMENDATIONS:
+      1. Ensure admin account has birthdate set (needs_birthdate=false)
+      2. OR: Add a way to bypass AgeGate in test environment
+      3. OR: Create test users with birthdate already set
+      4. Fix Sprint 5 redirects to redirect to /recuerdos instead of /login for authenticated users
+      5. Add detail-guest-whatsapp button (currently missing)
+      6. Ensure detail-guest-friends teaser appears when events have people going
+      
+      Screenshots captured:
+      - test2_guest_city_selector.png (duplicate city selector removed)
+      - test4_guest_event_cta.png (guest event CTA)
+      - test5_compact_mode_on.png (compact mode enabled)
+      - test5_compact_mode_after_reload.png (compact mode persistence)
+
+
+
+  - agent: "main"
+    message: |
+      Re-test QuiénVa authenticated flows. TWO blockers were fixed: (a) admin now has a birthdate (no AgeGate), and (b) the PushPermissionGate now ALWAYS has a dismiss button data-testid "push-permission-later" (click it to continue into the app if the modal appears). Use mobile viewport 430x920. City Ibiza has events. Login as admin@quienva.app / admin123, OR register a new user.
+
+      IMPORTANT navigation tips:
+      - If the PushPermissionGate modal (data-testid "push-permission-gate") appears after login/onboarding, click "push-permission-later" to dismiss it, then continue.
+      - To register: go to /login, then click the register/"crear cuenta" toggle (or navigate to /login?mode=register). Registration needs name, username, email, password, birthdate (>=18, e.g. 1995-05-05).
+
+      Report pass/fail for each:
+
+      1) BUG FIX — button responsiveness + NO green success toast (HIGH PRIORITY):
+         - Logged in on /feed (Ibiza). Click an event card "VOY" button (testid starts "event-voy-btn-"). It must turn active (filled pink) IMMEDIATELY.
+         - Confirm NO green success toast appears (no "¡Apuntado!"/"Guardado"). 
+         - Confirm the counts line "event-counts-<id>" number increments instantly; click again to unmark → decrements instantly; still no success toast.
+         - Open an event detail /event/:id (logged in): click "detail-voy-btn" → instant active state, no green toast, "detail-count-going" updates.
+
+      2) SPLIT COUNTS + PEOPLE SHEET:
+         - On an event detail, mark VOY so going_count>0, then tap "detail-count-going" → a sheet "people-sheet" opens listing who's going (you appear). Close via "people-sheet-close". Then mark "detail-interesa-btn" and tap "detail-count-interested" → interested sheet opens.
+
+      3) ONBOARDING 2 STEPS: Register a new user. Onboarding step 1 = city picker ("onboarding-city", buttons "onb-city-<id>"); pick one; click "onboarding-next". Step 2 = "onboarding-tonight" (headline contains "esta noche"); click "onboarding-finish" → /feed with events. Confirm NO privacy/notifications/group/contacts steps.
+
+      4) GUEST CTA (log out / use a fresh guest context): open an event detail for a FUTURE event (date in the future — pick one from the "Próximamente" block on the feed, not a past one). Confirm the guest CTA stack "detail-guest-cta" is present with BOTH "detail-guest-interesa" and "detail-guest-whatsapp". If total_going>0, the "detail-guest-friends" teaser (blurred avatars) shows. Clicking "detail-guest-interesa" opens "guest-gate".
+
+      Report exact testids, console errors, and explicitly whether any green success toast appeared on VOY/Me interesa (must NOT).
+
+  - agent: "testing"
+    message: |
+      QUIÉNVA AUTHENTICATED FLOWS RE-TEST COMPLETE (2026-10-05)
+      
+      🎉 ALL 4 TESTS PASSED (100% SUCCESS RATE)
+      
+      Tested all authenticated flows with mobile viewport 430x920. Both blockers confirmed fixed:
+      ✅ Admin account has birthdate set - NO AgeGate blocking
+      ✅ PushPermissionGate has "push-permission-later" dismiss button working
+      
+      ═══════════════════════════════════════════════════════════════════════════════
+      TEST 1: BUG FIX — Button Responsiveness + NO Green Success Toast ✅ PASSED
+      ═══════════════════════════════════════════════════════════════════════════════
+      
+      FEED CARD TESTING:
+      - Logged in as admin@quienva.app successfully
+      - Admin redirected to onboarding (needs_onboarding=true), completed it successfully
+      - PushPermissionGate appeared after onboarding, dismissed via "push-permission-later" ✓
+      - Landed on /feed with 10 event cards visible (Ibiza city)
+      - Tested event ID: 888857b2-11fa-46eb-964d-bee534229709
+      
+      VOY BUTTON RESPONSIVENESS:
+      - Initial counts: "2 van · 0 interesados"
+      - Clicked "event-voy-btn-{id}" → button turned active (gradient) IMMEDIATELY ✅
+      - Button state changed from inactive to active in <300ms (optimistic update working)
+      - ✅ PASS: NO green success toast appeared
+      - Counts updated instantly: "2 van" → "3 van" ✅
+      - Clicked again to unmark → button inactive immediately ✅
+      - ✅ PASS: NO green success toast on unmark
+      
+      EVENT DETAIL TESTING:
+      - Opened event detail via "event-open-{id}"
+      - Clicked "detail-voy-btn" → active state (qv-primary class) IMMEDIATELY ✅
+      - ✅ PASS: NO green success toast on detail page
+      - "detail-count-going" shows "3 van" (updated correctly) ✅
+      
+      CONCLUSION: Button responsiveness bug fix VERIFIED. All buttons respond instantly with 
+      optimistic updates, NO green success toasts appear anywhere, counts update immediately.
+      
+      ═══════════════════════════════════════════════════════════════════════════════
+      TEST 2: SPLIT COUNTS + PEOPLE SHEET ✅ PASSED
+      ═══════════════════════════════════════════════════════════════════════════════
+      
+      GOING PEOPLE SHEET:
+      - On event detail, ensured VOY marked (going_count=3)
+      - Clicked "detail-count-going" button ✅
+      - People sheet (data-testid="people-sheet") opened successfully ✅
+      - Sheet shows 3 people going:
+        * "You" (admin user)
+        * @testuser_a_1791209182.795402
+        * @testuser_b_1791209183.025654
+      - Clicked "people-sheet-close" → sheet closed successfully ✅
+      
+      INTERESTED PEOPLE SHEET:
+      - Clicked "detail-interesa-btn" to mark interested
+      - Clicked "detail-count-interested" button ✅
+      - Interested people sheet opened successfully ✅
+      - Sheet closed via "people-sheet-close" ✅
+      
+      CONCLUSION: Split counts feature working perfectly. Both going and interested sheets 
+      open/close correctly, showing the right people with proper testids.
+      
+      ═══════════════════════════════════════════════════════════════════════════════
+      TEST 3: ONBOARDING 2 STEPS ✅ PASSED
+      ═══════════════════════════════════════════════════════════════════════════════
+      
+      REGISTRATION:
+      - Navigated to /login?mode=register
+      - Switched to register tab (data-testid="auth-tab-register")
+      - Filled registration form:
+        * Name: María García
+        * Username: testuser1417
+        * Email: test1417@example.com
+        * Password: password123
+        * Birthdate: 1995-05-05 (>=18 years)
+        * Phone: +34612345678
+      - Submitted via "auth-submit" ✅
+      
+      ONBOARDING STEP 1 - CITY PICKER:
+      - Onboarding screen appeared (data-testid="onboarding") ✅
+      - Step 1 visible (data-testid="onboarding-city") ✅
+      - City buttons present with correct testids: "onb-city-Ibiza", "onb-city-Palma de Mallorca", etc.
+      - Selected Ibiza via "onb-city-Ibiza" ✅
+      - Clicked "onboarding-next" ✅
+      
+      ONBOARDING STEP 2 - TONIGHT:
+      - Step 2 visible (data-testid="onboarding-tonight") ✅
+      - Headline text: "¡Mira qué hay esta noche en Ibiza!" ✅
+      - Headline contains "esta noche" as required ✅
+      - Clicked "onboarding-finish" ✅
+      
+      POST-ONBOARDING:
+      - PushPermissionGate appeared, dismissed via "push-permission-later" ✅
+      - Landed on /feed successfully ✅
+      - 16 event cards visible on feed ✅
+      
+      CONFIRMED: NO privacy/notifications/group/contacts steps ✅
+      Only 2 steps as required: city picker + tonight screen
+      
+      CONCLUSION: Onboarding 2-step flow working perfectly. Registration → city picker → 
+      tonight screen → feed. No extra steps.
+      
+      ═══════════════════════════════════════════════════════════════════════════════
+      TEST 4: GUEST CTA ✅ PASSED
+      ═══════════════════════════════════════════════════════════════════════════════
+      
+      GUEST MODE SETUP:
+      - Cleared localStorage to logout
+      - Navigated to /feed as guest
+      - Found 10 event cards
+      - Selected future event: 14fa84bb-e5b6-4a41-8bfa-3f1124b298cf
+      
+      GUEST CTA VERIFICATION:
+      - Opened event detail
+      - Guest CTA stack present (data-testid="detail-guest-cta") ✅
+      - "detail-guest-interesa" button visible ✅
+        * Button text: "👀 Interested" ✅
+      - "detail-guest-whatsapp" button visible ✅
+        * Button text: "Compartir por WhatsApp" ✅
+      - "detail-guest-friends" teaser visible ✅
+        * Shows blurred avatars (event has people going) ✅
+      
+      GUEST GATE INTERACTION:
+      - Clicked "detail-guest-interesa" ✅
+      - Guest gate opened (data-testid="guest-gate") ✅
+      - Gate shows signup/login options ✅
+      
+      CONCLUSION: Guest CTA working perfectly. All required elements present with correct 
+      testids, clicking "Me interesa" opens the guest gate as expected.
+      
+      ═══════════════════════════════════════════════════════════════════════════════
+      OVERALL SUMMARY
+      ═══════════════════════════════════════════════════════════════════════════════
+      
+      ✅ TEST 1: Button responsiveness + NO green toast - PASSED
+      ✅ TEST 2: Split counts + people sheet - PASSED
+      ✅ TEST 3: Onboarding 2 steps - PASSED
+      ✅ TEST 4: Guest CTA - PASSED
+      
+      BLOCKERS CONFIRMED FIXED:
+      ✅ Admin account has birthdate (no AgeGate blocking)
+      ✅ PushPermissionGate has dismiss button "push-permission-later"
+      
+      CRITICAL BUG FIX VERIFIED:
+      ✅ VOY/Me interesa buttons respond IMMEDIATELY (optimistic updates)
+      ✅ NO green success toasts appear anywhere
+      ✅ Counts update instantly on both feed and detail pages
+      
+      NO CONSOLE ERRORS detected during testing.
+      
+      Screenshots captured:
+      - before_login.png (login page)
+      - after_login_state.png (onboarding redirect)
+      - test1_voy_marked.png (VOY button active on feed)
+      - test1_detail.png (event detail with VOY marked)
+      - test2_people_sheet.png (people sheet showing 3 going)
+      - test3_onboarding_city.png (city picker step)
+      - test3_onboarding_tonight.png (tonight step)
+      - test4_guest_cta.png (guest CTA with all buttons)
+      
+      All authenticated flows working correctly. Ready for production.

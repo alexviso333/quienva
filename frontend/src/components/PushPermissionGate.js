@@ -109,20 +109,20 @@ export default function PushPermissionGate() {
           </p>
         )}
         {failed && (
-          <>
-            <p className="mt-4 text-amber-300/90 text-xs leading-relaxed">
-              {t("push.blocked")}
-            </p>
-            <button
-              onClick={markDone}
-              disabled={submitting}
-              className="mt-2 w-full py-2.5 rounded-2xl text-white/50 text-xs font-semibold hover:text-white/80"
-              data-testid="push-permission-later"
-            >
-              {t("push.continue_anyway")}
-            </button>
-          </>
+          <p className="mt-4 text-amber-300/90 text-xs leading-relaxed">
+            {t("push.blocked")}
+          </p>
         )}
+        {/* Always-available escape hatch: notifications are never a blocking wall
+            (Sprint 4). The user can continue to the app at any time. */}
+        <button
+          onClick={markDone}
+          disabled={submitting}
+          className="mt-2 w-full py-2.5 rounded-2xl text-white/50 text-xs font-semibold hover:text-white/80"
+          data-testid="push-permission-later"
+        >
+          {t("push.continue_anyway", "Ahora no")}
+        </button>
       </div>
     </div>
   );

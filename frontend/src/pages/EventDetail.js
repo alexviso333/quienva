@@ -23,6 +23,21 @@ const todayStr = () => {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 };
 
+// Optimistic interest change: flip my_status + adjust the split counts instantly
+// so the card reacts with zero perceived delay (no toast, no spinner).
+const applyIntent = (e, status) => {
+  if (!e) return e;
+  const prev = e.my_status;
+  if (prev === status) return e;
+  let gc = e.going_count ?? 0;
+  let ic = e.interested_count ?? 0;
+  if (prev === "voy") gc = Math.max(0, gc - 1);
+  if (prev === "me_interesa") ic = Math.max(0, ic - 1);
+  if (status === "voy") gc += 1;
+  if (status === "me_interesa") ic += 1;
+  return { ...e, my_status: status, going_count: gc, interested_count: ic };
+};
+
 const FIELD_LABELS = {
   name: "Nombre", venue: "Discoteca", address: "Dirección", date: "Fecha",
   time: "Hora", image_url: "Foto", genre: "Género", city: "Ciudad",
@@ -130,18 +145,16 @@ export default function EventDetail() {
     onMutate: async (status) => {
       await qc.cancelQueries({ queryKey: ["event", id] });
       const prev = qc.getQueryData(["event", id]);
-      qc.setQueryData(["event", id], (e) => (e ? { ...e, my_status: status } : e));
+      qc.setQueryData(["event", id], (e) => applyIntent(e, status));
       const patchArr = (arr) =>
-        Array.isArray(arr) ? arr.map((e) => (e.id === id ? { ...e, my_status: status } : e)) : arr;
+        Array.isArray(arr) ? arr.map((e) => (e.id === id ? applyIntent(e, status) : e)) : arr;
       qc.getQueriesData({ queryKey: ["events"] }).forEach(([key, data]) => {
         qc.setQueryData(key, patchArr(data));
       });
       return { prev };
     },
-    onSuccess: (_d, status) => {
-      if (status === "voy") toast.success(t("event.toast_going"));
-      if (status === "estuve") toast.success(t("event.toast_saved"));
-    },
+    // No success toast: the optimistic update is instant, a toast would only
+    // draw attention to the network round-trip.
     onError: (_e, _s, ctx) => {
       if (ctx?.prev) qc.setQueryData(["event", id], ctx.prev);
       toast.error(t("event.toast_error"));
@@ -433,7 +446,7 @@ export default function EventDetail() {
             <button
               data-testid="detail-estuve-btn"
               onClick={() => toggle("estuve")}
-              className={`h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors duration-300 ${
+              className={`h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors duration-150 ${
                 isEstuve ? "bg-qv-primary text-white shadow-[0_0_20px_rgba(255,0,85,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
               }`}
             >
@@ -465,7 +478,7 @@ export default function EventDetail() {
               <button
                 data-testid="detail-voy-btn"
                 onClick={() => toggle("voy")}
-                className={`h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors duration-300 ${
+                className={`h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors duration-150 ${
                   isVoy ? "bg-qv-primary text-white shadow-[0_0_20px_rgba(255,0,85,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
                 }`}
               >
@@ -474,7 +487,7 @@ export default function EventDetail() {
               <button
                 data-testid="detail-interesa-btn"
                 onClick={() => toggle("me_interesa")}
-                className={`h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors duration-300 ${
+                className={`h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors duration-150 ${
                   isInteresa ? "bg-qv-secondary text-black shadow-[0_0_20px_rgba(0,240,255,0.4)]" : "bg-white/5 border border-white/20 text-white/80"
                 }`}
               >

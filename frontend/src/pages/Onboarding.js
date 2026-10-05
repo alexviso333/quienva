@@ -1,90 +1,77 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { PartyPopper, Users, Bell, ChevronRight, Sparkles, Loader2, ShieldCheck, Contact } from "lucide-react";
-import { subscribeToPush } from "@/lib/push";
+import { PartyPopper, MapPin, ChevronRight, Loader2, Sparkles, Check } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import GroupInviteStep from "@/components/GroupInviteStep";
-import FindFriends from "@/components/FindFriends";
 
-const SLIDES = [
-  { icon: PartyPopper, color: "text-qv-primary", titleKey: "onboarding.slide1_title", bodyKey: "onboarding.slide1_body" },
-  { icon: Users, color: "text-qv-secondary", titleKey: "onboarding.slide2_title", bodyKey: "onboarding.slide2_body" },
-  { icon: Bell, color: "text-yellow-300", titleKey: "onboarding.slide3_title", bodyKey: "onboarding.slide3_body" },
-];
-
+/**
+ * SPRINT 4 — Onboarding reducido de 6 pasos a 2:
+ *   Paso 1: Elegir ciudad.
+ *   Paso 2: "¡Mira qué hay esta noche en [ciudad]!" -> va a Tonight (/feed).
+ *
+ * El resto (privacidad, notificaciones, grupo, contactos) se movió a prompts
+ * contextuales dentro de la app. Los defaults del servidor (attendance_privacy
+ * y moment_privacy = "amigos") ya aplican sin preguntar nada aquí, para que un
+ * usuario que llega desde WhatsApp vea una fiesta real en menos de 30s.
+ */
 export default function Onboarding() {
   const { t } = useTranslation();
   const nav = useNavigate();
-  const { user, refreshUser } = useAuth();
-  const [i, setI] = useState(0);
+  const { user, setUser, refreshUser } = useAuth();
+  const [step, setStep] = useState(0); // 0 = ciudad, 1 = "esta noche"
   const [busy, setBusy] = useState(false);
-  const [privacyStep, setPrivacyStep] = useState(false);
-  const [notifStep, setNotifStep] = useState(false);
-  const [inviteStep, setInviteStep] = useState(false);
-  const [contactsStep, setContactsStep] = useState(false);
-  const [attendancePriv, setAttendancePriv] = useState("amigos");
-  const [momentPriv, setMomentPriv] = useState("amigos");
-  // First-run notification choices. new_event = "all my city" alerts (opt-in);
-  // the rest are the useful per-event alerts. Saved to /me/notif-prefs.
-  const [notifPrefs, setNotifPrefs] = useState({
-    new_event: true,
-    tickets_on_sale: true,
-    tickets_price_down: true,
-    friend_going: true,
-  });
-  const Icon = SLIDES[i].icon;
+  const [cities, setCities] = useState([]);
+  const [selected, setSelected] = useState(user?.city || null);
 
   useEffect(() => {
-    // If already onboarded, skip
     if (localStorage.getItem("qv_onboarded") === "1") {
       nav("/feed", { replace: true });
     }
   }, [nav]);
 
-  const finish = async (activate) => {
+  useEffect(() => {
+    api.get("/cities").then(({ data }) => {
+      if (data?.cities?.length) setCities(data.cities);
+    }).catch(() => {});
+  }, []);
+
+  const cityLabel = (() => {
+    const c = cities.find((x) => x.id === selected);
+    return (c?.label || selected || "").split(",")[0];
+  })();
+
+  const pickCity = async (cityId) => {
+    setSelected(cityId);
+    try {
+      const { data } = await api.put("/auth/profile", { city: cityId });
+      setUser(data);
+      try { localStorage.setItem("qv_user", JSON.stringify(data)); } catch { /* ignore */ }
+    } catch (e) { /* non-fatal: will retry on finish */ }
+  };
+
+  const goTonight = async () => {
     setBusy(true);
     try {
-      // Persist the privacy choices the user made in the final step. (If they
-      // skipped before reaching it, the server defaults — "amigos" — already apply.)
-      if (privacyStep) {
+      if (selected && selected !== user?.city) {
         try {
-          await api.put("/auth/profile", { attendance_privacy: attendancePriv, moment_privacy: momentPriv });
-        } catch (e) { /* ignore, defaults stay */ }
-      }
-      if (activate) {
-        try {
-          await subscribeToPush();
-          toast.success(t("onboarding.toast_notif"));
-        } catch (e) { /* browser denied — continue anyway */ }
-        if (user) localStorage.setItem(`qv_push_granted_${user.user_id}`, "1");
+          const { data } = await api.put("/auth/profile", { city: selected });
+          setUser(data);
+        } catch (e) { /* ignore */ }
       }
       try { await refreshUser(); } catch (e) { /* ignore */ }
     } finally {
       setBusy(false);
     }
-    localStorage.setItem("qv_onboarded", "1");
+    try { localStorage.setItem("qv_onboarded", "1"); } catch { /* ignore */ }
     nav("/feed", { replace: true });
   };
 
-  const saveNotifPrefs = async () => {
-    try {
-      await api.put("/me/notif-prefs", { prefs: notifPrefs });
-    } catch (e) {
-      /* non-fatal: defaults apply, user can change in Settings */
-    }
-  };
-
-  const next = () => {
-    if (i < SLIDES.length - 1) setI(i + 1);
-    else if (!privacyStep) setPrivacyStep(true);
-    else if (!notifStep) setNotifStep(true);
-    else if (!inviteStep) { saveNotifPrefs(); setInviteStep(true); }
-    else if (!contactsStep) setContactsStep(true);
-    else finish(true);
+  const skip = () => {
+    try { localStorage.setItem("qv_onboarded", "1"); } catch { /* ignore */ }
+    nav("/feed", { replace: true });
   };
 
   return (
@@ -93,160 +80,101 @@ export default function Onboarding() {
         <span className="text-qv-secondary text-xs font-bold uppercase tracking-widest">
           <Sparkles className="w-3.5 h-3.5 inline mr-1" /> {t("onboarding.welcome")}
         </span>
-        <button onClick={() => finish(false)} className="text-white/50 text-sm">{t("onboarding.skip")}</button>
+        <button onClick={skip} data-testid="onboarding-skip" className="text-white/50 text-sm">{t("onboarding.skip")}</button>
       </div>
 
-      {contactsStep ? (
-        <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-5 py-6" data-testid="onboarding-contacts">
-          <div className="text-center flex flex-col items-center gap-3">
-            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-              <Contact className="w-10 h-10 text-qv-secondary" />
+      <AnimatePresence mode="wait">
+        {step === 0 ? (
+          <motion.div
+            key="city"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -18 }}
+            transition={{ duration: 0.3 }}
+            className="flex-1 flex flex-col justify-center gap-7 py-6"
+            data-testid="onboarding-city"
+          >
+            <div className="text-center flex flex-col items-center gap-3">
+              <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                <MapPin className="w-10 h-10 text-qv-secondary" />
+              </div>
+              <h1 className="font-display text-3xl font-black text-white">
+                {t("onboarding.city_title", "¿En qué ciudad sales?")}
+              </h1>
+              <p className="text-white/60 text-sm max-w-xs leading-relaxed">
+                {t("onboarding.city_sub", "Te enseñamos las fiestas de tu ciudad. Podrás cambiarla cuando quieras.")}
+              </p>
             </div>
-            <h1 className="font-display text-3xl font-bold text-white">{t("onboarding.contacts_title", "Encuentra a tus amigos")}</h1>
-            <p className="text-white/60 text-sm max-w-xs leading-relaxed">{t("onboarding.contacts_sub", "Mira quién de tus contactos ya está en ¿Quién va? Tú eliges a quién añadir — es opcional.")}</p>
-          </div>
-          <div className="-mx-6">
-            <FindFriends />
-          </div>
-        </div>
-      ) : inviteStep ? (
-        <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col justify-center gap-6 py-6" data-testid="onboarding-invite">
-          <div className="text-center flex flex-col items-center gap-3">
-            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-              <Users className="w-10 h-10 text-qv-primary" />
-            </div>
-            <h1 className="font-display text-3xl font-bold text-white">{t("groupinvite.title", "Monta tu grupo")}</h1>
-            <p className="text-white/60 text-sm max-w-xs leading-relaxed">{t("onboarding.group_sub", "Un grupo es tu pandilla: veréis a qué fiesta va cada uno y os organizáis en un chat. Créalo y trae a tu gente.")}</p>
-          </div>
-          <GroupInviteStep />
-        </div>
-      ) : notifStep ? (
-        <div className="flex-1 flex flex-col justify-center gap-6 py-6" data-testid="onboarding-notif">
-          <div className="text-center flex flex-col items-center gap-3">
-            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-              <Bell className="w-10 h-10 text-yellow-300" />
-            </div>
-            <h1 className="font-display text-3xl font-bold text-white">{t("onboarding.notif_title", { defaultValue: "¿Qué avisos quieres?" })}</h1>
-            <p className="text-white/60 text-sm max-w-xs leading-relaxed">
-              {t("onboarding.notif_sub", { defaultValue: "Elige qué notificaciones recibir. Podrás cambiarlo cuando quieras en Ajustes." })}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {[
-              ["new_event", t("onboarding.notif_city", { defaultValue: "Todas las fiestas de mi ciudad" }), t("onboarding.notif_city_d", { defaultValue: "Avísame de cualquier fiesta nueva cerca" })],
-              ["tickets_on_sale", t("onboarding.notif_sale", { defaultValue: "Entradas a la venta" }), t("onboarding.notif_sale_d", { defaultValue: "Cuando salen a la venta" })],
-              ["tickets_price_down", t("onboarding.notif_drop", { defaultValue: "Bajadas de precio" }), t("onboarding.notif_drop_d", { defaultValue: "Cuando baja el precio de una entrada" })],
-              ["friend_going", t("onboarding.notif_friends", { defaultValue: "Amigos se apuntan" }), t("onboarding.notif_friends_d", { defaultValue: "Cuando un amigo se apunta a un plan" })],
-            ].map(([key, label, desc]) => (
-              <button
-                key={key}
-                data-testid={`onb-notif-${key}`}
-                onClick={() => setNotifPrefs((p) => ({ ...p, [key]: !p[key] }))}
-                className={`flex items-center gap-3 rounded-2xl border p-3.5 text-left active:scale-[0.99] transition-colors ${notifPrefs[key] ? "bg-qv-primary/15 border-qv-primary" : "bg-white/5 border-white/12"}`}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-semibold">{label}</p>
-                  <p className="text-white/45 text-xs">{desc}</p>
-                </div>
-                <span className={`w-11 h-6 rounded-full flex-shrink-0 relative transition-colors ${notifPrefs[key] ? "bg-qv-primary" : "bg-white/15"}`}>
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${notifPrefs[key] ? "left-[22px]" : "left-0.5"}`} />
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : privacyStep ? (
-        <div className="flex-1 flex flex-col justify-center gap-7 py-6" data-testid="onboarding-privacy">
-          <div className="text-center flex flex-col items-center gap-3">
-            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-              <ShieldCheck className="w-10 h-10 text-qv-secondary" />
-            </div>
-            <h1 className="font-display text-3xl font-bold text-white">{t("onboarding.privacy_title")}</h1>
-            <p className="text-white/60 text-sm max-w-xs leading-relaxed">
-              {t("onboarding.privacy_sub")}
-            </p>
-          </div>
 
-          <div>
-            <p className="text-sm font-bold text-white mb-2">
-              {t("onboarding.q_attendance")} <span className="text-white/50 font-medium">{t("onboarding.q_attendance_hint")}</span>
+            <div className="grid grid-cols-2 gap-3">
+              {cities.map((c) => {
+                const on = selected === c.id;
+                const short = (c.label || c.id).split(",")[0];
+                return (
+                  <button
+                    key={c.id}
+                    data-testid={`onb-city-${c.id}`}
+                    onClick={() => pickCity(c.id)}
+                    className={`h-14 rounded-2xl border text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-colors ${
+                      on
+                        ? "bg-qv-secondary/15 border-qv-secondary text-white"
+                        : "bg-white/5 border-white/12 text-white/70"
+                    }`}
+                  >
+                    {c.emoji ? <span>{c.emoji}</span> : null}
+                    {short}
+                    {on && <Check className="w-4 h-4 text-qv-secondary" />}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="tonight"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -18 }}
+            transition={{ duration: 0.3 }}
+            className="flex-1 flex flex-col items-center justify-center text-center gap-6"
+            data-testid="onboarding-tonight"
+          >
+            <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+              <PartyPopper className="w-11 h-11 text-qv-primary" />
+            </div>
+            <h1 className="font-display text-4xl font-black text-white leading-tight">
+              {t("onboarding.tonight_title", "¡Mira qué hay esta noche")}<br />
+              <span className="text-qv-primary">{cityLabel ? `en ${cityLabel}!` : "!"}</span>
+            </h1>
+            <p className="text-white/60 text-base max-w-xs leading-relaxed">
+              {t("onboarding.tonight_sub", "Descubre las fiestas de hoy y marca a cuáles vas. Así de fácil.")}
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {[["todos", t("onboarding.opt_all")], ["amigos", t("onboarding.opt_friends_only")], ["nadie", t("onboarding.opt_none")]].map(([val, label]) => (
-                <button
-                  key={val}
-                  data-testid={`onb-att-${val}`}
-                  onClick={() => setAttendancePriv(val)}
-                  className={`h-12 rounded-2xl border text-sm font-bold active:scale-95 transition-colors ${
-                    attendancePriv === val ? "bg-qv-primary/15 border-qv-primary text-white" : "bg-white/5 border-white/12 text-white/65"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          <div>
-            <p className="text-sm font-bold text-white mb-2">{t("onboarding.q_moment")}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[["amigos", t("onboarding.opt_friends_only")], ["publico", t("onboarding.opt_moment_public")]].map(([val, label]) => (
-                <button
-                  key={val}
-                  data-testid={`onb-mom-${val}`}
-                  onClick={() => setMomentPriv(val)}
-                  className={`h-12 rounded-2xl border text-sm font-bold active:scale-95 transition-colors ${
-                    momentPriv === val ? "bg-qv-secondary/15 border-qv-secondary text-white" : "bg-white/5 border-white/12 text-white/65"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+      {step === 0 ? (
+        <button
+          data-testid="onboarding-next"
+          onClick={() => setStep(1)}
+          disabled={!selected}
+          className="h-14 rounded-2xl bg-qv-primary text-white font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-40"
+        >
+          {t("onboarding.next")}
+          <ChevronRight className="w-5 h-5" />
+        </button>
       ) : (
-        <>
-          <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.35 }}
-                className="flex flex-col items-center gap-6"
-              >
-                <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                  <Icon className={`w-11 h-11 ${SLIDES[i].color}`} />
-                </div>
-                <h1 className="font-display text-3xl font-bold text-white">{t(SLIDES[i].titleKey)}</h1>
-                <p className="text-white/60 text-base max-w-xs leading-relaxed">{t(SLIDES[i].bodyKey)}</p>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          <div className="flex justify-center gap-2 mb-8">
-            {SLIDES.map((_, idx) => (
-              <span
-                key={idx}
-                className={`h-1.5 rounded-full transition-all ${idx === i ? "w-8 bg-qv-primary" : "w-1.5 bg-white/20"}`}
-              />
-            ))}
-          </div>
-        </>
+        <button
+          data-testid="onboarding-finish"
+          onClick={goTonight}
+          disabled={busy}
+          className="h-14 rounded-2xl bg-gradient-to-r from-qv-primary to-qv-secondary text-black font-black text-base flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
+        >
+          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+          {t("onboarding.tonight_cta", "Ver las fiestas")}
+          <ChevronRight className="w-5 h-5" />
+        </button>
       )}
-
-      <button
-        data-testid="onboarding-next"
-        onClick={next}
-        disabled={busy}
-        className="h-14 rounded-2xl bg-qv-primary text-white font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
-      >
-        {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-        {contactsStep ? t("onboarding.finish", "Empezar") : t("onboarding.next")}
-        {!contactsStep && <ChevronRight className="w-5 h-5" />}
-      </button>
     </div>
   );
 }

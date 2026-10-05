@@ -40,7 +40,6 @@ const MapPage = lazy(() => import("@/pages/MapPage"));
 const NotifPrefs = lazy(() => import("@/pages/NotifPrefs"));
 const Momento = lazy(() => import("@/pages/Momento"));
 const Descubrir = lazy(() => import("@/pages/Descubrir"));
-const Momentos = lazy(() => import("@/pages/Momentos"));
 const Wrapped = lazy(() => import("@/pages/Wrapped"));
 
 function LoadingScreen() {
@@ -143,7 +142,8 @@ function AppRouter() {
         <Route path="/ajustes/avisos" element={<ProtectedRoute><NotifPrefs /></ProtectedRoute>} />
         <Route path="/momento" element={<ProtectedRoute><Momento /></ProtectedRoute>} />
         <Route path="/descubrir" element={<ProtectedRoute><Descubrir /></ProtectedRoute>} />
-        <Route path="/momentos" element={<ProtectedRoute><Momentos /></ProtectedRoute>} />
+        {/* Sprint 5: "Momentos" (galería huérfana, sin enlaces) consolidada en Recuerdos */}
+        <Route path="/momentos" element={<Navigate to="/recuerdos" replace />} />
         <Route path="/wrapped" element={<ProtectedRoute><Wrapped /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
         <Route path="/admin/dinero" element={<ProtectedRoute adminOnly><AdminMoney /></ProtectedRoute>} />
