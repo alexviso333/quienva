@@ -663,10 +663,34 @@ export default function EventDetail() {
                   <FriendRow title={t("event.friends_interested")} color="#00F0FF" friends={event.friends_interested} />
                 </>
               )}
-              {((isPast && (event.friends_attended || []).length === 0) ||
-                (!isPast && (event.friends_going || []).length === 0 && (event.friends_interested || []).length === 0)) && (
-                <p className="text-white/40 text-sm italic" data-testid="detail-nofriends">
-                  {t("event.no_friends")}
+              {!isPast && (event.friends_going || []).length === 0 && (event.friends_interested || []).length === 0 && (
+                <p className="text-white/55 text-sm" data-testid="detail-aggsocial">
+                  {(() => {
+                    const openPlans = event.open_plans_count || 0;
+                    const nights = event.nights_at_venue || 0;
+                    const going = event.going_count ?? event.total_going ?? 0;
+                    const interested = event.interested_count ?? event.total_interested ?? 0;
+                    if (openPlans > 0) {
+                      return (
+                        <span className="text-qv-primary font-semibold">
+                          {t(openPlans === 1 ? "eventcard.open_plans_one" : "eventcard.open_plans_other", { count: openPlans })}
+                        </span>
+                      );
+                    }
+                    if ((going + interested) >= 5) {
+                      return (
+                        <span>
+                          <b className="text-white/85">{going}</b> {t("eventcard.count_going", "van")}
+                          <span className="text-white/25"> · </span>
+                          <b className="text-white/75">{interested}</b> {t("eventcard.count_interested", "interesados")}
+                        </span>
+                      );
+                    }
+                    if (nights > 0) {
+                      return <span>{t("eventcard.nights_at_venue", { count: nights, venue: event.venue })}</span>;
+                    }
+                    return <span className="text-white/45">{t("eventcard.new_this_week")}</span>;
+                  })()}
                 </p>
               )}
             </div>

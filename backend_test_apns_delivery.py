@@ -9,7 +9,7 @@ import requests
 import sys
 
 # Backend URL from frontend/.env
-BASE_URL = "https://who-goes-planner.preview.emergentagent.com/api"
+BASE_URL = "https://night-preview-1.preview.emergentagent.com/api"
 
 # Test credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

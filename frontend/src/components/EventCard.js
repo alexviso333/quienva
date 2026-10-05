@@ -310,11 +310,36 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 )}
               </p>
             </>
-          ) : (
-            <p className="text-xs text-white/40 italic" data-testid={`event-nofriends-${event.id}`}>
-              {isPast ? t("eventcard.nofriends_past") : t("eventcard.nofriends_future")}
+          ) : !isPast ? (
+            <p className="text-xs text-white/60 leading-tight" data-testid={`event-aggsocial-${event.id}`}>
+              {(() => {
+                const openPlans = event.open_plans_count || 0;
+                const nights = event.nights_at_venue || 0;
+                const going = event.going_count ?? event.total_going ?? 0;
+                const interested = event.interested_count ?? event.total_interested ?? 0;
+                if (openPlans > 0) {
+                  return (
+                    <span className="text-qv-primary font-semibold">
+                      {t(openPlans === 1 ? "eventcard.open_plans_one" : "eventcard.open_plans_other", { count: openPlans })}
+                    </span>
+                  );
+                }
+                if ((going + interested) >= 5) {
+                  return (
+                    <span>
+                      <b className="text-white/80">{going}</b> {t("eventcard.count_going", "van")}
+                      <span className="text-white/25"> · </span>
+                      <b className="text-white/70">{interested}</b> {t("eventcard.count_interested", "interesados")}
+                    </span>
+                  );
+                }
+                if (nights > 0) {
+                  return <span>{t("eventcard.nights_at_venue", { count: nights, venue: event.venue })}</span>;
+                }
+                return <span className="text-white/45">{t("eventcard.new_this_week")}</span>;
+              })()}
             </p>
-          )}
+          ) : null}
         </div>
 
         {/* Crowd counts — separated intent signal ("17 van · 42 interesados"),

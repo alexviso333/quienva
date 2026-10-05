@@ -6543,7 +6543,9 @@ def _signups_recent(interests: list, hours: int = 24) -> int:
 async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map: dict | None = None,
                           interests_by_event: dict | None = None,
                           follows_set: set | None = None,
-                          my_ticket_ids: set | None = None) -> dict:
+                          my_ticket_ids: set | None = None,
+                          open_plans_by_event: dict | None = None,
+                          nights_by_venue: dict | None = None) -> dict:
     if interests_by_event is not None:
         interests = interests_by_event.get(ev["id"], [])
     else:
@@ -6651,6 +6653,20 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         "interested_count": sum(1 for it in interests if it["status"] == "me_interesa" and it.get("privacy", "todos") != "nadie"),
         # Urgencia: cuántas personas se han apuntado (voy/interesa) en las últimas 24h.
         "signups_today": _signups_recent(interests),
+        # Aggregated social-proof fallbacks (never show an empty "no friends" state).
+        # Frontend picks the first non-empty signal in priority order:
+        # friends → crowd counts → open plans → nights at venue → editorial "new".
+        "open_plans_count": (
+            open_plans_by_event.get(ev["id"], 0) if open_plans_by_event is not None
+            else await db.plans.count_documents({"estado": "abierto", "opciones.evento_id": ev["id"]})
+        ),
+        "nights_at_venue": (
+            nights_by_venue.get(ev.get("venue", ""), 0) if nights_by_venue is not None
+            else (await db.events.count_documents({
+                "venue": ev.get("venue", ""),
+                "date": {"$lt": datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()},
+            }) if ev.get("venue") else 0)
+        ),
         "my_intent": STATUS_TO_INTENT.get(my_status, "none"),
         # Tickets
         "my_has_ticket": my_has_ticket,
@@ -6852,9 +6868,32 @@ async def list_events(user: dict = Depends(get_optional_user),
                 follows_set.add(f["event_id"])
 
     my_ticket_ids = set(await db.tickets.distinct("event_id", {"user_id": user["user_id"]})) if user["user_id"] is not None else set()
+    # Batch-precompute aggregated social-proof fallbacks (avoid N queries in the loop).
+    open_plans_by_event: dict = {}
+    nights_by_venue: dict = {}
+    if event_ids:
+        _eid_set = set(event_ids)
+        async for _p in db.plans.find(
+            {"estado": "abierto", "opciones.evento_id": {"$in": event_ids}},
+            {"_id": 0, "opciones": 1},
+        ):
+            _seen = set()
+            for _o in (_p.get("opciones") or []):
+                _e = _o.get("evento_id")
+                if _e in _eid_set and _e not in _seen:
+                    _seen.add(_e)
+                    open_plans_by_event[_e] = open_plans_by_event.get(_e, 0) + 1
+        _venue_names = list({ev.get("venue", "") for ev in filtered_events if ev.get("venue")})
+        if _venue_names:
+            _today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+            async for _row in db.events.aggregate([
+                {"$match": {"venue": {"$in": _venue_names}, "date": {"$lt": _today_iso}}},
+                {"$group": {"_id": "$venue", "n": {"$sum": 1}}},
+            ]):
+                nights_by_venue[_row["_id"]] = _row["n"]
     events = []
     for ev in filtered_events:
-        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids))
+        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids, open_plans_by_event, nights_by_venue))
     return events
 
 

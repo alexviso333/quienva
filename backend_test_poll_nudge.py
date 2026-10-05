@@ -2,14 +2,14 @@
 """
 Backend test for poll closed message with winner + nudge config/stats
 Test date: 2026-09-06
-Base URL: https://who-goes-planner.preview.emergentagent.com/api
+Base URL: https://night-preview-1.preview.emergentagent.com/api
 """
 
 import requests
 import json
 from datetime import datetime
 
-BASE_URL = "https://who-goes-planner.preview.emergentagent.com/api"
+BASE_URL = "https://night-preview-1.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@qvtest.com"

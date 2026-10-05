@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timedelta
 
 # Base URL from frontend/.env REACT_APP_BACKEND_URL with /api prefix
-BASE_URL = "https://1d50a7e9-627f-416c-9aa6-850ff82be546.preview.emergentagent.com/api"
+BASE_URL = "https://night-preview-1.preview.emergentagent.com/api"
 
 def log(msg):
     print(f"[TEST] {msg}")
