@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
 import { Ticket, ExternalLink, MapPin, Clock, Check, Star, Send, CheckCircle2, Info, Bell, BellOff, Flame, Lock, ClipboardList, Euro, Eye } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
+import { VoyCelebration } from "@/components/VoyCelebration";
 import api, { mediaThumb, API } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
@@ -95,6 +97,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const { t } = useTranslation();
   const qc = useQueryClient();
   const prefersReduced = useReducedMotion();
+  const [celebrateKey, setCelebrateKey] = useState(0);
   const isPast = event.date < todayStr();
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
@@ -131,7 +134,11 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const goingText = socialText(t, going, isVoy, "going");
   const interestedText = socialText(t, interested, isInteresa, "interested");
 
-  const toggle = (status) => onSetStatus(event.id, event.my_status === status ? "none" : status);
+  const toggle = (status) => {
+    const next = event.my_status === status ? "none" : status;
+    if (status === "voy" && next === "voy") setCelebrateKey((k) => k + 1);
+    onSetStatus(event.id, next);
+  };
 
   const shareWhatsApp = (e) => {
     if (e) e.stopPropagation();
@@ -355,22 +362,23 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 data-testid={`event-voy-btn-${event.id}`}
                 disabled={pending}
                 onClick={() => toggle("voy")}
-                className={`qv-btn h-11 rounded-2xl font-display font-black text-sm flex items-center justify-center gap-1.5 ${
+                className={`qv-btn relative h-11 rounded-2xl font-semibold text-sm flex items-center justify-center gap-1.5 ${
                   isVoy
-                    ? "qv-btn-sheen qv-btn-breathe-pink bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white"
-                    : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-primary/50 hover:bg-qv-primary/10"
+                    ? "bg-qv-primary text-white shadow-[0_6px_16px_-8px_rgba(255,0,85,0.55)]"
+                    : "bg-white/[0.06] border border-white/12 text-white/80 hover:border-qv-primary/40"
                 }`}
               >
                 {isVoy && <Check className="w-4 h-4" />} {t("eventcard.btn_going")}
+                {celebrateKey > 0 && <VoyCelebration key={celebrateKey} />}
               </button>
               <button
                 data-testid={`event-interesa-btn-${event.id}`}
                 disabled={pending}
                 onClick={() => toggle("me_interesa")}
-                className={`qv-btn h-11 rounded-2xl font-display font-black text-sm flex items-center justify-center gap-1.5 ${
+                className={`qv-btn h-11 rounded-2xl font-semibold text-sm flex items-center justify-center gap-1.5 ${
                   isInteresa
-                    ? "qv-btn-sheen qv-btn-breathe-cyan bg-gradient-to-r from-qv-secondary to-[#4df3ff] text-[#05060a]"
-                    : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-secondary/50 hover:bg-qv-secondary/10"
+                    ? "bg-qv-secondary text-[#06181a] shadow-[0_6px_16px_-8px_rgba(0,240,255,0.5)]"
+                    : "bg-white/[0.06] border border-white/12 text-white/80 hover:border-qv-secondary/40"
                 }`}
               >
                 {isInteresa ? <Star className="w-4 h-4" fill="currentColor" /> : <Eye className="w-4 h-4" />} {t("eventcard.btn_interested")}
@@ -389,9 +397,9 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => api.post("/tickets/click", { event_id: event.id }).catch(() => {})}
-                className="qv-btn qv-btn-sheen qv-btn-breathe-pink h-11 rounded-2xl text-[#05060a] font-display font-black text-sm flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary via-[#ff5fa2] to-qv-secondary"
+                className="qv-btn h-11 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2 bg-qv-primary shadow-[0_6px_16px_-8px_rgba(255,0,85,0.55)]"
               >
-                <Ticket className="w-4 h-4 qv-btn-icon-pop" strokeWidth={2.6} /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
+                <Ticket className="w-4 h-4" /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
               </a>
             ) : event.more_info_url ? (
               <a

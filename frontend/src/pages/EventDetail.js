@@ -10,6 +10,7 @@ import { EventAlbum } from "@/components/EventAlbum";
 import { EventMoment } from "@/components/EventMoment";
 import FourvenuesEmbed from "@/components/FourvenuesEmbed";
 import { NightRecapCard } from "@/components/NightRecapCard";
+import { VoyCelebration } from "@/components/VoyCelebration";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import {
@@ -80,6 +81,7 @@ export default function EventDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState(null);
   const [peopleSheet, setPeopleSheet] = useState(null); // null | "voy" | "me_interesa"
+  const [celebrateKey, setCelebrateKey] = useState(0);
   const location = useLocation();
   // Robust "back": if the user landed here directly (shared link, notification,
   // refresh) there is no in-app history to pop, so navigate(-1) would do nothing
@@ -317,7 +319,9 @@ export default function EventDetail() {
   const isEstuve = event.my_status === "estuve";
   const toggle = (s) => {
     if (!requireAuth("apuntarte a este plan")) return;
-    setStatus.mutate(event.my_status === s ? "none" : s);
+    const next = event.my_status === s ? "none" : s;
+    if (s === "voy" && next === "voy") setCelebrateKey((k) => k + 1);
+    setStatus.mutate(next);
   };
 
   const mapQuery = encodeURIComponent(`${event.address || event.venue}, ${event.city || "Palma de Mallorca"}`);
@@ -456,24 +460,20 @@ export default function EventDetail() {
             /* Sprint 3 — guest CTA stack (arrived from WhatsApp, not logged in).
                Primary = low-friction "Me interesa" (opens signup), tertiary =
                share back to WhatsApp. "Ver quién va" lives just below (teaser). */
-            <div className="flex flex-col gap-3" data-testid="detail-guest-cta">
+            <div className="flex flex-col gap-2.5" data-testid="detail-guest-cta">
               <button
                 data-testid="detail-guest-interesa"
                 onClick={() => toggle("me_interesa")}
-                className="qv-btn qv-btn-sheen qv-btn-breathe-cyan h-16 rounded-[20px] font-display font-black text-lg flex items-center justify-center gap-2.5 bg-gradient-to-r from-qv-secondary via-[#38f6ff] to-qv-primary text-[#05060a]"
+                className="qv-btn h-[52px] rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-2 bg-qv-secondary text-[#06181a] shadow-[0_6px_18px_-8px_rgba(0,240,255,0.5)]"
               >
-                <Eye className="w-6 h-6 qv-btn-icon-pop" strokeWidth={2.6} />
-                {t("event.interested")}
+                <Eye className="w-5 h-5" /> {t("event.interested")}
               </button>
               <button
                 data-testid="detail-guest-whatsapp"
                 onClick={shareWhatsApp}
-                className="qv-btn qv-btn-sheen h-12 rounded-[18px] font-bold text-[15px] flex items-center justify-center gap-2.5 text-white bg-gradient-to-r from-[#1faa52] to-[#25D366] shadow-[0_10px_28px_-10px_rgba(37,211,102,0.65)]"
+                className="qv-btn h-12 rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-2 bg-white/[0.06] border border-white/12 text-white/80"
               >
-                <span className="qv-wa-dot flex items-center justify-center w-5 h-5 rounded-full bg-white/20">
-                  <Send className="w-3.5 h-3.5" />
-                </span>
-                {t("event.share_whatsapp", "Compartir por WhatsApp")}
+                <Send className="w-4 h-4 text-[#25D366]" /> {t("event.share_whatsapp", "Compartir por WhatsApp")}
               </button>
             </div>
           ) : (
@@ -482,21 +482,22 @@ export default function EventDetail() {
               <button
                 data-testid="detail-voy-btn"
                 onClick={() => toggle("voy")}
-                className={`qv-btn h-[52px] rounded-[18px] font-display font-black text-[15px] flex items-center justify-center gap-2 ${
+                className={`qv-btn relative h-[52px] rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-2 ${
                   isVoy
-                    ? "qv-btn-sheen qv-btn-breathe-pink bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white"
-                    : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-primary/50 hover:bg-qv-primary/10"
+                    ? "bg-qv-primary text-white shadow-[0_6px_18px_-8px_rgba(255,0,85,0.55)]"
+                    : "bg-white/[0.06] border border-white/12 text-white/80 hover:border-qv-primary/40"
                 }`}
               >
                 {isVoy && <Check className="w-5 h-5" />} {t("event.going")}
+                {celebrateKey > 0 && <VoyCelebration key={celebrateKey} />}
               </button>
               <button
                 data-testid="detail-interesa-btn"
                 onClick={() => toggle("me_interesa")}
-                className={`qv-btn h-[52px] rounded-[18px] font-display font-black text-[15px] flex items-center justify-center gap-2 ${
+                className={`qv-btn h-[52px] rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-2 ${
                   isInteresa
-                    ? "qv-btn-sheen qv-btn-breathe-cyan bg-gradient-to-r from-qv-secondary to-[#4df3ff] text-[#05060a]"
-                    : "bg-white/[0.06] border border-white/15 text-white/85 hover:border-qv-secondary/50 hover:bg-qv-secondary/10"
+                    ? "bg-qv-secondary text-[#06181a] shadow-[0_6px_18px_-8px_rgba(0,240,255,0.5)]"
+                    : "bg-white/[0.06] border border-white/12 text-white/80 hover:border-qv-secondary/40"
                 }`}
               >
                 {isInteresa ? <Star className="w-5 h-5" fill="currentColor" /> : <Eye className="w-5 h-5" />} {t("event.interested")}
@@ -544,13 +545,13 @@ export default function EventDetail() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={onTicketClick}
-                className={`qv-btn h-[58px] rounded-[20px] font-display font-black text-base flex items-center justify-center gap-2.5 ${
+                className={`qv-btn h-14 rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-2 ${
                   event.sale_state === "agotado"
                     ? "bg-white/10 text-white/70 border border-white/20"
-                    : "qv-btn-sheen qv-btn-breathe-pink bg-gradient-to-r from-qv-primary via-[#ff5fa2] to-qv-secondary text-[#05060a]"
+                    : "bg-qv-primary text-white shadow-[0_8px_22px_-10px_rgba(255,0,85,0.6)]"
                 }`}
               >
-                <Ticket className={`w-5 h-5 ${event.sale_state === "agotado" ? "" : "qv-btn-icon-pop"}`} strokeWidth={2.6} />
+                <Ticket className="w-5 h-5" />
                 {event.sale_state === "agotado"
                   ? t("event.cta_soldout")
                   : event.sale_state === "solo_lista"
