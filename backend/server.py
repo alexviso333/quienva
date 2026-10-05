@@ -1830,7 +1830,7 @@ _CITY_INTRO_DATA = {
                  "de": "die Welthauptstadt des Clubbings"},
     },
     "Madrid": {
-        "clubs": "Fabrik, Teatro Barcel\u00f3, Kapital, Joy Eslava o Sh\u00f4ko",
+        "clubs": "Fitz, Tiffany's, LuLa Club, Perro Negro o Chango",
         "areas": {"es": "Gran V\u00eda, Malasa\u00f1a y Chueca", "en": "Gran V\u00eda, Malasa\u00f1a and Chueca",
                   "de": "Gran V\u00eda, Malasa\u00f1a und Chueca"},
         "vibe": {"es": "una de las ciudades con m\u00e1s vida nocturna de Europa",
@@ -1922,9 +1922,9 @@ _CITY_GUIDE_DATA = {
     "Madrid": {
         "zones": [
             {"name": "Gran V\u00eda y centro",
-             "es": "Discotecas ic\u00f3nicas como Teatro Barcel\u00f3, Joy Eslava y Kapital, a un paso de Sol.",
-             "en": "Iconic clubs like Teatro Barcel\u00f3, Joy Eslava and Kapital, steps from Sol.",
-             "de": "Legend\u00e4re Clubs wie Teatro Barcel\u00f3, Joy Eslava und Kapital, nur wenige Schritte von Sol."},
+             "es": "Clubs del centro como Fitz, Perro Negro y Teatro Magno, a un paso de Sol y Gran Vía.",
+             "en": "Central clubs like Fitz, Perro Negro and Teatro Magno, steps from Sol and Gran Vía.",
+             "de": "Zentrale Clubs wie Fitz, Perro Negro und Teatro Magno, nur wenige Schritte von Sol und Gran Vía."},
             {"name": "Malasa\u00f1a",
              "es": "El barrio alternativo, de bares con m\u00fasica indie y electr\u00f3nica hasta tarde.",
              "en": "The alternative neighbourhood, full of bars with indie and electronic music until late.",
@@ -1935,9 +1935,9 @@ _CITY_GUIDE_DATA = {
              "de": "Die vielf\u00e4ltigste Szene und die LGBTQ+-N\u00e4chte der Stadt."},
         ],
         "nights": {
-            "es": "En Madrid la noche empieza tarde y termina m\u00e1s tarde a\u00fan. El jueves ya se llena de universitarios, viernes y s\u00e1bado son las grandes noches, y los domingos hay afters que enlazan con la ma\u00f1ana. Fabrik, a las afueras, es la meca del techno los fines de semana.",
-            "en": "In Madrid the night starts late and ends even later. Thursday fills up with students, Friday and Saturday are the big nights, and Sundays bring afterparties that run into the morning. Fabrik, on the outskirts, is the techno mecca on weekends.",
-            "de": "In Madrid beginnt die Nacht sp\u00e4t und endet noch sp\u00e4ter. Donnerstags f\u00fcllt es sich mit Studenten, Freitag und Samstag sind die gro\u00dfen N\u00e4chte, und sonntags gibt es Afterpartys bis in den Morgen. Fabrik am Stadtrand ist am Wochenende das Techno-Mekka."},
+            "es": "En Madrid la noche empieza tarde y termina m\u00e1s tarde a\u00fan. El jueves ya se llena de universitarios, viernes y s\u00e1bado son las grandes noches, y los domingos hay afters que enlazan con la ma\u00f1ana. Salas como LuLa Club, Chango y Tiffany's concentran las sesiones más fuertes del finde.",
+            "en": "In Madrid the night starts late and ends even later. Thursday fills up with students, Friday and Saturday are the big nights, and Sundays bring afterparties that run into the morning. Clubs like LuLa Club, Chango and Tiffany's host the biggest weekend sessions.",
+            "de": "In Madrid beginnt die Nacht sp\u00e4t und endet noch sp\u00e4ter. Donnerstags f\u00fcllt es sich mit Studenten, Freitag und Samstag sind die gro\u00dfen N\u00e4chte, und sonntags gibt es Afterpartys bis in den Morgen. Clubs wie LuLa Club, Chango und Tiffany's veranstalten die größten Wochenend-Sessions."},
     },
     "Barcelona": {
         "zones": [
@@ -2116,33 +2116,33 @@ _CITY_LONGFORM = {
     "Madrid": {
         "es": [
             ("Precios de entrada en Madrid",
-             "Las entradas en Madrid son m\u00e1s asequibles que en costa: entre 10\u20ac y 20\u20ac en salas del centro (Teatro Barcel\u00f3, Joy, Kapital) y 15\u201330\u20ac en Fabrik (afueras). Casi todas incluyen una consumici\u00f3n. Para noches con DJ internacional en Fabrik o Mondo Disko sube a 25\u201340\u20ac. Las listas de amigos y los cupones Fever/Dice descuentan bastante entre semana."),
+             "Las entradas en Madrid son m\u00e1s asequibles que en costa: entre 10\u20ac y 20\u20ac en salas del centro (Fitz, Tiffany's, Perro Negro, LuLa Club) y suben a 20–30€ en noches con DJ invitado. Casi todas incluyen una consumición. Apuntarte a la lista con antelación descuenta bastante entre semana."),
             ("Horario t\u00edpico de la noche madrile\u00f1a",
-             "Madrid empieza tarde: cen\u00e1is tapeando por La Latina o Chueca hasta las 00:00, bares y copas hasta la 1:30\u20132:00, y disco entre 2:00 y 5:30. Los afters (Marula, Mondo, la ruta de Mercado) alargan hasta las 10:00 del domingo. Fabrik abre viernes, s\u00e1bado y festivos \u2014 noches tem\u00e1ticas tipo Code y Hyte son especiales."),
+             "Madrid empieza tarde: cen\u00e1is tapeando por La Latina o Chueca hasta las 00:00, bares y copas hasta la 1:30\u20132:00, y disco entre 2:00 y 5:30. Los afters alargan hasta el mediodía del domingo. Viernes y sábado son las noches fuertes en salas como Chango, Vandido o Nazca."),
             ("Transporte en Madrid",
-             "El metro cierra a la 1:30 y abre a las 6:00; entre medias s\u00f3lo hay b\u00fahos (autobuses nocturnos desde Cibeles). Taxi normal al centro cuesta 10\u201315\u20ac. Para ir a Fabrik, hay autob\u00fas Larca desde Atocha o Avenida de Am\u00e9rica (ida y vuelta por 10\u2013 12\u20ac) \u2014 mucho m\u00e1s barato que un taxi (40\u2013 50\u20ac)."),
+             "El metro cierra a la 1:30 y abre a las 6:00; entre medias s\u00f3lo hay b\u00fahos (autobuses nocturnos desde Cibeles). Un taxi o VTC por el centro cuesta 8–15€. La mayoría de las salas (Fitz, Tiffany's, Perro Negro) están en el centro, así que se va andando de unas a otras."),
             ("Dress code y consejos",
-             "Dress code depende de la sala: Kapital y Teatro Barcel\u00f3 son estrictos (ni chandal ni bermudas), Fabrik y Mondo son relajados. Lleva poco \u2014 muchas discotecas tienen guardarropa pero cobran 3\u20135\u20ac. En invierno pr\u00e1cticamente todas tienen guardarropa, as\u00ed que puedes llevar abrigo sin problema. Siempre ten cash para taxis y propinas.")
+             "El dress code depende de la sala: algunas son estrictas (ni chándal ni bermudas) y otras más relajadas. Lleva poco \u2014 muchas discotecas tienen guardarropa pero cobran 3\u20135\u20ac. En invierno pr\u00e1cticamente todas tienen guardarropa, as\u00ed que puedes llevar abrigo sin problema. Siempre ten cash para taxis y propinas.")
         ],
         "en": [
             ("Ticket prices in Madrid",
-             "Entry in Madrid is more affordable than coastal cities: 10\u201320\u20ac at central clubs (Teatro Barcel\u00f3, Joy, Kapital) and 15\u201330\u20ac at Fabrik (outskirts). Most include a drink. International DJs at Fabrik or Mondo Disko push it to 25\u201340\u20ac. Guest lists and Fever/Dice coupons bring prices down a lot midweek."),
+             "Entry in Madrid is more affordable than coastal cities: 10–20€ at central clubs (Fitz, Tiffany's, Perro Negro, LuLa Club), rising to 20–30€ on guest-DJ nights. Most include a drink. Signing up to the guest list in advance brings prices down a lot midweek."),
             ("Typical Madrid night",
-             "Madrid starts late: tapas in La Latina or Chueca until midnight, bars and drinks until 1:30\u20132:00, clubs from 2:00 to 5:30. Afterparties (Marula, Mondo, Mercado circuit) run to 10:00 Sunday. Fabrik opens Fri, Sat and bank holidays \u2014 Code and Hyte nights are special."),
+             "Madrid starts late: tapas in La Latina or Chueca until midnight, bars and drinks until 1:30\u20132:00, clubs from 2:00 to 5:30. Afterparties run until midday on Sunday. Friday and Saturday are the big nights at clubs like Chango, Vandido and Nazca."),
             ("Public transport",
-             "Metro closes at 1:30 and reopens at 6:00; night buses (b\u00faho) run from Cibeles in between. A taxi to the centre costs 10\u201315\u20ac. To reach Fabrik, the Larca bus runs from Atocha or Av. de Am\u00e9rica (10\u201312\u20ac return) \u2014 way cheaper than a taxi (40\u201350\u20ac)."),
+             "Metro closes at 1:30 and reopens at 6:00; night buses (b\u00faho) run from Cibeles in between. A taxi or ride-hail across the centre costs 8–15€. Most venues (Fitz, Tiffany's, Perro Negro) are central, so you can walk between them."),
             ("Dress code & tips",
-             "Dress depends on the venue: Kapital and Teatro Barcel\u00f3 are strict (no tracksuits, no shorts); Fabrik and Mondo are relaxed. Travel light \u2014 most clubs have coat check at 3\u20135\u20ac. In winter you can bring your coat without issue. Keep cash for cabs and tips.")
+             "Dress depends on the venue: some are strict (no tracksuits, no shorts), others relaxed. Travel light \u2014 most clubs have coat check at 3\u20135\u20ac. In winter you can bring your coat without issue. Keep cash for cabs and tips.")
         ],
         "de": [
             ("Eintrittspreise in Madrid",
-             "Madrid ist g\u00fcnstiger als die K\u00fcste: 10\u201320\u20ac in zentralen Clubs (Teatro Barcel\u00f3, Joy, Kapital) und 15\u201330\u20ac im Fabrik (au\u00dferhalb). Meist Getr\u00e4nk inklusive. Internationale DJs im Fabrik oder Mondo Disko: 25\u201340\u20ac. G\u00e4stelisten und Fever/Dice-Coupons dr\u00fccken den Preis unter der Woche."),
+             "Madrid ist g\u00fcnstiger als die K\u00fcste: 10–20€ in zentralen Clubs (Fitz, Tiffany's, Perro Negro, LuLa Club), an Nächten mit Gast-DJ 20–30€. Meist Getränk inklusive. Wer sich vorab in die Gästeliste einträgt, zahlt unter der Woche deutlich weniger."),
             ("Typischer Madrider Abend",
-             "Madrid startet sp\u00e4t: Tapas in La Latina oder Chueca bis Mitternacht, Bars bis 1:30\u20132:00, Clubs ab 2:00 bis 5:30. Afterpartys (Marula, Mondo, Mercado) bis 10:00 Sonntag. Fabrik \u00f6ffnet Fr, Sa und an Feiertagen \u2014 Code- und Hyte-N\u00e4chte sind besonders."),
+             "Madrid startet sp\u00e4t: Tapas in La Latina oder Chueca bis Mitternacht, Bars bis 1:30\u20132:00, Clubs ab 2:00 bis 5:30. Afterpartys bis Sonntagmittag. Freitag und Samstag sind die großen Nächte in Clubs wie Chango, Vandido und Nazca."),
             ("\u00d6PNV",
-             "Metro schlie\u00dft um 1:30, \u00f6ffnet um 6:00; dazwischen Nachtbusse (b\u00faho) ab Cibeles. Taxi ins Zentrum 10\u201315\u20ac. Zum Fabrik: Larca-Bus ab Atocha oder Av. de Am\u00e9rica (10\u201312\u20ac Hin- und R\u00fcck) \u2014 viel g\u00fcnstiger als Taxi (40\u201350\u20ac)."),
+             "Metro schlie\u00dft um 1:30, \u00f6ffnet um 6:00; dazwischen Nachtbusse (b\u00faho) ab Cibeles. Taxi oder VTC durchs Zentrum 8–15€. Die meisten Locations (Fitz, Tiffany's, Perro Negro) liegen zentral — man läuft bequem von einer zur nächsten."),
             ("Dresscode und Tipps",
-             "Dresscode: Kapital und Teatro Barcel\u00f3 streng (keine Trainingsanz\u00fcge, keine Shorts); Fabrik und Mondo relaxed. Leicht reisen \u2014 Garderobe meist 3\u20135\u20ac. Im Winter kein Problem mit Mantel. Bargeld f\u00fcr Taxi und Trinkgeld bereithalten.")
+             "Dresscode variiert je nach Location: manche streng (keine Trainingsanzüge, keine Shorts), andere relaxed. Leicht reisen \u2014 Garderobe meist 3\u20135\u20ac. Im Winter kein Problem mit Mantel. Bargeld f\u00fcr Taxi und Trinkgeld bereithalten.")
         ],
     },
     "Barcelona": {
@@ -3808,25 +3808,25 @@ _BLOG_POSTS = {
     },
     "mejores-discotecas-madrid": {
         "title": "Las 10 mejores discotecas de Madrid para salir esta noche",
-        "description": "Gu\u00eda de las 10 mejores discotecas de Madrid: Kapital, Fabrik, Teatro Barcel\u00f3, Opium, Icon, Independance Club y m\u00e1s, con precios, m\u00fasica y c\u00f3mo llegar.",
+        "description": "Gu\u00eda de las 10 mejores discotecas de Madrid: Fitz, Tiffany's, LuLa Club, Perro Negro, Chango, Opium y más, con precios, m\u00fasica y c\u00f3mo llegar.",
         "hero_image": "https://res.cloudinary.com/dh4byqvbb/image/upload/w_1200,f_auto,q_auto/v1/quienva/blog/madrid-night.jpg",
         "published": "2025-05-20",
         "updated": "2025-07-01",
         "city": "Madrid",
         "city_slug": "madrid",
         "sections": [
-            ("Los 10 clubs imprescindibles de Madrid", "Madrid tiene una de las mejores escenas nocturnas de Europa y para todos los gustos: <b>Kapital</b> (7 plantas, cada una con m\u00fasica distinta, la m\u00e1s famosa de Madrid), <b>Fabrik</b> (macro club de techno a las afueras, referente mundial), <b>Teatro Barcel\u00f3</b> (mainstream y comercial, ambiente joven), <b>Opium Madrid</b> (top y r&b, muy internacional), <b>Icon</b> (hip hop y r&b urbano), <b>Independance Club</b> (comercial en Gran V\u00eda), <b>Sala Cool</b> (electr\u00f3nica underground), <b>Mondo Disko</b> (techno y house de culto), <b>Goya Social Club</b> (elegante en el barrio de Salamanca) y <b>Panda Club</b> (nuevo hotspot). Ver <a href=\"/fiestas/madrid\">agenda completa</a>."),
-            ("Zonas de fiesta en Madrid: Gran V\u00eda, Malasa\u00f1a y Salamanca", "<b>Gran V\u00eda / Callao</b> concentra los clubs m\u00e1s grandes y mainstream. <b>Malasa\u00f1a</b> es la zona alternativa e indie con bares y pubs. <b>Chueca</b> tiene ambiente LGTBIQ+ y m\u00e1s abierto. <b>Salamanca</b> es la m\u00e1s pija con clubs elegantes tipo Goya Social Club. <b>Chamber\u00ed</b> para copas de calidad. Y las afueras (Fabrik) para macrofiestas electr\u00f3nicas."),
-            ("Precios de entrada y consumiciones", "La entrada media en Madrid oscila entre <b>15\u20ac y 25\u20ac</b> con una consumici\u00f3n incluida. Los clubs premium (Kapital, Fabrik en noches especiales) pueden llegar a <b>30-40\u20ac</b>. La copa suele costar <b>10-15\u20ac</b> dentro del club. Muchos clubs tienen listas gratis hasta las 2:00 o promociones de \"chicas gratis\" entre semana."),
-            ("Horarios y c\u00f3mo llegar", "La mayor\u00eda abren entre las <b>00:00 y las 6:00</b>, aunque algunos como Fabrik cierran a las 7:00 o 8:00 los s\u00e1bados. El metro cierra a las 1:30, pero hay <b>b\u00fahos</b> (autobuses nocturnos) que recorren toda la ciudad hasta las 6:00. Un Uber/Cabify medio cuesta 8-15\u20ac dentro de la M-30."),
+            ("Los 10 clubs imprescindibles de Madrid", "Madrid tiene una de las mejores escenas nocturnas de Europa y para todos los gustos: <b>Fitz</b> (reggaeton y comercial, uno de los más de moda), <b>Tiffany's The Club</b> (mainstream y ambiente joven), <b>LuLa Club</b> (house y electrónica), <b>Perro Negro</b> (urbano y alternativo), <b>Chango</b> (reggaeton y universitario), <b>Vandido</b> (comercial y urbano), <b>Opium Madrid</b> (top 40 e internacional), <b>Teatro Magno</b> (gran sala en el centro), <b>Medias Puri</b> (fiesta inmersiva con espectáculo) y <b>Deseo (Nazca)</b> (noches urbanas). Ver <a href=\"/fiestas/madrid\">agenda completa</a>."),
+            ("Zonas de fiesta en Madrid: Gran V\u00eda, Malasa\u00f1a y Salamanca", "<b>Gran V\u00eda / Callao</b> concentra los clubs m\u00e1s grandes y mainstream. <b>Malasa\u00f1a</b> es la zona alternativa e indie con bares y pubs. <b>Chueca</b> tiene ambiente LGTBIQ+ y m\u00e1s abierto. <b>Salamanca</b> es la más pija con clubs elegantes. <b>Chamber\u00ed</b> para copas de calidad. La mayoría de las salas más activas (Fitz, Tiffany's, Perro Negro, LuLa Club) están en el centro y se llega andando de unas a otras."),
+            ("Precios de entrada y consumiciones", "La entrada media en Madrid oscila entre <b>12€ y 20€</b> con una consumici\u00f3n incluida. En noches con DJ invitado puede subir a <b>25-30€</b>. La copa suele costar <b>10-15\u20ac</b> dentro del club. Muchos clubs tienen listas gratis hasta las 2:00 o promociones de \"chicas gratis\" entre semana."),
+            ("Horarios y c\u00f3mo llegar", "La mayor\u00eda abren entre las <b>00:00 y las 6:00</b>, y algunas salas del centro cierran más tarde los sábados. El metro cierra a las 1:30, pero hay <b>b\u00fahos</b> (autobuses nocturnos) que recorren toda la ciudad hasta las 6:00. Un Uber/Cabify medio cuesta 8-15\u20ac dentro de la M-30."),
             ("Consejos para salir en Madrid", "1) Cena tarde (22:00) y llega al club sobre las 1:00, cuando empieza a llenarse. 2) Reserva mesa si vais m\u00e1s de 6, ahorra col\u00e1s y da acceso r\u00e1pido. 3) Ll\u00e9vate DNI/pasaporte, todos piden identificaci\u00f3n. 4) En <a href=\"/fiestas/madrid\">\u00bfQui\u00e9n va?</a> puedes ver qu\u00e9 discotecas tienen ambiente cada noche y quedar con tus amigos."),
         ],
         "faq": [
-            ("\u00bfCu\u00e1l es la mejor discoteca de Madrid?", "Kapital es la m\u00e1s famosa y visitada por su tama\u00f1o (7 plantas, cada una con m\u00fasica diferente) y ambiente internacional. Fabrik lidera la escena techno con el mejor sonido de Espa\u00f1a."),
-            ("\u00bfCu\u00e1nto cuesta la entrada a Kapital?", "La entrada a Kapital cuesta entre 15\u20ac y 25\u20ac dependiendo del d\u00eda, con una consumici\u00f3n incluida. Comprando online suele salir 5\u20ac m\u00e1s barato."),
-            ("\u00bfHasta qu\u00e9 hora est\u00e1n abiertas las discotecas en Madrid?", "La mayor\u00eda cierran a las 5:30 o 6:00. Algunos macro clubs como Fabrik amanecen y cierran a las 7:00 u 8:00 de la ma\u00f1ana los s\u00e1bados."),
-            ("\u00bfQu\u00e9 discotecas ponen reggaeton en Madrid?", "Icon Madrid, Kapital (en sus plantas urbanas), Opium y Independance Club programan reggaeton, r&b urbano y hip hop las noches m\u00e1s populares."),
-            ("\u00bfCu\u00e1l es el mejor d\u00eda para salir de fiesta en Madrid?", "Viernes y s\u00e1bado son los m\u00e1s ambiente, pero jueves (\"jueves universitarios\") y el s\u00e1bado noche de Fabrik tambi\u00e9n llenan. Los domingos hay after-hours en algunas salas."),
+            ("\u00bfCu\u00e1l es la mejor discoteca de Madrid?", "Depende del estilo: Fitz y Tiffany's lideran el ambiente comercial y joven, LuLa Club manda en house y electrónica, y Perro Negro y Chango son top para reggaeton y urbano."),
+            ("¿Cuánto cuesta entrar a una discoteca en Madrid?", "Entre 12€ y 20€ dependiendo del día y la sala, con una consumición incluida. Comprando online o apuntándote a la lista suele salir más barato."),
+            ("\u00bfHasta qu\u00e9 hora est\u00e1n abiertas las discotecas en Madrid?", "La mayor\u00eda cierran a las 5:30 o 6:00. Algunas salas alargan con after hasta media mañana del domingo."),
+            ("\u00bfQu\u00e9 discotecas ponen reggaeton en Madrid?", "Fitz, Chango, Perro Negro, Vandido y Deseo (Nazca) programan reggaeton, r&b urbano y hip hop en sus noches más populares."),
+            ("\u00bfCu\u00e1l es el mejor d\u00eda para salir de fiesta en Madrid?", "Viernes y s\u00e1bado son los m\u00e1s ambiente, pero los jueves (\"jueves universitarios\") tambi\u00e9n llenan muchas salas. Los domingos hay after-hours en algunas salas."),
         ],
         "related_cities": ["barcelona", "ibiza", "marbella"],
     },
@@ -3935,7 +3935,7 @@ _BLOG_POSTS = {
         "updated": "2026-08-08",
         "sections": [
             ("Cómo decidir el plan de esta noche en 2 minutos", "La clave para no quedarte en casa es ver de un vistazo <b>qué está abierto hoy</b> y <b>qué amigos van</b>. En <a href=\"/feed\">¿Quién va?</a> filtras por tu ciudad y por \"esta noche\", ves horarios y precios reales de cada discoteca y descubres a qué fiesta van tus amigos. Así el plan se decide solo: vas donde está tu gente."),
-            ("Fiestas esta noche en Madrid", "Entre semana Madrid nunca duerme: Kapital, Teatro Barceló, Opium e Icon suelen tener noche todos los días, y los jueves universitarios llenan Malasaña y Gran Vía. Mira las <a href=\"/fiestas/madrid/esta-noche\">fiestas de esta noche en Madrid</a> con precios actualizados."),
+            ("Fiestas esta noche en Madrid", "Entre semana Madrid nunca duerme: Fitz, Tiffany's, Perro Negro y Opium suelen tener noche casi todos los días, y los jueves universitarios llenan Malasaña y Gran Vía. Mira las <a href=\"/fiestas/madrid/esta-noche\">fiestas de esta noche en Madrid</a> con precios actualizados."),
             ("Fiestas esta noche en Barcelona e Ibiza", "En Barcelona, Opium, Pacha, Shôko y Razzmatazz marcan la agenda nocturna del Port Olímpic. En Ibiza (mayo-octubre) cada día tiene su fiesta icónica en Pacha, Amnesia, Hï o [UNVRS]. Consulta <a href=\"/fiestas/barcelona/esta-noche\">Barcelona esta noche</a> e <a href=\"/fiestas/ibiza/esta-noche\">Ibiza esta noche</a>."),
             ("Fiestas esta noche en Palma y Marbella", "Palma de Mallorca reparte la noche entre el Paseo Marítimo, Tito's y Magaluf, mientras Marbella y Puerto Banús ofrecen el clubbing más premium (Olivia Valere, Pangea, Nikki Beach). Revisa <a href=\"/fiestas/palma/esta-noche\">Palma esta noche</a> y <a href=\"/fiestas/marbella/esta-noche\">Marbella esta noche</a>."),
         ],
@@ -3954,7 +3954,7 @@ _BLOG_POSTS = {
         "updated": "2026-08-07",
         "sections": [
             ("Planea tu finde antes de que se agoten las entradas", "Las mejores fiestas del fin de semana vuelan: las fechas con DJ conocido se agotan días antes. Adelántate viendo la <a href=\"/feed\">agenda del finde</a> por ciudad, compara precios y asegúrate la entrada online (suele ser un 20-30% más barata que en taquilla)."),
-            ("El finde en Madrid y Barcelona", "En Madrid, viernes y sábado llenan Fabrik, Kapital y las salas de Gran Vía; los macroeventos de techno son la gran cita del finde. En Barcelona, Opium y Pacha del Port Olímpic más Razzmatazz concentran el ambiente. Mira <a href=\"/fiestas/madrid/este-finde\">Madrid este finde</a> y <a href=\"/fiestas/barcelona/este-finde\">Barcelona este finde</a>."),
+            ("El finde en Madrid y Barcelona", "En Madrid, viernes y sábado llenan Fitz, Tiffany's, LuLa Club, Chango y las salas del centro. En Barcelona, Opium y Pacha del Port Olímpic más Razzmatazz concentran el ambiente. Mira <a href=\"/fiestas/madrid/este-finde\">Madrid este finde</a> y <a href=\"/fiestas/barcelona/este-finde\">Barcelona este finde</a>."),
             ("El finde en Ibiza, Palma y Marbella", "Ibiza vive su punto álgido de viernes a domingo con las residencias top en Amnesia, Hï y Pacha. Palma reparte fiesta por toda la isla y Marbella enciende sus clubs de lujo con headliners internacionales en verano. Consulta <a href=\"/fiestas/ibiza/este-finde\">Ibiza este finde</a>, <a href=\"/fiestas/palma/este-finde\">Palma este finde</a> y <a href=\"/fiestas/marbella/este-finde\">Marbella este finde</a>."),
             ("Sal con tu grupo, no en solitario", "El mejor finde es el que compartes. En ¿Quién va? ves a qué fiestas van tus amigos, te avisamos cuando alguien de tu grupo se apunta a un plan y podéis coordinar la noche desde la app para no perderos entre tanta oferta."),
         ],

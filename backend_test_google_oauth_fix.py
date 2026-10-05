@@ -13,7 +13,7 @@ import sys
 import os
 
 # Base URL from frontend/.env
-BASE_URL = "https://quienva-tonight.preview.emergentagent.com/api"
+BASE_URL = "https://who-goes-planner.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"
