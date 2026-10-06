@@ -13518,6 +13518,47 @@ async def create_plan(body: PlanCreateIn, request: Request):
             "plan": _plan_public(plan, [], viewer_token=creador_token)}
 
 
+@api_router.get("/plans/mine")
+async def my_open_plans(request: Request, slugs: str = Query("")):
+    """Lightweight list of the viewer's OPEN plans for the feed "Tus planes abiertos".
+    Works for guests (via localStorage slugs) and logged-in users (creator or participant).
+    Declared BEFORE /plans/{slug} so "mine" is not captured as a slug."""
+    user = await _plan_optional_user(request)
+    slug_list = [s.strip() for s in (slugs or "").split(",") if s.strip()][:50]
+    query_or = []
+    if slug_list:
+        query_or.append({"slug": {"$in": slug_list}})
+    if user and user.get("user_id"):
+        query_or.append({"creator_user_id": user["user_id"]})
+        part_plan_ids = await db.plan_participants.distinct("plan_id", {"user_id": user["user_id"]})
+        if part_plan_ids:
+            query_or.append({"id": {"$in": part_plan_ids}})
+    if not query_or:
+        return {"plans": []}
+    out = []
+    cursor = db.plans.find({"$and": [{"estado": "abierto"}, {"$or": query_or}]}, {"_id": 0}).sort("created_at", -1).limit(20)
+    async for plan in cursor:
+        plan = await _plan_maybe_autoclose(plan)
+        if plan.get("estado") != "abierto":
+            continue
+        participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+        counts = _plan_counts(participants)
+        opts = plan.get("opciones") or []
+        out.append({
+            "slug": plan.get("slug"),
+            "titulo": plan.get("titulo") or (opts[0].get("venue_nombre") if opts else None) or "Tu plan",
+            "ciudad": plan.get("ciudad"),
+            "estado": plan.get("estado"),
+            "dentro": counts.get("dentro", 0),
+            "total": counts.get("total", 0),
+            "umbral_personas": plan.get("umbral_personas"),
+            "hora_limite": plan.get("hora_limite"),
+            "creador_apodo": plan.get("creador_apodo"),
+            "num_opciones": len(opts),
+        })
+    return {"plans": out}
+
+
 @api_router.get("/plans/{slug}")
 async def get_plan(slug: str, request: Request):
     plan = await db.plans.find_one({"slug": slug}, {"_id": 0})

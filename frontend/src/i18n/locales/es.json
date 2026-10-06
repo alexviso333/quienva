@@ -1002,6 +1002,23 @@
     "sub": "Propón 1-3 sitios y compártelo por WhatsApp",
     "cta": "Crear"
   },
+  "myplans": {
+    "title": "Tus planes abiertos",
+    "inside": "{{dentro}} dentro",
+    "inside_quorum": "{{dentro}}/{{umbral}} dentro",
+    "closes_at": "cierra {{time}}",
+    "view": "Ver plan"
+  },
+  "moving": {
+    "title": "Se está moviendo",
+    "badge": "Activo",
+    "friends_going": "{{count}} amigos van",
+    "going_interested": "{{g}} van · {{i}} interesados",
+    "going_only": "{{g}} van",
+    "interested_only": "{{i}} interesados",
+    "signups_today": "{{count}} se han apuntado hoy",
+    "heating": "Se está calentando"
+  },
   "nudge": {
     "title": "Trae a tu gente 🎉",
     "default_body": "Invita a tus amigos y vivid el finde juntos.",

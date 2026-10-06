@@ -1002,6 +1002,23 @@
     "sub": "Suggest 1-3 spots and share it on WhatsApp",
     "cta": "Create"
   },
+  "myplans": {
+    "title": "Your open plans",
+    "inside": "{{dentro}} in",
+    "inside_quorum": "{{dentro}}/{{umbral}} in",
+    "closes_at": "closes {{time}}",
+    "view": "View plan"
+  },
+  "moving": {
+    "title": "It's heating up",
+    "badge": "Active",
+    "friends_going": "{{count}} friends going",
+    "going_interested": "{{g}} going · {{i}} interested",
+    "going_only": "{{g}} going",
+    "interested_only": "{{i}} interested",
+    "signups_today": "{{count}} joined today",
+    "heating": "Heating up"
+  },
   "nudge": {
     "title": "Bring your people 🎉",
     "default_body": "Invite your friends and enjoy the weekend together.",
