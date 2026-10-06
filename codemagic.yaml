@@ -188,6 +188,10 @@ workflows:
           # 3) Declarar que la app soporta Live Activities.
           /usr/libexec/PlistBuddy -c "Add :NSSupportsLiveActivities bool YES" App/Info.plist \
             || /usr/libexec/PlistBuddy -c "Set :NSSupportsLiveActivities YES" App/Info.plist
+          # Votos seguidos = muchas actualizaciones: pedimos presupuesto ampliado
+          # para que iOS no empiece a descartar las pushes de la isla.
+          /usr/libexec/PlistBuddy -c "Add :NSSupportsLiveActivitiesFrequentUpdates bool YES" App/Info.plist \
+            || /usr/libexec/PlistBuddy -c "Set :NSSupportsLiveActivitiesFrequentUpdates YES" App/Info.plist
           # 4) Crear el target de la extensión y meter los ficheros (idempotente).
           ruby -e '
             require "xcodeproj"

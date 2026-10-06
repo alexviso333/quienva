@@ -519,9 +519,27 @@ def city_query_value(user_city: str):
 def _effective_city(user: dict, city_param: Optional[str]) -> str:
     """City used to filter the feed. A valid ?city= override wins (lets guests —
     and anyone — peek other supported cities without changing their account);
-    otherwise fall back to the user's / guest's own city."""
-    if city_param and city_param in CITY_IDS:
-        return city_param
+    otherwise fall back to the user's / guest's own city.
+
+    FIX: el parámetro ya no es sensible a mayúsculas ni a acentos y acepta el
+    SLUG de la ciudad ("madrid", "palma", "ibiza"), que es lo que usan las URLs
+    públicas /fiestas/{ciudad}. Antes, un `?city=madrid` en minúscula no casaba
+    con "Madrid" y el feed caía silenciosamente a Palma de Mallorca: el usuario
+    veía fiestas de otra ciudad (bug de confianza del punto 1 del spec)."""
+    if city_param:
+        raw = city_param.strip()
+        if raw in CITY_IDS:
+            return raw
+        cid = None
+        try:
+            cid = _CITY_SLUGS.get(_slugify(raw)) or _CITY_SLUGS.get(raw.lower())
+        except Exception:
+            cid = None
+        if cid and cid in CITY_IDS:
+            return cid
+        lower_map = {c.lower(): c for c in CITY_IDS}
+        if raw.lower() in lower_map:
+            return lower_map[raw.lower()]
     return user.get("city", GUEST_CITY)
 
 # In-memory TTL cache for expensive user-stats computation
@@ -12784,6 +12802,58 @@ async def live_activity_end(inp: LiveActivityEnd, user: dict = Depends(get_curre
         {"user_id": user["user_id"], "activity_id": inp.activity_id},
         {"$set": {"ended": True}})
     return {"ok": True}
+
+
+@api_router.get("/admin/live-activities")
+async def admin_live_activities(admin: dict = Depends(require_admin)):
+    """Diagnóstico de la isla dinámica: ¿está APNs configurado?, ¿qué actividades
+    vivas hay y de qué plan? Sirve para comprobar en producción (Render) que la
+    Live Activity está llegando sin tener que montar una votación real."""
+    out = []
+    async for la in db.live_activities.find({}, {"_id": 0}).sort("updated_at", -1).limit(50):
+        plan = None
+        if la.get("plan_id"):
+            p = await db.plans.find_one({"id": la["plan_id"]},
+                                        {"_id": 0, "slug": 1, "titulo": 1, "estado": 1})
+            plan = p
+        u = await db.users.find_one({"user_id": la.get("user_id")}, {"_id": 0, "name": 1, "email": 1})
+        out.append({
+            "activity_id": la.get("activity_id"),
+            "user": (u or {}).get("name") or la.get("user_id"),
+            "token_preview": (la.get("token") or "")[:12] + "…",
+            "event_id": la.get("event_id"),
+            "plan": plan,
+            "ended": bool(la.get("ended")),
+            "updated_at": la.get("updated_at"),
+        })
+    return {
+        "apns_configured": apns.is_configured(),
+        "apns_environment": "production" if apns.APNS_PRODUCTION else "sandbox",
+        "liveactivity_topic": f"{apns.APNS_BUNDLE_ID}.push-type.liveactivity",
+        "total": await db.live_activities.count_documents({}),
+        "activas": await db.live_activities.count_documents({"ended": {"$ne": True}}),
+        "items": out,
+    }
+
+
+@api_router.post("/admin/live-activities/ping")
+async def admin_live_activity_ping(activity_id: str = Query(...),
+                                   admin: dict = Depends(require_admin)):
+    """Reenvía a mano el estado actual a una Live Activity concreta y devuelve la
+    respuesta literal de Apple ('ok' | 'gone' = token muerto | 'err' = mirar logs)."""
+    la = await db.live_activities.find_one({"activity_id": activity_id}, {"_id": 0})
+    if not la:
+        raise HTTPException(status_code=404, detail="Esa actividad no está registrada")
+    if not apns.is_configured():
+        return {"ok": False, "reason": "APNs no configurado (faltan APNS_TEAM_ID / KEY_ID / clave)"}
+    cs = {"dentro": 0, "umbral": 0, "cierraEpoch": None, "ganadora": None, "estado": "abierto"}
+    if la.get("plan_id"):
+        plan = await db.plans.find_one({"id": la["plan_id"]}, {"_id": 0})
+        if plan:
+            parts = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+            cs = await _plan_live_state(plan, parts)
+    res = await apns.send_live_activity(la["token"], cs, event="update", stale_seconds=4 * 3600)
+    return {"ok": res == "ok", "apns": res, "content_state": cs}
 
 
 # =========================================================================

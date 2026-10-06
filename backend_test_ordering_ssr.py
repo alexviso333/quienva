@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import re
 
 # Base URL from frontend/.env
-BASE_URL = "https://plan-maker-29.preview.emergentagent.com/api"
+BASE_URL = "https://full-stack-nightlife.preview.emergentagent.com/api"
 
 # Test credentials from /app/memory/test_credentials.md
 TEST_EMAIL = "pruebapoll@test.dev"

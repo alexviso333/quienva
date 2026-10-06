@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { AvatarCircle } from "@/components/AvatarCircle";
@@ -26,12 +27,12 @@ function ptFor(slug) { try { return localStorage.getItem(`qv_pt_${slug}`); } cat
 export default function PlanView() {
   const { slug } = useParams();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
   const [respondFor, setRespondFor] = useState(null); // intencion key being confirmed
   const [apodo, setApodo] = useState(() => { try { return localStorage.getItem("qv_apodo") || ""; } catch (e) { return ""; } });
-  const [telefono, setTelefono] = useState("");
   const [prefOpt, setPrefOpt] = useState(null);
 
   const pt = ptFor(slug);
@@ -50,13 +51,18 @@ export default function PlanView() {
   }, [slug]);
 
   const counts = plan?.counts || {};
-  const options = plan?.opciones || [];
+  // "madrid" (slug) -> "Madrid": el nombre de la ciudad nunca se muestra en minúscula.
+  const cityLabel = useMemo(() => {
+    const c = (plan?.ciudad || "").replace(/-/g, " ").trim();
+    if (!c) return "";
+    return c.split(" ").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
+  }, [plan]);  const options = plan?.opciones || [];
   const isClosed = plan && plan.estado !== "abierto";
   const isCreator = !!(plan?.is_creator || ct);
 
   const respondMut = useMutation({
     mutationFn: async (intencion) => {
-      const body = { apodo: apodo.trim(), intencion, telefono: telefono.trim() || undefined, opcion_preferida: prefOpt || undefined, participante_token: pt || undefined };
+      const body = { apodo: apodo.trim(), intencion, opcion_preferida: prefOpt || undefined, participante_token: pt || undefined };
       return (await api.post(`/plans/${slug}/respond`, body)).data;
     },
     onSuccess: (data, intencion) => {
@@ -143,7 +149,7 @@ export default function PlanView() {
         ) : (
           <div className="px-4" data-testid="planview">
             {/* Header */}
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-qv-secondary">{plan.ciudad}{fecha ? ` · ${fecha}` : ""}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-qv-secondary">{cityLabel}{fecha ? ` · ${fecha}` : ""}</p>
             <h1 className="font-display text-3xl font-black text-white leading-tight mt-1">{plan.titulo || t("planview.default_title", "¿Nos cuadra este plan?")}</h1>
             {plan.mensaje_creador ? (
               <div className="mt-3 flex items-start gap-2.5 bg-white/[0.04] border border-white/10 rounded-2xl p-3">
@@ -231,7 +237,7 @@ export default function PlanView() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-bold text-white">
-                  {t("planview.explore_title", "Mira qué fiestas hay en {{city}}", { city: plan.ciudad || "tu ciudad" })}
+                  {t("planview.explore_title", "Mira qué fiestas hay en {{city}}", { city: cityLabel || "tu ciudad" })}
                 </span>
                 <span className="block text-xs text-white/55">{t("planview.explore_sub", "Horarios, precios y quién va")}</span>
               </span>
@@ -297,9 +303,13 @@ export default function PlanView() {
             <p className="text-white/45 text-[11px] mb-1">{t("planview.your_name", "¿Cómo te llaman?")}</p>
             <input value={apodo} onChange={(e) => setApodo(e.target.value)} maxLength={40} placeholder={t("planview.name_ph", "Alex")} autoFocus
               className="w-full bg-[#0a0712] border border-white/12 rounded-xl px-3 py-3 text-sm outline-none focus:border-qv-primary/50" />
-            <p className="text-white/45 text-[11px] mt-3 mb-1">{t("planview.phone_opt", "Teléfono para avisarte si se cierra (opcional)")}</p>
-            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} inputMode="tel" placeholder="+34..."
-              className="w-full bg-[#0a0712] border border-white/12 rounded-xl px-3 py-3 text-sm outline-none focus:border-qv-primary/50" />
+            {/* El aviso de cierre ya NO va por SMS/WhatsApp: va por notificación
+                (push en la app + web push). Así que no pedimos el teléfono. */}
+            <p className="text-white/45 text-[11px] mt-3 leading-snug">
+              {user
+                ? t("planview.notify_push", "Te avisamos con una notificación en cuanto el plan se cierre.")
+                : t("planview.notify_signup", "¿Quieres que te avisemos al cerrarse el plan? Crea tu cuenta después de responder: tarda 10 segundos.")}
+            </p>
             <button
               onClick={() => { if (!apodo.trim()) { toast.error(t("planview.need_name", "Dinos cómo te llaman")); return; } respondMut.mutate(respondFor); }}
               disabled={respondMut.isPending}

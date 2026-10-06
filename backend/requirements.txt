@@ -131,4 +131,8 @@ beautifulsoup4
 curl_cffi
 cloudinary>=1.40.0
 h2==4.1.0
+# Dependencias de h2 (HTTP/2). Se pinean explícitamente porque APNs SOLO acepta
+# HTTP/2: si faltan, httpx(http2=True) revienta y no sale ninguna push.
+hyperframe==6.1.0
+hpack==4.2.0
 posthog

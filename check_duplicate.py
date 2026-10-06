@@ -1,6 +1,6 @@
 import requests
 
-BACKEND_URL = "https://plan-maker-29.preview.emergentagent.com"
+BACKEND_URL = "https://full-stack-nightlife.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Login as admin

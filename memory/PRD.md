@@ -617,7 +617,7 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
   - **Pestaña Scrapers** (antes 7 paneles apilados sin agrupar) → ahora **5 grupos colapsables** con cabecera (icono tintado + título + descripción + chevron) y **barra de navegación rápida** (chips que expanden y hacen scroll a la sección): `Ciudades` (AdminCitiesPanel), `Fuentes y scrapers` (AdminScrapersPanel + AdminScrapeChangelog), `Cobertura y prioridad` (AdminClubTicketsCoverage + AdminVenuePriority), `Afiliación y ventas` (AdminAffiliatePanel), `Directorio de locales` (AdminVenuesPanel). Ciudades y Fuentes abiertos por defecto. Componente reutilizable `AdminSection` (framer-motion height-animate). data-testid: `admin-scrapers-nav`, `admin-scrapers-jump-{id}`, `admin-scrapers-group-{id}`.
   - **Global**: contenido envuelto en `max-w-4xl mx-auto` (no se estira en desktop); StatBox con hover border; grids de stats responsive (`grid-cols-2 sm:grid-cols-3/4`). NO se tocó ningún sub-panel (cero riesgo de romper lógica/API).
   - Verificado por screenshots (admin logueado): nav rápido, grupos colapsables, salto a "Cobertura" expande la sección correcta.
-- **INCIDENCIA RECURRENTE resuelta**: el reinicio del contenedor volvió a alterar `frontend/.env` → `REACT_APP_BACKEND_URL` quedó en `https://plan-maker-29.preview.emergentagent.com` (otro entorno) provocando fallos CORS en las llamadas del frontend. Restaurado a `https://plan-maker-29.preview.emergentagent.com` (backend de ESTE pod, con los datos Sevilla/Granuja, CORS=*). Si el frontend deja de cargar datos, revisar SIEMPRE esta clave primero.
+- **INCIDENCIA RECURRENTE resuelta**: el reinicio del contenedor volvió a alterar `frontend/.env` → `REACT_APP_BACKEND_URL` quedó en `https://full-stack-nightlife.preview.emergentagent.com` (otro entorno) provocando fallos CORS en las llamadas del frontend. Restaurado a `https://full-stack-nightlife.preview.emergentagent.com` (backend de ESTE pod, con los datos Sevilla/Granuja, CORS=*). Si el frontend deja de cargar datos, revisar SIEMPRE esta clave primero.
 
 ## Actualización (nuevo pod d7a5fd3a) — herencia ciudad OAuth + persistencia panel + incidencia .env
 - **Heredar ciudad en Google/Apple**: `GoogleCallbackInput` y `AppleCallbackInput` aceptan `guest_city` (opcional). Al crear una cuenta NUEVA se usa esa ciudad si es válida (`in CITY_IDS`), si no `GUEST_CITY`. A usuarios existentes NO se les cambia la ciudad. Frontend: `AuthCallback.js` (Google) y `lib/appleAuth.js` (Apple) envían `localStorage.qv_guest_city`. Nota: OAuth solo es 100% verificable en producción / app nativa (en preview está deshabilitado).
@@ -784,3 +784,61 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 - App Store: la ficha dice 5 ciudades y la web tiene 6 (con Sevilla) → actualizar ficha.
 - Producción: subir estos cambios con "Save to GitHub" (Render + Vercel) y poner
   las variables de PostHog con host US.
+
+## 2026-10-06 — ITERACIÓN 15: Live Activity (isla dinámica) + aviso de cierre por notificación
+
+### Entorno (otro pod nuevo)
+- Otra vez faltaban `backend/.env` y `frontend/.env` y la BD estaba vacía. Restaurados:
+  DB `quienva`, admin `admin@quienva.app / QuienVa2025!`, `test@quienva.app` y
+  `amigo@quienva.app` (`Test1234!`). Scrapers lanzados: 124 eventos
+  (Ibiza 63, Barcelona 22, Madrid 21, Palma 10, Marbella 4, Sevilla 4).
+- **Se perdieron** (solo existen en Render/Vercel): FourVenues guest-token, Google OAuth,
+  Cloudinary, PostHog. Los adapters de FourVenues devuelven "falta el guest-token" a propósito.
+- APNs SÍ restaurado con la clave del usuario: `APNS_KEY_ID=BRSU8QBJGR`,
+  `APNS_TEAM_ID=6VBLV2L99S`, `/app/backend/secrets/AuthKey_BRSU8QBJGR.p8` (gitignored).
+
+### Live Activity (Dynamic Island) del plan — COMPLETA
+- **Swift** `frontend/native/LiveActivity/`: `QuienVaPlanAttributes.swift` (ContentState
+  {dentro, umbral, cierraEpoch, ganadora, estado}), `QuienVaWidgets.swift` (pantalla de
+  bloqueo + isla compacta/expandida/mínima con barra de progreso, "4/6 dentro" y cuenta
+  atrás), `QuienVaLiveActivityPlugin.swift/.m` (plugin de Capacitor: start/update/end +
+  stream del push token por actividad), `Info.plist` de la extensión.
+- **Codemagic** (`codemagic.yaml`, paso "Live Activity (Dynamic Island)"): copia los fuentes,
+  pone `NSSupportsLiveActivities` y `NSSupportsLiveActivitiesFrequentUpdates` en el Info.plist
+  de la app, crea por script (gema xcodeproj) el target `QuienVaWidgets`
+  (bundle `me.quienva.app.QuienVaWidgets`, iOS 16.2) y lo empotra en la app. El paso de firma
+  pide también el perfil de la extensión con `--create`.
+- **JS** `frontend/src/lib/liveActivity.js` + `pages/PlanView.js`: arranca la actividad al abrir
+  un plan abierto, la actualiza y la termina al cerrarse. En web/Android es un no-op.
+- **Backend**: `POST /api/live-activity/token` (guarda el token por actividad y lo liga al plan),
+  `POST /api/live-activity/end`, `_plan_live_state`, `_plan_push_live` (APNs
+  `apns-push-type: liveactivity`, topic `me.quienva.app.push-type.liveactivity`, update en cada
+  voto y `end` con dismissal a 15 min al cerrarse).
+- **Diagnóstico nuevo**: `GET /api/admin/live-activities` y
+  `POST /api/admin/live-activities/ping?activity_id=...` (devuelve la respuesta literal de Apple).
+- **BUG GORDO ENCONTRADO**: faltaban `hyperframe`/`hpack` (dependencias de `h2`), así que
+  `httpx(http2=True)` petaba y NO salía ninguna push de APNs. Pineadas en `requirements.txt`.
+  Verificado contra `api.push.apple.com`: HTTP/2 400 `BadDeviceToken` con token falso = el JWT
+  y el topic son válidos.
+
+### Spec 3.6 resuelto: el aviso de cierre ya NO es WhatsApp/SMS
+- `_plan_notify_closed` manda notificación in-app + push (APNs en la app, Web Push en la web) a
+  todos los participantes CON cuenta y al creador, en los 4 caminos de cierre (quórum, manual,
+  cancelado y cron `close_expired_plans`). Ya no hace falta Twilio ni WhatsApp Business.
+- Quitado el campo de teléfono del modal de respuesta de `/p/[slug]` (era para el SMS).
+
+### Otros arreglos de esta iteración
+- **`?city=` insensible a mayúsculas/acentos y acepta slug** (`_effective_city`): antes
+  `/api/events?city=madrid` caía en silencio a Palma y el usuario veía otra ciudad.
+- **i18n de `/p/[slug]`**: 34 claves `planview.*` en es/en/de (antes solo 3; en inglés/alemán
+  la página viral salía mezclada). Nombre de ciudad ya no en minúscula.
+- Testing agent: 32/32 (iteración 15) y 28/28 (15b) en backend.
+
+### Pendiente
+- **Del usuario**: subir a GitHub -> Render/Vercel, poner las variables APNS_* en Render,
+  bumpear `APP_VERSION` en `codemagic.yaml` y lanzar un build nuevo (la Live Activity exige
+  nueva versión en App Store).
+- Dashboards/funnels de PostHog (el usuario los dejó para después).
+- Ficha de App Store: dice 5 ciudades, la web tiene 6 (Sevilla).
+- Opcional futuro: arrancar la Live Activity por push (iOS 17.2+, `pushToStartToken`) para que
+  salga sin abrir la app; hoy arranca cuando el usuario abre el plan.
