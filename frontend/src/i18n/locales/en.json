@@ -1034,5 +1034,10 @@
   },
   "fab": {
     "new_plan": "Plan"
+  },
+  "planview": {
+    "empty_hint": "Nobody has answered yet. Share the link: one tap to reply, no sign-up needed.",
+    "explore_title": "See what's on in {{city}}",
+    "explore_sub": "Times, prices and who's going"
   }
 }

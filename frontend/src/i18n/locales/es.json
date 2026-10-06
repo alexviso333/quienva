@@ -1034,5 +1034,10 @@
   },
   "fab": {
     "new_plan": "Plan"
+  },
+  "planview": {
+    "empty_hint": "Todavía no ha respondido nadie. Comparte el enlace: se responde en un toque, sin registrarse.",
+    "explore_title": "Mira qué fiestas hay en {{city}}",
+    "explore_sub": "Horarios, precios y quién va"
   }
 }

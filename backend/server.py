@@ -11,6 +11,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depend
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import Response as StarletteResponse
+from starlette.responses import RedirectResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
@@ -13984,11 +13985,37 @@ async def og_plan_image(slug: str):
 
 
 # ---- Pagina publica SSR (OG + interactiva, sin login) -----------------------
+_CRAWLER_UA = (
+    "bot", "crawler", "spider", "facebookexternalhit", "facebot", "whatsapp",
+    "twitterbot", "telegrambot", "slackbot", "discordbot", "linkedinbot",
+    "pinterest", "embedly", "quora link preview", "vkshare", "redditbot",
+    "skypeuripreview", "applebot", "googlebot", "bingbot", "yandex",
+    "duckduckbot", "baiduspider", "preview", "curl", "wget", "python-requests",
+    "httpx", "lighthouse", "headlesschrome",
+)
+
+
+def _is_crawler(request: Request) -> bool:
+    """True for link-preview fetchers and search engines. Humans must get the
+    real in-app experience, never the bare server-rendered page."""
+    ua = (request.headers.get("user-agent") or "").lower()
+    if not ua:
+        return True
+    return any(tok in ua for tok in _CRAWLER_UA)
+
+
 @api_router.api_route("/p/{slug}", methods=["GET", "HEAD"])
 async def plan_public_page(slug: str, request: Request):
     front = _frontend_base(request)
     api_public = (os.environ.get("API_PUBLIC_BASE") or front).rstrip("/")
+    human = not _is_crawler(request)
     if slug == "nuevo":
+        # Humans create the plan INSIDE the app (bottom sheet over the feed), so
+        # the link never feels like a separate website.
+        if human:
+            ev_q = request.query_params.get("evento")
+            url = f"{front}/feed?crear=1" + (f"&evento={ev_q}" if ev_q else "")
+            return RedirectResponse(url, status_code=302)
         preset = None
         ev_id = request.query_params.get("evento")
         if ev_id:
@@ -14011,6 +14038,10 @@ async def plan_public_page(slug: str, request: Request):
     if not plan:
         return StarletteResponse(content="<h1>Plan no encontrado</h1>", status_code=404,
                                  media_type="text/html")
+    if human:
+        # Open the plan inside the app: the voter lands on the real screen, with
+        # the bottom nav and the whole feed one tap away.
+        return RedirectResponse(f"{front}/plan/{slug}", status_code=302)
     plan = await _plan_maybe_autoclose(plan)
     participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
     counts = _plan_counts(participants)

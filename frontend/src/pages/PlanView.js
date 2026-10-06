@@ -88,7 +88,9 @@ export default function PlanView() {
   }, [plan]);
 
   const shareText = plan ? `👀 ${plan.titulo || "¿Quién va?"} — dinos si te apuntas` : "";
-  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+  // Always share the canonical /p/{slug} link: it is the one that renders the
+  // rich WhatsApp preview and then redirects the human into the app.
+  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/p/${slug}` : "";
   const shareWhatsApp = () => { captureEvent("plan_shared", { plan_id: slug, destination: "whatsapp" }); window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText}: ${shareUrl}`)}`, "_blank", "noopener,noreferrer"); };
   const copyLink = async () => { captureEvent("plan_shared", { plan_id: slug, destination: "copy_link" }); try { await navigator.clipboard.writeText(shareUrl); toast.success(t("planview.copied", "Enlace copiado")); } catch (e) { /* ignore */ } };
 
@@ -196,6 +198,31 @@ export default function PlanView() {
                 </div>
               </div>
             )}
+            {(plan.participants || []).length === 0 && !isClosed && (
+              <p className="mt-4 text-sm text-white/45 leading-snug rounded-2xl border border-dashed border-white/12 bg-white/[0.02] p-3.5" data-testid="planview-empty">
+                {t("planview.empty_hint", "Todavía no ha respondido nadie. Comparte el enlace: se responde en un toque, sin registrarse.")}
+              </p>
+            )}
+
+            {/* Pull the voter into the rest of the app (this is the app, not a
+                separate page): the parties of their city, one tap away. */}
+            <button
+              type="button"
+              data-testid="planview-explore"
+              onClick={() => navigate("/feed")}
+              className="mt-4 w-full flex items-center gap-3 rounded-2xl border border-qv-secondary/30 bg-gradient-to-r from-qv-secondary/10 to-qv-primary/10 p-3.5 text-left active:scale-[0.99]"
+            >
+              <span className="w-9 h-9 rounded-xl bg-qv-secondary/15 flex items-center justify-center shrink-0">
+                <PartyPopper className="w-4.5 h-4.5 text-qv-secondary" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold text-white">
+                  {t("planview.explore_title", "Mira qué fiestas hay en {{city}}", { city: plan.ciudad || "tu ciudad" })}
+                </span>
+                <span className="block text-xs text-white/55">{t("planview.explore_sub", "Horarios, precios y quién va")}</span>
+              </span>
+              <Home className="w-4 h-4 text-white/30 shrink-0" />
+            </button>
 
             {/* Your response status */}
             {plan.mine && !isClosed ? (

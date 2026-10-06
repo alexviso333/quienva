@@ -5,7 +5,7 @@ import { captureEvent } from "@/analytics/posthog";
 const CreatePlanContext = createContext(null);
 
 export function useCreatePlan() {
-  return useContext(CreatePlanContext) || { open: () => {} };
+  return useContext(CreatePlanContext) || { open: () => {}, isOpen: false };
 }
 
 // Single app-wide plan creation sheet. Any component can call open(presetEvent, city, source).
@@ -25,7 +25,7 @@ export function CreatePlanProvider({ children }) {
   }, []);
 
   return (
-    <CreatePlanContext.Provider value={{ open: openSheet }}>
+    <CreatePlanContext.Provider value={{ open: openSheet, isOpen: open }}>
       {children}
       <CreatePlanSheet open={open} onOpenChange={setOpen} presetEvent={preset} city={city} source={source} />
     </CreatePlanContext.Provider>

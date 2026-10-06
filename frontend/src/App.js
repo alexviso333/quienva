@@ -158,6 +158,7 @@ function AppRouter() {
         <Route path="/feed" element={<PublicRoute><Feed /></PublicRoute>} />
         <Route path="/event/:id" element={<PublicRoute><EventDetail /></PublicRoute>} />
         <Route path="/p/:slug" element={<PublicRoute><PlanView /></PublicRoute>} />
+        <Route path="/plan/:slug" element={<PublicRoute><PlanView /></PublicRoute>} />
         <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/novedades" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />

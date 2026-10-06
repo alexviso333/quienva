@@ -1034,5 +1034,10 @@
     "interested_only": "{{i}} interessiert",
     "signups_today": "{{count}} haben sich heute angemeldet",
     "heating": "Wird gerade heiß"
+  },
+  "planview": {
+    "empty_hint": "Noch hat niemand geantwortet. Teile den Link: Antworten mit einem Tap, ohne Anmeldung.",
+    "explore_title": "Schau, was in {{city}} läuft",
+    "explore_sub": "Zeiten, Preise und wer hingeht"
   }
 }

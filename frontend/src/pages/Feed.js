@@ -9,6 +9,7 @@ import { CompactEventCard } from "@/components/CompactEventCard";
 import { StoriesBar } from "@/components/Stories";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
+import { useCreatePlan } from "@/context/CreatePlan";
 import { isNativeApp } from "@/lib/platform";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import CitySelectorSheet from "@/components/CitySelectorSheet";
@@ -98,6 +99,7 @@ export default function Feed() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { open: openCreatePlan } = useCreatePlan();
   const [q, setQ] = useState("");
   // Engagement signal: fire feed_scrolled once per mount when the user scrolls deep.
   useEffect(() => {
@@ -372,6 +374,24 @@ export default function Feed() {
     }
      
   }, [searchParams, user]);
+
+  // Deep-link from the shared link / SEO landing: open the in-app create-plan
+  // sheet over the feed (?crear=1[&evento=<id>]) instead of a separate page.
+  useEffect(() => {
+    if (searchParams.get("crear") !== "1") return;
+    const evId = searchParams.get("evento");
+    const ev = evId && events ? events.find((e) => e.id === evId) : null;
+    if (evId && !ev && !events) return; // wait for the feed before presetting
+    searchParams.delete("crear");
+    searchParams.delete("evento");
+    setSearchParams(searchParams, { replace: true });
+    openCreatePlan(
+      ev ? { id: ev.id, name: ev.name, venue: ev.venue, time: ev.time, price: ev.current_price, image_url: ev.image_url, city: ev.city } : null,
+      ev?.city || null,
+      "link",
+    );
+     
+  }, [searchParams, events]);
 
   // Deep-link: scroll to & highlight a shared event.
   useEffect(() => {

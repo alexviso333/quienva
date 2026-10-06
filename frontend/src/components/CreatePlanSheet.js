@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ClipboardList, Plus, X, Check, Send, Link2, Loader2, PartyPopper, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
@@ -14,6 +15,7 @@ const MAX_OPTS = 3;
 // title/quorum live behind an optional "Ajustes" disclosure so nothing feels crowded.
 export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null, city, source = "feed" }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [step, setStep] = useState("form");
   const [titulo, setTitulo] = useState("");
   const [umbral, setUmbral] = useState("");
@@ -215,10 +217,13 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
                 <button onClick={copyLink} className="bg-white/[0.06] border border-white/12 text-white/85 rounded-2xl py-3 font-semibold text-sm flex items-center justify-center gap-1.5 active:scale-[0.99]">
                   <Link2 className="w-4 h-4" /> {t("createplan.copy", "Copiar enlace")}
                 </button>
-                <a href={shareUrl} target="_blank" rel="noopener noreferrer"
+                <button
+                  type="button"
+                  data-testid="create-plan-view"
+                  onClick={() => { onOpenChange(false); navigate(`/plan/${result?.slug}`); }}
                   className="bg-white/[0.06] border border-white/12 text-white/85 rounded-2xl py-3 font-semibold text-sm flex items-center justify-center gap-1.5 active:scale-[0.99]">
                   <Check className="w-4 h-4" /> {t("createplan.view", "Ver plan")}
-                </a>
+                </button>
               </div>
               <button onClick={() => onOpenChange(false)} className="w-full mt-3 text-white/40 text-sm py-1.5">{t("createplan.close", "Hecho")}</button>
             </div>

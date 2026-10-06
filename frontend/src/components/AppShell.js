@@ -222,9 +222,9 @@ export function AppShell({ children, showNav = true, wide = false }) {
 // the plan page itself, chat threads) so it never overlaps them.
 function PlanFab() {
   const { t } = useTranslation();
-  const { open } = useCreatePlan();
+  const { open, isOpen } = useCreatePlan();
   const { pathname } = useLocation();
-  const hidden = /^\/(fiesta|p|chats)(\/|$)/.test(pathname);
+  const hidden = isOpen || /^\/(fiesta|p|plan|chats)(\/|$)/.test(pathname);
   if (hidden) return null;
   return (
     <button
