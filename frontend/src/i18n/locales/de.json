@@ -602,7 +602,9 @@
     "timeago_now": "jetzt",
     "timeago_min": "vor {{n}} Min.",
     "timeago_hour": "vor {{n}} Std.",
-    "highlight": "Rückblick"
+    "highlight": "Rückblick",
+    "take_photo": "Foto machen",
+    "from_gallery": "Aus der Galerie"
   },
   "eventcard": {
     "starts_in": "Beginnt in",
@@ -1039,5 +1041,16 @@
     "empty_hint": "Noch hat niemand geantwortet. Teile den Link: Antworten mit einem Tap, ohne Anmeldung.",
     "explore_title": "Schau, was in {{city}} läuft",
     "explore_sub": "Zeiten, Preise und wer hingeht"
+  },
+  "attendance": {
+    "night_last": "letzte Nacht",
+    "night_before": "vorletzte Nacht",
+    "night_on": "am {{day}}",
+    "title": "Warst du {{when}} dort?",
+    "sub": "Wir speichern nur Nächte, die du bestätigst. Nichts erfunden.",
+    "no": "War nicht da",
+    "yes": "Ja, ich war da",
+    "progress": "{{i}} von {{n}} Nächten zu bestätigen",
+    "later": "Jetzt nicht"
   }
 }

@@ -602,7 +602,9 @@
     "timeago_now": "ahora",
     "timeago_min": "hace {{n}} min",
     "timeago_hour": "hace {{n}} h",
-    "highlight": "Destacado"
+    "highlight": "Destacado",
+    "take_photo": "Hacer una foto",
+    "from_gallery": "Elegir de la galería"
   },
   "eventcard": {
     "starts_in": "Empieza en",
@@ -1039,5 +1041,16 @@
     "empty_hint": "Todavía no ha respondido nadie. Comparte el enlace: se responde en un toque, sin registrarse.",
     "explore_title": "Mira qué fiestas hay en {{city}}",
     "explore_sub": "Horarios, precios y quién va"
+  },
+  "attendance": {
+    "night_last": "anoche",
+    "night_before": "antenoche",
+    "night_on": "el {{day}}",
+    "title": "¿Fuiste {{when}}?",
+    "sub": "Solo guardamos las noches que confirmas. Nada inventado.",
+    "no": "No fui",
+    "yes": "Sí, estuve",
+    "progress": "{{i}} de {{n}} noches por confirmar",
+    "later": "Ahora no"
   }
 }

@@ -638,17 +638,46 @@ export default function Feed() {
             <SkeletonList />
           ) : (
             <>
+              {/* Saltos rápidos entre secciones (móvil: evita el "parece vacía") */}
+              <div className="flex gap-2 overflow-x-auto hide-scrollbar -mt-2" data-testid="feed-section-chips">
+                {[
+                  { id: "sec-today", label: "Esta noche", n: blockToday.length },
+                  ...(user && blockFriends.length > 0 ? [{ id: "sec-friends", label: "Tu gente", n: blockFriends.length }] : []),
+                  { id: "sec-upcoming", label: "Próximamente", n: blockUpcoming.length },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    data-testid={`feed-jump-${c.id}`}
+                    onClick={() => document.getElementById(c.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    className="shrink-0 rounded-full border border-white/12 bg-white/[0.05] px-3.5 py-1.5 text-[12px] font-bold text-white/75 active:scale-95"
+                  >
+                    {c.label}
+                    {c.n > 0 && <span className="ml-1.5 text-qv-primary">{c.n}</span>}
+                  </button>
+                ))}
+              </div>
+
               {/* Se está moviendo (oculto si no hay actividad real) */}
               <MovingNow events={events} todayStr={todayStr} />
 
               {/* ===== BLOQUE A · 🔥 ESTA NOCHE ===== */}
-              <section data-testid="tonight-block-today">
+              <section id="sec-today" data-testid="tonight-block-today">
                 <SectionHeader icon={Flame} title="Esta noche" count={blockToday.length} tint="primary" />
                 {nothingTonight ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
-                    <PartyPopper className="w-9 h-9 text-white/30 mx-auto mb-2" />
-                    <p className="text-white/60 text-sm">Hoy aún no hay fiestas confirmadas en {cityLabel.split(",")[0]}.</p>
-                    <p className="text-white/40 text-xs mt-1">Mira lo que viene más abajo 👇</p>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 py-3" data-testid="tonight-empty-compact">
+                    <p className="text-white/55 text-[13px] leading-snug">
+                      Hoy aún no hay fiestas confirmadas en {cityLabel.split(",")[0]}.
+                      <span className="text-white/35"> Esto es lo que viene:</span>
+                    </p>
+                    {blockUpcoming.length > 0 && (
+                      <div className="flex gap-3 overflow-x-auto hide-scrollbar snap-x snap-mandatory -mx-1 px-1 mt-3" data-testid="tonight-empty-upcoming-row">
+                        {blockUpcoming.slice(0, 8).map((ev, i) => (
+                          <div key={ev.id} className="snap-start">
+                            <CompactEventCard event={ev} index={i} width={150} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   renderList(blockToday)
@@ -657,7 +686,7 @@ export default function Feed() {
 
               {/* ===== BLOQUE B · ⚡ TU GENTE ===== (oculto si no hay) */}
               {user && blockFriends.length > 0 && (
-                <section data-testid="tonight-block-friends">
+                <section id="sec-friends" data-testid="tonight-block-friends">
                   <SectionHeader icon={Users} title="Tu gente" tint="secondary" />
                   {renderList(blockFriends)}
                 </section>
@@ -683,7 +712,7 @@ export default function Feed() {
 
               {/* ===== BLOQUE C · 🌙 PRÓXIMAMENTE ===== */}
               {blockUpcoming.length > 0 && (
-                <section data-testid="tonight-block-upcoming">
+                <section id="sec-upcoming" data-testid="tonight-block-upcoming">
                   <SectionHeader icon={Moon} title="Próximamente" count={blockUpcoming.length} tint="muted" />
                   {renderList(upcomingShown)}
                   {hasMoreUpcoming && (

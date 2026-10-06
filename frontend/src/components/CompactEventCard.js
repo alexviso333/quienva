@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
-import { Flame, Users, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList, Euro } from "lucide-react";
+import { Flame, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList, Euro } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import api, { mediaThumb } from "@/lib/api";
@@ -187,8 +187,33 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
               </span>
             </div>
           ) : (
-            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-white/40">
-              <Users className="w-3 h-3" /> {t("compact.be_first")}
+            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-white/45" data-testid={`compact-aggsocial-${event.id}`}>
+              {(() => {
+                const openPlans = event.open_plans_count || 0;
+                const nights = event.nights_at_venue || 0;
+                const going = event.going_count ?? event.total_going ?? 0;
+                const interested = event.interested_count ?? event.total_interested ?? 0;
+                if (openPlans > 0) {
+                  return (
+                    <span className="text-qv-primary font-semibold">
+                      {t(openPlans === 1 ? "eventcard.open_plans_one" : "eventcard.open_plans_other", { count: openPlans })}
+                    </span>
+                  );
+                }
+                if (going + interested >= 5) {
+                  return (
+                    <span>
+                      <b className="text-white/80">{going}</b> {t("eventcard.count_going", "van")}
+                      <span className="text-white/25"> · </span>
+                      <b className="text-white/70">{interested}</b> {t("eventcard.count_interested", "interesados")}
+                    </span>
+                  );
+                }
+                if (nights > 0) {
+                  return <span>{t("eventcard.nights_at_venue", { count: nights, venue: event.venue })}</span>;
+                }
+                return <span>{t("eventcard.new_this_week")}</span>;
+              })()}
             </div>
           )}
         </div>

@@ -8288,18 +8288,45 @@ async def my_activity(user: dict = Depends(get_current_user)):
     return {"items": items[:25]}
 
 
+# --- Real nights only (2026-06) --------------------------------------------
+# Marking "Voy" is an INTENTION, not an attendance. The app used to count every
+# past "Voy" as a night you lived, so it "invented" nights. Now a past party only
+# becomes a Night when the user confirms it ("Estuve", or answering the day-after
+# question), or when they uploaded photos to that party's album.
+ATTENDANCE_LOOKBACK_DAYS = 14
+
+
+def _attended_interest_query(uid: str) -> dict:
+    return {"user_id": uid, "$or": [{"status": "estuve"},
+                                    {"status": "voy", "attendance_confirmed": True}]}
+
+
+async def _attended_event_ids(user_ids: list) -> set:
+    """Event ids each of these users really attended (confirmed)."""
+    out = set()
+    async for it in db.interests.find(
+        {"user_id": {"$in": user_ids},
+         "$or": [{"status": "estuve"}, {"status": "voy", "attendance_confirmed": True}]},
+        {"_id": 0, "event_id": 1, "user_id": 1},
+    ):
+        out.add((it["user_id"], it["event_id"]))
+    return out
+
+
 @api_router.get("/me/past-events")
 async def my_past_events(user: dict = Depends(get_current_user)):
-    """Past parties the user attended (status voy/estuve and date < today).
-    Powers the 'Fiestas pasadas' page; each item is enterable → /event/:id
+    """Past parties the user CONFIRMED they attended (date < today).
+    Powers the 'Recuerdos' page; each item is enterable → /event/:id
     where the shared + private album lives."""
     uid = user["user_id"]
     today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
-    # my interests that count as "went"
+    # my interests that count as "went" (confirmed only)
     status_map = {}
-    async for it in db.interests.find(
-        {"user_id": uid, "status": {"$in": ["voy", "estuve"]}}, {"_id": 0}):
+    async for it in db.interests.find(_attended_interest_query(uid), {"_id": 0}):
         status_map[it["event_id"]] = it["status"]
+    # uploading photos to a party's album is an implicit confirmation
+    async for a in db.album_uploads.find({"user_id": uid}, {"_id": 0, "event_id": 1}):
+        status_map.setdefault(a["event_id"], "estuve")
     if not status_map:
         return {"items": []}
     ev_ids = list(status_map.keys())
@@ -8333,6 +8360,101 @@ async def my_past_events(user: dict = Depends(get_current_user)):
         })
     items.sort(key=lambda x: x.get("date", ""), reverse=True)
     return {"items": items}
+
+
+class AttendanceInput(BaseModel):
+    went: bool
+
+
+@api_router.get("/me/attendance-pending")
+async def my_attendance_pending(user: dict = Depends(get_current_user)):
+    """Parties that already happened, I marked 'Voy' for, and I never confirmed.
+    Drives the day-after question ("¿Fuiste a X anoche?"). Most recent first."""
+    uid = user["user_id"]
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    floor_iso = (today - timedelta(days=ATTENDANCE_LOOKBACK_DAYS)).isoformat()
+    today_iso = today.isoformat()
+    ev_ids = []
+    async for it in db.interests.find(
+        {"user_id": uid, "status": "voy", "attendance_confirmed": {"$exists": False}},
+        {"_id": 0, "event_id": 1},
+    ):
+        ev_ids.append(it["event_id"])
+    if not ev_ids:
+        return {"items": []}
+    items = []
+    async for ev in db.events.find(
+        {"id": {"$in": ev_ids}, "date": {"$lt": today_iso, "$gte": floor_iso}}, {"_id": 0},
+    ):
+        items.append({
+            "id": ev["id"], "name": ev["name"], "venue": ev.get("venue", ""),
+            "date": ev.get("date", ""), "time": ev.get("time", ""),
+            "image_url": ev.get("image_url", ""), "genre": ev.get("genre", ""),
+            "city": ev.get("city", ""),
+        })
+    items.sort(key=lambda x: x.get("date", ""), reverse=True)
+    return {"items": items}
+
+
+@api_router.post("/events/{event_id}/attendance")
+async def confirm_attendance(event_id: str, inp: AttendanceInput,
+                             user: dict = Depends(get_current_user)):
+    """Day-after answer. went=True → the party becomes a real Night ('estuve').
+    went=False → it is remembered as "didn't go" and never asked again, and it
+    never shows up in Recuerdos/Wrapped."""
+    uid = user["user_id"]
+    existing = await db.interests.find_one({"user_id": uid, "event_id": event_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="No marcaste esta fiesta")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if inp.went:
+        upd = {"status": "estuve", "attendance_confirmed": True,
+               "attendance_answered_at": now_iso, "updated_at": now_iso}
+    else:
+        upd = {"attendance_confirmed": False, "attendance_answered_at": now_iso,
+               "updated_at": now_iso}
+    await db.interests.update_one({"_id": existing["_id"]}, {"$set": upd})
+    _invalidate_stats_cache(uid)
+    # clear the day-after notification for this event
+    await db.notifications.update_many(
+        {"user_id": uid, "type": "attendance_check", "data.event_id": event_id},
+        {"$set": {"read": True}},
+    )
+    return {"ok": True, "went": bool(inp.went)}
+
+
+async def ask_attendance_confirmations() -> int:
+    """Scheduled (12:00 Europe/Madrid): ask everyone who marked 'Voy' for a party
+    that happened yesterday whether they actually went. One notification per
+    user+event, never repeated."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    sent = 0
+    async for ev in db.events.find({"date": yesterday}, {"_id": 0, "id": 1, "name": 1, "venue": 1}):
+        async for it in db.interests.find(
+            {"event_id": ev["id"], "status": "voy", "attendance_confirmed": {"$exists": False}},
+            {"_id": 0, "user_id": 1},
+        ):
+            uid = it["user_id"]
+            dup = await db.notifications.find_one(
+                {"user_id": uid, "type": "attendance_check", "data.event_id": ev["id"]})
+            if dup:
+                continue
+            await create_notification(
+                uid, "attendance_check",
+                f"¿Fuiste anoche a {ev['name']}? Confírmalo y guardamos la noche 🌙",
+                {"event_id": ev["id"], "type": "attendance_check"},
+            )
+            sent += 1
+    if sent:
+        logger.info(f"[attendance] day-after questions sent: {sent}")
+    return sent
+
+
+@api_router.post("/admin/trigger-attendance-check")
+async def trigger_attendance_check(admin: dict = Depends(require_admin)):
+    sent = await ask_attendance_confirmations()
+    return {"sent": sent}
 
 
 _MONTHS_ES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
@@ -10345,19 +10467,41 @@ _NOTIF_PREF_KEYS = [
 _OPT_IN_PREF_KEYS = set()
 DEFAULT_NOTIF_PREFS = {k: (k not in _OPT_IN_PREF_KEYS) for k in _NOTIF_PREF_KEYS}
 
+# --- Notification volume (2026-06) -----------------------------------------
+# Users complained about notification spam. Everything that is NOT about THEIR
+# people / THEIR plans / THEIR parties is now "extra": muted unless the user
+# switches to mode "todo" in Settings (or enables that single category).
+# Admins always receive everything (so the founder keeps full visibility).
+NOTIF_MODE_ESSENTIAL = "esenciales"
+NOTIF_MODE_ALL = "todo"
+_EXTRA_NOTIF_TYPES = {
+    "new_event",            # new parties in your city (hundreds per week)
+    "tickets_on_sale",
+    "tickets_low_stock",    # "quedan pocas" — user explicitly called it noise
+    "tickets_sold_out",
+    "tickets_price_up",
+    "tickets_price_down",
+    "poll_reminder",
+    "invite_nudge",
+    "interested_reminder",  # "te interesaba, ¿te animas?"
+}
+
 
 async def create_notification(user_id: str, ntype: str, message: str, data: dict):
     # Respect per-user notification preferences for gated categories.
-    if ntype in _NOTIF_PREF_KEYS:
-        u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "notif_prefs": 1})
-        prefs = (u or {}).get("notif_prefs") or {}
+    if ntype in _NOTIF_PREF_KEYS or ntype in _EXTRA_NOTIF_TYPES:
+        u = await db.users.find_one(
+            {"user_id": user_id}, {"_id": 0, "notif_prefs": 1, "notif_mode": 1, "role": 1}
+        ) or {}
+        prefs = u.get("notif_prefs") or {}
         val = prefs.get(ntype)
-        if ntype in _OPT_IN_PREF_KEYS:
-            # Opt-in: deliver ONLY when explicitly enabled (True).
-            if val is not True:
-                return
-        elif val is False:
-            # Opt-out: deliver unless explicitly disabled.
+        is_admin = u.get("role") == "admin"
+        mode = u.get("notif_mode") or NOTIF_MODE_ESSENTIAL
+        if val is False:
+            return
+        if not is_admin and ntype in _EXTRA_NOTIF_TYPES and val is not True and mode != NOTIF_MODE_ALL:
+            return
+        if ntype in _OPT_IN_PREF_KEYS and val is not True:
             return
     await db.notifications.insert_one({
         "id": str(uuid.uuid4()),
@@ -10378,6 +10522,8 @@ async def create_notification(user_id: str, ntype: str, message: str, data: dict
         url = "/profile"
     elif ntype in ("moment_prompt", "moment", "moment_friend"):
         url = "/momento"
+    elif ntype == "attendance_check":
+        url = f"/feed?fui={(data or {}).get('event_id', '')}"
     elif data and data.get("event_id"):
         url = f"/event/{data['event_id']}"
     try:
@@ -10468,7 +10614,27 @@ class NotifPrefsInput(BaseModel):
 @api_router.get("/me/notif-prefs")
 async def get_notif_prefs(user: dict = Depends(get_current_user)):
     prefs = {**DEFAULT_NOTIF_PREFS, **(user.get("notif_prefs") or {})}
-    return {"prefs": prefs, "keys": _NOTIF_PREF_KEYS}
+    return {
+        "prefs": prefs,
+        "keys": _NOTIF_PREF_KEYS,
+        "mode": user.get("notif_mode") or NOTIF_MODE_ESSENTIAL,
+        "extra_types": sorted(_EXTRA_NOTIF_TYPES),
+    }
+
+
+class NotifModeInput(BaseModel):
+    mode: str
+
+
+@api_router.put("/me/notif-mode")
+async def set_notif_mode(inp: NotifModeInput, user: dict = Depends(get_current_user)):
+    """Two simple modes: 'esenciales' (default — only your people, your plans and
+    your parties) or 'todo' (also new parties, ticket changes, reminders…)."""
+    mode = (inp.mode or "").strip().lower()
+    if mode not in (NOTIF_MODE_ESSENTIAL, NOTIF_MODE_ALL):
+        raise HTTPException(status_code=400, detail="Modo inválido")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"notif_mode": mode}})
+    return {"mode": mode}
 
 
 @api_router.put("/me/notif-prefs")
@@ -12629,6 +12795,13 @@ async def my_calendar(user: dict = Depends(get_current_user),
 
     friend_ids = await accepted_friend_ids(user["user_id"])
     allowed_users = friend_ids + [user["user_id"]]
+    today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    # Past parties only count when attendance was CONFIRMED (no invented nights).
+    attended_pairs = await _attended_event_ids(allowed_users)
+    photo_pairs = set()
+    async for a in db.album_uploads.find(
+        {"user_id": {"$in": allowed_users}}, {"_id": 0, "user_id": 1, "event_id": 1}):
+        photo_pairs.add((a["user_id"], a["event_id"]))
 
     # All interests within date range for me or friends
     days = {}  # date_iso -> {events: [], photos: [], videos: [], my_events: []}
@@ -12641,6 +12814,12 @@ async def my_calendar(user: dict = Depends(get_current_user),
         ev = await db.events.find_one({"id": event_id}, {"_id": 0})
         if not ev:
             continue
+        if ev.get("date", "") < today_iso:
+            its = [i for i in its
+                   if (i["user_id"], event_id) in attended_pairs
+                   or (i["user_id"], event_id) in photo_pairs]
+            if not its:
+                continue
         try:
             d = date.fromisoformat(ev["date"])
         except Exception:
@@ -13119,6 +13298,11 @@ async def on_startup():
         scheduler.add_job(convert_plans_to_noches, "cron", hour=11, minute=0,
                           id="convert_plans_to_noches", replace_existing=True,
                           max_instances=1, coalesce=True, misfire_grace_time=3600)
+        # Day-after: "¿fuiste a la fiesta de anoche?" (12:00 Europe/Madrid)
+        scheduler.add_job(ask_attendance_confirmations, "cron", hour=12, minute=0,
+                          id="ask_attendance_confirmations", replace_existing=True,
+                          max_instances=1, coalesce=True, misfire_grace_time=7200)
+
         scheduler.start()
         logger.info(f"Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00 + scrapers LIGHT c/{SCRAPER_LIGHT_INTERVAL_MIN}min ventana {SCRAPER_LIGHT_WINDOW_DAYS}d + FULL a las {SCRAPER_FULL_HOURS}h)")
     except Exception as e:

@@ -5,7 +5,7 @@ import urllib.parse
 import requests
 import pytest
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://full-stack-nights.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://plan-maker-29.preview.emergentagent.com").rstrip("/")
 TIFFANY_EVENT_ID = "d5d1ba48-e907-49a9-b6ed-f4d76a3dbdba"
 
 

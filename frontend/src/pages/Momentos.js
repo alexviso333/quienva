@@ -33,21 +33,47 @@ function MomentImg({ src, className = "" }) {
 }
 
 function MomentCard({ m, onLike, onOpenAuthor, onOpenEvent }) {
+  const [burst, setBurst] = useState(false);
+  const lastTap = useRef(0);
+
+  const doubleTapLike = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 320) {
+      if (!m.i_liked) onLike(m);
+      setBurst(true);
+      setTimeout(() => setBurst(false), 650);
+    }
+    lastTap.current = now;
+  };
+
   return (
-    <div className="relative rounded-3xl overflow-hidden border border-white/10 bg-white/5" data-testid={`moment-card-${m.id}`}>
-      <MomentImg src={mediaThumb(m.image_url, 900)} className="w-full aspect-[4/5] object-cover" />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-black/80" />
+    <div
+      className="relative h-full w-full snap-start shrink-0 overflow-hidden"
+      data-testid={`moment-card-${m.id}`}
+      onPointerDown={doubleTapLike}
+    >
+      {/* blurred backdrop so any aspect ratio fills the screen */}
+      <MomentImg src={mediaThumb(m.image_url, 400)} className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110" />
+      <MomentImg src={mediaThumb(m.image_url, 1080)} className="absolute inset-0 w-full h-full object-contain" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-black/85" />
+
+      {burst && (
+        <Heart
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 text-qv-primary animate-ping"
+          fill="currentColor"
+        />
+      )}
 
       <button
         onClick={() => onOpenAuthor(m.author_id)}
-        className="absolute top-3 left-3 flex items-center gap-2 active:scale-95"
+        className="absolute top-[max(70px,calc(env(safe-area-inset-top)+62px))] left-4 flex items-center gap-2 active:scale-95 z-10"
         data-testid={`moment-author-${m.id}`}
       >
         <AvatarCircle name={m.author?.name} picture={m.author?.picture} size={38} ring />
         <span className="font-semibold text-sm text-white drop-shadow">{m.author?.name}</span>
       </button>
 
-      <div className="absolute inset-x-0 bottom-0 p-4 flex items-end justify-between gap-3">
+      <div className="absolute inset-x-0 bottom-0 p-4 pb-[max(96px,calc(env(safe-area-inset-bottom)+92px))] flex items-end justify-between gap-3 z-10">
         <div className="min-w-0">
           {m.event_name && (
             <button
@@ -144,30 +170,28 @@ export default function Momentos() {
 
   return (
     <AppShell>
-      <header className="px-5 pt-8 pb-3 flex items-center gap-3" data-testid="momentos-header">
+      {/* floating header over the media (immersive, native-like) */}
+      <header className="absolute top-0 left-0 right-0 z-30 px-5 pt-[max(16px,env(safe-area-inset-top))] pb-3 flex items-center gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent" data-testid="momentos-header">
         <button
           onClick={() => navigate(-1)}
           data-testid="momentos-back"
-          className="w-10 h-10 rounded-full qv-glass border border-white/15 flex items-center justify-center active:scale-90"
+          className="w-10 h-10 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center active:scale-90"
         >
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
-        <h1 className="font-display text-3xl font-black tracking-tighter">
+        <h1 className="font-display text-2xl font-black tracking-tighter">
           Momentos<span className="text-qv-primary">.</span>
         </h1>
-      </header>
-
-      <div className="sticky top-0 z-20 px-5 pt-2 pb-3 bg-gradient-to-b from-[#0a0a0c] via-[#0a0a0c]/95 to-transparent">
-        <div className="flex gap-1 p-1 rounded-full bg-white/5 border border-white/10" data-testid="momentos-toggle">
+        <div className="ml-auto flex gap-1 p-1 rounded-full bg-black/45 backdrop-blur border border-white/12" data-testid="momentos-toggle">
           <Toggle value="amigos" icon={Users} label="Amigos" />
           <Toggle value="discover" icon={Compass} label="Descubrir" />
         </div>
-      </div>
+      </header>
 
       {isLoading ? (
         <div className="flex justify-center py-24"><Loader2 className="w-6 h-6 text-qv-primary animate-spin" /></div>
       ) : moments.length === 0 ? (
-        <div className="px-6 py-20 text-center flex flex-col items-center gap-4" data-testid="momentos-empty">
+        <div className="px-6 pt-32 pb-20 text-center flex flex-col items-center gap-4" data-testid="momentos-empty">
           <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
             <Camera className="w-7 h-7 text-white/40" />
           </div>
@@ -185,7 +209,10 @@ export default function Momentos() {
           </button>
         </div>
       ) : (
-        <div className="px-4 pb-8 flex flex-col gap-5" data-testid="momentos-feed">
+        <div
+          className="h-[100dvh] overflow-y-auto snap-y snap-mandatory hide-scrollbar bg-black"
+          data-testid="momentos-feed"
+        >
           {moments.map((m) => (
             <MomentCard
               key={m.id}
@@ -195,7 +222,7 @@ export default function Momentos() {
               onOpenEvent={(id) => navigate(`/event/${id}`)}
             />
           ))}
-          <div ref={sentinelRef} data-testid="momentos-load-more" className="h-8 flex items-center justify-center">
+          <div ref={sentinelRef} data-testid="momentos-load-more" className="h-10 flex items-center justify-center">
             {isFetchingNextPage && <Loader2 className="w-5 h-5 text-qv-primary animate-spin" />}
           </div>
         </div>

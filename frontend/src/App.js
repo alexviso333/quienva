@@ -10,6 +10,7 @@ import { GuestGateProvider } from "@/context/GuestGate";
 import { CreatePlanProvider } from "@/context/CreatePlan";
 import PushPermissionGate from "@/components/PushPermissionGate";
 import MomentGate from "@/components/MomentGate";
+import AttendanceCheckGate from "@/components/AttendanceCheckGate";
 import AgeGate from "@/components/AgeGate";
 import InviteNudgeGate from "@/components/InviteNudgeGate";
 import OfflineBanner from "@/components/OfflineBanner";
@@ -215,6 +216,7 @@ function App() {
               <OfflineBanner />
               <PushPermissionGate />
               <MomentGate />
+              <AttendanceCheckGate />
               <AgeGate />
               <InviteNudgeGate />
             </CreatePlanProvider>

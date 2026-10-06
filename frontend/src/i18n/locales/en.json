@@ -602,7 +602,9 @@
     "timeago_now": "now",
     "timeago_min": "{{n}} min ago",
     "timeago_hour": "{{n}} h ago",
-    "highlight": "Highlight"
+    "highlight": "Highlight",
+    "take_photo": "Take a photo",
+    "from_gallery": "Choose from gallery"
   },
   "eventcard": {
     "starts_in": "Starts in",
@@ -1039,5 +1041,16 @@
     "empty_hint": "Nobody has answered yet. Share the link: one tap to reply, no sign-up needed.",
     "explore_title": "See what's on in {{city}}",
     "explore_sub": "Times, prices and who's going"
+  },
+  "attendance": {
+    "night_last": "last night",
+    "night_before": "two nights ago",
+    "night_on": "on {{day}}",
+    "title": "Did you go {{when}}?",
+    "sub": "We only save the nights you confirm. Nothing made up.",
+    "no": "I didn't go",
+    "yes": "Yes, I was there",
+    "progress": "{{i}} of {{n}} nights to confirm",
+    "later": "Not now"
   }
 }

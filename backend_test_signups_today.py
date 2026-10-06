@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import time
 
 # Backend URL from frontend/.env
-BASE_URL = "https://full-stack-nights.preview.emergentagent.com/api"
+BASE_URL = "https://plan-maker-29.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@quienva.app"

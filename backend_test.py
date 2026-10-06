@@ -20,7 +20,7 @@ from pathlib import Path
 load_dotenv(Path('/app/backend/.env'))
 
 # Configuration
-BASE_URL = "https://full-stack-nights.preview.emergentagent.com/api"
+BASE_URL = "https://plan-maker-29.preview.emergentagent.com/api"
 MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 DB_NAME = os.environ.get('DB_NAME', 'quienva')
 

@@ -26,7 +26,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://full-stack-nights.preview.emergentagent.com/api"
+BASE_URL = "https://plan-maker-29.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 
