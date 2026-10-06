@@ -686,3 +686,11 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 - **Verificado**: testing agent iteración 12 → backend 8/8 y frontend 100% (carrusel en móvil 390px sin overflow, navegación entre noches, landing 200 en ES/EN/DE con las nuevas secciones, /api/ciudad/madrid y sitemap intactos). Tras el informe se excluye el propio evento de la lista de noches.
 - PENDIENTE (del spec): Sección 9 (auditoría de rendimiento fina) y Sección 10 (QA manual de crear plan sin cuenta). Rutas rotas (Sección 8) ya cubiertas por el catch-all a /feed.
 - PRODUCCIÓN: cambio de código → requiere "Save to GitHub" (Render backend + Vercel frontend).
+
+## 2026-10-06 b — Limpieza ficha + Sección 9/10 del spec
+- **Quitado el banner "Compartir en Stories"** de dentro de la ficha de fiesta (`EventDetail.js`) por petición del usuario (ruido). El icono de Instagram de la cabecera sigue compartiendo la imagen de Stories.
+- **Sección 10 (QA del plan sin cuenta) — VERIFICADA e2e en el preview**: `/api/p/nuevo` → crear plan sin cuenta → responder sin cuenta (apodo) → se cuenta y se ve el chip → 3 "dentro" = **autocierre por quórum** con opción ganadora (`estado=cerrado`, `cierre_motivo=quorum`). Plan de prueba borrado de la BD.
+  - **Bug encontrado y arreglado**: el CTA de compartir solo salía DESPUÉS de responder o al cerrar el plan → el creador se quedaba sin botón para difundirlo (rompía el bucle viral). Ahora `renderSticky` muestra "Compartir por WhatsApp" también con el plan abierto y sin respuesta.
+  - **Vacío mejorado**: con 0 participantes se muestra una pista ("Comparte el link por WhatsApp: tu grupo responde en un toque, sin registrarse") que además rellena el hueco visual del centro.
+- **Sección 9 (rendimiento/PWA) revisada**: `manifest.json` completo (id/scope/start_url/iconos any+maskable), service worker activo, imágenes `loading=lazy` en todas las tarjetas (y el nuevo `VenueNights`), páginas SEO de ciudad con carteles eager solo en los 6 primeros y JSON-LD capado a 30 (Madrid 101KB / Ibiza 125KB de HTML), feed con render progresivo (20 tarjetas + IntersectionObserver). No se detectaron cuellos nuevos.
+- Rutas rotas (Sección 8): el catch-all de `App.js` redirige cualquier ruta desconocida a `/feed`; `/memories`, `/fiestas-pasadas`, `/momentos` ya redirigen a `/recuerdos`.

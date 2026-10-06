@@ -14075,6 +14075,7 @@ h1{font-size:28px;line-height:1.1;margin:6px 0 14px;font-weight:800}
 .bar>i{display:block;height:100%;background:linear-gradient(90deg,#ec4899,#8b5cf6);border-radius:999px;transition:width .4s}
 .progtxt{display:flex;justify-content:space-between;font-size:14px;font-weight:600}
 .parts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.hint{background:#17111f;border:1px dashed #3a2e46;border-radius:16px;padding:14px;color:#b9a8c9;font-size:14px;line-height:1.5;margin-bottom:16px}
 .chip{display:flex;align-items:center;gap:6px;background:#140f1c;border:1px solid #2a2033;border-radius:999px;padding:6px 11px;font-size:13px}
 .sticky{position:fixed;left:0;right:0;bottom:0;background:linear-gradient(180deg,rgba(10,7,18,0),#0a0712 32%);padding:16px;z-index:50}
 .sticky .inner{max-width:520px;margin:0 auto}
@@ -14267,6 +14268,8 @@ _PLAN_JS = r'''
       h+='<div class=parts>';
       P.participants.forEach(function(p){h+='<div class=chip>'+(INTENT_EMOJI[p.intencion]||'')+' '+esc(p.apodo)+'</div>';});
       h+='</div>';
+    } else if(P.estado==='abierto'){
+      h+='<div class=hint>Todav\u00eda no ha respondido nadie. Comparte el link por WhatsApp: tu grupo responde en un toque, sin registrarse.</div>';
     }
     app.innerHTML=h;
     Array.prototype.forEach.call(document.querySelectorAll('.pref'),function(b){
@@ -14289,6 +14292,9 @@ _PLAN_JS = r'''
       h+='<button class="btn b3" data-i=depende>Depende</button>';
       h+='<button class="btn b4" data-i=paso>Paso</button>';
       h+='</div>';
+      // The whole point of a plan is to reach your group: the share CTA must be
+      // there from the very first second (specially for the creator).
+      h+='<button class=share id=shareBtn>Compartir por WhatsApp</button>';
     }
     if(ct && P.estado==='abierto'){
       h+='<div class=creator><button id=closeBtn>Cerrar plan ahora</button><button id=cancelPlanBtn>Cancelar</button></div>';
