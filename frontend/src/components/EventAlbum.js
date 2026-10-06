@@ -10,6 +10,7 @@ import {
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ReportFlag } from "@/components/ReportBlock";
 import { toast } from "sonner";
+import { captureEvent } from "@/analytics/posthog";
 
 /**
  * Event album — PRIVATE by default.
@@ -47,6 +48,7 @@ export function EventAlbum({ eventId, hasInterest, prominent = false }) {
     },
     onSuccess: (res) => {
       const n = res?.count || 1;
+      captureEvent("photo_uploaded_to_album", { evento_id: eventId, count: n, is_shared: false });
       toast.success(t("album.toast_saved", { count: n }));
       qc.invalidateQueries({ queryKey: ["album", eventId] });
       qc.invalidateQueries({ queryKey: ["badges", "me"] });

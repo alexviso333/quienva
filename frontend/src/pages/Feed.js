@@ -15,6 +15,7 @@ import CitySelectorSheet from "@/components/CitySelectorSheet";
 import MontaPlanBanner from "@/components/MontaPlanBanner";
 import MyOpenPlans from "@/components/MyOpenPlans";
 import MovingNow from "@/components/MovingNow";
+import { captureEvent } from "@/analytics/posthog";
 import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -99,6 +100,21 @@ export default function Feed() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [q, setQ] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Engagement signal: fire feed_scrolled once per mount when the user scrolls deep.
+  useEffect(() => {
+    let fired = false;
+    const onScroll = () => {
+      const depth = window.scrollY || document.documentElement.scrollTop || 0;
+      if (!fired && depth > 700) {
+        fired = true;
+        captureEvent("feed_scrolled", { depth_px: Math.round(depth) });
+        window.removeEventListener("scroll", onScroll);
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const [highlightId, setHighlightId] = useState(null);
   const [inviteFrom, setInviteFrom] = useState(null);
   const [showPrivacyReminder, setShowPrivacyReminder] = useState(false);
@@ -433,6 +449,14 @@ export default function Feed() {
               <ChevronDown className="w-4 h-4 shrink-0 text-qv-secondary group-active:translate-y-0.5 transition-transform" />
             </button>
             <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setSearchOpen((v) => !v)}
+                aria-label={t("feed.search_placeholder", "Buscar")}
+                data-testid="feed-search-toggle"
+                className={`flex items-center justify-center w-9 h-9 rounded-full border active:scale-95 ${searchOpen || isSearching ? "bg-qv-secondary/15 border-qv-secondary/50 text-qv-secondary" : "bg-white/[0.08] border-white/10 text-qv-secondary"}`}
+              >
+                <Search className="w-4 h-4" />
+              </button>
               <LanguageSwitcher compact />
               <button
                 onClick={toggleCompact}
@@ -468,6 +492,16 @@ export default function Feed() {
           <h1 className="font-display text-[34px] sm:text-[42px] lg:text-6xl font-black tracking-[-0.035em] mt-1.5 lg:mt-2 leading-[0.95] lg:leading-[0.9]">
             ¿Dónde está<br />la noche<span className="text-qv-primary">?</span>
           </h1>
+          {!user && !inviteFrom && (
+            <button
+              onClick={() => requireAuth("empezar")}
+              data-testid="feed-guest-inline"
+              className="mt-2.5 inline-flex items-center gap-1.5 text-xs text-white/55 active:scale-[0.98]"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-qv-primary shrink-0" />
+              {t("feed.guest_title")} · <span className="font-bold text-qv-primary underline underline-offset-2">{t("feed.enter")}</span>
+            </button>
+          )}
           </motion.div>
         </div>
       </header>
@@ -516,37 +550,28 @@ export default function Feed() {
         </div>
       )}
 
-      {!user && !inviteFrom && (
-        <div className="px-4 pt-1 pb-1">
-          <div data-testid="feed-guest-banner" className="w-full rounded-full border border-qv-primary/35 bg-white/[0.04] px-3 py-1.5 flex items-center gap-2 text-left">
-            <Sparkles className="w-4 h-4 text-qv-primary shrink-0" />
-            <p className="flex-1 min-w-0 truncate text-white/75 text-xs font-medium">{t("feed.guest_title")}</p>
-            <button onClick={() => requireAuth("empezar")} data-testid="feed-guest-register" className="shrink-0 text-xs font-bold text-white bg-qv-primary rounded-full px-3.5 py-1.5 active:scale-95">
-              {t("feed.enter")}
-            </button>
-          </div>
-        </div>
-      )}
+      {!user && !inviteFrom && null}
 
-      {/* Discreet search */}
+      {/* Collapsible search (hidden by default to keep the top light) */}
+      {(searchOpen || isSearching) && (
       <div className="px-4 pt-3 pb-1 lg:pt-2">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
           <input
             data-testid="feed-search-input"
             type="search"
+            autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("feed.search_placeholder", "Busca fiesta, discoteca o estilo\u2026")}
             className="w-full h-12 rounded-2xl bg-white/[0.05] border border-white/12 pl-11 pr-10 text-sm text-white placeholder-white/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:outline-none focus:border-qv-primary/50 focus:ring-2 focus:ring-qv-primary/20 focus:bg-white/[0.07] transition-all"
           />
-          {isSearching && (
-            <button data-testid="feed-search-clear" onClick={() => setQ("")} aria-label={t("common.clear", "Borrar")} className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/70 active:scale-90">
-              <X className="w-4 h-4" />
-            </button>
-          )}
+          <button data-testid="feed-search-clear" onClick={() => { setQ(""); setSearchOpen(false); }} aria-label={t("common.clear", "Borrar")} className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/70 active:scale-90">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       </div>
+      )}
 
       {/* ---- SEARCH MODE: flat filtered list ---- */}
       {isSearching ? (

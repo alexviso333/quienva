@@ -616,7 +616,7 @@ export default function EventDetail() {
             <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/10 p-3">
               <button
                 data-testid="detail-ticket-owned-btn"
-                onClick={() => { if (requireAuth("guardar tu entrada")) setTicket.mutate(!event.my_has_ticket); }}
+                onClick={() => { if (requireAuth("guardar tu entrada")) { const have = !event.my_has_ticket; if (have) captureEvent("i_have_ticket_marked", { evento_id: event.id }); setTicket.mutate(have); } }}
                 className={`shrink-0 h-10 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-colors ${
                   event.my_has_ticket ? "bg-qv-secondary text-black" : "bg-white/10 text-white/80 border border-white/20"
                 }`}

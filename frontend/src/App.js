@@ -75,6 +75,16 @@ function AppRouter() {
   const claimingGroup = useRef(false);
   // Analytics (PostHog): init once, identify on auth, reset on logout.
   useEffect(() => { initAnalytics(); }, []);
+  // Retention signal: app_opened once per mount, with days since last open.
+  useEffect(() => {
+    try {
+      const last = parseInt(localStorage.getItem("qv_last_open") || "0", 10);
+      const nowMs = Date.now();
+      const days = last ? Math.floor((nowMs - last) / 86400000) : null;
+      captureEvent("app_opened", { days_since_last: days });
+      localStorage.setItem("qv_last_open", String(nowMs));
+    } catch (e) { /* ignore */ }
+  }, []);
   const prevUserRef = useRef(null);
   useEffect(() => {
     const uid = user?.id || user?.user_id;

@@ -4,6 +4,7 @@ import { useCreatePlan } from "@/context/CreatePlan";
 
 // Subtle, feed-native entry point to create a shareable Plan.
 // Opens the in-app CreatePlanSheet (bottom sheet) — never leaves the app.
+// Kept as a light single-line row so it informs without crowding the feed top.
 export default function MontaPlanBanner({ city }) {
   const { t } = useTranslation();
   const { open } = useCreatePlan();
@@ -13,19 +14,12 @@ export default function MontaPlanBanner({ city }) {
       type="button"
       data-testid="monta-plan-banner"
       onClick={go}
-      className="w-full text-left rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3 flex items-center gap-3 active:scale-[0.99] transition-transform hover:border-white/20"
+      className="w-full text-left rounded-full border border-white/10 bg-white/[0.03] pl-3 pr-3.5 py-2 flex items-center gap-2.5 active:scale-[0.99] transition-transform hover:border-qv-primary/30"
     >
-      <div className="w-9 h-9 rounded-xl bg-qv-primary/15 border border-qv-primary/30 flex items-center justify-center shrink-0">
-        <ClipboardList className="w-[18px] h-[18px] text-qv-primary" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-white text-sm leading-tight">
-          {t("montaplan.title", "Crea un plan y mira quién se apunta")}
-        </p>
-        <p className="text-white/50 text-xs leading-tight truncate">
-          {t("montaplan.sub", "Propón 1-3 sitios y compártelo por WhatsApp")}
-        </p>
-      </div>
+      <ClipboardList className="w-4 h-4 text-qv-primary shrink-0" />
+      <span className="flex-1 min-w-0 truncate text-sm font-semibold text-white/85">
+        {t("montaplan.title", "Crea un plan y mira quién se apunta")}
+      </span>
       <span className="shrink-0 text-xs font-bold text-qv-primary flex items-center gap-0.5">
         {t("montaplan.cta", "Crear")} <ChevronRight className="w-3.5 h-3.5" />
       </span>
