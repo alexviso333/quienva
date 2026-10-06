@@ -13,7 +13,7 @@ import json
 from datetime import datetime, timedelta
 
 # Base URL from frontend/.env
-BASE_URL = "https://154b3a4e-9e0c-467f-8a82-52857cd93b9b.preview.emergentagent.com/api"
+BASE_URL = "https://voting-island-widget.preview.emergentagent.com/api"
 
 # Test credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

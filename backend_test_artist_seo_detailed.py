@@ -6,7 +6,7 @@ import requests
 import json
 from bs4 import BeautifulSoup
 
-BASE_URL = "https://full-stack-nightlife.preview.emergentagent.com/api"
+BASE_URL = "https://voting-island-widget.preview.emergentagent.com/api"
 GOOGLEBOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
 def validate_json_ld_structure():
