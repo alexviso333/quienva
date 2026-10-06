@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { refreshNativePushIfGranted } from "@/lib/nativePush";
 import { isNativeApp } from "@/lib/platform";
+import { captureEvent, identifyUser, resetAnalytics } from "@/analytics/posthog";
 
 const AuthContext = createContext(null);
 
@@ -106,6 +107,8 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/login", { email, password });
     if (data.token) localStorage.setItem("qv_token", data.token);
     setUser(data.user);
+    identifyUser(data.user?.user_id, { city: data.user?.city });
+    captureEvent("login_completed", { method: "email" });
     try { localStorage.setItem("qv_user", JSON.stringify(data.user)); } catch (e) { /* ignore */ }
     return data.user;
   };
@@ -114,6 +117,8 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/register", payload);
     if (data.token) localStorage.setItem("qv_token", data.token);
     setUser(data.user);
+    identifyUser(data.user?.user_id, { city: data.user?.city });
+    captureEvent("signup_completed", { method: "email", city: data.user?.city || null });
     try { localStorage.setItem("qv_user", JSON.stringify(data.user)); } catch (e) { /* ignore */ }
     return data.user;
   };
@@ -122,6 +127,8 @@ export function AuthProvider({ children }) {
     const { data } = await api.post("/auth/google/session", { session_id: sessionId });
     if (data.token) localStorage.setItem("qv_token", data.token);
     setUser(data.user);
+    identifyUser(data.user?.user_id, { city: data.user?.city });
+    captureEvent(data.is_new_user ? "signup_completed" : "login_completed", { method: "google" });
     try { localStorage.setItem("qv_user", JSON.stringify(data.user)); } catch (e) { /* ignore */ }
     return data.user;
   };
@@ -133,6 +140,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("qv_token");
     try { localStorage.removeItem("qv_user"); } catch (e) { /* ignore */ }
     setUser(null);
+    resetAnalytics();
   };
 
   const refreshUser = async () => {

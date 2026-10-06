@@ -185,6 +185,7 @@
     "no_friends": "Noch keine Freunde dabei.",
     "guest_who": "Wer geht? 👀",
     "guest_sub": "Registriere dich kostenlos, um es zu sehen und mitzukommen.",
+    "venue_nights_title": "Nächte im {{venue}}",
     "how_to_get": "Anfahrt",
     "map": "Karte"
   },
@@ -1016,5 +1017,22 @@
   },
   "fab": {
     "new_plan": "Plan"
+  },
+  "myplans": {
+    "title": "Deine offenen Pläne",
+    "inside": "{{dentro}} dabei",
+    "inside_quorum": "{{dentro}}/{{umbral}} dabei",
+    "closes_at": "schließt {{time}}",
+    "view": "Plan ansehen"
+  },
+  "moving": {
+    "title": "Hier geht was",
+    "badge": "Aktiv",
+    "friends_going": "{{count}} Freunde gehen hin",
+    "going_interested": "{{g}} gehen hin · {{i}} interessiert",
+    "going_only": "{{g}} gehen hin",
+    "interested_only": "{{i}} interessiert",
+    "signups_today": "{{count}} haben sich heute angemeldet",
+    "heating": "Wird gerade heiß"
   }
 }

@@ -3386,7 +3386,159 @@ _HOME_EXTRA_CSS = (
     "padding:5px 10px;border-radius:999px}"
     ".social{display:flex;gap:14px;justify-content:center;margin:10px 0}"
     ".social a{color:#c9b3ff;text-decoration:none;font-weight:600}"
+    # --- Plan demo (viral object) + after-party showcase ---
+    ".plansec{display:grid;grid-template-columns:1.05fr .95fr;gap:28px;align-items:center;"
+    "margin:46px 0;padding:26px;border-radius:26px;border:1px solid rgba(255,0,85,.22);"
+    "background:linear-gradient(135deg,rgba(255,0,85,.10),rgba(0,240,255,.06))}"
+    ".plansec h2{margin:0 0 10px;font-size:30px;line-height:1.1}"
+    ".plansec p{color:#cfd3dd;margin:0 0 14px;font-size:16px;line-height:1.55}"
+    ".plansteps{list-style:none;padding:0;margin:0 0 18px;display:flex;flex-direction:column;gap:9px}"
+    ".plansteps li{display:flex;gap:10px;align-items:flex-start;color:#e8e9ee;font-size:15px}"
+    ".plansteps i{flex:0 0 22px;height:22px;border-radius:999px;background:rgba(255,0,85,.9);"
+    "color:#fff;font-style:normal;font-size:12px;font-weight:800;display:grid;place-items:center}"
+    ".pdemo{background:#0e0e13;border:1px solid rgba(255,255,255,.10);border-radius:22px;"
+    "padding:18px;box-shadow:0 24px 60px -30px rgba(255,0,85,.6)}"
+    ".pdemo-top{display:flex;align-items:center;gap:10px;margin-bottom:14px}"
+    ".pdemo-av{width:34px;height:34px;border-radius:999px;background:linear-gradient(135deg,#ff0055,#8b5cf6);"
+    "display:grid;place-items:center;color:#fff;font-weight:800}"
+    ".pdemo-top b{display:block;font-size:15px}.pdemo-top small{color:#9aa;font-size:12px}"
+    ".popt{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 13px;"
+    "border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);margin-bottom:9px;font-size:14px}"
+    ".popt.win{border-color:rgba(255,0,85,.55);background:rgba(255,0,85,.12)}"
+    ".popt span{color:#9aa;font-size:12px}"
+    ".pbar{height:7px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:14px 0 8px}"
+    ".pbar i{display:block;height:100%;width:62%;background:linear-gradient(90deg,#ff0055,#8b5cf6)}"
+    ".pdemo-foot{display:flex;justify-content:space-between;color:#9aa;font-size:12px}"
+    ".after{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:18px 0 34px}"
+    ".acard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:20px}"
+    ".acard .ic{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;"
+    "justify-content:center;margin-bottom:12px;background:rgba(255,0,85,.14);color:#ff3d7f}"
+    ".acard:nth-child(2) .ic{background:rgba(0,240,255,.14);color:#00f0ff}"
+    ".acard:nth-child(3) .ic{background:rgba(139,92,246,.16);color:#b98cff}"
+    ".acard b{display:block;margin:0 0 6px;font-size:17px}"    ".acard p{color:#aab;margin:0;font-size:14px;line-height:1.5}"
+    ".acard .abadges{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}"
+    ".acard .abadges span{font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;"
+    "background:rgba(0,240,255,.12);color:#8ef0ff;border:1px solid rgba(0,240,255,.25)}"
+    "@media(max-width:760px){.plansec{grid-template-columns:1fr;padding:20px;gap:20px}.plansec h2{font-size:24px}}"
 )
+
+_PLAN_HOME_T = {
+    "es": {
+        "h2": "El plan se decide solo",
+        "p": "Crea un plan, m\u00e1ndalo por WhatsApp y que tu gente vote. Sin cuenta, sin grupos infinitos, sin \u00abal final qu\u00e9 hacemos\u00bb.",
+        "steps": ["Eliges 2 o 3 fiestas", "Lo compartes por WhatsApp", "Se cierra solo al llegar el cupo"],
+        "cta": "Crear un plan gratis",
+        "demo_title": "S\u00e1bado en Madrid",
+        "demo_sub": "plan de @marcos \u00b7 cierra a las 21:00",
+        "opt1": "Fitz Madrid",
+        "opt2": "Tiffany's",
+        "votes1": "5 votos",
+        "votes2": "3 votos",
+        "quorum": "5 de 8 dentro",
+        "foot_l": "dentro \u00b7 voy si \u00b7 depende \u00b7 paso",
+        "foot_r": "sin registrarse",
+        "after_h": "Y despu\u00e9s de la fiesta",
+        "mem_t": "Recuerdos",
+        "mem_p": "Las fotos y los momentos de la noche se guardan en el \u00e1lbum de cada fiesta, solo para quien estuvo.",
+        "wrap_t": "Tu Wrapped",
+        "wrap_p": "Tus noches, tus discotecas y tu gente del a\u00f1o, en un resumen listo para compartir.",
+        "amb_t": "Embajador",
+        "amb_p": "Invita a tu gente y desbloquea insignias por cada amigo que se apunta a un plan contigo.",
+        "amb_badges": ["Primer plan", "Lleno", "Embajador"],
+        "n_cities": "ciudades",
+        "n_venues": "discotecas",
+    },
+    "en": {
+        "h2": "The plan decides itself",
+        "p": "Create a plan, drop it on WhatsApp and let your people vote. No account, no endless group chats.",
+        "steps": ["Pick 2 or 3 parties", "Share it on WhatsApp", "It closes itself when the quorum hits"],
+        "cta": "Create a free plan",
+        "demo_title": "Saturday in Madrid",
+        "demo_sub": "plan by @marcos \u00b7 closes at 21:00",
+        "opt1": "Fitz Madrid",
+        "opt2": "Tiffany's",
+        "votes1": "5 votes",
+        "votes2": "3 votes",
+        "quorum": "5 of 8 in",
+        "foot_l": "in \u00b7 maybe \u00b7 depends \u00b7 out",
+        "foot_r": "no sign-up needed",
+        "after_h": "And after the party",
+        "mem_t": "Memories",
+        "mem_p": "Photos and moments from the night live in each party's album, only for the people who were there.",
+        "wrap_t": "Your Wrapped",
+        "wrap_p": "Your nights, your clubs and your crew of the year, in a recap made to share.",
+        "amb_t": "Ambassador",
+        "amb_p": "Invite your people and unlock badges for every friend who joins a plan with you.",
+        "amb_badges": ["First plan", "Sold out", "Ambassador"],
+        "n_cities": "cities",
+        "n_venues": "clubs",
+    },
+    "de": {
+        "h2": "Der Plan entscheidet sich selbst",
+        "p": "Erstelle einen Plan, schick ihn per WhatsApp und lass deine Leute abstimmen. Ohne Konto, ohne endlose Gruppenchats.",
+        "steps": ["W\u00e4hle 2 oder 3 Partys", "Teile ihn per WhatsApp", "Er schlie\u00dft sich beim Quorum automatisch"],
+        "cta": "Gratis Plan erstellen",
+        "demo_title": "Samstag in Madrid",
+        "demo_sub": "Plan von @marcos \u00b7 schlie\u00dft um 21:00",
+        "opt1": "Fitz Madrid",
+        "opt2": "Tiffany's",
+        "votes1": "5 Stimmen",
+        "votes2": "3 Stimmen",
+        "quorum": "5 von 8 dabei",
+        "foot_l": "dabei \u00b7 vielleicht \u00b7 kommt drauf an \u00b7 nein",
+        "foot_r": "keine Anmeldung",
+        "after_h": "Und nach der Party",
+        "mem_t": "Erinnerungen",
+        "mem_p": "Fotos und Momente der Nacht landen im Album jeder Party \u2014 nur f\u00fcr die, die dabei waren.",
+        "wrap_t": "Dein Wrapped",
+        "wrap_p": "Deine N\u00e4chte, deine Clubs und deine Leute des Jahres \u2014 fertig zum Teilen.",
+        "amb_t": "Botschafter",
+        "amb_p": "Lade deine Leute ein und schalte Abzeichen f\u00fcr jeden Freund frei, der mit dir in einen Plan einsteigt.",
+        "amb_badges": ["Erster Plan", "Ausverkauft", "Botschafter"],
+        "n_cities": "Städte",
+        "n_venues": "Clubs",
+    },
+}
+
+
+def _home_plan_section(front: str, lang: str, e) -> str:
+    """Live demo of the shareable Plan (/p/{slug}) — the core viral object."""
+    T = _PLAN_HOME_T.get(lang) or _PLAN_HOME_T["es"]
+    steps = "".join(
+        f'<li><i>{n}</i><span>{e(s)}</span></li>' for n, s in enumerate(T["steps"], start=1))
+    return (
+        '<section class="plansec">'
+        f'<div><h2>{e(T["h2"])}</h2><p>{e(T["p"])}</p>'
+        f'<ul class="plansteps">{steps}</ul>'
+        f'<a class="cta" href="{e(front)}/p/nuevo">{e(T["cta"])}</a></div>'
+        '<div class="pdemo" aria-hidden="true">'
+        '<div class="pdemo-top"><span class="pdemo-av">M</span>'
+        f'<span><b>{e(T["demo_title"])}</b><small>{e(T["demo_sub"])}</small></span></div>'
+        f'<div class="popt win"><b>{e(T["opt1"])}</b><span>{e(T["votes1"])}</span></div>'
+        f'<div class="popt"><b>{e(T["opt2"])}</b><span>{e(T["votes2"])}</span></div>'
+        '<div class="pbar"><i></i></div>'
+        f'<div class="pdemo-foot"><span>{e(T["foot_l"])}</span><span>{e(T["quorum"])}</span></div>'
+        '</div></section>'
+    )
+
+
+def _home_after_section(lang: str, e) -> str:
+    """Memories + Wrapped + Ambassador badges (retention side of the product)."""
+    T = _PLAN_HOME_T.get(lang) or _PLAN_HOME_T["es"]
+    badges = "".join(f'<span>{e(b)}</span>' for b in T["amb_badges"])
+    ic_cam = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3"/></svg>')
+    ic_chart = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>')
+    ic_medal = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="6"/><path d="M8.5 9 6 2h12l-2.5 7"/></svg>')
+    return (
+        f'<h2 class="sectitle">{e(T["after_h"])}</h2><div class="after">'
+        f'<div class="acard glow-card reveal"><div class="ic">{ic_cam}</div><b>{e(T["mem_t"])}</b>'
+        f'<p>{e(T["mem_p"])}</p></div>'
+        f'<div class="acard glow-card reveal"><div class="ic">{ic_chart}</div><b>{e(T["wrap_t"])}</b>'
+        f'<p>{e(T["wrap_p"])}</p></div>'
+        f'<div class="acard glow-card reveal"><div class="ic">{ic_medal}</div><b>{e(T["amb_t"])}</b>'
+        f'<p>{e(T["amb_p"])}</p><div class="abadges">{badges}</div></div>'
+        '</div>'
+    )
 
 _HOME_T = {
     "es": {
@@ -3698,10 +3850,21 @@ async def _render_home(lang: str, request: Request):
     ogloc = {'es': 'es_ES', 'en': 'en_US', 'de': 'de_DE'}[lang]
     title = e(T["title"])
     desc = e(T["desc"])
-    plans_stat = f'<span class="stat"><b>{total}</b> {e(T["n_plans"])}</span>' if total > 0 else ''
-    stats_html = (f'<div class="stats">{plans_stat}'
-                  f'<span class="stat">\U0001F3AB {e(ST["st_on_sale"])}</span>'
-                  f'<span class="stat">\U0001F465 {e(_HOME_T[lang]["tonight"])}</span></div>')
+    # Real counters only — a pill with no number reads as broken.
+    PT = _PLAN_HOME_T.get(lang) or _PLAN_HOME_T["es"]
+    try:
+        n_venues = await db.venues.count_documents({})
+    except Exception:
+        n_venues = 0
+    _stats = []
+    if total > 0:
+        _stats.append(f'<span class="stat"><b>{total}</b> {e(T["n_plans"])}</span>')
+    _stats.append(f'<span class="stat"><b>{len(SUPPORTED_CITIES)}</b> {e(PT["n_cities"])}</span>')
+    if n_venues > 0:
+        _stats.append(f'<span class="stat"><b>{n_venues}</b> {e(PT["n_venues"])}</span>')
+    stats_html = f'<div class="stats">{"".join(_stats)}</div>'
+    plan_section = _home_plan_section(front, lang, e)
+    after_section = _home_after_section(lang, e)
     # OPTION B (owner): do NOT auto-redirect logged-in users to /feed. quienva.me
     # ALWAYS shows the "Fiestas de hoy" SEO page (good for SEO + shareable), and a
     # small script below just relabels the hero button to "Abrir la app" for people
@@ -3745,8 +3908,10 @@ async def _render_home(lang: str, request: Request):
 {ev_grid}
 {sug_html}
 {ve_grid}
+{plan_section}
 <h2 class="sectitle">{e(T["cities_h"])}</h2>
 <div class="hgrid">{cities_html}</div>
+{after_section}
 {benefits}
 {joinband}
 {faq_html}
@@ -13692,6 +13857,35 @@ async def event_open_plans(event_id: str):
             "hora_limite": p.get("hora_limite"),
         })
     return {"plans": out, "count": len(out)}
+
+
+@api_router.get("/events/{event_id}/venue-nights")
+async def event_venue_nights(event_id: str):
+    """Past nights at the same venue — social proof + memories ("Noches en este
+    sitio"). Public: only aggregate counts, never names."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0, "venue": 1, "city": 1})
+    if not ev or not ev.get("venue"):
+        return {"nights": [], "count": 0}
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    q = {"venue": ev["venue"], "date": {"$lt": today}}
+    if ev.get("city"):
+        q["city"] = ev["city"]
+    rows = await db.events.find(
+        q, {"_id": 0, "id": 1, "name": 1, "date": 1, "image_url": 1}
+    ).sort("date", -1).to_list(6)
+    nights = []
+    for r in rows:
+        attended = await db.interests.count_documents({"event_id": r["id"], "status": "estuve"})
+        photos = await db.album_uploads.count_documents({"event_id": r["id"]})
+        nights.append({
+            "id": r["id"],
+            "name": r.get("name") or "",
+            "date": r.get("date"),
+            "image_url": r.get("image_url"),
+            "attended": attended,
+            "photos": photos,
+        })
+    return {"nights": nights, "count": len(nights), "venue": ev["venue"]}
 
 
 @api_router.get("/og/plan/{slug}")

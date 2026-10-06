@@ -9,6 +9,7 @@ import { UserPlus, Check, Clock, Search, X, Loader2, Compass, MessageCircle } fr
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { captureEvent } from "@/analytics/posthog";
 
 export default function Friends() {
   const { t } = useTranslation();
@@ -58,6 +59,7 @@ export default function Friends() {
   const sendReq = useMutation({
     mutationFn: async (userId) => (await api.post("/friends/request", { user_id: userId })).data,
     onSuccess: (d) => {
+      captureEvent("friend_request_sent", { auto_accepted: d.status === "accepted" });
       toast.success(d.status === "accepted" ? t("friends.toast_now_friends") : t("friends.toast_request_sent"));
       invalidate();
     },
@@ -67,7 +69,8 @@ export default function Friends() {
   const respond = useMutation({
     mutationFn: async ({ requestId, accept }) =>
       (await api.post("/friends/respond", { request_id: requestId, accept })).data,
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
+      if (vars?.accept) captureEvent("friend_added", { via: "request_accepted" });
       toast.success(t("friends.toast_done"));
       invalidate();
     },

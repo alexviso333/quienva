@@ -11,6 +11,7 @@ import { EventMoment } from "@/components/EventMoment";
 import FourvenuesEmbed from "@/components/FourvenuesEmbed";
 import { NightRecapCard } from "@/components/NightRecapCard";
 import { EventOpenPlans } from "@/components/EventOpenPlans";
+import { VenueNights } from "@/components/VenueNights";
 import { VoyCelebration } from "@/components/VoyCelebration";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
@@ -724,6 +725,8 @@ export default function EventDetail() {
           {/* Repaso de la noche — shareable recap for past parties */}
           {user && isPast && <NightRecapCard event={event} />}
 
+          {/* Noches en este sitio — past nights at the same venue */}
+          <VenueNights eventId={event.id} venue={event.venue} />
           {/* Shared album — elevated so friends' photos don't get stuck in
               everyone's phone. Comes right after the friends block. */}
           {user && <EventAlbum eventId={event.id} hasInterest={hasInterest} prominent />}

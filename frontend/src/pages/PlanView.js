@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -43,6 +43,10 @@ export default function PlanView() {
     staleTime: 10000,
     refetchInterval: 15000,
   });
+
+  useEffect(() => {
+    if (slug) captureEvent("plan_viewed", { plan_id: slug });
+  }, [slug]);
 
   const counts = plan?.counts || {};
   const options = plan?.opciones || [];

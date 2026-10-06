@@ -185,6 +185,7 @@
     "no_friends": "No friends have joined yet.",
     "guest_who": "Who's going? 👀",
     "guest_sub": "Sign up free to see it and join.",
+    "venue_nights_title": "Nights at {{venue}}",
     "how_to_get": "How to get there",
     "map": "Map"
   },
