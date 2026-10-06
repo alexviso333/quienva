@@ -7,6 +7,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import { VoyCelebration } from "@/components/VoyCelebration";
 import api, { mediaThumb, API } from "@/lib/api";
+import { useCreatePlan } from "@/context/CreatePlan";
 import { formatPartyDate } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
@@ -95,6 +96,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const navigate = useNavigate();
   const { user } = useAuth();
   const { requireAuth } = useGuestGate();
+  const { open: openCreatePlan } = useCreatePlan();
   const { t } = useTranslation();
   const qc = useQueryClient();
   const prefersReduced = useReducedMotion();
@@ -404,7 +406,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           <>
             <button
               data-testid={`event-propose-btn-${event.id}`}
-              onClick={(e) => { e.stopPropagation(); window.location.href = `${API}/p/nuevo?evento=${event.id}`; }}
+              onClick={(e) => { e.stopPropagation(); openCreatePlan({ id: event.id, name: event.name, venue: event.venue, time: event.time, price: event.current_price, image_url: event.image_url, city: event.city }, event.city, "event"); }}
               className="qv-btn h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
             >
               <ClipboardList className="w-4 h-4" /> {t("eventcard.btn_propose", "Proponer a mi grupo")}
@@ -448,10 +450,10 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
                 href={event.commission_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => api.post("/tickets/click", { event_id: event.id }).catch(() => {})}
-                className="qv-btn h-11 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2 bg-qv-primary shadow-[0_6px_16px_-8px_rgba(255,0,85,0.55)]"
+                onClick={() => { captureEvent("ticket_cta_clicked", { evento_id: event.id, price: event.current_price || null }); api.post("/tickets/click", { event_id: event.id }).catch(() => {}); }}
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-white/50 hover:text-white/80 transition-colors mx-auto py-1"
               >
-                <Ticket className="w-4 h-4" /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${Math.round(event.current_price)}€` : ""}
+                <Ticket className="w-3.5 h-3.5" /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${t("event.price_from", { price: Math.round(event.current_price) })}` : ""}
               </a>
             ) : event.more_info_url ? (
               <a

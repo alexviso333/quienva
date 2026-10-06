@@ -254,6 +254,40 @@ backend:
           meet the requirements.
 
 frontend:
+  - task: "Plan compartible — creación IN-APP (bottom sheet) + declutter de EventCard (ticket a enlace)"
+    implemented: true
+    working: true
+    file: "frontend/src/components/CreatePlanSheet.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          REDISEÑO (feedback del usuario: la creación de plan abría una página SSR
+          BLOQUEANTE /p/nuevo y los botones estaban "demasiado cargados / metidos con calzador").
+          Cambios:
+          - Todos los puntos de entrada ahora abren el bottom sheet IN-APP (CreatePlanSheet)
+            vía context useCreatePlan(): EventCard (event-propose-btn), EventDetail
+            (detail-propose-btn) y MontaPlanBanner (monta-plan-banner). Ya NO navegan a
+            ${API}/p/nuevo (eliminado window.location.href en los 3 sitios).
+          - CreatePlanSheet simplificado/progresivo: vista por defecto minimal (solo "¿Dónde
+            quedáis?" + "Crear y compartir"). Título y aforo ocultos tras toggle
+            "Título y aforo (opcional)" (data-testid create-plan-more/create-plan-opts).
+            Si viene preset, muestra tarjeta del evento (create-plan-preset) y label
+            "¿Alguna alternativa? (opcional)".
+          - Declutter EventCard: el botón de entrada "Get ticket" pasó de botón gradiente
+            grande a ENLACE discreto (una sola CTA primaria = "Proponer a mi grupo").
+          - Instrumentación añadida: plan_create_started (al abrir, con source), 
+            plan_create_abandoned (cerrar sin crear), ticket_cta_clicked.
+          Verificado por screenshots móvil (390x844): sheet abre desde banner y desde la
+          tarjeta con evento precargado; tarjeta rediseñada sin sobrecarga. Lint limpio.
+          NOTA ENTORNO: faltaban frontend/.env y backend/.env (reset de contenedor); recreados
+          con valores locales (MONGO_URL local, DB_NAME=quienva, REACT_APP_BACKEND_URL=preview).
+          Sembrados 3 eventos demo en Madrid (marcados _demo) para verificación visual.
+
+
   - task: "SPRINT 1 — Feed rediseñado como TONIGHT (3 bloques: Esta noche / Tu gente / Próximamente)"
     implemented: true
     working: "NA"
@@ -2619,7 +2653,7 @@ agent_communication:
           
           Test environment: Mobile viewport 430x920, Ibiza city, 16 events loaded
           Admin credentials: admin@quienva.app / admin123 (working)
-          Backend URL: https://night-preview-1.preview.emergentagent.com
+          Backend URL: https://plan-compartido.preview.emergentagent.com
 
   - agent: "testing"
     message: |
@@ -3178,7 +3212,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://night-preview-1.preview.emergentagent.com/api
+      Base URL: https://plan-compartido.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -3292,7 +3326,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://night-preview-1.preview.emergentagent.com/api
+      Base URL: https://plan-compartido.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -5965,7 +5999,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://night-preview-1.preview.emergentagent.com/api
+        Base URL: https://plan-compartido.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -6030,7 +6064,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://night-preview-1.preview.emergentagent.com/api
+      Base URL: https://plan-compartido.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -6138,7 +6172,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://night-preview-1.preview.emergentagent.com/api
+      Base URL: https://plan-compartido.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -6265,7 +6299,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://night-preview-1.preview.emergentagent.com/api
+      Base URL: https://plan-compartido.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -6681,7 +6715,7 @@ agent_communication:
         No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
         
         Test file: /app/backend_test.py
-        Base URL: https://night-preview-1.preview.emergentagent.com/api
+        Base URL: https://plan-compartido.preview.emergentagent.com/api
 
 test_focus_2026_08_06_notif_and_cityalerts:
   goal: "Verificar 2 cambios de backend SIN romper nada. Entorno LOCAL nuevo: la BD arranca vacía y NO hay token de FourVenues (no probar scrapers/afiliado aquí)."
@@ -6755,7 +6789,7 @@ agent_communication:
         Both bug fixes working perfectly. No regressions detected. All endpoints returning correct values with proper persistence.
         
         Test file: /app/backend_test.py
-        Base URL: https://night-preview-1.preview.emergentagent.com/api
+        Base URL: https://plan-compartido.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
 
 
@@ -7238,7 +7272,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://night-preview-1.preview.emergentagent.com/api
+      Base URL: https://plan-compartido.preview.emergentagent.com/api
       Admin: admin@quienva.app / admin123
       Test user: u1test1786031593@test.com
 
@@ -7375,7 +7409,7 @@ return 401 for guests.
         NO ISSUES FOUND. All requirements from review request satisfied.
         
         Test file: /app/backend_test.py
-        Base URL: https://night-preview-1.preview.emergentagent.com/api
+        Base URL: https://plan-compartido.preview.emergentagent.com/api
 
 
 #====================================================================================================
@@ -7612,7 +7646,7 @@ agent_communication:
         - Own username update allowed (no-op, no clash)
         
         Test file: /app/backend_test.py
-        Backend URL: https://night-preview-1.preview.emergentagent.com/api
+        Backend URL: https://plan-compartido.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
         
         NO ISSUES FOUND. All 3 tasks working perfectly.
@@ -7709,7 +7743,7 @@ agent_communication:
       TESTED: New SSR homepage, venue pages, and sitemap features for SEO optimization.
       
       TEST ENVIRONMENT:
-      - Base URL: https://night-preview-1.preview.emergentagent.com/api
+      - Base URL: https://plan-compartido.preview.emergentagent.com/api
       - Test data: Venue "Olivia Valere" (slug: olivia-valere) in Marbella with events t1 (Gims Live), t2 (House Night)
       - Canonical URLs use preview domain (expected behavior for preview environment)
       
@@ -7861,7 +7895,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://night-preview-1.preview.emergentagent.com/api
+      Base URL: https://plan-compartido.preview.emergentagent.com/api
       Total tests: 24 passed, 0 failed
 
 backend:
@@ -9250,7 +9284,7 @@ agent_communication:
           ✅ TEST 1: Artist page with events (carl-cox)
           - GET /api/artista/carl-cox with User-Agent: Googlebot → 200 ✓
           - <h1> contains "Carl Cox" ✓
-          - Canonical link present: https://night-preview-1.preview.emergentagent.com/artista/carl-cox ✓
+          - Canonical link present: https://plan-compartido.preview.emergentagent.com/artista/carl-cox ✓
           - 4 hreflang links present (es/en/de/x-default) ✓
           - 10 JSON-LD script tags found ✓
           - 7 valid Event JSON-LD structures with complete data:
@@ -10481,7 +10515,7 @@ frontend:
           ✅ TESTED WEB BUILD LAUNCH SPLASH BEHAVIOR (3 test scenarios, 100% PASS)
           
           Verified the branded launch overlay (#qv-splash) behavior on the web build at:
-          https://night-preview-1.preview.emergentagent.com/feed
+          https://plan-compartido.preview.emergentagent.com/feed
           
           ✅ TEST 1: WEB (UNTOUCHED) - Splash hidden on plain web (PASS)
           - Navigated to /feed as guest (no login)
@@ -10529,7 +10563,7 @@ agent_communication:
       TEST RESULTS:
       
       ✅ TEST 1: WEB (UNTOUCHED) - Splash hidden on plain web (PASS)
-      - Navigated to /feed as guest at https://night-preview-1.preview.emergentagent.com
+      - Navigated to /feed as guest at https://plan-compartido.preview.emergentagent.com
       - #qv-splash element exists in DOM: YES ✓
       - getComputedStyle(#qv-splash).display === 'none' ✓ (overlay HIDDEN on plain web)
       - <html> has qv-native class: NO ✓ (correct for web)
@@ -10584,7 +10618,7 @@ agent_communication:
       native launch image (LaunchScreen.storyboard + splash.png) cannot be tested in browser and will 
       only be visible after Codemagic rebuild + App Store update.
       
-      Test URL: https://night-preview-1.preview.emergentagent.com/feed
+      Test URL: https://plan-compartido.preview.emergentagent.com/feed
       Test date: 2026-08-29
 
             * Line 1: "¿Quién" in white (rgb(255, 255, 255)) ✓
@@ -11953,7 +11987,7 @@ agent_communication:
         comment: |
           TESTED POLL CLOSED MESSAGE WITH WINNER FIELD (2026-09-06) - 100% PASS
           
-          Base URL: https://night-preview-1.preview.emergentagent.com/api
+          Base URL: https://plan-compartido.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!
           
           ✅ TEST SCENARIO:
@@ -11988,7 +12022,7 @@ agent_communication:
         comment: |
           TESTED NUDGE CONFIG ENDPOINTS (2026-09-06) - 100% PASS
           
-          Base URL: https://night-preview-1.preview.emergentagent.com/api
+          Base URL: https://plan-compartido.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!, ana@qvtest.com / User1234!
           
           ✅ TEST 1: GET /api/admin/invite-nudge/config (admin)
@@ -12048,7 +12082,7 @@ agent_communication:
         comment: |
           TESTED NUDGE STATS ENDPOINTS (2026-09-06) - 100% PASS
           
-          Base URL: https://night-preview-1.preview.emergentagent.com/api
+          Base URL: https://plan-compartido.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!, luis@qvtest.com / User1234!, ana@qvtest.com / User1234!
           
           ✅ TEST 1: GET /api/admin/invite-nudge/stats (admin)
@@ -12097,7 +12131,7 @@ agent_communication:
         comment: |
           TESTED BACKEND STARTUP VERIFICATION (2026-09-06) - 100% PASS
           
-          Base URL: https://night-preview-1.preview.emergentagent.com/api
+          Base URL: https://plan-compartido.preview.emergentagent.com/api
           
           ✅ TEST 1: Backend health check
           - GET /api/cities → 200 ✓
@@ -14528,7 +14562,7 @@ agent_communication:
       Test credentials: admin@quienva.app / Admin1234!
       Test event: Chinois Presents... (id: 8f297f48-dee2-4a10-b320-6d24a5a67903)
       Database: 50 events seeded in Ibiza via scrapers
-      Backend URL: https://night-preview-1.preview.emergentagent.com/api
+      Backend URL: https://plan-compartido.preview.emergentagent.com/api
       
       NO ISSUES FOUND. Feature ready for production.
 
@@ -14689,7 +14723,7 @@ backend:
           Test credentials: admin@quienva.app / admin123
           Test event: Chinois Presents... (id: 8b9c7dab-c4b5-46bc-bcb2-637be11fee44)
           Database: 50 events in Ibiza
-          Backend URL: https://493a34f4-53de-4627-988e-5ad835d45ea1.preview.emergentagent.com/api
+          Backend URL: https://plan-compartido.preview.emergentagent.com/api
           
           NO ISSUES FOUND. Feature ready for production.
 

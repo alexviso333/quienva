@@ -14,6 +14,7 @@ import { EventOpenPlans } from "@/components/EventOpenPlans";
 import { VoyCelebration } from "@/components/VoyCelebration";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
+import { useCreatePlan } from "@/context/CreatePlan";
 import {
   ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram, Pencil, X, RotateCcw, Users, Eye, ClipboardList,
 } from "lucide-react";
@@ -77,6 +78,7 @@ export default function EventDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const { requireAuth } = useGuestGate();
+  const { open: openCreatePlan } = useCreatePlan();
   const navigate = useNavigate();
   const [storyBusy, setStoryBusy] = useState(false);
   const isAdmin = user?.role === "admin";
@@ -488,7 +490,7 @@ export default function EventDetail() {
             <>
             <button
               data-testid="detail-propose-btn"
-              onClick={() => { window.location.href = `${API}/p/nuevo?evento=${event.id}`; }}
+              onClick={() => openCreatePlan({ id: event.id, name: event.name, venue: event.venue, time: event.time, price: event.current_price, image_url: event.image_url, city: event.city }, event.city, "event")}
               className="qv-btn w-full h-[52px] rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)] mb-3"
             >
               <ClipboardList className="w-5 h-5" /> {t("eventcard.btn_propose", "Proponer a mi grupo")}

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 # Base URL from frontend/.env
-BASE_URL = "https://493a34f4-53de-4627-988e-5ad835d45ea1.preview.emergentagent.com/api"
+BASE_URL = "https://plan-compartido.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

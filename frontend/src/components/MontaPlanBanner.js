@@ -1,17 +1,13 @@
 import { useTranslation } from "react-i18next";
 import { ClipboardList, ChevronRight } from "lucide-react";
-import { API } from "@/lib/api";
-import { captureEvent } from "@/analytics/posthog";
+import { useCreatePlan } from "@/context/CreatePlan";
 
-// Subtle, feed-native entry point to create a shareable Plan (/p/nuevo).
-// Kept low-key (matches the feed cards) so it informs without adding noise.
+// Subtle, feed-native entry point to create a shareable Plan.
+// Opens the in-app CreatePlanSheet (bottom sheet) — never leaves the app.
 export default function MontaPlanBanner({ city }) {
   const { t } = useTranslation();
-  const go = () => {
-    captureEvent("plan_create_started", { source: "feed" });
-    const q = city ? `?ciudad=${encodeURIComponent(city)}` : "";
-    window.location.href = `${API}/p/nuevo${q}`;
-  };
+  const { open } = useCreatePlan();
+  const go = () => open(null, city, "feed");
   return (
     <button
       type="button"
