@@ -14726,3 +14726,110 @@ agent_communication:
       ✅ No 500 errors, no regressions
       
       Implementation is production-ready. Main agent can summarize and finish.
+
+#====================================================================================================
+# SESSION (2026-10-06) — Bloque 3 completion: plan auto-close on expiry + Noche conversion
+#====================================================================================================
+backend:
+  - task: "Plan deadline auto-close job + Noche conversion cron (Bloque 3.6/3.7) + participant user_id fix"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added close_expired_plans() (APScheduler every 15 min) that closes OPEN plans whose hora_limite passed: quorum met -> winner (cierre_motivo='quorum'); otherwise closed with opcion_ganadora=null (cierre_motivo='expirado_sin_quorum'). Added convert_plans_to_noches() (APScheduler cron 11:00 Europe/Madrid) that, for each CLOSED plan with opcion_ganadora!=null, noche_id=null and past fecha_objetivo, inserts an 'estuve' interest (source='plan_noche') for every REGISTERED participant (user_id set) whose intencion is dentro/voy_si, on the winning event, then sets plan.noche_id. Added admin manual triggers POST /api/admin/plans/close-expired and POST /api/admin/plans/convert-noches. FIXED a pre-existing bug: plan code used user.get('id') but user docs only have 'user_id' -> creator_user_id and participant.user_id were always null for logged-in users; replaced all user.get('id')->user.get('user_id') in plan code. Also added 'varias opciones' WhatsApp share variant on /p/{slug}. Verified end-to-end via /app/scripts/test_plan_noche_flow.py (PASS): plan closed by quorum picked winner, registered participant got 'estuve', plan.noche_id set; guest (no user_id) skipped. Please retest: (a) close-expired with quorum unmet -> no winner; (b) close-expired with quorum met -> winner; (c) convert-noches creates 'estuve' only for registered dentro/voy_si participants and is idempotent (noche_id guards re-processing); (d) authenticated respond now links participant.user_id; (e) no regression on create/respond/close/cancel plan endpoints. Admin: admin@quienva.app/admin123."
+        -working: true
+        -agent: "testing"
+        -comment: |
+          PLAN/NOCHE BACKEND TESTING COMPLETE (2026-10-06)
+          
+          🎉 ALL 5 TEST SCENARIOS PASSED (100% SUCCESS RATE)
+          
+          Tested the Plan deadline auto-close + Noche conversion functionality (Bloque 3.6/3.7)
+          as specified in the review request. All endpoints and behaviors working correctly.
+          
+          ✅ SCENARIO 1: Expiry WITHOUT quorum (PASSED)
+          - Created plan with umbral=2, hora_limite in PAST, fecha_objetivo 2 days ago
+          - Added ONE authenticated 'dentro' response
+          - Called POST /api/admin/plans/close-expired
+          - Verified: estado='cerrado', opcion_ganadora=null, cierre_motivo='expirado_sin_quorum' ✓
+          
+          ✅ SCENARIO 2: Expiry WITH quorum (PASSED)
+          - Created plan with umbral=2, hora_limite in PAST, fecha_objetivo 2 days ago
+          - Added TWO 'dentro' responses: one authenticated (admin), one guest
+          - Called POST /api/admin/plans/close-expired
+          - Verified: estado='cerrado', opcion_ganadora=<opt_id>, cierre_motivo='quorum' ✓
+          - Winner correctly set to the single option's opt_id ✓
+          
+          ✅ SCENARIO 3: Noche conversion (PASSED)
+          - After scenario 2 (closed with winner, past target date)
+          - Called POST /api/admin/plans/convert-noches
+          - Verified: plan.noche_id set to evento_id in database ✓
+          - Verified: registered participant (admin) has my_status='estuve' on winning event ✓
+          - Verified: guest participant did NOT create interest (correctly skipped) ✓
+          - Called convert-noches AGAIN to test idempotency
+          - Verified: my_status still 'estuve', no duplicate interests created ✓
+          - Idempotency working correctly (noche_id guards re-processing) ✓
+          
+          ✅ SCENARIO 4: Registered participant linking (PASSED)
+          - Created plan as authenticated user
+          - Responded as authenticated user (1st response)
+          - Verified: counts.total=1, dentro=1 ✓
+          - Responded AGAIN with SAME participante_token, different intencion
+          - Verified: counts.total=1 (no duplication), dentro=0, voy_si=1 ✓
+          - Responded AGAIN WITHOUT participante_token (should match by user_id)
+          - Verified: counts.total=1 (no duplication by user_id), dentro=1, voy_si=0 ✓
+          - Regression fix verified: user.get('user_id') correctly links participants ✓
+          
+          ✅ SCENARIO 5: Regression - Plan endpoints (PASSED)
+          - POST /api/plans → 200, plan created ✓
+          - POST /api/plans/{slug}/respond → 200, response submitted ✓
+          - POST /api/plans/{slug}/close with x-participante-token (creador_token) → 200, estado='cerrado', cierre_motivo='manual' ✓
+          - POST /api/plans/{slug}/cancel with x-participante-token (creador_token) → 200, estado='cancelado' ✓
+          - POST /api/plans/{slug}/close with Authorization Bearer (as creator) → 200, estado='cerrado' ✓
+          - All endpoints return 2xx and behave correctly ✓
+          
+          CONCLUSION:
+          All Plan/Noche backend requirements met perfectly:
+          ✅ close_expired_plans() closes plans with expired hora_limite
+          ✅ Quorum met → winner selected, cierre_motivo='quorum'
+          ✅ Quorum NOT met → no winner, cierre_motivo='expirado_sin_quorum'
+          ✅ convert_plans_to_noches() creates 'estuve' interests for registered participants
+          ✅ Guest participants correctly skipped (no user_id)
+          ✅ Idempotency working (noche_id guards re-processing)
+          ✅ Registered participant linking fixed (user.get('user_id') instead of user.get('id'))
+          ✅ No regressions in create/respond/close/cancel endpoints
+          ✅ Admin manual triggers working correctly
+          
+          IMPORTANT NOTES:
+          - Backend only persists umbral_personas when > 1 (verified: quorum of 1 stored as null)
+          - noche_id field is internal (not exposed via GET /api/plans/{slug} API)
+          - Verified noche_id via direct MongoDB query
+          - fecha_objetivo must be at least 2 days in past for conversion (noche_date < today check)
+          
+          Test file: /app/backend_test_plan_noche.py
+          All tests executed successfully with concrete evidence for each scenario.
+
+agent_communication:
+    -agent: "main"
+    -message: "Bloque 3.6/3.7 done. Use admin triggers /api/admin/plans/close-expired and /api/admin/plans/convert-noches to test without waiting for the scheduler. Note the backend only stores umbral_personas when > 1, so to exercise the quorum path create a plan with umbral 2 and two 'dentro' participants (one authenticated = registered, one guest). PostHog is live (EU) but do not depend on it for assertions. Do NOT test third-party scrapers. Test ONLY the plan/noche backend. Frontend not to be tested yet."
+    -agent: "testing"
+    -message: |
+      BACKEND TESTING COMPLETE (2026-10-06) - ALL TESTS PASSED ✅
+      
+      Tested Plan deadline auto-close + Noche conversion (Bloque 3.6/3.7) as requested.
+      All 5 test scenarios passed with 100% success rate. NO ISSUES FOUND.
+      
+      Key findings:
+      ✅ close_expired_plans() working correctly (quorum met → winner, quorum not met → no winner)
+      ✅ convert_plans_to_noches() working correctly (registered participants get 'estuve', guests skipped)
+      ✅ Idempotency verified (noche_id guards re-processing)
+      ✅ Registered participant linking fixed (user.get('user_id') regression verified)
+      ✅ All plan endpoints working (create/respond/close/cancel)
+      ✅ No regressions detected
+      
+      Implementation is production-ready. Main agent can summarize and finish.

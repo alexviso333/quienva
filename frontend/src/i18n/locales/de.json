@@ -997,6 +997,11 @@
     "cta": "Erstellen",
     "dialog_sub": "Benenne und erstelle deine Gruppe — darin könnt ihr eine 'Wohin?'-Umfrage starten."
   },
+  "montaplan": {
+    "title": "Plane deine Nacht",
+    "sub": "Optionen hinzufügen, sehen wer dabei ist und gemeinsam festmachen",
+    "cta": "Erstellen"
+  },
   "nudge": {
     "title": "Hol deine Leute 🎉",
     "default_body": "Lade deine Freunde ein und genießt das Wochenende zusammen.",

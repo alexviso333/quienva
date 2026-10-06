@@ -997,6 +997,11 @@
     "cta": "Crear",
     "dialog_sub": "Ponle nombre y crea tu grupo: dentro podréis lanzar una encuesta de a dónde ir."
   },
+  "montaplan": {
+    "title": "Monta tu plan para esta noche",
+    "sub": "Pon opciones, mira quién se apunta y cerradlo entre todos",
+    "cta": "Crear"
+  },
   "nudge": {
     "title": "Trae a tu gente 🎉",
     "default_body": "Invita a tus amigos y vivid el finde juntos.",

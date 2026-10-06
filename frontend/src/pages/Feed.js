@@ -12,6 +12,7 @@ import { useGuestGate } from "@/context/GuestGate";
 import { isNativeApp } from "@/lib/platform";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import CitySelectorSheet from "@/components/CitySelectorSheet";
+import MontaPlanBanner from "@/components/MontaPlanBanner";
 import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -570,6 +571,9 @@ export default function Feed() {
             <SkeletonList />
           ) : (
             <>
+              {/* Banner permanente: montar un plan compartible para esta noche */}
+              <MontaPlanBanner city={effectiveCity} />
+
               {/* ===== BLOQUE A · 🔥 ESTA NOCHE ===== */}
               <section data-testid="tonight-block-today">
                 <SectionHeader icon={Flame} title="Esta noche" count={blockToday.length} tint="primary" />

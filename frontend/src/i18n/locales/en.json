@@ -997,6 +997,11 @@
     "cta": "Create",
     "dialog_sub": "Name it and create your group — inside you can launch a 'where to go' poll."
   },
+  "montaplan": {
+    "title": "Plan your night out",
+    "sub": "Add options, see who's in and lock it together",
+    "cta": "Create"
+  },
   "nudge": {
     "title": "Bring your people 🎉",
     "default_body": "Invite your friends and enjoy the weekend together.",

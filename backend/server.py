@@ -12945,6 +12945,14 @@ async def on_startup():
         scheduler.add_job(run_scrapers_full, "cron", hour=SCRAPER_FULL_HOURS, minute=15,
                           id="scrapers_full", replace_existing=True,
                           max_instances=1, coalesce=True, misfire_grace_time=600)
+        # Plan compartible: close plans past their deadline (even unvisited) every
+        # 15 min, and convert finished plans into Noches (Recuerdos) daily at 11:00.
+        scheduler.add_job(close_expired_plans, "interval", minutes=15,
+                          id="close_expired_plans", replace_existing=True,
+                          max_instances=1, coalesce=True, misfire_grace_time=300)
+        scheduler.add_job(convert_plans_to_noches, "cron", hour=11, minute=0,
+                          id="convert_plans_to_noches", replace_existing=True,
+                          max_instances=1, coalesce=True, misfire_grace_time=3600)
         scheduler.start()
         logger.info(f"Scheduler iniciado (digest viernes + recordatorios 30min + recuerdo lunes 12:00 + momentos auto cada 10min + randomizador diario 18:00 + scrapers LIGHT c/{SCRAPER_LIGHT_INTERVAL_MIN}min ventana {SCRAPER_LIGHT_WINDOW_DAYS}d + FULL a las {SCRAPER_FULL_HOURS}h)")
     except Exception as e:
@@ -13320,6 +13328,110 @@ async def _plan_maybe_autoclose(plan: dict) -> dict:
     return plan
 
 
+async def close_expired_plans():
+    """Background job: close OPEN plans whose hora_limite has passed even if nobody
+    opens the page. Quorum met -> winner (quorum); otherwise closed with no winner."""
+    try:
+        now = _plan_now()
+        closed = 0
+        async for plan in db.plans.find({"estado": "abierto", "hora_limite": {"$ne": None}}):
+            try:
+                dl = datetime.fromisoformat(plan["hora_limite"])
+                if dl.tzinfo is None:
+                    dl = dl.replace(tzinfo=ZoneInfo("Europe/Madrid"))
+            except Exception:
+                continue
+            if now <= dl:
+                continue
+            participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+            dentro = sum(1 for p in participants if p.get("intencion") == "dentro")
+            umbral = plan.get("umbral_personas")
+            if umbral and dentro >= umbral:
+                winner = _plan_pick_winner(plan, participants)
+                motivo = "quorum"
+            else:
+                winner = None
+                motivo = "expirado_sin_quorum"
+            await db.plans.update_one({"id": plan["id"]}, {"$set": {
+                "estado": "cerrado", "closed_at": now, "opcion_ganadora": winner,
+                "cierre_motivo": motivo}})
+            _plan_track("plan_closed_by_quorum" if motivo == "quorum" else "plan_closed_no_quorum",
+                        plan_id=plan["id"], participants_count=len(participants))
+            closed += 1
+        if closed:
+            logger.info(f"[plans] cerrados por vencimiento: {closed}")
+    except Exception as e:
+        logger.error(f"close_expired_plans error: {e}")
+
+
+async def convert_plans_to_noches():
+    """Daily (11:00 Madrid): every CLOSED plan with a winning option whose target
+    date already passed becomes a 'Noche'. Each REGISTERED participant who was in /
+    leaning-in gets an 'estuve' interest on the winning event, so the night shows up
+    in their Recuerdos automatically. noche_id marks the plan as processed."""
+    try:
+        today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+        converted = 0
+        async for plan in db.plans.find({"estado": "cerrado",
+                                         "opcion_ganadora": {"$ne": None},
+                                         "noche_id": None}):
+            opts = plan.get("opciones") or []
+            win = next((o for o in opts if o.get("opt_id") == plan.get("opcion_ganadora")), None)
+            if not win:
+                continue
+            evento_id = win.get("evento_id")
+            # Night date: fecha_objetivo if present, else the close date.
+            noche_date = None
+            fo = plan.get("fecha_objetivo")
+            if fo:
+                try:
+                    noche_date = datetime.fromisoformat(fo).date()
+                except Exception:
+                    noche_date = None
+            if noche_date is None:
+                ca = plan.get("closed_at")
+                noche_date = ca.date() if hasattr(ca, "date") else today
+            if noche_date >= today:
+                continue  # night hasn't happened yet
+            if not evento_id:
+                # free-text winner: can't attach to an event album; just mark handled.
+                await db.plans.update_one({"id": plan["id"]},
+                                          {"$set": {"noche_id": f"notxt-{plan['id']}"}})
+                continue
+            participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+            added = 0
+            for p in participants:
+                uid = p.get("user_id")
+                if not uid or p.get("intencion") not in ("dentro", "voy_si"):
+                    continue
+                existing = await db.interests.find_one({"user_id": uid, "event_id": evento_id})
+                if existing:
+                    if existing.get("status") != "estuve":
+                        await db.interests.update_one(
+                            {"_id": existing["_id"]},
+                            {"$set": {"status": "estuve",
+                                      "updated_at": datetime.now(timezone.utc).isoformat()}})
+                    continue
+                await db.interests.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": uid,
+                    "event_id": evento_id,
+                    "status": "estuve",
+                    "privacy": "todos",
+                    "source": "plan_noche",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+                added += 1
+            await db.plans.update_one({"id": plan["id"]}, {"$set": {"noche_id": evento_id}})
+            _plan_track("night_auto_created", plan_id=plan["id"], noche_id=evento_id,
+                        participants_count=added)
+            converted += 1
+        if converted:
+            logger.info(f"[plans] convertidos a Noche: {converted}")
+    except Exception as e:
+        logger.error(f"convert_plans_to_noches error: {e}")
+
+
 def _plan_public(plan: dict, participants: list, viewer_token: str = None, viewer_user=None) -> dict:
     counts = _plan_counts(participants)
     parts_pub = [{
@@ -13335,13 +13447,13 @@ def _plan_public(plan: dict, participants: list, viewer_token: str = None, viewe
             mine = {"apodo": p.get("apodo"), "intencion": p.get("intencion"),
                     "opcion_preferida": p.get("opcion_preferida")}
             break
-        if viewer_user and p.get("user_id") and p.get("user_id") == viewer_user.get("id"):
+        if viewer_user and p.get("user_id") and p.get("user_id") == viewer_user.get("user_id"):
             mine = {"apodo": p.get("apodo"), "intencion": p.get("intencion"),
                     "opcion_preferida": p.get("opcion_preferida")}
     is_creator = False
     if viewer_token and plan.get("creador_token") == viewer_token:
         is_creator = True
-    if viewer_user and viewer_user.get("id") and viewer_user.get("id") == plan.get("creator_user_id"):
+    if viewer_user and viewer_user.get("user_id") and viewer_user.get("user_id") == plan.get("creator_user_id"):
         is_creator = True
     return {
         "slug": plan.get("slug"),
@@ -13381,7 +13493,7 @@ async def create_plan(body: PlanCreateIn, request: Request):
     plan = {
         "id": str(uuid.uuid4()),
         "slug": slug,
-        "creator_user_id": user.get("id") if user else None,
+        "creator_user_id": user.get("user_id") if user else None,
         "creador_token": creador_token,
         "creador_apodo": creador_apodo,
         "ciudad": (body.ciudad or "Madrid").strip(),
@@ -13439,7 +13551,7 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
             {"plan_id": plan["id"], "participante_token": body.participante_token}, {"_id": 0})
     if not existing and user:
         existing = await db.plan_participants.find_one(
-            {"plan_id": plan["id"], "user_id": user.get("id")}, {"_id": 0})
+            {"plan_id": plan["id"], "user_id": user.get("user_id")}, {"_id": 0})
         if existing:
             token = existing.get("participante_token") or token
     doc = {
@@ -13447,7 +13559,7 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
         "intencion": body.intencion,
         "opcion_preferida": opcion,
         "telefono": (body.telefono or "").strip() or None,
-        "user_id": user.get("id") if user else (existing.get("user_id") if existing else None),
+        "user_id": user.get("user_id") if user else (existing.get("user_id") if existing else None),
         "updated_at": _plan_now(),
     }
     if existing:
@@ -13481,7 +13593,7 @@ async def close_plan(slug: str, request: Request):
     token = request.headers.get("x-participante-token") or request.query_params.get("pt")
     user = await _plan_optional_user(request)
     allowed = (token and token == plan.get("creador_token")) or \
-              (user and user.get("id") and user.get("id") == plan.get("creator_user_id"))
+              (user and user.get("user_id") and user.get("user_id") == plan.get("creator_user_id"))
     if not allowed:
         raise HTTPException(status_code=403, detail="Solo el creador puede cerrar el plan")
     if plan.get("estado") != "abierto":
@@ -13505,7 +13617,7 @@ async def cancel_plan(slug: str, request: Request):
     token = request.headers.get("x-participante-token") or request.query_params.get("pt")
     user = await _plan_optional_user(request)
     allowed = (token and token == plan.get("creador_token")) or \
-              (user and user.get("id") and user.get("id") == plan.get("creator_user_id"))
+              (user and user.get("user_id") and user.get("user_id") == plan.get("creator_user_id"))
     if not allowed:
         raise HTTPException(status_code=403, detail="Solo el creador puede cancelar el plan")
     await db.plans.update_one({"id": plan["id"]}, {"$set": {
@@ -13979,7 +14091,9 @@ _PLAN_JS = r'''
 
   function doShare(){
     var txt;
-    if(P.umbral_personas){txt=(P.titulo||'Plan')+' \uD83D\uDD25 Se cierra si somos '+P.umbral_personas+'. Dinos si est\u00e1s dentro: '+SHARE;}
+    var nOpts=(P.opciones||[]).length;
+    if(nOpts>1){txt='Montando plan'+(P.titulo?(' \u00b7 '+P.titulo):'')+'. He puesto '+nOpts+' opciones con horarios y precios, decidid cu\u00e1l: '+SHARE;}
+    else if(P.umbral_personas){txt=(P.titulo||'Plan')+' \uD83D\uDD25 Se cierra si somos '+P.umbral_personas+'. Dinos si est\u00e1s dentro: '+SHARE;}
     else {txt='\uD83D\uDC40 '+(P.titulo||'\u00bfQui\u00e9n va?')+' Dinos si te apuntas: '+SHARE;}
     if(navigator.share){navigator.share({title:P.titulo||'\u00bfQui\u00e9n va?',text:txt,url:SHARE}).catch(function(){});}
     else{navigator.clipboard.writeText(SHARE).then(function(){toast('Link copiado');});
@@ -16208,6 +16322,20 @@ async def admin_run_all_scrapers(admin: dict = Depends(require_admin)):
         "total_updated": sum(r["updated"] for r in results),
         "results": results,
     }
+
+
+@app.post("/api/admin/plans/close-expired")
+async def admin_close_expired_plans(admin: dict = Depends(require_admin)):
+    """Manual trigger for the plan-deadline closer (same routine the scheduler runs)."""
+    await close_expired_plans()
+    return {"ok": True}
+
+
+@app.post("/api/admin/plans/convert-noches")
+async def admin_convert_plans_to_noches(admin: dict = Depends(require_admin)):
+    """Manual trigger for the plan -> Noche conversion (same routine as the 11:00 cron)."""
+    await convert_plans_to_noches()
+    return {"ok": True}
 
 
 # =========================================================================
