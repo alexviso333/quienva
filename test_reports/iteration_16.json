@@ -1,0 +1,53 @@
+{
+  "summary": "Simulation-verified the fix for the 'Multiple commands produce .appex' Codemagic build error. Reproduced the Linux-based simulation of the Live Activity step from codemagic.yaml using ruby 3.1.2 + xcodeproj 1.28.1 against the real Capacitor ios-pods-template and /app/frontend/native sources. All assertions requested by the main agent passed: PRODUCT_NAME=QuienVaWidgets in both Debug and Release, product_reference.path='QuienVaWidgets.appex' (no leading dot), one 'Embed Foundation Extensions' phase with dst_subfolder_spec=13 (plug_ins) containing exactly one QuienVaWidgets.appex, App depends on QuienVaWidgets, and every source file reference resolves to an existing file on disk. Idempotent across 3 runs (no duplicated file refs, build files, embed entries or targets). Regression check: running the OLD HEAD~1 ruby block reproduces the bug (PRODUCT_NAME=nil AND doubled paths App/App/*.swift and QuienVaWidgets/QuienVaWidgets/*.swift). Swift static review and YAML validity also pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "simulation_results": {
+    "shell_phase": "exit 0; Main.storyboard patched to customClass=MainViewController customModule=App; sed -i -E (GNU) works as replacement for BSD sed -i ''",
+    "ruby_phase_first_run": "exit 0, prints 'Rutas de los fuentes OK (App + QuienVaWidgets)'",
+    "pbxproj_assertions": {
+      "ext_target_present": true,
+      "product_name_debug": "QuienVaWidgets",
+      "product_name_release": "QuienVaWidgets",
+      "product_module_name": "QuienVaWidgets",
+      "product_bundle_identifier": "me.quienva.app.QuienVaWidgets",
+      "infoplist_file": "QuienVaWidgets/Info.plist",
+      "product_reference_path": "QuienVaWidgets.appex",
+      "product_reference_name": "QuienVaWidgets.appex",
+      "embed_phase_count": 1,
+      "embed_dst_subfolder_spec": 13,
+      "embed_files": [{"path": "QuienVaWidgets.appex", "settings": {"ATTRIBUTES": ["RemoveHeadersOnCopy"]}}],
+      "app_dependencies": ["QuienVaWidgets"],
+      "app_sources_resolved": ["App/AppDelegate.swift", "App/QuienVaLiveActivityPlugin.swift", "App/MainViewController.swift", "App/QuienVaPlanAttributes.swift"],
+      "ext_sources_resolved": ["QuienVaWidgets/QuienVaWidgets.swift", "QuienVaWidgets/QuienVaPlanAttributes.swift"],
+      "all_source_files_exist": true,
+      "product_name_collisions": "none (App->App, QuienVaWidgets->QuienVaWidgets)"
+    },
+    "idempotency": "3 consecutive runs: still 1 QuienVaWidgets target, 4 App sources, 2 Ext sources, 1 embed phase with 1 file, 1 dependency. No doubled paths like App/App/ or QuienVaWidgets/QuienVaWidgets/",
+    "regression_old_version": "git show HEAD~1:codemagic.yaml ruby block reproduces BOTH reported bugs: PRODUCT_NAME=nil for QuienVaWidgets AND doubled paths (App/App/*.swift, QuienVaWidgets/QuienVaWidgets/*.swift do not exist on disk) — confirms the fix in HEAD is necessary and correct.",
+    "swift_review": {
+      "plugin_conforms_to_CAPBridgedPlugin": true,
+      "jsName_matches_js": "QuienVaLiveActivity == registerPlugin('QuienVaLiveActivity') in /app/frontend/src/lib/liveActivity.js",
+      "MainViewController_registers_plugin": "bridge?.registerPluginInstance(QuienVaLiveActivityPlugin())",
+      "dotm_file_references_in_codemagic_yaml": "none",
+      "storyboard_customClass": "MainViewController (customModule=App, customModuleProvider=target)"
+    },
+    "yaml_validity": "codemagic.yaml parses with PyYAML without errors"
+  },
+  "test_report_links": ["/tmp/t/run_shell.sh", "/tmp/t/run_ruby.rb", "/tmp/t/verify.rb", "/tmp/t/idempotency_check.rb", "/tmp/t/old_ruby.rb"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is minimal and correct: setting PRODUCT_NAME/PRODUCT_MODULE_NAME on every build config AND rewriting the ext.product_reference.path/name to 'QuienVaWidgets.appex' resolves the 'Multiple commands produce .appex' error.",
+    "Removing the 'App/' and '#{ext_name}/' prefixes when creating file references is correct because the parent groups (app_group found via find_subpath('App'), and grp created with new_group(ext_name, ext_name)) already have those paths as source_tree-relative paths. The latent doubled-path bug is fixed.",
+    "Settings block was moved outside the 'if ext.nil?' branch so it is now applied on every run (self-healing even if a prior partial run left an ext target without PRODUCT_NAME). Good defensive change.",
+    "Note: on Linux, GNU sed uses 'sed -i -E' while codemagic.yaml uses BSD 'sed -i \"\" -E' which is correct for macOS runners on Codemagic. This is only a simulation-time adaptation and not a bug.",
+    "Minor: ensure APP_VERSION env var is set in Codemagic (fallback is '1.5'); otherwise MARKETING_VERSION may lag the main App target."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "seed_data_creation": "Created /tmp/t and /tmp/t2 scratch simulation workspaces from Capacitor ios-pods-template.tar.gz plus /app/frontend/native. Not persisted into /app.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The Live Activity codemagic.yaml step was validated by Linux simulation. If retesting, re-run /tmp/t/run_shell.sh and 'ruby /tmp/t/run_ruby.rb' from /tmp/t/frontend/ios/App after regenerating from the Capacitor template. Compare to /tmp/t/old_ruby.rb to see the previous bug reproduction.",
+  "rca of the issue": "Original bug: The ruby block in codemagic.yaml created a new app_extension target without setting PRODUCT_NAME. Xcode's default PRODUCT_NAME is $(TARGET_NAME) at the xcconfig level, but xcodeproj's new_target does NOT inject it into the per-config build_settings; combined with the explicit product_reference being left at the default '.appex' name produced by xcodeproj, Xcode saw two phases producing a product literally named '.appex' and failed with 'Multiple commands produce .../UninstalledProducts/iphoneos/.appex'. Secondary latent bug: file references for the plugin (inside App/) and widget sources (inside QuienVaWidgets/) were created with path='App/foo.swift' / 'QuienVaWidgets/foo.swift' while the parent groups already pointed at those folders, yielding real_path = App/App/foo.swift (etc.) which does not exist on disk — the build would have failed as soon as any source compile step tried to read those files. Mitigation (already applied in HEAD): (1) always write PRODUCT_NAME, PRODUCT_MODULE_NAME and reset product_reference.path/name to 'QuienVaWidgets.appex' on every run; (2) create file references with just the basename so group-relative resolution yields the correct real paths. Both are verified by simulation."
+}
