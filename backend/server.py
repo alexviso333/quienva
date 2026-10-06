@@ -13514,6 +13514,7 @@ async def create_plan(body: PlanCreateIn, request: Request):
     _plan_track("plan_created", plan_id=plan["id"], num_opciones=len(opciones),
                 has_quorum=bool(plan["umbral_personas"]), has_hora_limite=bool(plan["hora_limite"]))
     return {"slug": slug, "creador_token": creador_token,
+            "share_url": f"{_frontend_base(request)}/p/{slug}",
             "plan": _plan_public(plan, [], viewer_token=creador_token)}
 
 

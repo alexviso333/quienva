@@ -7,6 +7,7 @@ import api from "@/lib/api";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { GuestGateProvider } from "@/context/GuestGate";
+import { CreatePlanProvider } from "@/context/CreatePlan";
 import PushPermissionGate from "@/components/PushPermissionGate";
 import MomentGate from "@/components/MomentGate";
 import AgeGate from "@/components/AgeGate";
@@ -196,12 +197,14 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <GuestGateProvider>
-            <AppRouter />
-            <OfflineBanner />
-            <PushPermissionGate />
-            <MomentGate />
-            <AgeGate />
-            <InviteNudgeGate />
+            <CreatePlanProvider>
+              <AppRouter />
+              <OfflineBanner />
+              <PushPermissionGate />
+              <MomentGate />
+              <AgeGate />
+              <InviteNudgeGate />
+            </CreatePlanProvider>
           </GuestGateProvider>
         </BrowserRouter>
         <Toaster position="top-center" theme="dark" richColors />
