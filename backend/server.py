@@ -13865,6 +13865,13 @@ h1{font-size:28px;line-height:1.1;margin:6px 0 14px;font-weight:800}
 .sheet .cancel{width:100%;margin-top:8px;background:transparent;border:none;color:#8a7a99;padding:8px;cursor:pointer;font-family:inherit}
 .toast{position:fixed;bottom:150px;left:50%;transform:translateX(-50%);background:#ec4899;color:#fff;padding:11px 18px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none}
 .toast.on{opacity:1}
+.topbar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.backbtn{display:inline-flex;align-items:center;gap:6px;background:#17111f;border:1px solid #2a2033;color:#fff;border-radius:999px;padding:9px 14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none}
+.backbtn:active{transform:scale(.96)}
+.howto{background:#140f1c;border:1px solid #2a2033;border-radius:16px;padding:14px 16px;margin-bottom:18px}
+.howto .ht{font-size:12px;font-weight:800;color:#f0a8d8;margin-bottom:8px;text-transform:uppercase;letter-spacing:.6px}
+.howto ol{margin:0;padding-left:18px;color:#cdbfdb;font-size:13.5px;line-height:1.75}
+.howto ol b{color:#fff}
 a{color:#f0a8d8}
 </style>"""
 
@@ -13924,17 +13931,18 @@ def _plan_new_page_html(front, api_public, preset=None):
                       f"{api_public}/api/og/plan/_", f"{front}/p/nuevo")
     body = """
 <body><div class=wrap>
-<div class=brand>\u00bfQui\u00e9n va?</div>
+<div class=topbar><a class=backbtn id=backBtn href="__FRONT__">\u2190 Volver</a><div class=brand style='margin:0'>\u00bfQui\u00e9n va?</div></div>
 <h1>Monta tu plan</h1>
-<p style='color:#b9a8c9;margin-bottom:16px'>Dale un t\u00edtulo, a\u00f1ade hasta 3 sitios y comp\u00e1rtelo con tu grupo.</p>
-<label style='font-size:13px;color:#b9a8c9'>T\u00edtulo</label>
+<p style='color:#b9a8c9;margin-bottom:14px'>Propon donde salir, comparte el link y tu grupo dice si se apunta. Se decide solo.</p>
+<div class=howto><div class=ht>C\u00f3mo funciona</div><ol><li><b>Elige 1-3 sitios</b> (con hora y precio si quieres)</li><li><b>Comparte el link</b> por WhatsApp con tu grupo</li><li>Cada uno dice <b>si se apunta</b>, sin registrarse</li><li>El plan <b>se cierra solo</b> cuando lleg\u00e1is al n\u00famero</li></ol></div>
+<label style='font-size:13px;color:#b9a8c9'>T\u00edtulo (opcional)</label>
 <input id=titulo class=np placeholder='__TITULO_PH__' maxlength=60>
 <label style='font-size:13px;color:#b9a8c9'>Mensaje para tu grupo (opcional)</label>
 <input id=msg class=np placeholder='\u00bfNos cuadra esto?' maxlength=140>
 <label style='font-size:13px;color:#b9a8c9'>Ciudad</label>
 <input id=ciudad class=np value='__CIUDAD__'>
 __PRESET_CARD__
-<label style='font-size:13px;color:#b9a8c9'>Opciones</label>
+<label style='font-size:13px;color:#b9a8c9'>Sitios (d\u00f3nde ir)</label>
 <div id=opts></div>
 <button id=addOpt class=addbtn>+ A\u00f1adir otro sitio</button>
 <label style='font-size:13px;color:#b9a8c9'>Se cierra si somos (opcional)</label>
@@ -13962,6 +13970,7 @@ __PRESET_CARD__
                 .replace("__PRESET_CARD__", preset_card)
                 .replace("__TITULO_PH__", titulo_ph)
                 .replace("__CIUDAD__", ciudad_val)
+                .replace("__FRONT__", _h.escape(front or "/"))
                 .replace("__PRESET_JSON__", json.dumps(preset) if preset else "null"))
     return head + body
 
@@ -14119,6 +14128,8 @@ _PLAN_NEW_JS = r'''
   var API=window.__API__;
   var PRESET=window.__PRESET__||null;
   var opts=document.getElementById('opts');
+  var bb=document.getElementById('backBtn');
+  if(bb){bb.addEventListener('click',function(e){if(history.length>1){e.preventDefault();history.back();}});}
   function addRow(){
     if(opts.children.length>=(PRESET?2:3)){return;}
     var d=document.createElement('div');d.className='optrow';

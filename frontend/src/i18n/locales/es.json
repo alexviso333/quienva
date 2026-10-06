@@ -998,8 +998,8 @@
     "dialog_sub": "Ponle nombre y crea tu grupo: dentro podréis lanzar una encuesta de a dónde ir."
   },
   "montaplan": {
-    "title": "Monta tu plan para esta noche",
-    "sub": "Pon opciones, mira quién se apunta y cerradlo entre todos",
+    "title": "Crea un plan y mira quién se apunta",
+    "sub": "Propón 1-3 sitios y compártelo por WhatsApp",
     "cta": "Crear"
   },
   "nudge": {
