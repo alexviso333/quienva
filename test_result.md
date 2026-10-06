@@ -15519,3 +15519,322 @@ agent_communication:
       
       Test file: /app/backend_test_iteracion_15b.py (28 scenarios, 100% pass rate)
 
+
+#====================================================================================================
+# ITERACIÓN 16 — Invitar a amigos de la app a un plan + respuesta en UN TOQUE (sin nombre obligatorio)
+#====================================================================================================
+
+backend:
+  - task: "Invitar amigos al CREAR el plan (POST /api/plans con invitar_user_ids)"
+    implemented: true
+    working: true
+    file: "backend/server.py (create_plan, _plan_invite_users)"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: |
+          PlanCreateIn acepta invitar_user_ids: entran como participantes con
+          intencion="pendiente" (emoji 🕓), NO cuentan para el cupo, y reciben
+          notificación in-app + push "X te propone <plan> el jueves · ¿te apuntas?".
+          La respuesta de POST /plans devuelve "invitados": N.
+          Anti-spam: solo se puede invitar a quien YA es amigo aceptado.
+        -working: true
+        -agent: "testing"
+        -comment: |
+          TESTED (2026-10-06): ✅ ALL SCENARIOS PASSED
+          
+          ✅ POST /api/plans with invitar_user_ids=[friend_user_id] as test@
+          - Returns 200 with "invitados": 1 in response
+          - counts.pendiente = 1 ✓
+          - counts.invitados = 1 ✓
+          - counts.total = 0 (pending don't count toward total) ✓
+          - Participant structure correct:
+            * intencion = "pendiente" ✓
+            * pendiente = true ✓
+            * invitado_por = "@testuser" ✓
+          
+          ✅ Invited friend receives notification:
+          - GET /api/notifications as friend returns plan_invite notification ✓
+          - Message contains "te propone" ✓
+          
+          ✅ Invited friend sees plan in their list:
+          - GET /api/plans/mine as friend includes the plan ✓
+          - Plan has soy_invitado = true ✓
+          
+          All functionality working correctly. Test file: /app/backend_test_plan_invites.py
+
+  - task: "POST /api/plans/{slug}/invite y GET /api/plans/{slug}/invitables"
+    implemented: true
+    working: true
+    file: "backend/server.py (invite_to_plan, plan_invitables, _plan_can_invite)"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: |
+          invitables: lista de amigos con estado nuevo|invitado|respondido + puede_invitar.
+          invite: pueden invitar el creador (cuenta o creador_token) y cualquier
+          participante CON cuenta (así el plan se propaga). Un tercero -> 403.
+          Plan cerrado -> 409. Devuelve {invitados, ya_estaban, no_amigos, plan}.
+        -working: true
+        -agent: "testing"
+        -comment: |
+          TESTED (2026-10-06): ✅ ALL SCENARIOS PASSED
+          
+          ✅ GET /api/plans/{slug}/invitables authorization:
+          - As creator/participant → 200 with friends list, puede_invitar=true ✓
+          - Friend appears with estado="invitado" when already invited ✓
+          - As non-participant (admin) → 200 with puede_invitar=false ✓
+          - Without auth → 401 ✓
+          
+          ✅ POST /api/plans/{slug}/invite scenarios:
+          - Invite non-friend (admin user_id) → 200 with invitados=0, no_amigos=1 (no 500) ✓
+          - Repeat same invitation → 200 with invitados=0, ya_estaban=1 ✓
+          - As non-participant (admin) → 403 ✓
+          - To closed plan → 409 ✓
+          
+          All authorization checks and edge cases working correctly.
+
+  - task: "Respuesta sin fricción: apodo ya NO es obligatorio"
+    implemented: true
+    working: false
+    file: "backend/server.py (respond_plan)"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: |
+          Antes POST /respond sin apodo devolvía 400 "Dinos como te llaman" y eso
+          frenaba al que entra por el link. Ahora: apodo = el que ya tenía > nombre
+          de su cuenta > "Invitado N". Se puede poner el nombre después llamando
+          otra vez con el mismo participante_token. Un invitado 🕓 que responde
+          actualiza su fila (no duplica) y cuenta como plan_response_submitted.
+        -working: false
+        -agent: "testing"
+        -comment: |
+          TESTED (2026-10-06): ❌ 2 CRITICAL BUGS FOUND
+          
+          ✅ WORKING: Response without apodo (no auth):
+          - POST /api/plans/{slug}/respond with only {"intencion":"dentro"} → 200 ✓
+          - Auto-generated nickname has form "Invitado N" ✓
+          
+          ❌ BUG 1 (CRITICAL): Renaming with same participante_token DUPLICATES participant
+          - POST /respond with x-participante-token + {"intencion":"dentro","apodo":"Marta"}
+          - Expected: Update existing participant (counts.total stays 1)
+          - Actual: Creates NEW participant (counts.total becomes 2)
+          - Result: Plan has both "Invitado 1" AND "Marta" as separate participants
+          - This breaks the "rename yourself" flow completely
+          
+          ❌ BUG 2 (CRITICAL): Response with account but no apodo doesn't link user_id
+          - POST /respond with auth token but no apodo → 200
+          - Expected: Use account name as apodo
+          - Actual: Creates participant with @username but user_id is None
+          - Result: Cannot identify which participant belongs to which user
+          
+          ROOT CAUSE: The respond_plan function is not properly matching existing
+          participants by participante_token. It's creating new participants instead
+          of updating existing ones.
+          
+          IMPACT: Users cannot rename themselves after initial response, and authenticated
+          users' responses are not properly linked to their accounts.
+          
+          Test file: /app/backend_test_plan_invites.py (see TEST 5 output)
+
+  - task: "Contadores: los invitados pendientes no inflan total ni cupo"
+    implemented: true
+    working: true
+    file: "backend/server.py (_plan_counts, _plan_public, /plans/mine)"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: |
+          counts = {dentro, voy_si, depende, paso, pendiente, invitados, total}
+          donde total = SOLO quien ha respondido. _plan_public ordena los pendientes
+          al final, marca pendiente/invitado_por/picture, y "mine" de un invitado
+          devuelve intencion=null + invitado=true (para que le salgan los botones).
+          /plans/mine añade "invitados" y "soy_invitado".
+        -working: true
+        -agent: "testing"
+        -comment: |
+          TESTED (2026-10-06): ✅ ALL SCENARIOS PASSED
+          
+          ✅ Invited user responds (updates, not duplicates):
+          - Created plan with invited friend (pendiente=1, total=0)
+          - Friend responds with account (no apodo) → 200 ✓
+          - After response: pendiente=0, total=1 ✓
+          - Exactly 1 participant for friend (not duplicated) ✓
+          - Participant updated: intencion="dentro", pendiente=false ✓
+          
+          ✅ Quota/threshold - pending invites don't count:
+          - Plan with umbral_personas=2 + 1 invited friend → estado="abierto" ✓
+          - After 1 "dentro" response → still "abierto" (1 < 2) ✓
+          - After 2 "dentro" responses → "cerrado" (threshold reached) ✓
+          - Pending invites correctly excluded from threshold calculation ✓
+          
+          All counting logic working correctly. Pending invites don't inflate total or count
+          toward closure threshold.
+
+  - task: "Un único recordatorio a invitados que no contestan (~1h antes de la hora límite)"
+    implemented: true
+    working: true
+    file: "backend/server.py (plan_invite_reminders + scheduler 15min + POST /api/admin/plans/invite-reminders)"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: |
+          Cada 15 min: planes abiertos con hora_limite dentro de los próximos 70 min
+          y sin flag recordatorio_invitados -> notificación plan_invite_reminder
+          "⏳ Última llamada: X se decide a las HH:MM" SOLO a los pendientes con cuenta.
+          El flag se pone siempre, así que nunca se repite. Verificado a mano: 1 sola.
+        -working: true
+        -agent: "testing"
+        -comment: |
+          TESTED (2026-10-06): ✅ ALL SCENARIOS PASSED
+          
+          ✅ Invite reminders (single notification):
+          - Created plan with hora_limite in ~65 minutes + invited friend
+          - POST /api/admin/plans/invite-reminders as admin → 200 {ok: true} ✓
+          - Friend receives notification type="plan_invite_reminder" ✓
+          - Second trigger of same endpoint → 200 ✓
+          - Friend still has only 1 reminder notification (no duplicate) ✓
+          
+          ✅ Regression tests (all passed):
+          - GET /api/plans/{slug} → 200 ✓
+          - POST /api/plans/{slug}/close → 200 ✓
+          - POST /api/plans/{slug}/cancel → 200 ✓
+          - GET /api/og/plan/{slug} → 200 image/png ✓
+          - GET /api/events?city=madrid → 200 (21 events) ✓
+          - GET /api/admin/live-activities → 200 ✓
+          
+          Reminder system working correctly - sends exactly one notification per plan,
+          never duplicates. All existing plan endpoints still functional.
+
+frontend:
+  - task: "Selector de amigos (FriendPicker) en crear plan y en el plan ya creado"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/FriendPicker.js, CreatePlanSheet.js, pages/PlanView.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: |
+          Verificado con capturas en es: sheet de crear plan con "¿A quién avisas?",
+          botón "Crear y avisar a N"; en /plan/{slug} botón "Invitar a mis amigos"
+          -> drawer -> "Invitar a 1" -> toast "Avisado 1 amigo" + fila 🕓
+          "@amigoqv · sin responder" y cabecera "QUIÉN RESPONDE (0) · 1 sin responder".
+          Sin amigos -> tarjeta que lleva a /friends. Sin cuenta -> no se renderiza.
+
+  - task: "Votar en UN TOQUE: fuera el modal de nombre"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/PlanView.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: |
+          Verificado como invitado de la calle (localStorage limpio): un toque en
+          "Yo voy" -> "¡Contado! Ya apareces en el plan", barra 1/4 y fila
+          "Invitado 2". Solo entonces aparece una barra inferior opcional
+          "Ya cuentas. ¿Cómo te llamamos?" (con X para ignorarla) que al guardar
+          renombra a "Marta". El nombre se recuerda para el próximo plan.
+
+metadata:
+  created_by: "main_agent"
+  version: "1.16"
+  test_sequence: 17
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Invitar amigos al CREAR el plan (POST /api/plans con invitar_user_ids)"
+    - "POST /api/plans/{slug}/invite y GET /api/plans/{slug}/invitables"
+    - "Respuesta sin fricción: apodo ya NO es obligatorio"
+    - "Contadores: los invitados pendientes no inflan total ni cupo"
+    - "Un único recordatorio a invitados que no contestan (~1h antes de la hora límite)"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: |
+      Solo backend. Credenciales en /app/memory/test_credentials.md.
+      test@quienva.app y amigo@quienva.app YA son amigos aceptados (user_id del amigo:
+      user_9c4a20c73ff5). admin@quienva.app NO es amigo de nadie: úsalo para los 403.
+
+      1) Crear plan como test@ con invitar_user_ids=[amigo] -> 200, "invitados":1,
+         counts.pendiente=1, counts.invitados=1, counts.total=0, y el participante sale
+         con intencion="pendiente", pendiente=true, invitado_por="@testuser".
+      2) El amigo: GET /api/notifications -> hay una type="plan_invite" con "te propone".
+         GET /api/plans/mine -> el plan aparece con soy_invitado=true.
+      3) GET /api/plans/{slug}/invitables como test@ -> el amigo sale estado="invitado";
+         como admin (no participante) -> puede_invitar=false. Sin auth -> 401.
+      4) POST /api/plans/{slug}/invite: como test@ con un amigo nuevo -> invitados=1;
+         repetir la misma invitación -> invitados=0 y ya_estaban=1; con un user_id que
+         NO es amigo -> invitados=0 y no_amigos=1 (nunca 500); como admin -> 403;
+         sobre un plan cerrado -> 409.
+      5) Respuesta sin fricción: POST /api/plans/{slug}/respond con SOLO {"intencion":"dentro"}
+         (sin apodo, sin cuenta) -> 200 y el apodo generado tiene la forma "Invitado N".
+         Volver a llamar con el mismo participante_token y {"intencion":"dentro","apodo":"Marta"}
+         -> se RENOMBRA, no crea otro participante (counts.total sigue igual).
+         Con cuenta y sin apodo -> usa el nombre de la cuenta.
+      6) El invitado 🕓 responde (con su cuenta, sin apodo) -> su fila se actualiza:
+         counts.pendiente baja a 0, counts.total sube, y NO hay participantes duplicados.
+      7) Cupo: con umbral_personas=2, invitar a 1 amigo NO cierra el plan (pendiente no
+         cuenta); el plan solo se cierra cuando hay 2 "dentro" de verdad.
+      8) POST /api/admin/plans/invite-reminders (admin): con un plan cuya hora_limite esté
+         dentro de los próximos ~60 min y un invitado pendiente -> llega UNA notificación
+         type="plan_invite_reminder"; al llamarlo otra vez NO llega una segunda.
+      9) Regresión: GET /api/plans/{slug}, /close, /cancel, /api/og/plan/{slug},
+         GET /api/events?city=madrid y /api/admin/live-activities siguen OK.
+      NO probar frontend (ya verificado con capturas). NO probar FourVenues/Cloudinary/
+      Google/PostHog (sin claves en dev a propósito).
+    -agent: "testing"
+    -message: |
+      BACKEND TESTING COMPLETE (2026-10-06)
+      
+      Tested all 5 backend tasks from ITERACIÓN 16. Results:
+      
+      ✅ 4 tasks WORKING (invitar_user_ids, invite/invitables, contadores, recordatorios)
+      ❌ 1 task FAILED with 2 CRITICAL BUGS (respuesta sin fricción)
+      
+      CRITICAL BUGS FOUND in "Respuesta sin fricción" task:
+      
+      1. BUG: Renaming with participante_token creates DUPLICATE participant
+         - When user responds again with same participante_token + new apodo
+         - Backend creates NEW participant instead of updating existing one
+         - Result: Plan has "Invitado 1" AND "Marta" as separate participants
+         - Expected: Update existing participant, keep counts.total = 1
+         - Actual: counts.total = 2 (duplicated)
+      
+      2. BUG: Authenticated response without apodo doesn't link user_id
+         - When user with account responds without providing apodo
+         - Backend creates participant with @username but user_id = None
+         - Result: Cannot identify which participant belongs to which user
+         - Expected: Link participant to user account
+      
+      Both bugs are in backend/server.py respond_plan function. The function is not
+      properly matching existing participants by participante_token before creating
+      new ones.
+      
+      Test file: /app/backend_test_plan_invites.py
+      All test scenarios documented with concrete examples.

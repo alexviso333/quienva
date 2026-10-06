@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ClipboardList, Plus, X, Check, Send, Link2, Loader2, PartyPopper, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import FriendPicker from "@/components/FriendPicker";
+import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { captureEvent } from "@/analytics/posthog";
@@ -16,13 +18,15 @@ const MAX_OPTS = 3;
 export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null, city, source = "feed" }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState("form");
   const [titulo, setTitulo] = useState("");
   const [umbral, setUmbral] = useState("");
   const [showOpts, setShowOpts] = useState(false);
   const [rows, setRows] = useState([{ texto: "", hora: "", precio: "" }]);
+  const [invitados, setInvitados] = useState([]); // user_ids de amigos de la app
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null); // { slug, share_url }
+  const [result, setResult] = useState(null); // { slug, share_url, invitados }
 
   // Reset whenever the sheet opens.
   useEffect(() => {
@@ -32,6 +36,7 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
       setUmbral("");
       setShowOpts(false);
       setRows(presetEvent ? [] : [{ texto: "", hora: "", precio: "" }]);
+      setInvitados([]);
       setResult(null);
       setBusy(false);
     }
@@ -74,11 +79,13 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
         ciudad: city || presetEvent?.city || "Madrid",
         opciones,
         umbral_personas: parseInt(umbral, 10) || null,
+        invitar_user_ids: invitados,
       };
       const { data } = await api.post("/plans", body);
-      captureEvent("plan_created", { plan_id: data?.plan?.id, num_opciones: opciones.length, has_quorum: !!body.umbral_personas, source: presetEvent ? "event" : source });
+      captureEvent("plan_created", { plan_id: data?.plan?.id, num_opciones: opciones.length, has_quorum: !!body.umbral_personas, source: presetEvent ? "event" : source, num_invitados: invitados.length });
+      if (invitados.length) captureEvent("friend_invite_sent", { plan_id: data?.slug, destination: "app", count: invitados.length });
       try { if (data?.slug && data?.creador_token) localStorage.setItem(`qv_ct_${data.slug}`, data.creador_token); } catch (e) { /* ignore */ }
-      setResult({ slug: data.slug, share_url: data.share_url });
+      setResult({ slug: data.slug, share_url: data.share_url, invitados: data.invitados || 0 });
       setStep("share");
     } catch (e) {
       toast.error(e?.response?.data?.detail || t("createplan.error", "No se pudo crear el plan"));
@@ -167,6 +174,25 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
                 </button>
               )}
 
+              {/* Invitar a amigos de la app: se les avisa con una notificación y
+                  entran como "pendientes" hasta que contestan. El enlace de
+                  WhatsApp sigue estando para los que no tienen la app. */}
+              {user ? (
+                <div className="mt-4" data-testid="create-plan-friends">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-white/55 text-xs font-semibold">{t("createplan.who_label", "¿A quién avisas?")}</p>
+                    {invitados.length ? (
+                      <span className="text-[11px] font-bold text-qv-primary">{invitados.length === 1
+                        ? t("createplan.who_count_one", "1 seleccionado")
+                        : t("createplan.who_count", "{{n}} seleccionados", { n: invitados.length })}</span>
+                    ) : (
+                      <span className="text-[11px] text-white/35">{t("createplan.who_hint", "opcional")}</span>
+                    )}
+                  </div>
+                  <FriendPicker selected={invitados} onChange={setInvitados} />
+                </div>
+              ) : null}
+
               {/* Optional settings, hidden by default so the default view stays clean */}
               {!showOpts ? (
                 <button
@@ -197,7 +223,9 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
               <button onClick={submit} disabled={busy} data-testid="create-plan-submit"
                 className="w-full mt-5 bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white rounded-2xl py-3.5 font-bold text-[15px] flex items-center justify-center gap-2 disabled:opacity-60 active:scale-[0.99] shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]">
                 {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-4 h-4" />}
-                {t("createplan.create", "Crear y compartir")}
+                {invitados.length
+                  ? t("createplan.create_invite", "Crear y avisar a {{n}}", { n: invitados.length })
+                  : t("createplan.create", "Crear y compartir")}
               </button>
               <button onClick={() => handleOpenChange(false)} className="w-full mt-2 text-white/40 text-sm py-1.5">{t("createplan.cancel", "Cancelar")}</button>
             </>
@@ -207,7 +235,17 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
                 <PartyPopper className="w-7 h-7 text-qv-primary" />
               </div>
               <h2 className="font-display font-black text-xl">{t("createplan.done_title", "¡Plan creado!")}</h2>
-              <p className="text-white/55 text-sm mt-1 mb-5">{t("createplan.done_sub", "Compártelo con tu grupo para que digan si se apuntan")}</p>
+              {result?.invitados ? (
+                <p className="text-sm mt-1 mb-5 text-white/55" data-testid="create-plan-invited">
+                  <b className="text-qv-primary">{result.invitados === 1
+                    ? t("createplan.done_invited_one", "Avisado 1 amigo")
+                    : t("createplan.done_invited", "Avisados {{n}} amigos", { n: result.invitados })}</b>
+                  {" · "}
+                  {t("createplan.done_invited_sub", "comparte el enlace con los que no tienen la app")}
+                </p>
+              ) : (
+                <p className="text-white/55 text-sm mt-1 mb-5">{t("createplan.done_sub", "Compártelo con tu grupo para que digan si se apuntan")}</p>
+              )}
 
               <button onClick={shareWhatsApp} data-testid="create-plan-wa"
                 className="w-full bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white rounded-2xl py-3.5 font-bold text-[15px] flex items-center justify-center gap-2 active:scale-[0.99]">

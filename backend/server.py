@@ -10542,7 +10542,7 @@ async def create_notification(user_id: str, ntype: str, message: str, data: dict
         url = "/momento"
     elif ntype == "attendance_check":
         url = f"/feed?fui={(data or {}).get('event_id', '')}"
-    elif ntype in ("plan_closed", "plan_cancelled"):
+    elif ntype in ("plan_closed", "plan_cancelled", "plan_invite", "plan_invite_reminder"):
         url = f"/plan/{(data or {}).get('plan_slug', '')}"
     elif data and data.get("event_id"):
         url = f"/event/{data['event_id']}"
@@ -13376,6 +13376,11 @@ async def on_startup():
         scheduler.add_job(convert_plans_to_noches, "cron", hour=11, minute=0,
                           id="convert_plans_to_noches", replace_existing=True,
                           max_instances=1, coalesce=True, misfire_grace_time=3600)
+        # Un único recordatorio a los invitados que no han contestado, ~1h antes
+        # de la hora límite del plan.
+        scheduler.add_job(plan_invite_reminders, "interval", minutes=15,
+                          id="plan_invite_reminders", replace_existing=True,
+                          max_instances=1, coalesce=True, misfire_grace_time=300)
         # Day-after: "¿fuiste a la fiesta de anoche?" (12:00 Europe/Madrid)
         scheduler.add_job(ask_attendance_confirmations, "cron", hour=12, minute=0,
                           id="ask_attendance_confirmations", replace_existing=True,
@@ -13579,9 +13584,15 @@ async def next_badges(user: dict = Depends(get_current_user), limit: int = Query
 # =========================================================================
 
 _PLAN_INTENTS = {"dentro", "voy_si", "depende", "paso"}
+# Estado extra que NO se puede enviar por la API: lo pone el servidor cuando
+# invitas a un amigo de la app. El invitado sale en la lista con 🕓 y NO cuenta
+# para el cupo hasta que responde de verdad.
+_PLAN_PENDING = "pendiente"
 _PLAN_INTENT_EMOJI = {"dentro": "\U0001F7E2", "voy_si": "\U0001F7E1",
-                      "depende": "\U0001F7E0", "paso": "\u26AB"}
-_PLAN_INTENT_LABEL = {"dentro": "Dentro", "voy_si": "Voy si", "depende": "Depende", "paso": "Paso"}
+                      "depende": "\U0001F7E0", "paso": "\u26AB",
+                      _PLAN_PENDING: "\U0001F553"}
+_PLAN_INTENT_LABEL = {"dentro": "Dentro", "voy_si": "Voy si", "depende": "Depende",
+                      "paso": "Paso", _PLAN_PENDING: "Sin responder"}
 
 
 def _plan_now():
@@ -13659,9 +13670,17 @@ class PlanCreateIn(BaseModel):
     umbral_personas: Optional[int] = None
     hora_limite: Optional[str] = None
     creador_apodo: str = ""
+    # Amigos de la app a los que se invita en el momento de crear el plan.
+    invitar_user_ids: List[str] = Field(default_factory=list)
+
+
+class PlanInviteIn(BaseModel):
+    user_ids: List[str] = Field(default_factory=list)
 
 
 class PlanRespondIn(BaseModel):
+    # El apodo ya NO es obligatorio: votas primero y, si quieres, pones el nombre
+    # después. Si llega vacío el servidor usa tu nombre de cuenta o "Invitado N".
     apodo: str = ""
     intencion: str = ""
     opcion_preferida: Optional[str] = None
@@ -13701,10 +13720,14 @@ async def _plan_build_option(opt: "PlanOptionIn", orden: int) -> dict:
 
 def _plan_counts(participants: list) -> dict:
     c = {k: 0 for k in _PLAN_INTENTS}
+    c[_PLAN_PENDING] = 0
     for p in participants:
         if p.get("intencion") in c:
             c[p["intencion"]] += 1
-    c["total"] = len(participants)
+    # "total" = cuánta gente ha RESPONDIDO. Los invitados pendientes van aparte
+    # para que no inflen el contador ni el cupo.
+    c["invitados"] = c[_PLAN_PENDING]
+    c["total"] = max(0, len(participants) - c[_PLAN_PENDING])
     return c
 
 
@@ -13814,8 +13837,145 @@ async def _plan_notify_closed(plan: dict, motivo: str, participants: list = None
     await _plan_push_live(plan, participants, event="end")
 
 
+_PLAN_WEEKDAYS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def _plan_label(plan: dict) -> str:
+    """Nombre corto del plan para notificaciones: el título, o el primer sitio."""
+    t = (plan.get("titulo") or "").strip()
+    if t:
+        return t
+    for o in (plan.get("opciones") or []):
+        n = (o.get("venue_nombre") or o.get("texto_libre") or "").strip()
+        if n:
+            return n
+    return "un plan"
+
+
+def _plan_when_label(plan: dict) -> str:
+    """"el jueves" / "" a partir de fecha_objetivo (hora de Madrid)."""
+    raw = plan.get("fecha_objetivo")
+    if not raw:
+        return ""
+    try:
+        d = datetime.fromisoformat(str(raw))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=ZoneInfo("Europe/Madrid"))
+        d = d.astimezone(ZoneInfo("Europe/Madrid"))
+        hoy = datetime.now(ZoneInfo("Europe/Madrid")).date()
+        delta = (d.date() - hoy).days
+        if delta == 0:
+            return "hoy"
+        if delta == 1:
+            return "mañana"
+        if 2 <= delta <= 6:
+            return f"el {_PLAN_WEEKDAYS_ES[d.weekday()]}"
+        return f"el {d.day}/{d.month}"
+    except Exception:
+        return ""
+
+
+async def _plan_invite_users(plan: dict, inviter: dict, user_ids: list) -> dict:
+    """Invita a amigos DE LA APP a un plan: entran como 'pendiente' (salen con 🕓
+    y no cuentan para el cupo) y reciben notificación in-app + push con un toque
+    para votar. Solo se puede invitar a gente que ya es amiga del que invita:
+    así nadie puede usar los planes para hacer spam."""
+    out = {"invitados": 0, "ya_estaban": 0, "no_amigos": 0}
+    if not inviter or not inviter.get("user_id") or not user_ids:
+        return out
+    wanted = [u for u in dict.fromkeys([str(x) for x in user_ids if x]) if u][:30]
+    if not wanted:
+        return out
+    friends = set(await accepted_friend_ids(inviter["user_id"]))
+    ids = [u for u in wanted if u in friends]
+    out["no_amigos"] = len(wanted) - len(ids)
+    if not ids:
+        return out
+    ya = set(await db.plan_participants.distinct("user_id", {"plan_id": plan["id"]}))
+    ya.add(inviter["user_id"])
+    if plan.get("creator_user_id"):
+        ya.add(plan["creator_user_id"])
+    nuevos = [u for u in ids if u not in ya]
+    out["ya_estaban"] = len(ids) - len(nuevos)
+    if not nuevos:
+        return out
+    inviter_name = (display_name(inviter) or plan.get("creador_apodo") or "Un amigo").strip()
+    label = _plan_label(plan)
+    cuando = _plan_when_label(plan)
+    msg = f"{inviter_name} te propone {label}{(' ' + cuando) if cuando else ''} · ¿te apuntas?"
+    docs = []
+    now = _plan_now()
+    for uid in nuevos:
+        u = await db.users.find_one({"user_id": uid}, {"_id": 0}) or {}
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "plan_id": plan["id"],
+            "participante_token": _plan_token(),
+            "user_id": uid,
+            "apodo": (display_name(u) or "Amigo")[:40],
+            "picture": u.get("picture") or "",
+            "intencion": _PLAN_PENDING,
+            "opcion_preferida": None,
+            "telefono": None,
+            "is_creator": False,
+            "invited_by": inviter["user_id"],
+            "invited_by_apodo": inviter_name[:40],
+            "created_at": now,
+            "updated_at": now,
+        })
+    if docs:
+        await db.plan_participants.insert_many(docs)
+    for d in docs:
+        try:
+            await create_notification(d["user_id"], "plan_invite", msg, {
+                "plan_slug": plan.get("slug"), "plan_id": plan.get("id"),
+                "type": "plan_invite", "invited_by": inviter["user_id"]})
+        except Exception as e:
+            logger.warning(f"[plans] no se pudo avisar al invitado {d['user_id']}: {e}")
+    out["invitados"] = len(docs)
+    _plan_track("friend_invite_sent", plan_id=plan["id"], destination="app", count=len(docs))
+    logger.info(f"[plans] {len(docs)} amigos invitados al plan {plan.get('slug')}")
+    return out
+
+
+async def plan_invite_reminders():
+    """Un ÚNICO recordatorio a los invitados que no han contestado, ~1h antes de
+    la hora límite. Se marca en el plan para no repetirlo nunca."""
+    try:
+        now = _plan_now()
+        async for plan in db.plans.find({"estado": "abierto",
+                                         "hora_limite": {"$ne": None},
+                                         "recordatorio_invitados": {"$ne": True}},
+                                        {"_id": 0}).limit(200):
+            try:
+                dl = datetime.fromisoformat(str(plan["hora_limite"]))
+                if dl.tzinfo is None:
+                    dl = dl.replace(tzinfo=ZoneInfo("Europe/Madrid"))
+            except Exception:
+                continue
+            mins = (dl - now).total_seconds() / 60.0
+            if not (0 < mins <= 70):
+                continue
+            pend = await db.plan_participants.find(
+                {"plan_id": plan["id"], "intencion": _PLAN_PENDING,
+                 "user_id": {"$ne": None}}, {"_id": 0}).to_list(100)
+            await db.plans.update_one({"id": plan["id"]},
+                                      {"$set": {"recordatorio_invitados": True}})
+            if not pend:
+                continue
+            label = _plan_label(plan)
+            hora = dl.astimezone(ZoneInfo("Europe/Madrid")).strftime("%H:%M")
+            msg = f"⏳ Última llamada: {label} se decide a las {hora}. ¿Te apuntas?"
+            for p in pend:
+                await create_notification(p["user_id"], "plan_invite_reminder", msg, {
+                    "plan_slug": plan.get("slug"), "plan_id": plan.get("id"),
+                    "type": "plan_invite_reminder"})
+            logger.info(f"[plans] recordatorio enviado a {len(pend)} invitados de {plan.get('slug')}")
+    except Exception as e:
+        logger.warning(f"[plans] recordatorio de invitados falló: {e}")
+
+
 async def _plan_maybe_autoclose(plan: dict) -> dict:
-    """If quorum reached (within deadline) close the plan and pick winner."""
     if plan.get("estado") != "abierto":
         return plan
     umbral = plan.get("umbral_personas")
@@ -13956,22 +14116,36 @@ async def convert_plans_to_noches():
 
 def _plan_public(plan: dict, participants: list, viewer_token: str = None, viewer_user=None) -> dict:
     counts = _plan_counts(participants)
+    # Los invitados que aún no han contestado se muestran al final de la lista.
+    ordered = ([p for p in participants if p.get("intencion") != _PLAN_PENDING]
+               + [p for p in participants if p.get("intencion") == _PLAN_PENDING])
     parts_pub = [{
         "apodo": p.get("apodo") or "Alguien",
         "intencion": p.get("intencion"),
         "emoji": _PLAN_INTENT_EMOJI.get(p.get("intencion"), ""),
         "opcion_preferida": p.get("opcion_preferida"),
         "is_creator": bool(p.get("is_creator")),
-    } for p in participants]
+        "pendiente": p.get("intencion") == _PLAN_PENDING,
+        "invitado_por": p.get("invited_by_apodo") or None,
+        "picture": p.get("picture") or "",
+    } for p in ordered]
     mine = None
     for p in participants:
+        hit = False
         if viewer_token and p.get("participante_token") == viewer_token:
-            mine = {"apodo": p.get("apodo"), "intencion": p.get("intencion"),
-                    "opcion_preferida": p.get("opcion_preferida")}
-            break
-        if viewer_user and p.get("user_id") and p.get("user_id") == viewer_user.get("user_id"):
-            mine = {"apodo": p.get("apodo"), "intencion": p.get("intencion"),
-                    "opcion_preferida": p.get("opcion_preferida")}
+            hit = True
+        elif viewer_user and p.get("user_id") and p.get("user_id") == viewer_user.get("user_id"):
+            hit = True
+        if hit:
+            pend = p.get("intencion") == _PLAN_PENDING
+            mine = {"apodo": p.get("apodo"),
+                    # Si solo estás invitado, para la UI es como no haber respondido:
+                    # así te salen los botones de votar en vez de "tu respuesta".
+                    "intencion": None if pend else p.get("intencion"),
+                    "opcion_preferida": p.get("opcion_preferida"),
+                    "invitado": pend}
+            if p.get("participante_token") == viewer_token:
+                break
     is_creator = False
     if viewer_token and plan.get("creador_token") == viewer_token:
         is_creator = True
@@ -14035,9 +14209,15 @@ async def create_plan(body: PlanCreateIn, request: Request):
     await db.plans.insert_one(plan)
     _plan_track("plan_created", plan_id=plan["id"], num_opciones=len(opciones),
                 has_quorum=bool(plan["umbral_personas"]), has_hora_limite=bool(plan["hora_limite"]))
+    # Invitar en el mismo toque a los amigos marcados en el selector.
+    invitados = {"invitados": 0}
+    if user and body.invitar_user_ids:
+        invitados = await _plan_invite_users(plan, user, body.invitar_user_ids)
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
     return {"slug": slug, "creador_token": creador_token,
             "share_url": f"{_frontend_base(request)}/p/{slug}",
-            "plan": _plan_public(plan, [], viewer_token=creador_token)}
+            "invitados": invitados.get("invitados", 0),
+            "plan": _plan_public(plan, participants, viewer_token=creador_token)}
 
 
 @api_router.get("/plans/mine")
@@ -14077,6 +14257,11 @@ async def my_open_plans(request: Request, slugs: str = Query("")):
             "hora_limite": plan.get("hora_limite"),
             "creador_apodo": plan.get("creador_apodo"),
             "num_opciones": len(opts),
+            "invitados": counts.get("invitados", 0),
+            # Para pintar "Te han invitado · responde" en el feed.
+            "soy_invitado": bool(user and any(
+                p.get("user_id") == user.get("user_id") and p.get("intencion") == _PLAN_PENDING
+                for p in participants)),
         })
     return {"plans": out}
 
@@ -14102,9 +14287,6 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
         raise HTTPException(status_code=409, detail="El plan ya esta cerrado")
     if body.intencion not in _PLAN_INTENTS:
         raise HTTPException(status_code=400, detail="Intencion no valida")
-    apodo = (body.apodo or "").strip()[:40]
-    if not apodo:
-        raise HTTPException(status_code=400, detail="Dinos como te llaman")
     user = await _plan_optional_user(request)
     opt_ids = {o["opt_id"] for o in (plan.get("opciones") or [])}
     opcion = body.opcion_preferida if body.opcion_preferida in opt_ids else None
@@ -14118,6 +14300,17 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
             {"plan_id": plan["id"], "user_id": user.get("user_id")}, {"_id": 0})
         if existing:
             token = existing.get("participante_token") or token
+    # Cero fricción: si no manda apodo, no se le bloquea. Se usa (por orden) el que
+    # ya tenía, su nombre de cuenta, o "Invitado N". El nombre se puede poner
+    # después desde la propia página (vuelve a llamar aquí con el mismo token).
+    apodo = (body.apodo or "").strip()[:40]
+    if not apodo and existing:
+        apodo = (existing.get("apodo") or "").strip()
+    if not apodo and user:
+        apodo = (display_name(user) or "").strip()[:40]
+    if not apodo:
+        n = await db.plan_participants.count_documents({"plan_id": plan["id"]})
+        apodo = f"Invitado {n + 1}"
     doc = {
         "apodo": apodo,
         "intencion": body.intencion,
@@ -14130,6 +14323,10 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
         await db.plan_participants.update_one(
             {"id": existing["id"]}, {"$set": doc})
         pid = existing["id"]
+        if existing.get("intencion") == _PLAN_PENDING:
+            # Un invitado de la app que por fin contesta cuenta como respuesta nueva.
+            _plan_track("plan_response_submitted", plan_id=plan["id"],
+                        intencion=body.intencion, opcion_preferida=opcion, from_invite=True)
     else:
         doc.update({
             "id": str(uuid.uuid4()),
@@ -14150,6 +14347,62 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
         asyncio.create_task(_plan_push_live(plan, participants, event="update"))
     pub = _plan_public(plan, participants, viewer_token=token, viewer_user=user)
     return {"participante_token": token, "plan": pub}
+
+
+async def _plan_can_invite(plan: dict, user: dict, request: Request) -> bool:
+    """Puede invitar el creador (por cuenta o por token) y cualquier participante
+    con cuenta: así el plan se propaga solo entre grupos de amigos."""
+    if not user or not user.get("user_id"):
+        return False
+    if plan.get("creator_user_id") and plan["creator_user_id"] == user["user_id"]:
+        return True
+    tok = request.headers.get("x-participante-token") or request.query_params.get("pt")
+    if tok and plan.get("creador_token") == tok:
+        return True
+    p = await db.plan_participants.find_one({"plan_id": plan["id"], "user_id": user["user_id"]})
+    return bool(p)
+
+
+@api_router.get("/plans/{slug}/invitables")
+async def plan_invitables(slug: str, request: Request, user: dict = Depends(get_current_user)):
+    """Amigos de la app con su estado en este plan, para el selector de invitar."""
+    plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+    ids = await accepted_friend_ids(user["user_id"])
+    parts = await db.plan_participants.find(
+        {"plan_id": plan["id"], "user_id": {"$in": ids}}, {"_id": 0}).to_list(500)
+    by_uid = {p["user_id"]: p for p in parts if p.get("user_id")}
+    out = []
+    async for u in db.users.find({"user_id": {"$in": ids}}, {"_id": 0}):
+        p = by_uid.get(u["user_id"])
+        estado = "nuevo"
+        if p:
+            estado = "invitado" if p.get("intencion") == _PLAN_PENDING else "respondido"
+        out.append({"user_id": u["user_id"], "name": display_name(u),
+                    "username": u.get("username") or "", "picture": u.get("picture") or "",
+                    "estado": estado, "intencion": (p or {}).get("intencion")})
+    out.sort(key=lambda x: ({"nuevo": 0, "invitado": 1, "respondido": 2}[x["estado"]],
+                            (x["name"] or "").lower()))
+    return {"friends": out, "puede_invitar": await _plan_can_invite(plan, user, request)}
+
+
+@api_router.post("/plans/{slug}/invite")
+async def invite_to_plan(slug: str, body: PlanInviteIn, request: Request,
+                         user: dict = Depends(get_current_user)):
+    """Invita amigos de la app a un plan ya creado ("Invitar a más gente")."""
+    plan = await db.plans.find_one({"slug": slug}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+    if plan.get("estado") != "abierto":
+        raise HTTPException(status_code=409, detail="El plan ya esta cerrado")
+    if not await _plan_can_invite(plan, user, request):
+        raise HTTPException(status_code=403, detail="Solo el creador o quien ya esta en el plan puede invitar")
+    res = await _plan_invite_users(plan, user, body.user_ids)
+    participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    viewer_token = request.headers.get("x-participante-token") or request.query_params.get("pt")
+    return {"ok": True, **res,
+            "plan": _plan_public(plan, participants, viewer_token=viewer_token, viewer_user=user)}
 
 
 @api_router.post("/plans/{slug}/close")
@@ -16973,6 +17226,14 @@ async def admin_run_all_scrapers(admin: dict = Depends(require_admin)):
 async def admin_close_expired_plans(admin: dict = Depends(require_admin)):
     """Manual trigger for the plan-deadline closer (same routine the scheduler runs)."""
     await close_expired_plans()
+    return {"ok": True}
+
+
+@app.post("/api/admin/plans/invite-reminders")
+async def admin_plan_invite_reminders(admin: dict = Depends(require_admin)):
+    """Lanza a mano el recordatorio a invitados que no han contestado (lo mismo
+    que hace el scheduler cada 15 min), para poder probarlo sin esperar."""
+    await plan_invite_reminders()
     return {"ok": True}
 
 
