@@ -1,16 +1,19 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { Home, Users, MessageCircle, Bell, User } from "lucide-react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { Home, Users, Moon, User, Plus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
+import { useCreatePlan } from "@/context/CreatePlan";
 
+// Bottom nav reduced to 4 core tabs (spec 4.3): Feed · Amigos · Noches · Perfil.
+// Chats now lives inside the Amigos page (DMs are with friends) and Avisos is a
+// bell in the feed header — nothing was lost, the nav just got decluttered.
 const items = [
   { to: "/feed", icon: Home, labelKey: "nav.planes", testid: "nav-feed", public: true },
   { to: "/friends", icon: Users, labelKey: "nav.amigos", testid: "nav-friends", reasonKey: "nav.reason_friends" },
-  { to: "/chats", icon: MessageCircle, labelKey: "nav.chats", testid: "nav-chats", reasonKey: "nav.reason_chats" },
-  { to: "/notifications", icon: Bell, labelKey: "nav.avisos", testid: "nav-notifications", reasonKey: "nav.reason_notifications" },
+  { to: "/recuerdos", icon: Moon, labelKey: "nav.noches", testid: "nav-noches", reasonKey: "nav.reason_noches" },
   { to: "/profile", icon: User, labelKey: "nav.perfil", testid: "nav-profile", reasonKey: "nav.reason_profile" },
 ];
 
@@ -80,7 +83,7 @@ export function BottomNav() {
       className="qv-glass fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-50 border-t border-white/10 lg:hidden"
       data-testid="bottom-nav"
     >
-      <div className="grid grid-cols-5 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="grid grid-cols-4 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {items.map(({ to, icon: Icon, labelKey, testid, reasonKey, public: isPublic }) => {
           const label = t(labelKey);
           const reason = reasonKey ? t(reasonKey) : "";
@@ -208,6 +211,30 @@ export function AppShell({ children, showNav = true, wide = false }) {
         </main>
       </div>
       {showNav && <BottomNav />}
+      {showNav && <PlanFab />}
     </div>
+  );
+}
+
+// Global, always-accessible shortcut to create a shareable Plan (user's choice:
+// general entry = floating button, not an inline feed banner). Hidden on screens
+// that already surface a primary plan CTA or a sticky bottom bar (event detail,
+// the plan page itself, chat threads) so it never overlaps them.
+function PlanFab() {
+  const { t } = useTranslation();
+  const { open } = useCreatePlan();
+  const { pathname } = useLocation();
+  const hidden = /^\/(fiesta|p|chats)(\/|$)/.test(pathname);
+  if (hidden) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => open(null, null, "fab")}
+      data-testid="plan-fab"
+      aria-label={t("fab.new_plan", "Plan")}
+      className="qv-btn fixed right-4 bottom-[92px] lg:bottom-6 z-[55] h-14 pl-4 pr-5 rounded-full bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white font-black text-sm flex items-center gap-1.5 shadow-[0_12px_34px_-8px_rgba(255,0,85,0.75)] active:scale-95"
+    >
+      <Plus className="w-5 h-5" strokeWidth={2.6} /> {t("fab.new_plan", "Plan")}
+    </button>
   );
 }

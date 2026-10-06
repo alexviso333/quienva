@@ -37,7 +37,9 @@
     "reason_friends": "see your friends",
     "reason_chats": "chat with your group",
     "reason_notifications": "get alerts",
-    "reason_profile": "see your profile"
+    "reason_profile": "see your profile",
+    "noches": "Nights",
+    "reason_noches": "see your nights"
   },
   "onboarding": {
     "welcome": "Welcome",
@@ -94,7 +96,8 @@
     "invited_suffix": "invited you 🎉",
     "invited_sub": "Sign up to accept the friendship and see where they're going.",
     "accept": "Accept",
-    "change_city": "Tap to change your city"
+    "change_city": "Tap to change your city",
+    "notifications": "Alerts"
   },
   "plans": {
     "view_dia": "Day",
@@ -277,7 +280,8 @@
     "toast_done": "Done",
     "requests": "Requests ({{count}})",
     "your_friends": "Your friends ({{count}})",
-    "empty": "You have no friends added yet. Search above by their username."
+    "empty": "You have no friends added yet. Search above by their username.",
+    "messages": "Messages"
   },
   "discover": {
     "title": "Discover",
@@ -1026,5 +1030,8 @@
     "friends_btn": "Find friends in my contacts",
     "or": "or",
     "skip": "Not now"
+  },
+  "fab": {
+    "new_plan": "Plan"
   }
 }

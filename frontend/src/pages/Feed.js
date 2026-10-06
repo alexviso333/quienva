@@ -12,11 +12,10 @@ import { useGuestGate } from "@/context/GuestGate";
 import { isNativeApp } from "@/lib/platform";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import CitySelectorSheet from "@/components/CitySelectorSheet";
-import MontaPlanBanner from "@/components/MontaPlanBanner";
 import MyOpenPlans from "@/components/MyOpenPlans";
 import MovingNow from "@/components/MovingNow";
 import { captureEvent } from "@/analytics/posthog";
-import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3 } from "lucide-react";
+import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -240,6 +239,16 @@ export default function Feed() {
   });
   const noFriends = !!user && Array.isArray(friendsList) && friendsList.length === 0;
 
+  // Unread notifications count — powers the bell badge in the header (Avisos tab
+  // was removed from the bottom nav; the bell keeps it reachable from home).
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ["unread-count"],
+    queryFn: async () => (await api.get("/notifications/unread-count")).data.count,
+    refetchInterval: 30000,
+    staleTime: 15000,
+    enabled: !!user,
+  });
+
   // Client-side search over the loaded events (name / venue / genre / address).
   const qNorm = (s) => (s || "").toString().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const isSearching = q.trim().length > 0;
@@ -447,7 +456,25 @@ export default function Feed() {
               </span>
               <ChevronDown className="w-4 h-4 shrink-0 text-qv-secondary group-active:translate-y-0.5 transition-transform" />
             </button>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              {user && (
+                <button
+                  onClick={() => navigate("/notifications")}
+                  aria-label={t("feed.notifications", "Avisos")}
+                  data-testid="feed-notifications-btn"
+                  className="relative flex items-center justify-center w-9 h-9 text-white bg-white/[0.08] border border-white/10 rounded-full active:scale-95"
+                >
+                  <Bell className="w-4 h-4 text-qv-secondary" />
+                  {unreadCount > 0 && (
+                    <span
+                      data-testid="feed-notifications-badge"
+                      className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-qv-primary text-white text-[9px] font-bold flex items-center justify-center"
+                    >
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+              )}
               <LanguageSwitcher compact />
               <button
                 onClick={toggleCompact}
@@ -545,7 +572,12 @@ export default function Feed() {
         </div>
       )}
 
-      {/* Search — always visible but light (discoverable without crowding) */}
+      {/* Tus planes abiertos — above the search bar (self-hides when there are none) */}
+      <div className="px-4 pt-2">
+        <MyOpenPlans />
+      </div>
+
+      {/* Search — placed below the plans row, visible but light */}
       <div className="px-4 pt-2 pb-1">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/45 pointer-events-none" />
@@ -586,12 +618,6 @@ export default function Feed() {
             <SkeletonList />
           ) : (
             <>
-              {/* Tus planes abiertos (oculto si no hay) */}
-              <MyOpenPlans />
-
-              {/* Banner permanente: montar un plan compartible para esta noche */}
-              <MontaPlanBanner city={effectiveCity} />
-
               {/* Se está moviendo (oculto si no hay actividad real) */}
               <MovingNow events={events} todayStr={todayStr} />
 

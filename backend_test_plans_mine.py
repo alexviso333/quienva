@@ -8,7 +8,7 @@ import json
 import time
 
 # Base URL from frontend/.env REACT_APP_BACKEND_URL with /api prefix
-BASE_URL = "https://a6264dde-40db-4ba5-87b6-71284faecc91.preview.emergentagent.com/api"
+BASE_URL = "https://full-stack-nights.preview.emergentagent.com/api"
 
 def log(msg):
     print(f"[TEST] {msg}")

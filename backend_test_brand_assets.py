@@ -9,7 +9,7 @@ import json
 import sys
 
 # Backend base URL from frontend/.env
-BASE_URL = "https://plan-compartido.preview.emergentagent.com"
+BASE_URL = "https://full-stack-nights.preview.emergentagent.com"
 
 def test_endpoint(url, expected_status, expected_content_type_prefix, expected_min_size=None, check_json=False):
     """Test a single endpoint and return results."""

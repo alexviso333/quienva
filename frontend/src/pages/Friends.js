@@ -5,7 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import FindFriends from "@/components/FindFriends";
 import { Input } from "@/components/ui/input";
-import { UserPlus, Check, Clock, Search, X, Loader2, Compass } from "lucide-react";
+import { UserPlus, Check, Clock, Search, X, Loader2, Compass, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -38,6 +38,14 @@ export default function Friends() {
   const { data: friends = [] } = useQuery({
     queryKey: ["friends"],
     queryFn: async () => (await api.get("/friends")).data,
+  });
+
+  // DM unread badge — chats now live here (bottom-nav tab was removed).
+  const { data: dmUnread = 0 } = useQuery({
+    queryKey: ["dm-unread-count"],
+    queryFn: async () => (await api.get("/dm/unread-count")).data.count,
+    refetchInterval: 30000,
+    staleTime: 15000,
   });
 
   const invalidate = () => {
@@ -78,11 +86,29 @@ export default function Friends() {
 
   return (
     <AppShell>
-      <header className="px-5 pt-8 pb-4">
-        <h1 className="font-display text-4xl font-black tracking-tighter">
-          {t("friends.title")}<span className="text-qv-primary">.</span>
-        </h1>
-        <p className="text-white/50 text-sm mt-1">{t("friends.subtitle")}</p>
+      <header className="px-5 pt-8 pb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-4xl font-black tracking-tighter">
+            {t("friends.title")}<span className="text-qv-primary">.</span>
+          </h1>
+          <p className="text-white/50 text-sm mt-1">{t("friends.subtitle")}</p>
+        </div>
+        <button
+          data-testid="friends-messages-btn"
+          onClick={() => navigate("/chats")}
+          aria-label={t("friends.messages", "Mensajes")}
+          className="relative mt-1 shrink-0 flex items-center justify-center w-11 h-11 rounded-full bg-white/[0.08] border border-white/10 text-qv-secondary active:scale-95"
+        >
+          <MessageCircle className="w-5 h-5" />
+          {dmUnread > 0 && (
+            <span
+              data-testid="friends-messages-badge"
+              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-qv-primary text-white text-[10px] font-bold flex items-center justify-center"
+            >
+              {dmUnread > 9 ? "9+" : dmUnread}
+            </span>
+          )}
+        </button>
       </header>
 
       <div className="px-5 pb-1">

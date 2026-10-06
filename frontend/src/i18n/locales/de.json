@@ -37,7 +37,9 @@
     "reason_friends": "deine Freunde zu sehen",
     "reason_chats": "mit deiner Gruppe zu chatten",
     "reason_notifications": "Hinweise zu erhalten",
-    "reason_profile": "dein Profil zu sehen"
+    "reason_profile": "dein Profil zu sehen",
+    "noches": "Nächte",
+    "reason_noches": "deine Nächte sehen"
   },
   "onboarding": {
     "welcome": "Willkommen",
@@ -94,7 +96,8 @@
     "invited_suffix": "hat dich eingeladen 🎉",
     "invited_sub": "Registriere dich, um die Freundschaft anzunehmen und zu sehen, wohin sie gehen.",
     "accept": "Annehmen",
-    "change_city": "Tippen, um deine Stadt zu ändern"
+    "change_city": "Tippen, um deine Stadt zu ändern",
+    "notifications": "Hinweise"
   },
   "plans": {
     "view_dia": "Tag",
@@ -277,7 +280,8 @@
     "toast_done": "Erledigt",
     "requests": "Anfragen ({{count}})",
     "your_friends": "Deine Freunde ({{count}})",
-    "empty": "Du hast noch keine Freunde hinzugefügt. Suche oben nach dem Benutzernamen."
+    "empty": "Du hast noch keine Freunde hinzugefügt. Suche oben nach dem Benutzernamen.",
+    "messages": "Nachrichten"
   },
   "discover": {
     "title": "Entdecken",
@@ -1009,5 +1013,8 @@
     "friends_btn": "Freunde in meinen Kontakten finden",
     "or": "oder",
     "skip": "Jetzt nicht"
+  },
+  "fab": {
+    "new_plan": "Plan"
   }
 }
