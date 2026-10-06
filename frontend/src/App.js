@@ -13,6 +13,7 @@ import AgeGate from "@/components/AgeGate";
 import InviteNudgeGate from "@/components/InviteNudgeGate";
 import OfflineBanner from "@/components/OfflineBanner";
 import { Loader2 } from "lucide-react";
+import { initAnalytics, identifyUser, resetAnalytics, captureEvent } from "@/analytics/posthog";
 // Eager: first-paint / auth-critical screens.
 import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
@@ -71,6 +72,26 @@ function AppRouter() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const claimingGroup = useRef(false);
+  // Analytics (PostHog): init once, identify on auth, reset on logout.
+  useEffect(() => { initAnalytics(); }, []);
+  const prevUserRef = useRef(null);
+  useEffect(() => {
+    const uid = user?.id || user?.user_id;
+    if (uid) {
+      identifyUser(uid, { username: user?.username, city: user?.city });
+      prevUserRef.current = uid;
+    } else if (prevUserRef.current) {
+      resetAnalytics();
+      prevUserRef.current = null;
+    }
+  }, [user]);
+  // Manual SPA pageview on every route change.
+  useEffect(() => {
+    captureEvent("$pageview", {
+      $current_url: typeof window !== "undefined" ? window.location.href : location.pathname,
+      path: `${location.pathname}${location.search}`,
+    });
+  }, [location.pathname, location.search]);
   // Capture referral / invite params on ANY route the visitor lands on. This
   // lets us send shared links to the app ROOT (preview) instead of /login —
   // the code is persisted and applied when the guest eventually signs up.

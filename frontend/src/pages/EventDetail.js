@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { captureEvent } from "@/analytics/posthog";
 
 const todayStr = () => {
   const n = new Date();
@@ -134,6 +135,11 @@ export default function EventDetail() {
   useEffect(() => {
     if (!user && id) setReturnEvent(id);
   }, [user, id]);
+
+  // Analytics: named event-page view (in addition to the generic $pageview).
+  useEffect(() => {
+    if (id) captureEvent("event_page_viewed", { evento_id: id });
+  }, [id]);
 
   // Who's going / interested — loaded only when the sheet is open (logged-in).
   const { data: peopleData, isLoading: peopleLoading } = useQuery({
@@ -366,6 +372,7 @@ export default function EventDetail() {
 
   const onTicketClick = () => {
     // Fire-and-forget tracking for the money funnel
+    captureEvent("ticket_cta_clicked", { evento_id: event.id, price: event.current_price || null });
     api.post("/tickets/click", { event_id: event.id }).catch(() => {});
   };
 

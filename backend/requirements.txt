@@ -131,3 +131,4 @@ beautifulsoup4
 curl_cffi
 cloudinary>=1.40.0
 h2==4.1.0
+posthog

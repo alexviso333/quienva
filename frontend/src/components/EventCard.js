@@ -12,6 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { captureEvent } from "@/analytics/posthog";
 
 // Builds "Marta" / "Marta y 2 más" for a friends list.
 function namesList(t, friends) {
@@ -137,11 +138,14 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
   const toggle = (status) => {
     const next = event.my_status === status ? "none" : status;
     if (status === "voy" && next === "voy") setCelebrateKey((k) => k + 1);
+    if (next === "voy") captureEvent("event_going", { evento_id: event.id });
+    else if (next === "me_interesa") captureEvent("event_interested", { evento_id: event.id });
     onSetStatus(event.id, next);
   };
 
   const shareWhatsApp = (e) => {
     if (e) e.stopPropagation();
+    captureEvent("event_share", { evento_id: event.id, destination: "whatsapp" });
     // Share the backend OG page so WhatsApp renders a compact card with the
     // party poster instead of a long, spammy text line.
     const link = `${API}/share/event/${event.id}`;

@@ -13178,12 +13178,31 @@ async def _plan_optional_user(request: Request):
         return None
 
 
+_POSTHOG_TOKEN = (os.environ.get("POSTHOG_PROJECT_TOKEN") or os.environ.get("POSTHOG_API_KEY") or "").strip()
+_POSTHOG_HOST = (os.environ.get("POSTHOG_HOST") or "https://eu.i.posthog.com").strip()
+_posthog_client = None
+if _POSTHOG_TOKEN:
+    try:
+        from posthog import Posthog as _Posthog
+        _posthog_client = _Posthog(_POSTHOG_TOKEN, host=_POSTHOG_HOST, flush_at=1, flush_interval=2.0)
+        logger.info("PostHog server client initialised (host=%s)", _POSTHOG_HOST)
+    except Exception as _e:
+        logger.warning("PostHog init failed: %s", _e)
+
+
 def _plan_track(event: str, **props):
-    # Hook de instrumentacion (PostHog) — se conectara en el Bloque 2.
+    # Hook de instrumentacion (PostHog). Mantiene el log local y, si hay cliente,
+    # envia el evento server-side con un distinct_id estable.
     try:
         logger.info(f"[plan_event] {event} {json.dumps(props, default=str)}")
     except Exception:
         pass
+    if _posthog_client is not None:
+        try:
+            distinct_id = props.pop("distinct_id", None) or props.get("plan_id") or "backend"
+            _posthog_client.capture(distinct_id=str(distinct_id), event=event, properties=props)
+        except Exception as _e:
+            logger.warning("PostHog capture failed for %s: %s", event, _e)
 
 
 class PlanOptionIn(BaseModel):
@@ -13647,6 +13666,8 @@ async def plan_public_page(slug: str, request: Request):
     plan = await _plan_maybe_autoclose(plan)
     participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
     counts = _plan_counts(participants)
+    _plan_track("plan_page_viewed", plan_id=plan["id"], estado=plan.get("estado"),
+                participants_count=counts.get("total", 0))
     pub = _plan_public(plan, participants)
     share_url = f"{front}/p/{slug}"
     og_img = f"{api_public}/api/og/plan/{slug}"
