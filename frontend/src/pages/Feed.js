@@ -415,7 +415,7 @@ export default function Feed() {
       />
 
       {/* ---- HERO ---- */}
-      <header className="relative px-5 pt-6 pb-1 lg:pt-9 lg:pb-2">
+      <header className="relative px-5 pt-4 pb-1 lg:pt-7 lg:pb-2">
         {/* ambient neon glow */}
         <div aria-hidden className="qv-glow-a pointer-events-none absolute -top-16 -left-16 w-72 h-72 rounded-full bg-qv-primary/20 blur-[90px]" />
         <div aria-hidden className="qv-glow-b pointer-events-none absolute -top-10 right-0 w-64 h-64 rounded-full bg-qv-secondary/15 blur-[90px]" />
@@ -433,7 +433,7 @@ export default function Feed() {
               <ChevronDown className="w-4 h-4 shrink-0 text-qv-secondary group-active:translate-y-0.5 transition-transform" />
             </button>
             <div className="flex items-center gap-2 shrink-0">
-              <LanguageSwitcher />
+              <LanguageSwitcher compact />
               <button
                 onClick={toggleCompact}
                 aria-label={compact ? "Vista ampliada" : "Vista compacta"}
@@ -444,10 +444,11 @@ export default function Feed() {
               </button>
               <button
                 onClick={() => navigate("/locales")}
-                className="flex items-center gap-1.5 text-xs font-bold text-white bg-white/[0.08] border border-white/10 rounded-full px-3 py-2 active:scale-95"
+                aria-label={t("feed.locales")}
+                className="flex items-center justify-center w-9 h-9 text-white bg-white/[0.08] border border-white/10 rounded-full active:scale-95"
                 data-testid="feed-locales-btn"
               >
-                <Building2 className="w-4 h-4 text-qv-secondary" /> {t("feed.locales")}
+                <Building2 className="w-4 h-4 text-qv-secondary" />
               </button>
             </div>
           </div>
@@ -457,12 +458,12 @@ export default function Feed() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           >
-          <p className="flex items-center gap-2 mt-4 lg:mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
+          <p className="flex items-center gap-2 mt-3 lg:mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-qv-primary/70" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-qv-primary" />
             </span>
-            {cityLabel.split(",")[0]} · {WEEKDAYS_ES[now.getDay()]} {pad2(now.getHours())}:{pad2(now.getMinutes())}
+            {WEEKDAYS_ES[now.getDay()]} {pad2(now.getHours())}:{pad2(now.getMinutes())}
           </p>
           <h1 className="font-display text-[34px] sm:text-[42px] lg:text-6xl font-black tracking-[-0.035em] mt-1.5 lg:mt-2 leading-[0.95] lg:leading-[0.9]">
             ¿Dónde está<br />la noche<span className="text-qv-primary">?</span>
@@ -517,15 +518,10 @@ export default function Feed() {
 
       {!user && !inviteFrom && (
         <div className="px-4 pt-1 pb-1">
-          <div data-testid="feed-guest-banner" className="w-full rounded-2xl border border-qv-primary/40 bg-gradient-to-r from-qv-primary/15 to-qv-secondary/15 p-3 flex items-center gap-3 text-left">
-            <div className="w-10 h-10 rounded-full bg-qv-primary/20 flex items-center justify-center shrink-0">
-              <Sparkles className="w-5 h-5 text-qv-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-display font-black text-white text-sm leading-tight">{t("feed.guest_title")}</p>
-              <p className="text-white/60 text-xs">{t("feed.guest_sub")}</p>
-            </div>
-            <button onClick={() => requireAuth("empezar")} data-testid="feed-guest-register" className="shrink-0 text-xs font-bold text-white bg-qv-primary rounded-full px-4 py-2 active:scale-95">
+          <div data-testid="feed-guest-banner" className="w-full rounded-full border border-qv-primary/35 bg-white/[0.04] px-3 py-1.5 flex items-center gap-2 text-left">
+            <Sparkles className="w-4 h-4 text-qv-primary shrink-0" />
+            <p className="flex-1 min-w-0 truncate text-white/75 text-xs font-medium">{t("feed.guest_title")}</p>
+            <button onClick={() => requireAuth("empezar")} data-testid="feed-guest-register" className="shrink-0 text-xs font-bold text-white bg-qv-primary rounded-full px-3.5 py-1.5 active:scale-95">
               {t("feed.enter")}
             </button>
           </div>
