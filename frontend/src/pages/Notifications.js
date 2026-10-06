@@ -101,6 +101,8 @@ export default function Notifications() {
   }, [notifs]);
 
   const targetFor = (n) => {
+    // Planes: siempre dentro de la app (pantalla del plan + Live Activity).
+    if (n.data?.plan_slug) return `/plan/${n.data.plan_slug}`;
     if (n.data?.event_id) return `/event/${n.data.event_id}`;
     if (n.type === "friend_request" || n.type === "friend_accept") return "/friends";
     if (n.type === "story_reaction") return "/profile";

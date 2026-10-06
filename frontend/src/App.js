@@ -14,6 +14,7 @@ import AttendanceCheckGate from "@/components/AttendanceCheckGate";
 import AgeGate from "@/components/AgeGate";
 import InviteNudgeGate from "@/components/InviteNudgeGate";
 import OfflineBanner from "@/components/OfflineBanner";
+import NativeDeepLinks from "@/components/NativeDeepLinks";
 import { Loader2 } from "lucide-react";
 import { initAnalytics, identifyUser, resetAnalytics, captureEvent } from "@/analytics/posthog";
 // Eager: first-paint / auth-critical screens.
@@ -149,6 +150,7 @@ function AppRouter() {
   }
   return (
     <Suspense fallback={<LoadingScreen />}>
+      <NativeDeepLinks />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/ig" element={<TrackRedirect source="ig" />} />

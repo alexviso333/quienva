@@ -1024,7 +1024,8 @@
     "going_only": "{{g}} going",
     "interested_only": "{{i}} interested",
     "signups_today": "{{count}} joined today",
-    "heating": "Heating up"
+    "heating": "Heating up",
+    "badge_short": "Buzzing"
   },
   "nudge": {
     "title": "Bring your people 🎉",

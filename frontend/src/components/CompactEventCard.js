@@ -10,6 +10,7 @@ import { formatPartyDate } from "@/lib/format";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { MovingBadge } from "@/components/MovingNow";
 
 const SALE_STATE_META = {
   no_a_la_venta: { labelKey: "compact.sale_next", cls: "bg-white/15 text-white/80", icon: Clock },
@@ -111,6 +112,7 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
         <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c]/50 to-transparent" />
 
         <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-20">
+          <MovingBadge event={event} size="sm" />
           {event.is_affiliate && (
             <span
               data-testid={`compact-affiliate-${event.id}`}

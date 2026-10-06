@@ -1,6 +1,7 @@
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ClipboardList, Users, ArrowRight } from "lucide-react";
-import api, { API } from "@/lib/api";
+import api from "@/lib/api";
 
 // Shows the active shareable Plans (/p/{slug}) created for this event, so people
 // can join an existing plan instead of starting from scratch. Amplifies the
@@ -28,9 +29,9 @@ export function EventOpenPlans({ eventId }) {
             ? Math.min(100, Math.round((dentro / p.umbral_personas) * 100))
             : null;
           return (
-            <a
+            <Link
               key={p.slug}
-              href={`${API}/p/${p.slug}`}
+              to={`/plan/${p.slug}`}
               data-testid={`event-plan-${p.slug}`}
               className="block rounded-2xl border border-white/12 bg-white/[0.05] p-3.5 active:scale-[0.99] transition-transform hover:border-qv-primary/40"
             >
@@ -60,7 +61,7 @@ export function EventOpenPlans({ eventId }) {
                   />
                 </div>
               )}
-            </a>
+            </Link>
           );
         })}
       </div>

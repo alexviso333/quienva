@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { captureEvent } from "@/analytics/posthog";
+import { startPlanActivity } from "@/lib/liveActivity";
 
 const MAX_OPTS = 3;
 
@@ -86,6 +87,8 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
       if (invitados.length) captureEvent("friend_invite_sent", { plan_id: data?.slug, destination: "app", count: invitados.length });
       try { if (data?.slug && data?.creador_token) localStorage.setItem(`qv_ct_${data.slug}`, data.creador_token); } catch (e) { /* ignore */ }
       setResult({ slug: data.slug, share_url: data.share_url, invitados: data.invitados || 0 });
+      // Isla dinámica / pantalla de bloqueo desde el segundo 0 (solo iOS nativo).
+      if (data?.plan) startPlanActivity(data.plan);
       setStep("share");
     } catch (e) {
       toast.error(e?.response?.data?.detail || t("createplan.error", "No se pudo crear el plan"));

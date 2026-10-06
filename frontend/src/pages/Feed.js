@@ -14,7 +14,6 @@ import { isNativeApp } from "@/lib/platform";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import CitySelectorSheet from "@/components/CitySelectorSheet";
 import MyOpenPlans from "@/components/MyOpenPlans";
-import MovingNow from "@/components/MovingNow";
 import { captureEvent } from "@/analytics/posthog";
 import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3, Bell } from "lucide-react";
 import { toast } from "sonner";
@@ -657,27 +656,36 @@ export default function Feed() {
                 ))}
               </div>
 
-              {/* Se está moviendo (oculto si no hay actividad real) */}
-              <MovingNow events={events} todayStr={todayStr} />
+              {/* "Se está moviendo" ya no es un bloque: es una etiqueta en cada evento. */}
 
               {/* ===== BLOQUE A · 🔥 ESTA NOCHE ===== */}
               <section id="sec-today" data-testid="tonight-block-today">
                 <SectionHeader icon={Flame} title="Esta noche" count={blockToday.length} tint="primary" />
                 {nothingTonight ? (
+                  // Sin duplicar "Próximamente": un aviso corto y acciones DENTRO de la app.
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 py-3" data-testid="tonight-empty-compact">
-                    <p className="text-white/55 text-[13px] leading-snug">
-                      Hoy aún no hay fiestas confirmadas en {cityLabel.split(",")[0]}.
-                      <span className="text-white/35"> Esto es lo que viene:</span>
+                    <p className="text-white/75 text-[13px] font-semibold leading-snug flex items-center gap-1.5">
+                      <Moon className="w-4 h-4 text-white/45 shrink-0" />
+                      Esta noche no hay nada confirmado en {cityLabel.split(",")[0]}.
                     </p>
-                    {blockUpcoming.length > 0 && (
-                      <div className="flex gap-3 overflow-x-auto hide-scrollbar snap-x snap-mandatory -mx-1 px-1 mt-3" data-testid="tonight-empty-upcoming-row">
-                        {blockUpcoming.slice(0, 8).map((ev, i) => (
-                          <div key={ev.id} className="snap-start">
-                            <CompactEventCard event={ev} index={i} width={150} />
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div className="flex flex-wrap gap-2 mt-2.5">
+                      {blockUpcoming.length > 0 && (
+                        <button
+                          data-testid="tonight-empty-see-upcoming"
+                          onClick={() => document.getElementById("sec-upcoming")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                          className="rounded-full bg-white/[0.07] border border-white/12 px-3 py-1.5 text-[12px] font-bold text-white/80 active:scale-95"
+                        >
+                          Lo que viene ↓
+                        </button>
+                      )}
+                      <button
+                        data-testid="tonight-empty-create-plan"
+                        onClick={() => openCreatePlan(null, effectiveCity, "feed_tonight_empty")}
+                        className="rounded-full bg-qv-primary/15 border border-qv-primary/40 px-3 py-1.5 text-[12px] font-bold text-qv-primary active:scale-95"
+                      >
+                        Monta tú el plan
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   renderList(blockToday)

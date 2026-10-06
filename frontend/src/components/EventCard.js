@@ -14,6 +14,7 @@ import { useGuestGate } from "@/context/GuestGate";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { captureEvent } from "@/analytics/posthog";
+import { MovingBadge } from "@/components/MovingNow";
 
 // Builds "Marta" / "Marta y 2 más" for a friends list.
 function namesList(t, friends) {
@@ -190,6 +191,7 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
         <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(255,0,85,0.2),transparent_60%)]" />
 
         <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+            {!isPast && <MovingBadge event={event} />}
             {event.is_affiliate && (
               <span
                 data-testid={`event-affiliate-${event.id}`}

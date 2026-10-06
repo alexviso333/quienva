@@ -1035,7 +1035,8 @@
     "going_only": "{{g}} gehen hin",
     "interested_only": "{{i}} interessiert",
     "signups_today": "{{count}} haben sich heute angemeldet",
-    "heating": "Wird gerade heiß"
+    "heating": "Wird gerade heiß",
+    "badge_short": "Angesagt"
   },
   "planview": {
     "empty_hint": "Noch hat niemand geantwortet. Teile den Link: Antworten mit einem Tap, ohne Anmeldung.",

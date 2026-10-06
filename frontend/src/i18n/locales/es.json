@@ -1024,7 +1024,8 @@
     "going_only": "{{g}} van",
     "interested_only": "{{i}} interesados",
     "signups_today": "{{count}} se han apuntado hoy",
-    "heating": "Se está calentando"
+    "heating": "Se está calentando",
+    "badge_short": "Se mueve"
   },
   "nudge": {
     "title": "Trae a tu gente 🎉",
