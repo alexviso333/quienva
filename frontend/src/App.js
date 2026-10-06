@@ -43,6 +43,7 @@ const NotifPrefs = lazy(() => import("@/pages/NotifPrefs"));
 const Momento = lazy(() => import("@/pages/Momento"));
 const Descubrir = lazy(() => import("@/pages/Descubrir"));
 const Wrapped = lazy(() => import("@/pages/Wrapped"));
+const PlanView = lazy(() => import("@/pages/PlanView"));
 
 function LoadingScreen() {
   return (
@@ -156,6 +157,7 @@ function AppRouter() {
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
         <Route path="/feed" element={<PublicRoute><Feed /></PublicRoute>} />
         <Route path="/event/:id" element={<PublicRoute><EventDetail /></PublicRoute>} />
+        <Route path="/p/:slug" element={<PublicRoute><PlanView /></PublicRoute>} />
         <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/novedades" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
