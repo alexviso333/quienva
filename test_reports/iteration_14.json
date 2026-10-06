@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 14: validated the attendance-gate flow, notification-mode filtering (esenciales vs todo + admin always-on), past-events/calendar invariants (no inventing nights), and the new native-feel UI (Stories viewer/composer, Momentos, mobile empty-state feed, NotifPrefs). All 16 backend pytest cases pass. All frontend assertions pass across attendance-gate (yes → next event → no → closes), tonight-empty-compact + upcoming-row visible in first viewport (390x844), feed-section-chips with jump sections, story-bubble → story-viewer with next/prev/close, add-story-btn → story-composer with take-photo/gallery, /ajustes/avisos notif-mode-picker with esenciales/todo persisting across reload, and /recuerdos showing only the confirmed night ('I was here') and NOT the 'No fui' one.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Feed (mobile 390x844)", "issues": ["tonight-empty-upcoming-row bounding box is top=798 / bottom=985 (viewport_h=844): the carousel header is visible in the first screen but the card bodies are below the fold. If the intent is 'fully above the fold', consider raising the row ~140px (e.g., tighten hero/greeting spacing). Still passes the spec of 'visible in first pantallazo'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration14_attendance_notif.py",
+    "/app/test_reports/pytest/iter14.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is still ~17.6k lines; consider extracting attendance/notif-prefs/stories/plans into separate routers for maintainability.",
+    "GET /api/plans does not exist (only POST). /api/plans/mine is the actual read endpoint — fine, but worth documenting; a 405 on bare GET /api/plans is a potential dev-ergonomics footgun.",
+    "AdminEventInput uses `name`/`date`/`time` while other newer parts of the API use `title`/`start_time` style — minor inconsistency across the codebase.",
+    "On the mobile empty-state feed, the 'Próximamente' carousel is only ~46px above the fold; small layout tweak would make the full first card visible without scroll."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration14_attendance_notif.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% (all asserted flows)"},
+  "test_credentials": "admin@quienva.app / QuienVa2025!   •   test@quienva.app / Test1234!",
+  "seed_data_creation": "Ran /app/scripts/seed_attendance_test.py twice to re-seed 2 pending past 'voy' for test@quienva.app. Created 2 TEST_notif_* events via POST /api/admin/events in Palma de Mallorca to drive the notif-mode filtering tests (TEST_notif_esenciales_evt and TEST_notif_todo_evt). These are harmless (future-dated test events) but can be purged if desired.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints verified: GET /api/me/attendance-pending returns the 2 seeded past-voy events; POST /api/events/{id}/attendance {went:true} moves it to /api/me/past-events; {went:false} removes it from pending without adding to past-events; invalid event id returns 404/400. /api/me/notif-prefs returns {mode, extra_types}; PUT /api/me/notif-mode accepts 'esenciales'/'todo' and 400s on anything else. Notif gating: in esenciales mode a newly created event does NOT yield a new_event notification for the normal user; in 'todo' it does; admin always receives new_event. /api/me/past-events and /api/me/calendar never contain unconfirmed past 'voy'. Frontend verified on https://2c7d9ca8-7400-4d0c-8adb-6c2afae4aaab.preview.emergentagent.com with mobile viewport 390x844: attendance-gate flow (yes→next→no→close), tonight-empty-compact + upcoming-row in first viewport, feed-section-chips, Stories bubble+viewer+composer, /ajustes/avisos picker with persistence, and /recuerdos only showing confirmed night. The notifications read endpoint is /api/notifications (not /api/me/notifications).",
+  "rca of the issue": "n/a — no bugs found"
+}

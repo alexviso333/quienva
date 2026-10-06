@@ -503,7 +503,7 @@ export function StoriesBar() {
 
   return (
     <>
-      <div className="flex overflow-x-auto hide-scrollbar gap-4 px-5 py-3" data-testid="stories-bar">
+      <div className="flex overflow-x-auto hide-scrollbar gap-4 px-5 py-2" data-testid="stories-bar">
         {/* Your story — avatar with a + badge (opens camera), tap ring to view yours */}
         <button
           data-testid="add-story-btn"

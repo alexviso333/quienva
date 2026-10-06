@@ -19,6 +19,7 @@ export function initAnalytics() {
       persistence: "localStorage+cookie",
     });
     enabled = true;
+    if (typeof window !== "undefined") window.posthog = posthog;
   } catch (e) {
     // never let analytics break the app
     // eslint-disable-next-line no-console

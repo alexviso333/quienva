@@ -703,3 +703,84 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 - **Quitado** el banner "Compartir en Stories" de la ficha de fiesta (ruido); queda el icono de Instagram en la cabecera.
 - **Verificado**: testing agent iteración 13 → backend 11/11 y frontend 100% (302 para humanos, 200 + OG para bots, voto de invitado dentro de la app, `?crear=1`, FAB oculto, "Ver plan" in-app, regresión de la ficha). Planes de prueba borrados.
 - PRODUCCIÓN: requiere "Save to GitHub" (Render + Vercel). Las rewrites de Vercel para `/p/:slug` siguen siendo necesarias (es la URL que comparten los usuarios y la que da el preview).
+
+## 2026-06-10 — Feedback del usuario (5 puntos) + entorno restaurado
+
+### Entorno (pod nuevo 2c7d9ca8)
+- Faltaban `backend/.env` y `frontend/.env` y la BD estaba vacía → restaurados.
+  DB `quienva`, admin `admin@quienva.app / QuienVa2025!`, usuario de prueba
+  `test@quienva.app / Test1234!` (ver `/app/memory/test_credentials.md`).
+- Claves reales aportadas por el usuario y puestas en el .env de dev: FourVenues
+  (token + slug `quienva`), ClubTickets `CT226`, Google OAuth, Cloudinary (`ljmmajiu`),
+  PostHog `phc_xyfVt9HRpG…`. Los scrapers ya han traído ~1.350 eventos y Cloudinary
+  guarda las subidas (verificado con 2 historias reales).
+- **IMPORTANTE PostHog**: el token es de la nube **US**, no EU. Host correcto:
+  `https://us.i.posthog.com` (con EU daba 404 en `/array/{token}/config` y no
+  entraba ningún evento). En Vercel hay que poner `REACT_APP_POSTHOG_PROJECT_TOKEN`
+  y `REACT_APP_POSTHOG_HOST=https://us.i.posthog.com`; en Render `POSTHOG_PROJECT_TOKEN`,
+  `POSTHOG_API_KEY`, `POSTHOG_HOST`. Verificado: ingesta 200 OK con ese token/host.
+  (posthog-js bloquea a propósito los user-agents de bots/headless, así que en
+  capturas automatizadas no se ven los eventos; con usuarios reales sí se envían.)
+
+### 1. Menos notificaciones (spam) — HECHO
+- `create_notification` tiene nuevo filtro: `_EXTRA_NOTIF_TYPES` (new_event,
+  tickets_on_sale/low_stock/sold_out/price_up/price_down, poll_reminder,
+  invite_nudge, interested_reminder) solo se entregan si el usuario está en modo
+  `todo` o activó esa categoría suelta. **El admin (role=admin) recibe TODO siempre.**
+- Nuevo campo `users.notif_mode` ("esenciales" por defecto | "todo"),
+  `GET /api/me/notif-prefs` devuelve `{prefs, keys, mode, extra_types}` y
+  `PUT /api/me/notif-mode` (400 si el modo no es válido).
+- Front: `pages/NotifPrefs.js` con selector de 2 modos (`notif-mode-esenciales` /
+  `notif-mode-todo`) y las categorías extra marcadas "Silenciado en modo Esenciales".
+- Siguen siendo esenciales: amigos (friend_going/request/accept), grupo, planes,
+  álbum, DMs, El Momento, recordatorio de la fiesta a la que vas, digest/recap.
+
+### 2+3. La app ya no inventa noches + pregunta del día después — HECHO
+- `voy` = intención, no asistencia. `GET /api/me/past-events` y `GET /api/me/calendar`
+  (para fechas pasadas) solo cuentan noches CONFIRMADAS: `status=estuve`,
+  `attendance_confirmed=True`, o haber subido fotos propias al álbum.
+- Nuevos: `GET /api/me/attendance-pending` (fiestas pasadas de los últimos 14 días
+  con "voy" sin confirmar), `POST /api/events/{id}/attendance {went}` (sí → "estuve";
+  no → se marca y no se vuelve a preguntar), cron `ask_attendance_confirmations`
+  **12:00 Europe/Madrid** + `POST /api/admin/trigger-attendance-check`.
+- Front: `components/AttendanceCheckGate.js` (bottom-sheet semibloqueante, montado
+  en `App.js`): "¿Fuiste anoche?" con foto de la fiesta, "No fui" / "Sí, estuve",
+  X para posponer en la sesión, contador "1 de N noches por confirmar". i18n es/en/de
+  (bloque `attendance.*`). Analítica: evento `attendance_confirmed`.
+
+### 4. Historias y Momentos nativos — HECHO
+- `components/Stories.js` reescrito: visor a pantalla completa con barras de progreso
+  que avanzan solas (5 s), tocar izquierda/derecha, **mantener pulsado = pausa**,
+  arrastrar hacia abajo para cerrar, salto automático a la siguiente persona,
+  teclado (←/→/Esc), fondo difuminado para cualquier formato, anillo gris para
+  historias ya vistas (`localStorage qv_stories_seen`) y orden mías → no vistas → vistas.
+- Subir historia: **compositor a pantalla completa con cámara primero**
+  (`story-composer`, `story-take-photo` con `capture="environment"`,
+  `story-from-gallery`), previsualización a sangre + texto superpuesto + publicar.
+- `pages/Momentos.js`: feed inmersivo a pantalla completa con scroll de ajuste
+  (snap), cabecera flotante, doble toque para dar like.
+
+### 5. El feed ya no parece vacío en móvil — HECHO
+- "Esta noche" vacío → aviso compacto de 1 línea + **carrusel horizontal de las
+  próximas fiestas** (`tonight-empty-compact` / `tonight-empty-upcoming-row`),
+  visible entero en el primer pantallazo (390×844) tras compactar el hero.
+- Chips de salto entre secciones (`feed-section-chips` → sec-today / sec-friends /
+  sec-upcoming).
+- `CompactEventCard`: eliminado "Sé el primero"; ahora usa la misma prueba social
+  agregada que `EventCard` (planes abiertos → van/interesados ≥5 → noches en el
+  local → "nuevo esta semana").
+
+### Verificación
+- testing_agent iteración 14: **backend 16/16 y frontend 100%** (gate "¿Fuiste?",
+  filtrado de notificaciones por modo + admin, past-events/calendar sin noches
+  inventadas, visor/compositor de historias, Momentos, feed vacío, NotifPrefs).
+  Test nuevo: `/app/backend/tests/test_iteration14_attendance_notif.py`.
+
+### Pendiente del spec (requiere decisión/claves del usuario)
+- 3.6: avisar por WhatsApp/SMS a los participantes cuando se cierra un plan
+  (hoy se guarda el teléfono pero no se envía nada) → hace falta proveedor
+  (Twilio / WhatsApp Business).
+- Bloque 2: crear los dashboards/funnels en PostHog (los eventos ya se envían).
+- App Store: la ficha dice 5 ciudades y la web tiene 6 (con Sevilla) → actualizar ficha.
+- Producción: subir estos cambios con "Save to GitHub" (Render + Vercel) y poner
+  las variables de PostHog con host US.

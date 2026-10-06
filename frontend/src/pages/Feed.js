@@ -520,14 +520,14 @@ export default function Feed() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           >
-          <p className="flex items-center gap-2 mt-3 lg:mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
+          <p className="flex items-center gap-2 mt-2 lg:mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-qv-primary/70" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-qv-primary" />
             </span>
             {WEEKDAYS_ES[now.getDay()]} {pad2(now.getHours())}:{pad2(now.getMinutes())}
           </p>
-          <h1 className="font-display text-[34px] sm:text-[42px] lg:text-6xl font-black tracking-[-0.035em] mt-1.5 lg:mt-2 leading-[0.95] lg:leading-[0.9]">
+          <h1 className="font-display text-[30px] sm:text-[42px] lg:text-6xl font-black tracking-[-0.035em] mt-1 lg:mt-2 leading-[0.95] lg:leading-[0.9]">
             ¿Dónde está<br />la noche<span className="text-qv-primary">?</span>
           </h1>
           </motion.div>
@@ -633,7 +633,7 @@ export default function Feed() {
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-8 px-4 pt-4 pb-10">
+        <div className="flex flex-col gap-6 sm:gap-8 px-4 pt-3 pb-10">
           {isLoading ? (
             <SkeletonList />
           ) : (
