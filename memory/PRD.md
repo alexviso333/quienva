@@ -673,3 +673,16 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
   admin admin@quienva.app / QuienVa2025!), frontend .env (REACT_APP_BACKEND_URL=preview).
 - SECRETOS PERDIDOS a re-aportar por el usuario: FourVenues (token+slug → feed de eventos),
   ClubTickets (afiliado), Google OAuth, Cloudinary, PostHog project key.
+
+## 2026-10-06 — Spec: Sección 5 (ficha) + Sección 6 (landing) + Sección 2/7 (analítica e i18n)
+- **Sección 5 — ficha de fiesta completada**: nuevo `GET /api/events/{id}/venue-nights` (noches PASADAS del mismo local, excluyendo el propio evento; devuelve id, nombre, fecha, cartel, nº de asistentes "estuve" y nº de fotos del álbum). Nuevo componente `frontend/src/components/VenueNights.js` (carrusel horizontal, `data-testid=venue-nights` / `venue-night-<id>`) insertado en `EventDetail.js` tras el bloque de amigos. "Planes abiertos para esta fiesta" (`EventOpenPlans`) ya existía → Sección 5 cerrada.
+- **Sección 6 — landing SEO (quienva.me) ampliada** en `_render_home`:
+  - **Contadores arreglados**: la barra del hero solo muestra números reales (planes esta semana · ciudades · discotecas). Eliminadas las píldoras sin número ("🎫 A la venta", "👥 Esta noche") que parecían roto.
+  - **Demo del plan compartible** (`_home_plan_section`): bloque con los 3 pasos + maqueta visual de un plan (opciones con votos, barra de cupo, intenciones) y CTA "Crear un plan gratis" → `/p/nuevo`.
+  - **"Y después de la fiesta"** (`_home_after_section`): 3 tarjetas con iconos SVG (Recuerdos, Tu Wrapped, Embajador + insignias). CSS en `_HOME_EXTRA_CSS` (clase `.abadges` para no colisionar con `.badges` de las tarjetas de cartel).
+  - Copys ES/EN/DE en `_PLAN_HOME_T`.
+- **Sección 2 — instrumentación**: añadidos `signup_completed`, `login_completed` (+`identifyUser`/`resetAnalytics`) en `AuthContext.js`; `friend_request_sent` y `friend_added` en `Friends.js`; `plan_viewed` en `PlanView.js`. (PostHog sigue sin token en preview → no verificable e2e.)
+- **Sección 7 — i18n**: `de.json` tenía 13 claves menos que `es/en` (`myplans.*`, `moving.*`) → traducidas; los 3 idiomas tienen ahora 852 claves. Nueva clave `event.venue_nights_title` en ES/EN/DE.
+- **Verificado**: testing agent iteración 12 → backend 8/8 y frontend 100% (carrusel en móvil 390px sin overflow, navegación entre noches, landing 200 en ES/EN/DE con las nuevas secciones, /api/ciudad/madrid y sitemap intactos). Tras el informe se excluye el propio evento de la lista de noches.
+- PENDIENTE (del spec): Sección 9 (auditoría de rendimiento fina) y Sección 10 (QA manual de crear plan sin cuenta). Rutas rotas (Sección 8) ya cubiertas por el catch-all a /feed.
+- PRODUCCIÓN: cambio de código → requiere "Save to GitHub" (Render backend + Vercel frontend).

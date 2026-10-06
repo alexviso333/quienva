@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 12 — venue-nights endpoint + SSR landing (plan sharable + after sections) + hero stats cleanup. Backend pytest 8/8 PASS in /app/backend/tests/test_iteration12_venue_nights_landing.py: (1) GET /api/events/d5d1ba48-.../venue-nights returns venue=Tiffany's, count=3, nights with 'Reggaeton Night'/2026-09-27, 'Techno Marathon'/2026-09-20, 'Opening Party'/2026-09-13 and the expected keys (id,name,date,image_url,attended,photos). (2) GET /api/events/not-a-real-event-id/venue-nights -> 200 {nights:[], count:0}. (3) A non-Tiffany event (LuLa Club) -> 200 {nights:[], count:0, venue:'LuLa Club'}. (4-6) /api/home, /api/en/home, /api/de/home all 200, contain class='plansec' + class='pdemo' + CTA to /p/nuevo, class='after' section with Recuerdos/Memories/Erinnerungen, Wrapped, Embajador/Ambassador/Botschafter. (7) Hero <div class='stats'> contains only numeric pills ('25 planes esta semana','6 ciudades','133 discotecas') — no 'A la venta' / 'Esta noche' leaking into the stats bar. (8) /api/ciudad/madrid and /api/sitemap.xml still 200. Frontend playwright (mobile 390x844) on /event/d5d1ba48-...: data-testid='venue-nights' rendered with 3 data-testid='venue-night-<id>' cards in a horizontal carousel; clicking the second card navigates to /event/9d712ad0-... Page horizontal scroll check scrollWidth=390==innerWidth=390 (no horizontal overflow). No JS console errors (only expected 401s on /me endpoints for guest flow). Hero/Who's going/map/How-to-get-there all render.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "VenueNights on /event/d5d1ba48-...", "issues": ["The current event (Reggaeton Night 2026-09-27, same id as the page) is included as one of the 3 cards in the 'Nights at Tiffany's' carousel. Tapping it reloads the same event page. Likely minor UX nit — consider excluding the current eventId server-side in /api/events/{id}/venue-nights, or filtering in the component. Spec expected these 3 titles so endpoint still matches spec."]},
+      {"screen": "VenueNights title", "issues": ["Rendered as 'Nights at Tiffany\\'s' in the headless browser (i18n fallback to en based on navigator.language). ES locale key 'event.venue_nights_title' resolves to 'Noches en Tiffany\\'s' when the UI is forced to Spanish. Not a bug — just visible when testing in default en locale."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration12_venue_nights_landing.py",
+    "/app/test_reports/pytest/iteration12.xml"
+  ],
+  "action_items": [
+    "(Nice-to-have) In backend `event_venue_nights`, exclude the requested event_id from the returned nights list so the carousel does not display the current event as a clickable sibling.",
+    "(Carry-over from iter 11) /icons/icon-512.png preload warning still present on load."
+  ],
+  "critical_code_review_comments": [
+    "server.py `event_venue_nights` returns the current event as part of 'nights' (self-link) — should probably filter `_id != event_id` or `date < today` so the carousel actually behaves like 'past nights at this venue'. The field was literally labelled 'noches pasadas' in the spec yet all 3 dates are in the future (Sept 2026) because they were seeded manually.",
+    "VenueNights.js: component queries react-query with staleTime=5min — fine. However, `enabled: !!eventId` always fires even when `venue` prop is missing (then title shows 'Noches en' with trailing space). Fallback uses data.venue so OK, but consider waiting for data before rendering title to avoid flash of empty venue name.",
+    "VenueNights.js: cards use `onClick={() => navigate(/event/${n.id})}` but when the card id === current eventId this performs a same-URL navigation that react-router treats as no-op; worth either hiding self or adding a visual 'Esta noche' badge.",
+    "server.py `_render_home` plansec/after sections hardcode i18n copy inline (`_PLAN_HOME_T`, `_HOME_EXTRA_CSS`) instead of using the same shared translation file. Minor duplication risk when strings diverge from the SPA copies.",
+    "server.py SSR stats bar now only renders numeric stats (good). The old 'A la venta' pill is now scoped only to event-card badges, which is correct — but there are 12 cards with 'sb-on A la venta' badges in the home feed; verify these still reflect real ticketing data (not a hardcoded flag)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration12_venue_nights_landing.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all requested flows)"},
+  "test_credentials": "N/A — guest flow used (no login needed to view /event/:id)",
+  "seed_data_creation": "None — relied on pre-seeded Tiffany's nights in dev DB. No TEST_ data created in this iteration.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To rerun quickly: `pytest /app/backend/tests/test_iteration12_venue_nights_landing.py -v -o addopts='' --junitxml=/app/test_reports/pytest/iteration12.xml`. Tiffany's event id: d5d1ba48-e907-49a9-b6ed-f4d76a3dbdba. Other dev events have binary/non-ascii IDs — URL-encode with `urllib.parse.quote(id.encode('utf-8','surrogatepass'), safe='')`. Default `/api/events?limit=N` only returns 2 non-Tiffany events in dev. For frontend testing, seed localStorage.qv_onboarding_done='1' and qv_discover_seen='1' before navigating.",
+  "rca of the issue": "N/A — no blocking issues. One observation: the venue-nights carousel includes the current event itself (same id as the page), which is a mild UX nit but matches the spec's listed 3 titles."
+}

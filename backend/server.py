@@ -13867,7 +13867,7 @@ async def event_venue_nights(event_id: str):
     if not ev or not ev.get("venue"):
         return {"nights": [], "count": 0}
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
-    q = {"venue": ev["venue"], "date": {"$lt": today}}
+    q = {"venue": ev["venue"], "date": {"$lt": today}, "id": {"$ne": event_id}}
     if ev.get("city"):
         q["city"] = ev["city"]
     rows = await db.events.find(
