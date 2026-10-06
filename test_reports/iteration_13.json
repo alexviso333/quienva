@@ -1,0 +1,22 @@
+{
+  "summary": "Iteration 13: validated the bot-vs-human split for /api/p/{slug} and /api/p/nuevo, and the full in-app PlanView + CreatePlan flow. All 11 backend pytest cases pass; all frontend assertions pass across PlanView rendering, guest voting, legacy /p/{slug} React fallback, /feed?crear=1 deeplink, FAB hide-logic, create plan → Ver plan in-app navigation, and the EventDetail share-story regression.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration13_plan_crawler_split.py",
+    "/app/test_reports/pytest/iter13.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 17k+ lines; recommend extracting plan/public-page module (plan_public_page, _plan_page_html, _is_crawler) to keep SSR logic isolated.",
+    "_is_crawler treats empty UA as crawler which is safe for previews, but direct curl without UA still returns SSR HTML; acceptable since humans always get a UA, but keep in mind for monitoring/health checks."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (all asserted flows)"},
+  "test_credentials": "n/a (guest flow)",
+  "seed_data_creation": "Created plan slug qa-iter13-plan-2107 (via POST /api/plans) for PlanView tests; CreatePlanSheet test produced an additional plan (madrid-31f4). Can be removed by admin cleanup if needed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints verified: human UAs on /api/p/{slug} redirect 302 to {FRONTEND}/plan/{slug}; bot UAs (WhatsApp, facebookexternalhit, Googlebot, Twitterbot) + empty UA return 200 SSR HTML with og:title/description/image. /api/p/nuevo redirects humans 302 to /feed?crear=1 and preserves ?evento=. 404 preserved for unknown slug. Frontend verified end-to-end on preview URL (https://full-stack-nights.preview.emergentagent.com): /plan/{slug} shows PlanView with bottom-nav, Volver button, empty state + explore card and NO +Plan FAB; guest vote via planview-intent-dentro → planview-respond-sheet → planview-confirm produces planview-mine; legacy /p/{slug} still renders React PlanView; /feed?crear=1 opens CreatePlanSheet, URL cleans to /feed, FAB hidden; creating a plan shows ¡Plan creado! view with Ver plan button that navigates in-app to /plan/{slug}. EventDetail /event/{id} has detail-share-story header icon but NOT the detail-share-story-btn banner, and venue-nights section still rendering.",
+  "rca of the issue": "n/a — no bugs found"
+}
