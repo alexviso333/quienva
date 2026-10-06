@@ -14290,11 +14290,13 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
     user = await _plan_optional_user(request)
     opt_ids = {o["opt_id"] for o in (plan.get("opciones") or [])}
     opcion = body.opcion_preferida if body.opcion_preferida in opt_ids else None
-    token = body.participante_token or _plan_token()
+    # El token puede venir en el body (la app) o en la cabecera x-participante-token.
+    sent_token = (body.participante_token or request.headers.get("x-participante-token") or "").strip() or None
+    token = sent_token or _plan_token()
     existing = None
-    if body.participante_token:
+    if sent_token:
         existing = await db.plan_participants.find_one(
-            {"plan_id": plan["id"], "participante_token": body.participante_token}, {"_id": 0})
+            {"plan_id": plan["id"], "participante_token": sent_token}, {"_id": 0})
     if not existing and user:
         existing = await db.plan_participants.find_one(
             {"plan_id": plan["id"], "user_id": user.get("user_id")}, {"_id": 0})
@@ -14309,7 +14311,8 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
     if not apodo and user:
         apodo = (display_name(user) or "").strip()[:40]
     if not apodo:
-        n = await db.plan_participants.count_documents({"plan_id": plan["id"]})
+        n = await db.plan_participants.count_documents(
+            {"plan_id": plan["id"], "intencion": {"$ne": _PLAN_PENDING}})
         apodo = f"Invitado {n + 1}"
     doc = {
         "apodo": apodo,

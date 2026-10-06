@@ -7,10 +7,33 @@ import Foundation
 import Capacitor
 import ActivityKit
 
+// Capacitor 7: los plugins locales (dentro del target App) NO se descubren solos.
+// Se declaran con CAPBridgedPlugin y se registran en MainViewController.
 @objc(QuienVaLiveActivityPlugin)
-public class QuienVaLiveActivityPlugin: CAPPlugin {
+public class QuienVaLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "QuienVaLiveActivityPlugin"
+    public let jsName = "QuienVaLiveActivity"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startPlan", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updatePlan", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "endPlan", returnType: CAPPluginReturnPromise),
+    ]
 
     private var activities: [String: Any] = [:]   // slug -> Activity<QuienVaPlanAttributes>
+    private var streaming = Set<String>()          // slugs cuyo token ya escuchamos
+
+    /// Busca la actividad del plan: primero en memoria y, si la app se reinició,
+    /// entre las que iOS mantiene vivas (Activity.activities).
+    @available(iOS 16.2, *)
+    private func findActivity(_ slug: String) -> Activity<QuienVaPlanAttributes>? {
+        if let a = activities[slug] as? Activity<QuienVaPlanAttributes> { return a }
+        if let a = Activity<QuienVaPlanAttributes>.activities.first(where: { $0.attributes.slug == slug }) {
+            activities[slug] = a
+            return a
+        }
+        return nil
+    }
 
     @objc func isSupported(_ call: CAPPluginCall) {
         if #available(iOS 16.2, *) {
@@ -27,7 +50,19 @@ public class QuienVaLiveActivityPlugin: CAPPlugin {
         }
         let slug = call.getString("slug") ?? ""
         if slug.isEmpty { call.reject("slug required"); return }
-        if activities[slug] != nil { call.resolve(["started": true, "already": true]); return }
+        if let existing = findActivity(slug) {
+            // Ya existía (p.ej. tras reiniciar la app): re-emitimos su token una vez.
+            if !streaming.insert(slug).inserted {
+                call.resolve(["started": true, "already": true, "activityId": existing.id]); return
+            }
+            Task {
+                for await tokenData in existing.pushTokenUpdates {
+                    let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                    self.notifyListeners("planToken", data: ["slug": slug, "token": token, "activityId": existing.id])
+                }
+            }
+            call.resolve(["started": true, "already": true, "activityId": existing.id]); return
+        }
 
         let attrs = QuienVaPlanAttributes(
             titulo: call.getString("titulo") ?? "Tu plan",
@@ -48,11 +83,12 @@ public class QuienVaLiveActivityPlugin: CAPPlugin {
                 pushType: .token
             )
             activities[slug] = activity
+            streaming.insert(slug)
             // Stream the per-activity push token to JS (listener "planToken").
             Task {
                 for await tokenData in activity.pushTokenUpdates {
                     let token = tokenData.map { String(format: "%02x", $0) }.joined()
-                    self.notifyListeners("planToken", data: ["slug": slug, "token": token])
+                    self.notifyListeners("planToken", data: ["slug": slug, "token": token, "activityId": activity.id])
                 }
             }
             call.resolve(["started": true, "activityId": activity.id])
@@ -64,7 +100,7 @@ public class QuienVaLiveActivityPlugin: CAPPlugin {
     @objc func updatePlan(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else { call.resolve(); return }
         let slug = call.getString("slug") ?? ""
-        guard let activity = activities[slug] as? Activity<QuienVaPlanAttributes> else {
+        guard let activity = findActivity(slug) else {
             call.resolve(["updated": false]); return
         }
         let state = QuienVaPlanAttributes.ContentState(
@@ -83,10 +119,11 @@ public class QuienVaLiveActivityPlugin: CAPPlugin {
     @objc func endPlan(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else { call.resolve(); return }
         let slug = call.getString("slug") ?? ""
-        guard let activity = activities[slug] as? Activity<QuienVaPlanAttributes> else {
+        guard let activity = findActivity(slug) else {
             call.resolve(["ended": false]); return
         }
         activities.removeValue(forKey: slug)
+        streaming.remove(slug)
         Task {
             await activity.end(nil, dismissalPolicy: .after(Date().addingTimeInterval(900)))
             call.resolve(["ended": true])
