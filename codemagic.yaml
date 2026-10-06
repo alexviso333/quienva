@@ -209,7 +209,8 @@ workflows:
             app_group = project.main_group.find_subpath("App", true)
             ["QuienVaLiveActivityPlugin.swift", "MainViewController.swift", "QuienVaPlanAttributes.swift"].each do |f|
               next if app.source_build_phase.files_references.any? { |r| r.path.to_s.end_with?(f) }
-              ref = app_group.new_reference("App/#{f}")
+              # El grupo "App" ya apunta a la carpeta App/: la ruta es SOLO el nombre.
+              ref = app_group.new_reference(f)
               app.add_file_references([ref])
             end
 
@@ -219,20 +220,8 @@ workflows:
               ext = project.new_target(:app_extension, ext_name, :ios, "16.2")
               grp = project.main_group.new_group(ext_name, ext_name)
               ["QuienVaWidgets.swift", "QuienVaPlanAttributes.swift"].each do |f|
-                ref = grp.new_reference("#{ext_name}/#{f}")
+                ref = grp.new_reference(f)   # el grupo ya apunta a QuienVaWidgets/
                 ext.add_file_references([ref])
-              end
-              ext.build_configurations.each do |c|
-                c.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = "me.quienva.app.QuienVaWidgets"
-                c.build_settings["INFOPLIST_FILE"] = "#{ext_name}/Info.plist"
-                c.build_settings["SWIFT_VERSION"] = "5.0"
-                c.build_settings["TARGETED_DEVICE_FAMILY"] = "1"
-                c.build_settings["SKIP_INSTALL"] = "YES"
-                c.build_settings["CODE_SIGN_STYLE"] = "Manual"
-                c.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.2"
-                c.build_settings["MARKETING_VERSION"] = ENV["APP_VERSION"] || "1.4"
-                c.build_settings["GENERATE_INFOPLIST_FILE"] = "NO"
-                c.build_settings["LD_RUNPATH_SEARCH_PATHS"] = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
               end
               # Empotrar la extensión en la app
               embed = app.build_phases.find { |p| p.respond_to?(:name) && p.name == "Embed Foundation Extensions" }
@@ -247,6 +236,36 @@ workflows:
             else
               puts "Extension target #{ext_name} ya existía"
             end
+            # Ajustes de la extensión: se aplican SIEMPRE (también si ya existía).
+            # PRODUCT_NAME es imprescindible: sin él el producto sale como ".appex"
+            # y Xcode falla con "Multiple commands produce .../.appex".
+            ext.product_reference.path = "#{ext_name}.appex"
+            ext.product_reference.name = "#{ext_name}.appex"
+            ext.build_configurations.each do |c|
+              c.build_settings["PRODUCT_NAME"] = ext_name
+              c.build_settings["PRODUCT_MODULE_NAME"] = ext_name
+              c.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = "me.quienva.app.QuienVaWidgets"
+              c.build_settings["INFOPLIST_FILE"] = "#{ext_name}/Info.plist"
+              c.build_settings["GENERATE_INFOPLIST_FILE"] = "NO"
+              c.build_settings["SWIFT_VERSION"] = "5.0"
+              c.build_settings["TARGETED_DEVICE_FAMILY"] = "1"
+              c.build_settings["SKIP_INSTALL"] = "YES"
+              c.build_settings["APPLICATION_EXTENSION_API_ONLY"] = "YES"
+              c.build_settings["CODE_SIGN_STYLE"] = "Manual"
+              c.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.2"
+              c.build_settings["MARKETING_VERSION"] = ENV["APP_VERSION"] || "1.5"
+              c.build_settings["CURRENT_PROJECT_VERSION"] = "1"
+              c.build_settings["LD_RUNPATH_SEARCH_PATHS"] = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+            end
+            puts "Extension #{ext_name}: PRODUCT_NAME=#{ext.build_configurations.first.build_settings["PRODUCT_NAME"]} producto=#{ext.product_reference.path}"
+            # Comprobación: todos los .swift de ambos targets existen en disco.
+            [app, ext].each do |t|
+              t.source_build_phase.files_references.each do |r|
+                rp = r.real_path.to_s
+                raise "No existe #{rp} (target #{t.name})" unless File.exist?(rp)
+              end
+            end
+            puts "Rutas de los fuentes OK (App + #{ext_name})"
             project.save
           '
       - name: Preparar firma (automática con tu API Key)

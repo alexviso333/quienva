@@ -152,9 +152,9 @@ struct QuienVaPlanActivityWidget: Widget {
 
 @main
 struct QuienVaWidgetBundle: WidgetBundle {
+    // La extensión solo se instala en iOS 16.2+ (IPHONEOS_DEPLOYMENT_TARGET),
+    // así que no hace falta comprobar disponibilidad aquí.
     var body: some Widget {
-        if #available(iOS 16.1, *) {
-            QuienVaPlanActivityWidget()
-        }
+        QuienVaPlanActivityWidget()
     }
 }
