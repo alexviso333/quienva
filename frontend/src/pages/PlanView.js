@@ -8,6 +8,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import api, { mediaThumb } from "@/lib/api";
 import { toast } from "sonner";
 import { captureEvent } from "@/analytics/posthog";
+import { startPlanActivity, updatePlanActivity, endPlanActivity } from "@/lib/liveActivity";
 import {
   Loader2, Clock, Users, MapPin, Check, Send, Link2, ArrowLeft, Home, PartyPopper, X,
 } from "lucide-react";
@@ -93,6 +94,19 @@ export default function PlanView() {
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/p/${slug}` : "";
   const shareWhatsApp = () => { captureEvent("plan_shared", { plan_id: slug, destination: "whatsapp" }); window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText}: ${shareUrl}`)}`, "_blank", "noopener,noreferrer"); };
   const copyLink = async () => { captureEvent("plan_shared", { plan_id: slug, destination: "copy_link" }); try { await navigator.clipboard.writeText(shareUrl); toast.success(t("planview.copied", "Enlace copiado")); } catch (e) { /* ignore */ } };
+
+  // Live Activity (Dynamic Island, solo app iOS): arranca con el plan abierto,
+  // se actualiza al votar y se cierra cuando el plan se cierra o se cancela.
+  useEffect(() => {
+    if (!plan?.slug) return;
+    if (plan.estado === "abierto") {
+      startPlanActivity(plan);
+      updatePlanActivity(plan);
+    } else {
+      updatePlanActivity(plan);
+      endPlanActivity(plan.slug);
+    }
+  }, [plan]);
 
   const dentro = counts.dentro || 0;
   const pct = plan?.umbral_personas ? Math.min(100, Math.round((dentro / plan.umbral_personas) * 100)) : null;

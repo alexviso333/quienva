@@ -27,7 +27,7 @@ workflows:
         # Versión visible en la App Store (CFBundleShortVersionString). Para CADA
         # actualización, súbela aquí (1.1 -> 1.2 -> ...). Debe ser mayor que la
         # versión ya publicada. El número de build interno se pone solo (abajo).
-        APP_VERSION: "1.4"
+        APP_VERSION: "1.5"
         APP_STORE_APPLE_ID: 6804396475        # Apple ID numérico de la app (App Store Connect → Información de la app)
         # URL del backend de producción. SIN esto la app iOS se compila sin saber
         # dónde está el servidor (en Vercel la inyecta Vercel; aquí hay que darla).
@@ -173,10 +173,79 @@ workflows:
             project.save
             puts "CODE_SIGN_ENTITLEMENTS asignado al target App (Sign in with Apple)"
           '
+      - name: "Live Activity (Dynamic Island) — extensión de widget + plugin"
+        script: |
+          cd frontend/ios/App
+          # 1) Copiar el plugin de Capacitor (va DENTRO del target de la app).
+          cp ../../native/LiveActivity/QuienVaLiveActivityPlugin.swift App/
+          cp ../../native/LiveActivity/QuienVaLiveActivityPlugin.m App/
+          cp ../../native/LiveActivity/QuienVaPlanAttributes.swift App/
+          # 2) Copiar los fuentes de la extensión.
+          mkdir -p QuienVaWidgets
+          cp ../../native/LiveActivity/QuienVaWidgets.swift QuienVaWidgets/
+          cp ../../native/LiveActivity/QuienVaPlanAttributes.swift QuienVaWidgets/
+          cp ../../native/LiveActivity/Info.plist QuienVaWidgets/Info.plist
+          # 3) Declarar que la app soporta Live Activities.
+          /usr/libexec/PlistBuddy -c "Add :NSSupportsLiveActivities bool YES" App/Info.plist \
+            || /usr/libexec/PlistBuddy -c "Set :NSSupportsLiveActivities YES" App/Info.plist
+          # 4) Crear el target de la extensión y meter los ficheros (idempotente).
+          ruby -e '
+            require "xcodeproj"
+            project = Xcodeproj::Project.open("App.xcodeproj")
+            app = project.targets.find { |t| t.name == "App" }
+            raise "App target no encontrado" unless app
+
+            # -- plugin de Capacitor dentro del target de la app --
+            app_group = project.main_group.find_subpath("App", true)
+            ["QuienVaLiveActivityPlugin.swift", "QuienVaLiveActivityPlugin.m", "QuienVaPlanAttributes.swift"].each do |f|
+              next if app.source_build_phase.files_references.any? { |r| r.path.to_s.end_with?(f) }
+              ref = app_group.new_reference("App/#{f}")
+              app.add_file_references([ref])
+            end
+
+            ext_name = "QuienVaWidgets"
+            ext = project.targets.find { |t| t.name == ext_name }
+            if ext.nil?
+              ext = project.new_target(:app_extension, ext_name, :ios, "16.2")
+              grp = project.main_group.new_group(ext_name, ext_name)
+              ["QuienVaWidgets.swift", "QuienVaPlanAttributes.swift"].each do |f|
+                ref = grp.new_reference("#{ext_name}/#{f}")
+                ext.add_file_references([ref])
+              end
+              ext.build_configurations.each do |c|
+                c.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = "me.quienva.app.QuienVaWidgets"
+                c.build_settings["INFOPLIST_FILE"] = "#{ext_name}/Info.plist"
+                c.build_settings["SWIFT_VERSION"] = "5.0"
+                c.build_settings["TARGETED_DEVICE_FAMILY"] = "1"
+                c.build_settings["SKIP_INSTALL"] = "YES"
+                c.build_settings["CODE_SIGN_STYLE"] = "Manual"
+                c.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.2"
+                c.build_settings["MARKETING_VERSION"] = ENV["APP_VERSION"] || "1.4"
+                c.build_settings["GENERATE_INFOPLIST_FILE"] = "NO"
+                c.build_settings["LD_RUNPATH_SEARCH_PATHS"] = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+              end
+              # Empotrar la extensión en la app
+              embed = app.build_phases.find { |p| p.respond_to?(:name) && p.name == "Embed Foundation Extensions" }
+              embed ||= app.new_copy_files_build_phase("Embed Foundation Extensions")
+              embed.symbol_dst_subfolder_spec = :plug_ins
+              unless embed.files_references.include?(ext.product_reference)
+                bf = embed.add_file_reference(ext.product_reference)
+                bf.settings = { "ATTRIBUTES" => ["RemoveHeadersOnCopy"] }
+              end
+              app.add_dependency(ext)
+              puts "Extension target #{ext_name} creado y empotrado"
+            else
+              puts "Extension target #{ext_name} ya existía"
+            end
+            project.save
+          '
       - name: Preparar firma (automática con tu API Key)
         script: |
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --certificate-key @env:CERTIFICATE_PRIVATE_KEY --create
+          # Perfil para la extensión de widget (Live Activity). Si falla, el build
+          # sigue: la app se compila igual (sin isla dinámica) y lo vemos en el log.
+          app-store-connect fetch-signing-files "me.quienva.app.QuienVaWidgets" --type IOS_APP_STORE --certificate-key @env:CERTIFICATE_PRIVATE_KEY --create || echo "AVISO: no se pudo crear el perfil de la extension QuienVaWidgets"
           keychain add-certificates
           # Apuntar SOLO al proyecto de la app (evita el conflicto con Pods.xcodeproj)
           xcode-project use-profiles --project "$XCODE_PROJECT"

@@ -10524,6 +10524,8 @@ async def create_notification(user_id: str, ntype: str, message: str, data: dict
         url = "/momento"
     elif ntype == "attendance_check":
         url = f"/feed?fui={(data or {}).get('event_id', '')}"
+    elif ntype in ("plan_closed", "plan_cancelled"):
+        url = f"/plan/{(data or {}).get('plan_slug', '')}"
     elif data and data.get("event_id"):
         url = f"/event/{data['event_id']}"
     try:
@@ -12745,6 +12747,7 @@ class LiveActivityToken(BaseModel):
     activity_id: str
     token: str
     event_id: Optional[str] = None
+    plan_slug: Optional[str] = None
 
 
 @api_router.post("/live-activity/token")
@@ -12755,15 +12758,20 @@ async def live_activity_register(inp: LiveActivityToken, user: dict = Depends(ge
     if not token:
         raise HTTPException(status_code=400, detail="Missing token")
     now = datetime.now(timezone.utc).isoformat()
+    plan_id = None
+    if inp.plan_slug:
+        p = await db.plans.find_one({"slug": inp.plan_slug}, {"_id": 0, "id": 1})
+        plan_id = (p or {}).get("id")
     await db.live_activities.update_one(
         {"user_id": user["user_id"], "activity_id": inp.activity_id},
         {"$set": {
             "user_id": user["user_id"], "activity_id": inp.activity_id,
-            "token": token, "event_id": inp.event_id, "ended": False, "updated_at": now,
+            "token": token, "event_id": inp.event_id, "plan_id": plan_id,
+            "ended": False, "updated_at": now,
         }, "$setOnInsert": {"created_at": now}},
         upsert=True,
     )
-    return {"ok": True}
+    return {"ok": True, "plan_id": plan_id}
 
 
 class LiveActivityEnd(BaseModel):
@@ -13646,6 +13654,96 @@ def _plan_pick_winner(plan: dict, participants: list):
     return opts[0]["opt_id"]
 
 
+async def _plan_option_label(plan: dict, opt_id: str) -> str:
+    for o in (plan.get("opciones") or []):
+        if o.get("opt_id") == opt_id:
+            name = (o.get("venue_nombre") or o.get("texto_libre") or "el plan").strip()
+            return f"{name}{(' a las ' + o['hora']) if o.get('hora') else ''}"
+    return "el plan"
+
+
+async def _plan_live_state(plan: dict, participants: list) -> dict:
+    """ContentState que viaja a la Live Activity (Dynamic Island) del plan.
+    Las claves tienen que coincidir con QuienVaPlanAttributes.ContentState."""
+    dentro = sum(1 for p in participants if p.get("intencion") == "dentro")
+    cierra = None
+    if plan.get("hora_limite"):
+        try:
+            dl = datetime.fromisoformat(plan["hora_limite"])
+            if dl.tzinfo is None:
+                dl = dl.replace(tzinfo=ZoneInfo("Europe/Madrid"))
+            cierra = dl.timestamp()
+        except Exception:
+            cierra = None
+    ganadora = None
+    if plan.get("opcion_ganadora"):
+        ganadora = await _plan_option_label(plan, plan["opcion_ganadora"])
+    return {"dentro": dentro, "umbral": plan.get("umbral_personas") or 0,
+            "cierraEpoch": cierra, "ganadora": ganadora,
+            "estado": plan.get("estado") or "abierto"}
+
+
+async def _plan_push_live(plan: dict, participants: list = None, event: str = "update"):
+    """Actualiza (o termina) la Live Activity de TODOS los que la tengan activa
+    para este plan: creador y participantes con la app instalada."""
+    if not apns.is_configured():
+        return 0
+    try:
+        if participants is None:
+            participants = await db.plan_participants.find(
+                {"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+        cs = await _plan_live_state(plan, participants)
+        sent = 0
+        async for la in db.live_activities.find({"plan_id": plan["id"], "ended": {"$ne": True}}):
+            res = await apns.send_live_activity(
+                la["token"], cs, event=event,
+                stale_seconds=4 * 3600 if event == "update" else None,
+                dismissal_seconds=900 if event == "end" else None)
+            if res == "gone" or event == "end":
+                await db.live_activities.update_one({"_id": la["_id"]}, {"$set": {"ended": True}})
+            if res == "ok":
+                sent += 1
+        return sent
+    except Exception as e:
+        logger.warning(f"[plans] live activity push falló: {e}")
+        return 0
+
+
+async def _plan_notify_closed(plan: dict, motivo: str, participants: list = None):
+    """Push + aviso in-app a TODOS los participantes registrados (y al creador)
+    cuando el plan se cierra o se cancela. Sustituye al aviso por WhatsApp/SMS:
+    no hace falta proveedor externo y llega a la app (APNs) y a la web (Web Push).
+    Los participantes sin cuenta no reciben nada (no tienen dispositivo)."""
+    try:
+        if participants is None:
+            participants = await db.plan_participants.find(
+                {"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+        titulo = (plan.get("titulo") or "").strip() or "tu plan"
+        if motivo == "cancelado":
+            msg = f"❌ Plan cancelado: {titulo}"
+            ntype = "plan_cancelled"
+        elif plan.get("opcion_ganadora"):
+            label = await _plan_option_label(plan, plan["opcion_ganadora"])
+            dentro = sum(1 for p in participants if p.get("intencion") == "dentro")
+            msg = f"🔥 ¡Plan cerrado! {titulo}: {label} · {dentro} dentro"
+            ntype = "plan_closed"
+        else:
+            msg = f"🌙 {titulo} se ha cerrado sin suficiente gente. Otro día será."
+            ntype = "plan_closed"
+        targets = {p["user_id"] for p in participants if p.get("user_id")}
+        if plan.get("creator_user_id"):
+            targets.add(plan["creator_user_id"])
+        for uid in targets:
+            await create_notification(uid, ntype, msg,
+                                      {"plan_slug": plan.get("slug"), "plan_id": plan.get("id"),
+                                       "type": ntype, "motivo": motivo})
+        logger.info(f"[plans] aviso de cierre ({motivo}) enviado a {len(targets)} usuarios")
+    except Exception as e:
+        logger.warning(f"[plans] no se pudo avisar del cierre: {e}")
+    # La isla dinámica termina mostrando el resultado y se auto-descarta.
+    await _plan_push_live(plan, participants, event="end")
+
+
 async def _plan_maybe_autoclose(plan: dict) -> dict:
     """If quorum reached (within deadline) close the plan and pick winner."""
     if plan.get("estado") != "abierto":
@@ -13675,6 +13773,7 @@ async def _plan_maybe_autoclose(plan: dict) -> dict:
                      "cierre_motivo": "quorum"})
         _plan_track("plan_closed_by_quorum", plan_id=plan["id"],
                     participants_count=len(participants))
+        await _plan_notify_closed(plan, "quorum", participants)
     return plan
 
 
@@ -13707,6 +13806,9 @@ async def close_expired_plans():
                 "cierre_motivo": motivo}})
             _plan_track("plan_closed_by_quorum" if motivo == "quorum" else "plan_closed_no_quorum",
                         plan_id=plan["id"], participants_count=len(participants))
+            plan.update({"estado": "cerrado", "closed_at": now,
+                         "opcion_ganadora": winner, "cierre_motivo": motivo})
+            await _plan_notify_closed(plan, motivo, participants)
             closed += 1
         if closed:
             logger.info(f"[plans] cerrados por vencimiento: {closed}")
@@ -13973,6 +14075,9 @@ async def respond_plan(slug: str, body: PlanRespondIn, request: Request):
                     intencion=body.intencion, opcion_preferida=opcion)
     plan = await _plan_maybe_autoclose(plan)
     participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    if plan.get("estado") == "abierto":
+        # Isla dinámica / pantalla de bloqueo en vivo para todos los que la tienen.
+        asyncio.create_task(_plan_push_live(plan, participants, event="update"))
     pub = _plan_public(plan, participants, viewer_token=token, viewer_user=user)
     return {"participante_token": token, "plan": pub}
 
@@ -13998,6 +14103,7 @@ async def close_plan(slug: str, request: Request):
         "estado": "cerrado", "closed_at": now, "opcion_ganadora": winner, "cierre_motivo": "manual"}})
     plan.update({"estado": "cerrado", "closed_at": now, "opcion_ganadora": winner, "cierre_motivo": "manual"})
     _plan_track("plan_closed_manually", plan_id=plan["id"])
+    await _plan_notify_closed(plan, "manual", participants)
     return _plan_public(plan, participants, viewer_token=token, viewer_user=user)
 
 
@@ -14017,6 +14123,7 @@ async def cancel_plan(slug: str, request: Request):
     _plan_track("plan_cancelled", plan_id=plan["id"])
     plan["estado"] = "cancelado"
     participants = await db.plan_participants.find({"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
+    await _plan_notify_closed(plan, "cancelado", participants)
     return _plan_public(plan, participants, viewer_token=token, viewer_user=user)
 
 
