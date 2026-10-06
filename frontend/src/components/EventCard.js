@@ -404,13 +404,33 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
           </button>
         ) : (
           <>
+            {/* 1) Revenue-first: buy ticket is the primary CTA whenever available */}
+            {event.has_commission && event.commission_url ? (
+              <a
+                data-testid={`event-ticket-btn-${event.id}`}
+                href={event.commission_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => { captureEvent("ticket_cta_clicked", { evento_id: event.id, price: event.current_price || null }); api.post("/tickets/click", { event_id: event.id }).catch(() => {}); }}
+                className="qv-btn h-12 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
+              >
+                <Ticket className="w-4 h-4" /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${t("event.price_from", { price: Math.round(event.current_price) })}` : ""}
+              </a>
+            ) : null}
+
+            {/* 2) Engagement: propose a plan. Primary gradient when there's no ticket, clear secondary otherwise. */}
             <button
               data-testid={`event-propose-btn-${event.id}`}
               onClick={(e) => { e.stopPropagation(); openCreatePlan({ id: event.id, name: event.name, venue: event.venue, time: event.time, price: event.current_price, image_url: event.image_url, city: event.city }, event.city, "event"); }}
-              className="qv-btn h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
+              className={`qv-btn h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 ${
+                event.has_commission && event.commission_url
+                  ? "bg-white/[0.05] border border-qv-primary/45 text-white hover:bg-qv-primary/10"
+                  : "bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white shadow-[0_8px_22px_-6px_rgba(255,0,85,0.6)]"
+              }`}
             >
               <ClipboardList className="w-4 h-4" /> {t("eventcard.btn_propose", "Proponer a mi grupo")}
             </button>
+
             <div className="grid grid-cols-2 gap-2.5">
               <button
                 data-testid={`event-voy-btn-${event.id}`}
@@ -444,26 +464,15 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
               <span><b className="text-white/60">{t("eventcard.voy_word")}</b> {t("eventcard.eq_confirmed")} · <b className="text-white/60">{t("eventcard.interesa_word")}</b> {t("eventcard.eq_notify")}</span>
             </p>
 
-            {event.has_commission && event.commission_url ? (
-              <a
-                data-testid={`event-ticket-btn-${event.id}`}
-                href={event.commission_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => { captureEvent("ticket_cta_clicked", { evento_id: event.id, price: event.current_price || null }); api.post("/tickets/click", { event_id: event.id }).catch(() => {}); }}
-                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-white/50 hover:text-white/80 transition-colors mx-auto py-1"
-              >
-                <Ticket className="w-3.5 h-3.5" /> {t("eventcard.btn_ticket")}{event.current_price ? ` · ${t("event.price_from", { price: Math.round(event.current_price) })}` : ""}
-              </a>
-            ) : event.more_info_url ? (
+            {!(event.has_commission && event.commission_url) && event.more_info_url ? (
               <a
                 data-testid={`event-info-btn-${event.id}`}
                 href={event.more_info_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="h-11 rounded-2xl bg-white/[0.06] border border-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors duration-300 hover:border-white/30 active:scale-95"
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-white/50 hover:text-white/80 transition-colors mx-auto py-1"
               >
-                <ExternalLink className="w-4 h-4" /> {t("eventcard.btn_more_info")}
+                <ExternalLink className="w-3.5 h-3.5" /> {t("eventcard.btn_more_info")}
               </a>
             ) : null}
           </>

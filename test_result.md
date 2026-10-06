@@ -277,8 +277,11 @@ frontend:
             "Título y aforo (opcional)" (data-testid create-plan-more/create-plan-opts).
             Si viene preset, muestra tarjeta del evento (create-plan-preset) y label
             "¿Alguna alternativa? (opcional)".
-          - Declutter EventCard: el botón de entrada "Get ticket" pasó de botón gradiente
-            grande a ENLACE discreto (una sola CTA primaria = "Proponer a mi grupo").
+          - Declutter + jerarquía (feedback 2 del usuario: las ENTRADAS son el negocio, no
+            enterrarlas): en EventCard la CTA primaria es "Comprar entrada · Xe" (gradiente),
+            "Proponer a mi grupo" queda como secundaria (outline), y Voy/Me interesa como
+            acciones rápidas (ghost). Si el evento NO tiene entrada, "Proponer" recupera el
+            gradiente. En EventDetail "Proponer" es outline para no eclipsar la compra.
           - Instrumentación añadida: plan_create_started (al abrir, con source), 
             plan_create_abandoned (cerrar sin crear), ticket_cta_clicked.
           Verificado por screenshots móvil (390x844): sheet abre desde banner y desde la
