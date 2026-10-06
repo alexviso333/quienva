@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 15 re-verification: all 9 pytest cases pass (9/9). Re-verified respond_plan frictionless flow (no-auth no-apodo yields 'Invitado 1' excluding pending invitees; participante_token in body OR x-participante-token header both rename not duplicate; authed no-apodo uses account display_name, user_id is NOT exposed in public participants JSON, plan.mine populated when fetched authed, re-respond does not duplicate). Invited pending friend answering with his account updates own row (pendiente->dentro, counts.pendiente 1->0, counts.total 0->1, 1 row only). Live Activity: POST /api/live-activity/token upserts (200+plan_id, repeat returns same plan_id, no duplicates in admin list), 401 without auth, /end returns 200. Respond/close/cancel keep returning 200 even with APNs unconfigured (APNS_TEAM_ID empty) and a Live Activity token registered. Regression: /invitables (puede_invitar=true for creator), /invite returns 403 for admin non-participant, 409 after plan closed, /admin/plans/invite-reminders triggers exactly one plan_invite_reminder notification even when called twice.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration15_respond_live.py",
+    "/app/test_reports/pytest/iter15.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is still ~18k lines; the respond/live-activity/invite logic deserves extraction into dedicated routers (plans_router.py, live_activity_router.py).",
+    "respond_plan uses an unused expression `bool(plan.get('creador_token') and False)` (always False) for is_creator — dead code that should be removed or replaced with real detection via creator_user_id/token.",
+    "Valid intents are {'dentro','voy_si','depende','paso'}; there is no explicit 'leaving/no' intent — document this clearly in the API schema so clients don't try 'fuera'/'no'. Also surface the whitelist in the 400 error message for easier debugging.",
+    "Live Activity /token endpoint accepts arbitrary token strings; consider length/hex validation beyond non-empty to reject obviously bad APNs tokens early.",
+    "Public participant JSON correctly strips user_id for privacy, but downstream `plan.mine` relies on the client sending auth to be recognized — fine, worth documenting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration15_respond_live.py (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "admin@quienva.app / QuienVa2025!  •  test@quienva.app / Test1234!  •  amigo@quienva.app / Test1234!  (note: /app/memory/test_credentials.md is MISSING in this repo; credentials were taken from the review_request.)",
+  "seed_data_creation": "Tests create ~8 plans titled 'TEST ...' owned by test@. They do not pollute production. Can be purged via a slug-prefix cleanup if desired. No new users created in this run (reuses existing test@/amigo@ friendship; makes them friends via API if not already).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "pytest file lives at /app/backend/tests/test_iteration15_respond_live.py and runs green against the preview URL. Valid plan intents are {'dentro','voy_si','depende','paso'} (NOT 'fuera'). participante_token works both in JSON body and x-participante-token header. Public GET /api/plans/{slug} intentionally strips user_id from participants; use authed GET to read plan.mine. Live Activity admin list endpoint is GET /api/admin/live-activities and returns a list (or {items/activities: [...]}) — the test handles both shapes. APNs is intentionally unconfigured in dev; _plan_push_live returns {'ok':false,'reason':'APNs no configurado ...'} and never raises.",
+  "rca of the issue": "n/a — both previously reported bugs in POST /api/plans/{slug}/respond are resolved: (a) auto 'Invitado N' now counts via count_documents({intencion: {$ne: 'pendiente'}}) so pending invitees are excluded; (b) matching by participante_token (body or header) then by user_id triggers UPDATE instead of INSERT so no duplicate rows are created."
+}

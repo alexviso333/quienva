@@ -842,3 +842,11 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 - Ficha de App Store: dice 5 ciudades, la web tiene 6 (Sevilla).
 - Opcional futuro: arrancar la Live Activity por push (iOS 17.2+, `pushToStartToken`) para que
   salga sin abrir la app; hoy arranca cuando el usuario abre el plan.
+
+## 2026-10-06 — Invitar amigos a planes + Live Activity (cierre)
+- Restaurados otra vez backend/.env y frontend/.env (faltaban tras el restore) + usuarios de prueba re-sembrados.
+- respond_plan: acepta participante_token en body o cabecera x-participante-token; "Invitado N" ya no cuenta a los pendientes. Tests iteration_15: 9/9.
+- Live Activity: backend completo (token por plan, push update en cada voto, end al cerrar/cancelar).
+- Capacitor 7: plugin pasa a CAPBridgedPlugin + MainViewController (registerPluginInstance); Codemagic cambia Main.storyboard. Eliminado el .m.
+- Pendiente usuario: APNS_TEAM_ID en Render (+ APNS_KEY_ID/APNS_PRIVATE_KEY), App ID me.quienva.app.QuienVaWidgets, subir APP_VERSION.
+- Dashboards PostHog: aplazado por el usuario.
