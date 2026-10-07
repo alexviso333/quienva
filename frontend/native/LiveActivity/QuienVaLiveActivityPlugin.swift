@@ -74,7 +74,10 @@ public class QuienVaLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             umbral: call.getInt("umbral") ?? 0,
             cierraEpoch: call.getDouble("cierraEpoch"),
             ganadora: call.getString("ganadora"),
-            estado: call.getString("estado") ?? "abierto"
+            estado: call.getString("estado") ?? "abierto",
+            lugar: call.getString("lugar"),
+            lugarVotos: call.getInt("lugarVotos"),
+            numOpciones: call.getInt("numOpciones")
         )
         do {
             let activity = try Activity.request(
@@ -108,7 +111,10 @@ public class QuienVaLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             umbral: call.getInt("umbral") ?? 0,
             cierraEpoch: call.getDouble("cierraEpoch"),
             ganadora: call.getString("ganadora"),
-            estado: call.getString("estado") ?? "abierto"
+            estado: call.getString("estado") ?? "abierto",
+            lugar: call.getString("lugar"),
+            lugarVotos: call.getInt("lugarVotos"),
+            numOpciones: call.getInt("numOpciones")
         )
         Task {
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(4 * 3600)))

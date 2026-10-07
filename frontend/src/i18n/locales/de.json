@@ -97,7 +97,11 @@
     "invited_sub": "Registriere dich, um die Freundschaft anzunehmen und zu sehen, wohin sie gehen.",
     "accept": "Annehmen",
     "change_city": "Tippen, um deine Stadt zu ändern",
-    "notifications": "Hinweise"
+    "notifications": "Hinweise",
+    "tagline": "Sieh, wer zu welcher Party geht, sag ob du dabei bist und plane mit deinen Leuten.",
+    "more": "Mehr Optionen",
+    "view_big": "Große Ansicht",
+    "view_compact": "Kompakte Ansicht"
   },
   "plans": {
     "view_dia": "Tag",
@@ -1132,7 +1136,19 @@
     "view": "Plan ansehen",
     "close": "Fertig",
     "done_invited_one": "1 Freund benachrichtigt",
-    "who_count_one": "1 ausgewählt"
+    "who_count_one": "1 ausgewählt",
+    "sub2": "Wähle bis zu 3 Orte, deine Gruppe stimmt ab",
+    "voting_on": "Abstimmung zwischen:",
+    "pick_hint": "Wähle eine Party, einen Club oder tippe es selbst.",
+    "free_opt": "Von dir eingegeben",
+    "max_opts": "Maximal 3 Optionen zur Abstimmung",
+    "tab_events": "Partys",
+    "tab_venues": "Clubs",
+    "tab_manual": "Manuell",
+    "search_events": "Party in {{city}} suchen…",
+    "search_venues": "Club suchen…",
+    "no_events": "Keine passende Party. Probiere „Clubs“ oder tippe es selbst.",
+    "no_venues": "Kein Club passt."
   },
   "friendpicker": {
     "search": "Freund suchen...",

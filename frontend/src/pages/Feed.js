@@ -15,7 +15,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import CitySelectorSheet from "@/components/CitySelectorSheet";
 import MyOpenPlans from "@/components/MyOpenPlans";
 import { captureEvent } from "@/analytics/posthog";
-import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3, Bell } from "lucide-react";
+import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3, Bell, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -100,6 +100,7 @@ export default function Feed() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { open: openCreatePlan } = useCreatePlan();
   const [q, setQ] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
   // Engagement signal: fire feed_scrolled once per mount when the user scrolls deep.
   useEffect(() => {
     let fired = false;
@@ -458,7 +459,7 @@ export default function Feed() {
       />
 
       {/* ---- HERO ---- */}
-      <header className="relative px-5 pt-4 pb-1 lg:pt-7 lg:pb-2">
+      <header className="relative px-5 pt-5 pb-3 lg:pt-7 lg:pb-2">
         {/* ambient neon glow */}
         <div aria-hidden className="qv-glow-a pointer-events-none absolute -top-16 -left-16 w-72 h-72 rounded-full bg-qv-primary/20 blur-[90px]" />
         <div aria-hidden className="qv-glow-b pointer-events-none absolute -top-10 right-0 w-64 h-64 rounded-full bg-qv-secondary/15 blur-[90px]" />
@@ -494,23 +495,46 @@ export default function Feed() {
                   )}
                 </button>
               )}
-              <LanguageSwitcher compact />
-              <button
-                onClick={toggleCompact}
-                aria-label={compact ? "Vista ampliada" : "Vista compacta"}
-                data-testid="feed-compact-toggle"
-                className="flex items-center justify-center w-9 h-9 text-white bg-white/[0.08] border border-white/10 rounded-full active:scale-95"
-              >
-                {compact ? <Rows3 className="w-4 h-4 text-qv-secondary" /> : <LayoutGrid className="w-4 h-4 text-qv-secondary" />}
-              </button>
-              <button
-                onClick={() => navigate("/locales")}
-                aria-label={t("feed.locales")}
-                className="flex items-center justify-center w-9 h-9 text-white bg-white/[0.08] border border-white/10 rounded-full active:scale-95"
-                data-testid="feed-locales-btn"
-              >
-                <Building2 className="w-4 h-4 text-qv-secondary" />
-              </button>
+              {/* Todo lo secundario (idioma, vista, locales) vive en un único
+                  menú: la cabecera deja de parecer un panel de mandos. */}
+              <div className="relative">
+                <button
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-label={t("feed.more", "Más opciones")}
+                  data-testid="feed-more-btn"
+                  className="flex items-center justify-center w-9 h-9 text-white bg-white/[0.08] border border-white/10 rounded-full active:scale-95"
+                >
+                  <MoreHorizontal className="w-4 h-4 text-qv-secondary" />
+                </button>
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                    <div
+                      data-testid="feed-more-menu"
+                      className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-white/12 bg-[#15101d]/95 backdrop-blur-xl p-1.5 shadow-[0_22px_50px_-12px_rgba(0,0,0,0.9)]"
+                    >
+                      <button
+                        onClick={() => { setMenuOpen(false); navigate("/locales"); }}
+                        data-testid="feed-locales-btn"
+                        className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/85 active:scale-[0.99] hover:bg-white/[0.06]"
+                      >
+                        <Building2 className="w-4 h-4 text-qv-secondary" /> {t("feed.locales")}
+                      </button>
+                      <button
+                        onClick={() => { toggleCompact(); setMenuOpen(false); }}
+                        data-testid="feed-compact-toggle"
+                        className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/85 active:scale-[0.99] hover:bg-white/[0.06]"
+                      >
+                        {compact ? <Rows3 className="w-4 h-4 text-qv-secondary" /> : <LayoutGrid className="w-4 h-4 text-qv-secondary" />}
+                        {compact ? t("feed.view_big", "Vista ampliada") : t("feed.view_compact", "Vista compacta")}
+                      </button>
+                      <div className="flex items-center gap-3 px-3 py-1.5">
+                        <LanguageSwitcher compact />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -519,16 +543,20 @@ export default function Feed() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           >
-          <p className="flex items-center gap-2 mt-2 lg:mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
+          <p className="flex items-center gap-2 mt-5 lg:mt-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/50">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-qv-primary/70" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-qv-primary" />
             </span>
             {WEEKDAYS_ES[now.getDay()]} {pad2(now.getHours())}:{pad2(now.getMinutes())}
           </p>
-          <h1 className="font-display text-[30px] sm:text-[42px] lg:text-6xl font-black tracking-[-0.035em] mt-1 lg:mt-2 leading-[0.95] lg:leading-[0.9]">
+          <h1 className="font-display text-[30px] sm:text-[42px] lg:text-6xl font-black tracking-[-0.035em] mt-2.5 lg:mt-2 leading-[0.95] lg:leading-[0.9]">
             ¿Dónde está<br />la noche<span className="text-qv-primary">?</span>
           </h1>
+          {/* Una sola frase que explica la app a quien entra por primera vez. */}
+          <p className="mt-3 text-white/55 text-sm leading-snug max-w-[20rem]" data-testid="feed-tagline">
+            {t("feed.tagline", "Mira quién va a cada fiesta, di si te apuntas y monta el plan con tu gente.")}
+          </p>
           </motion.div>
         </div>
       </header>
@@ -637,25 +665,6 @@ export default function Feed() {
             <SkeletonList />
           ) : (
             <>
-              {/* Saltos rápidos entre secciones (móvil: evita el "parece vacía") */}
-              <div className="flex gap-2 overflow-x-auto hide-scrollbar -mt-2" data-testid="feed-section-chips">
-                {[
-                  { id: "sec-today", label: "Esta noche", n: blockToday.length },
-                  ...(user && blockFriends.length > 0 ? [{ id: "sec-friends", label: "Tu gente", n: blockFriends.length }] : []),
-                  { id: "sec-upcoming", label: "Próximamente", n: blockUpcoming.length },
-                ].map((c) => (
-                  <button
-                    key={c.id}
-                    data-testid={`feed-jump-${c.id}`}
-                    onClick={() => document.getElementById(c.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    className="shrink-0 rounded-full border border-white/12 bg-white/[0.05] px-3.5 py-1.5 text-[12px] font-bold text-white/75 active:scale-95"
-                  >
-                    {c.label}
-                    {c.n > 0 && <span className="ml-1.5 text-qv-primary">{c.n}</span>}
-                  </button>
-                ))}
-              </div>
-
               {/* "Se está moviendo" ya no es un bloque: es una etiqueta en cada evento. */}
 
               {/* ===== BLOQUE A · 🔥 ESTA NOCHE ===== */}

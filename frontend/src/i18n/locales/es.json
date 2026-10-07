@@ -97,7 +97,11 @@
     "invited_sub": "Regístrate para aceptar la amistad y ver a dónde va.",
     "accept": "Aceptar",
     "change_city": "Toca para cambiar tu ciudad",
-    "notifications": "Avisos"
+    "notifications": "Avisos",
+    "tagline": "Mira quién va a cada fiesta, di si te apuntas y monta el plan con tu gente.",
+    "more": "Más opciones",
+    "view_big": "Vista ampliada",
+    "view_compact": "Vista compacta"
   },
   "plans": {
     "view_dia": "Día",
@@ -1132,7 +1136,19 @@
     "view": "Ver plan",
     "close": "Hecho",
     "done_invited_one": "Avisado 1 amigo",
-    "who_count_one": "1 seleccionado"
+    "who_count_one": "1 seleccionado",
+    "sub2": "Elige hasta 3 sitios y tu grupo vota",
+    "voting_on": "Se vota entre:",
+    "pick_hint": "Elige una fiesta, una discoteca o escríbelo tú.",
+    "free_opt": "Escrito por ti",
+    "max_opts": "Máximo 3 opciones para votar",
+    "tab_events": "Fiestas",
+    "tab_venues": "Discotecas",
+    "tab_manual": "A mano",
+    "search_events": "Busca una fiesta de {{city}}…",
+    "search_venues": "Busca una discoteca…",
+    "no_events": "No hay fiestas que encajen. Prueba en «Discotecas» o escríbelo a mano.",
+    "no_venues": "Ninguna discoteca coincide."
   },
   "friendpicker": {
     "search": "Buscar amigo...",

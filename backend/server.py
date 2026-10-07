@@ -13755,6 +13755,30 @@ async def _plan_option_label(plan: dict, opt_id: str) -> str:
     return "el plan"
 
 
+def _plan_leading_option(plan: dict, participants: list) -> tuple:
+    """(nombre_corto, votos, nº_opciones) de la opción que va ganando la votación.
+    Alimenta la Live Activity: "VA GANANDO · Fitz · 3". Con una sola opción
+    devuelve su nombre y 0 votos (no hay votación, solo asistencia)."""
+    opts = plan.get("opciones") or []
+    if not opts:
+        return (None, 0, 0)
+    def short(o):
+        return (o.get("venue_nombre") or o.get("texto_libre") or "").strip()[:28]
+    if len(opts) == 1:
+        return (short(opts[0]) or None, 0, 1)
+    tally = {}
+    for p in participants:
+        if p.get("intencion") in ("dentro", "voy_si") and p.get("opcion_preferida"):
+            tally[p["opcion_preferida"]] = tally.get(p["opcion_preferida"], 0) + 1
+    if not tally:
+        return (short(opts[0]) or None, 0, len(opts))
+    best_id, votes = max(tally.items(), key=lambda kv: kv[1])
+    for o in opts:
+        if o.get("opt_id") == best_id:
+            return (short(o) or None, votes, len(opts))
+    return (short(opts[0]) or None, 0, len(opts))
+
+
 async def _plan_live_state(plan: dict, participants: list) -> dict:
     """ContentState que viaja a la Live Activity (Dynamic Island) del plan.
     Las claves tienen que coincidir con QuienVaPlanAttributes.ContentState."""
@@ -13771,9 +13795,11 @@ async def _plan_live_state(plan: dict, participants: list) -> dict:
     ganadora = None
     if plan.get("opcion_ganadora"):
         ganadora = await _plan_option_label(plan, plan["opcion_ganadora"])
+    lugar, lugar_votos, num_opts = _plan_leading_option(plan, participants)
     return {"dentro": dentro, "umbral": plan.get("umbral_personas") or 0,
             "cierraEpoch": cierra, "ganadora": ganadora,
-            "estado": plan.get("estado") or "abierto"}
+            "estado": plan.get("estado") or "abierto",
+            "lugar": lugar, "lugarVotos": lugar_votos, "numOpciones": num_opts}
 
 
 async def _plan_push_live(plan: dict, participants: list = None, event: str = "update"):
@@ -17873,8 +17899,11 @@ async def _venue_event_counts() -> dict:
 
 
 @app.get("/api/venues")
-async def list_venues(response: Response, zone: str = None, type: str = None, user: dict = Depends(get_optional_user)):
-    q = {"active": True, "city": city_query_value(user.get("city", "Palma de Mallorca"))}
+async def list_venues(response: Response, zone: str = None, type: str = None,
+                      city: str = None, user: dict = Depends(get_optional_user)):
+    # `city` permite a los invitados (y al selector de planes) pedir el
+    # directorio de otra ciudad sin cambiar la del perfil.
+    q = {"active": True, "city": city_query_value(city or user.get("city", "Palma de Mallorca"))}
     if zone:
         q["zone"] = zone
     if type:

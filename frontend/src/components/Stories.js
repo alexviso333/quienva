@@ -503,14 +503,14 @@ export function StoriesBar() {
 
   return (
     <>
-      <div className="flex overflow-x-auto hide-scrollbar gap-4 px-5 py-2" data-testid="stories-bar">
+      <div className="flex overflow-x-auto hide-scrollbar gap-4 px-5 pt-3.5 pb-4" data-testid="stories-bar">
         {/* Your story — avatar with a + badge (opens camera), tap ring to view yours */}
         <button
           data-testid="add-story-btn"
           onClick={() => setAddOpen(true)}
-          className="flex flex-col items-center gap-1.5 shrink-0"
+          className="flex flex-col items-center gap-2 shrink-0"
         >
-          <div className="relative w-16 h-16 rounded-full border-2 border-dashed border-white/25 flex items-center justify-center bg-white/5">
+          <div className="relative w-[70px] h-[70px] rounded-full border-2 border-dashed border-white/25 flex items-center justify-center bg-white/5">
             <Camera className="w-6 h-6 text-white/70" />
             <span className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-qv-primary border-2 border-[#0A0A0C] flex items-center justify-center">
               <Plus className="w-3.5 h-3.5 text-white" />
@@ -532,11 +532,11 @@ export function StoriesBar() {
             key={g.user_id}
             data-testid={`story-bubble-${g.author.username}`}
             onClick={() => setViewer({ groupIndex: gIndex })}
-            className="flex flex-col items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
+            className="flex flex-col items-center gap-2 shrink-0 active:scale-95 transition-transform"
           >
-            <div className={`relative w-16 h-16 rounded-full p-[2.5px] ${ring}`}>
+            <div className={`relative w-[70px] h-[70px] rounded-full p-[2.5px] ${ring}`}>
               <div className="w-full h-full rounded-full p-[2px] bg-[#0A0A0C]">
-                <AvatarCircle name={g.author.name} picture={g.author.picture} size={54} ring={false} className="w-full h-full" />
+                <AvatarCircle name={g.author.name} picture={g.author.picture} size={60} ring={false} className="w-full h-full" />
               </div>
               {hasMoment && (
                 <span className={`absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full border-2 border-[#0A0A0C] flex items-center justify-center ${isHighlight ? "bg-white/30" : "bg-qv-primary"}`} data-testid={`story-moment-badge-${g.author.username}`}>

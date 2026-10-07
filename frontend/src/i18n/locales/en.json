@@ -97,7 +97,11 @@
     "invited_sub": "Sign up to accept the friendship and see where they're going.",
     "accept": "Accept",
     "change_city": "Tap to change your city",
-    "notifications": "Alerts"
+    "notifications": "Alerts",
+    "tagline": "See who's going to each party, say if you're in and set up the plan with your people.",
+    "more": "More options",
+    "view_big": "Large view",
+    "view_compact": "Compact view"
   },
   "plans": {
     "view_dia": "Day",
@@ -1132,7 +1136,19 @@
     "view": "See plan",
     "close": "Done",
     "done_invited_one": "1 friend notified",
-    "who_count_one": "1 selected"
+    "who_count_one": "1 selected",
+    "sub2": "Pick up to 3 spots and let your group vote",
+    "voting_on": "Voting between:",
+    "pick_hint": "Pick a party, a club, or type it yourself.",
+    "free_opt": "Typed by you",
+    "max_opts": "Max 3 options to vote on",
+    "tab_events": "Parties",
+    "tab_venues": "Clubs",
+    "tab_manual": "By hand",
+    "search_events": "Search a party in {{city}}…",
+    "search_venues": "Search a club…",
+    "no_events": "No parties match. Try “Clubs” or type it by hand.",
+    "no_venues": "No club matches."
   },
   "friendpicker": {
     "search": "Search friend...",
