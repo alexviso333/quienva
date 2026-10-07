@@ -1,0 +1,260 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { motion } from "framer-motion";
+import { Flame, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList, Euro, Eye } from "lucide-react";
+import { AvatarCircle } from "@/components/AvatarCircle";
+import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
+import api, { mediaThumb } from "@/lib/api";
+import { formatPartyDate } from "@/lib/format";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "@/lib/notify";
+import { useAuth } from "@/context/AuthContext";
+import { MovingBadge } from "@/components/MovingNow";
+import { useCreatePlan } from "@/context/CreatePlan";
+
+const SALE_STATE_META = {
+  no_a_la_venta: { labelKey: "compact.sale_next", cls: "bg-white/15 text-white/80", icon: Clock },
+  a_la_venta: { labelKey: "compact.sale_on_sale", cls: "bg-emerald-400/25 text-emerald-200", icon: Ticket },
+  pocas_entradas: { labelKey: "compact.sale_few", cls: "bg-orange-400/30 text-orange-100", icon: Flame },
+  agotado: { labelKey: "compact.sale_sold_out", cls: "bg-white/10 text-white/50", icon: Lock },
+  solo_lista: { labelKey: "compact.sale_list_only", cls: "bg-violet-400/25 text-violet-100", icon: ClipboardList },
+};
+
+function CompactPriceBadge({ event }) {
+  const { t } = useTranslation();
+  const state = event.sale_state || "no_a_la_venta";
+  const meta = SALE_STATE_META[state] || SALE_STATE_META.no_a_la_venta;
+  const Icon = meta.icon;
+  const price = event.current_price;
+  const currency = event.currency || "EUR";
+  const symbol = currency === "EUR" ? "€" : currency;
+  if (!price && state === "no_a_la_venta") return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full backdrop-blur-sm ${meta.cls}`}
+    >
+      <Icon className="w-2.5 h-2.5" />
+      {price ? `${Math.round(price)}${symbol}` : ""}
+      {price && state !== "no_a_la_venta" ? " · " : ""}
+      {t(meta.labelKey)}
+    </span>
+  );
+}
+
+/**
+ * Compact tile used in horizontal carousels AND in "modo compacto" 2-column grid.
+ * Not the full card — just a teaser. Tapping opens the event detail.
+ */
+export function CompactEventCard({ event, index = 0, width, onVoy }) {
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { open: openCreatePlan } = useCreatePlan();
+  const going = event.friends_going || [];
+  const interested = event.friends_interested || [];
+  const isVoy = event.my_status === "voy";
+  const isInteresa = event.my_status === "me_interesa";
+  const meEntry = user ? { user_id: "me", name: t("compact.you"), picture: user.picture || "" } : null;
+  const previewGoing = isVoy && meEntry ? [meEntry, ...going] : going;
+  const previewInteresa = isInteresa && meEntry ? [meEntry, ...interested] : interested;
+  const previewFriends = [...previewGoing, ...previewInteresa].slice(0, 3);
+  const goingCount = going.length + (isVoy ? 1 : 0);
+  const interestedCount = interested.length + (isInteresa ? 1 : 0);
+  const friendCount = goingCount + interestedCount;
+
+  const qc = useQueryClient();
+  const [following, setFollowing] = useState(!!event.is_following);
+  const followMut = useMutation({
+    mutationFn: async () =>
+      following
+        ? (await api.delete(`/events/${event.id}/follow`)).data
+        : (await api.post(`/events/${event.id}/follow`)).data,
+    onMutate: () => {
+      const prev = following;
+      setFollowing(!prev);
+      return { prev };
+    },
+    onError: (e, v, ctx) => {
+      if (ctx) setFollowing(ctx.prev);
+      toast.error(t("compact.toast_follow_error"));
+    },
+    onSuccess: (d) => toast.success(d.following ? t("compact.toast_follow_on") : t("compact.toast_follow_off")),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["events"] }),
+  });
+  const onBell = (e) => {
+    e.stopPropagation();
+    followMut.mutate();
+  };
+
+  const handleVoy = (e) => {
+    e.stopPropagation();
+    if (onVoy) onVoy(isVoy ? "none" : "voy");
+  };
+
+  const onPlan = (e) => {
+    e.stopPropagation();
+    openCreatePlan(
+      { id: event.id, name: event.name, venue: event.venue, time: event.time,
+        price: event.current_price, image_url: event.image_url, city: event.city },
+      event.city,
+      "event_compact",
+    );
+  };
+
+  return (
+    <motion.div
+      data-testid={`compact-card-${event.id}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => navigate(`/event/${event.id}`)}
+      onKeyDown={(e) => { if (e.key === "Enter") navigate(`/event/${event.id}`); }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.24), ease: "easeOut" }}
+      className="relative rounded-2xl overflow-hidden bg-[#121215] border border-white/10 text-left flex-shrink-0 active:scale-[0.98] transition-transform cursor-pointer"
+      style={width ? { width } : undefined}
+    >
+      <div className="relative aspect-[4/5]">
+        {event.image_url ? (
+          <img src={mediaThumb(event.image_url, 800)} alt={event.name} className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-[#2a0a1a] via-[#121215] to-[#0a1a1f]" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c]/50 to-transparent" />
+
+        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-20">
+          <MovingBadge event={event} size="sm" />
+          {event.is_affiliate && (
+            <span
+              data-testid={`compact-affiliate-${event.id}`}
+              title={t("compact.mylink_title")}
+              className="bg-gradient-to-r from-lime-300 to-green-500 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(132,204,22,0.6)]"
+            >
+              <Euro className="w-2.5 h-2.5" /> {t("compact.mylink")}
+            </span>
+          )}
+          {event.genre && (
+            <span className="qv-glass text-white text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border border-white/15">
+              {event.genre}
+            </span>
+          )}
+          {event.featured && (
+            <span className="bg-gradient-to-r from-yellow-300 to-amber-400 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-[0_0_10px_rgba(253,224,71,0.5)]">
+              <Star className="w-2.5 h-2.5" fill="currentColor" /> {t("compact.top")}
+            </span>
+          )}
+        </div>
+
+        {friendCount > 0 && (
+          <span className="absolute top-2 right-10 bg-qv-primary/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+            <Flame className="w-2.5 h-2.5" />
+            {friendCount}
+          </span>
+        )}
+
+        <button
+          data-testid={`compact-follow-${event.id}`}
+          onClick={onBell}
+          className="absolute top-2 right-2 z-20 h-7 w-7 rounded-full bg-black/50 backdrop-blur-sm border border-white/25 flex items-center justify-center active:scale-90 transition-transform"
+          aria-label={t("compact.notify_me")}
+        >
+          <Bell className={`w-3.5 h-3.5 ${following ? "text-qv-secondary" : "text-white/80"}`} fill={following ? "currentColor" : "none"} />
+        </button>
+
+        {/* Proponer plan: la acción principal del producto también en compacto,
+            junto a la campana y al "Voy". */}
+        <button
+          data-testid={`compact-plan-${event.id}`}
+          onClick={onPlan}
+          className="absolute top-[38px] right-2 z-20 h-7 w-7 rounded-full bg-black/50 backdrop-blur-sm border border-qv-primary/50 flex items-center justify-center active:scale-90 transition-transform"
+          aria-label={t("compact.make_plan", "Proponer plan")}
+        >
+          <ClipboardList className="w-3.5 h-3.5 text-qv-primary" />
+        </button>
+
+        {onVoy && (
+          <button
+            data-testid={`compact-voy-${event.id}`}
+            onClick={handleVoy}
+            className={`absolute bottom-2 right-2 z-20 inline-flex items-center gap-0.5 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide backdrop-blur-sm active:scale-90 transition-colors border ${
+              isVoy
+                ? "bg-qv-primary text-white border-qv-primary"
+                : "bg-black/50 text-white/90 border-white/25"
+            }`}
+            aria-label={isVoy ? t("compact.remove_going") : t("compact.mark_going")}
+          >
+            {isVoy ? <><Check className="w-2.5 h-2.5" /> {t("compact.going")}</> : t("compact.going")}
+          </button>
+        )}
+
+        <div className="absolute bottom-0 w-full p-2.5 z-10">
+          <h3 className="font-display font-bold text-white text-sm leading-tight line-clamp-2">{event.name}</h3>
+          <p className="text-white/60 text-[11px] mt-0.5 truncate">
+            {event.venue} · {formatPartyDate(event.date, event.time)}
+          </p>
+          <div className="mt-1">
+            <CompactPriceBadge event={event} />
+          </div>
+          {!user && event.total_going > 0 ? (
+            <BlurredGoingTeaser count={event.total_going} compact />
+          ) : previewFriends.length > 0 ? (
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <div className="flex -space-x-1.5">
+                {previewFriends.map((f, i) => (
+                  <AvatarCircle key={f.user_id + i} name={f.name} picture={f.picture} size={18} />
+                ))}
+              </div>
+              <span className="text-[10px] text-white/70 font-semibold truncate">
+                {goingCount > 0
+                  ? t("compact.going_count", { count: goingCount })
+                  : t("compact.interested_count", { count: interestedCount })}
+              </span>
+              {(event.view_count ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-white/40 ml-auto shrink-0" data-testid={`compact-views-${event.id}`}>
+                  <Eye className="w-2.5 h-2.5" />
+                  {event.view_count}
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-white/45" data-testid={`compact-aggsocial-${event.id}`}>
+              {(() => {
+                const openPlans = event.open_plans_count || 0;
+                const nights = event.nights_at_venue || 0;
+                const going = event.going_count ?? event.total_going ?? 0;
+                const interested = event.interested_count ?? event.total_interested ?? 0;
+                if (openPlans > 0) {
+                  return (
+                    <span className="text-qv-primary font-semibold">
+                      {t(openPlans === 1 ? "eventcard.open_plans_one" : "eventcard.open_plans_other", { count: openPlans })}
+                    </span>
+                  );
+                }
+                if (going + interested >= 5) {
+                  return (
+                    <span>
+                      <b className="text-white/80">{going}</b> {t("eventcard.count_going", "van")}
+                      <span className="text-white/25"> · </span>
+                      <b className="text-white/70">{interested}</b> {t("eventcard.count_interested", "interesados")}
+                    </span>
+                  );
+                }
+                if (nights > 0) {
+                  return <span>{t("eventcard.nights_at_venue", { count: nights, venue: event.venue })}</span>;
+                }
+                return <span>{t("eventcard.new_this_week")}</span>;
+              })()}
+              {(event.view_count ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-white/35 ml-auto shrink-0">
+                  <Eye className="w-2.5 h-2.5" />
+                  {event.view_count}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
