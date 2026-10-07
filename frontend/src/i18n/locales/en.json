@@ -101,7 +101,8 @@
     "tagline": "See who's going to each party, say if you're in and set up the plan with your people.",
     "more": "More options",
     "view_big": "Large view",
-    "view_compact": "Compact view"
+    "view_compact": "Compact view",
+    "language": "Language"
   },
   "plans": {
     "view_dia": "Day",
@@ -614,6 +615,7 @@
   "eventcard": {
     "starts_in": "Starts in",
     "friends_fomo": "are going and you're not. Gonna miss out?",
+    "views_title": "People who have seen this event",
     "follow_on": "We'll let you know when they're out 🔔",
     "follow_off": "Notifications off",
     "toast_error": "Error",
@@ -790,12 +792,15 @@
   "momentgate": {
     "pill": "Do your Moment",
     "title": "It's THE MOMENT!",
+    "title_wow": "THE MOMENT!",
     "desc_pre": "Take your surprise photo (front and back)",
     "desc_ontime": "now to earn +30 points.",
     "desc_late": "before the night ends.",
     "friends_captured_one": "{{count}} friend has already posted theirs · you'll see theirs once you post yours",
     "friends_captured_other": "{{count}} friends have already posted theirs · you'll see theirs once you post yours",
+    "be_first": "Be the first in your crew tonight 👀",
     "go": "Do my Moment",
+    "go_wow": "DO MY MOMENT NOW!",
     "later": "Not now"
   },
   "report": {
@@ -1098,7 +1103,13 @@
     "vis_invitados": "Invited only",
     "cancel_confirm": "Cancel the plan for everyone?",
     "cancel_no": "No, keep it",
-    "cancel_yes": "Yes, cancel"
+    "cancel_yes": "Yes, cancel",
+    "cta_title": "👋 One thing left: your name",
+    "cta_desc": "Sign up in 10s to see who's going to every party in your city, make your own plans and get a push when this one closes.",
+    "cta_register": "Create account",
+    "cta_login": "I have an account",
+    "guest_hint_title": "Got a ¿Quién va? account?",
+    "guest_hint_sub": "Sign in to see who's going, build plans and get notified when this closes"
   },
   "attendance": {
     "night_last": "last night",

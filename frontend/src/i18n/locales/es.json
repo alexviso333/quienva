@@ -101,7 +101,8 @@
     "tagline": "Mira quién va a cada fiesta, di si te apuntas y monta el plan con tu gente.",
     "more": "Más opciones",
     "view_big": "Vista ampliada",
-    "view_compact": "Vista compacta"
+    "view_compact": "Vista compacta",
+    "language": "Idioma"
   },
   "plans": {
     "view_dia": "Día",
@@ -614,6 +615,7 @@
   "eventcard": {
     "starts_in": "Empieza en",
     "friends_fomo": "van y tú no. ¿Te lo vas a perder?",
+    "views_title": "Personas que han visto este evento",
     "follow_on": "Te avisaremos cuando salgan 🔔",
     "follow_off": "Notificaciones desactivadas",
     "toast_error": "Error",
@@ -790,12 +792,15 @@
   "momentgate": {
     "pill": "Hacer tu Momento",
     "title": "¡Es EL MOMENTO!",
+    "title_wow": "¡EL MOMENTO!",
     "desc_pre": "Haz tu foto sorpresa (delante y detrás)",
     "desc_ontime": "ahora para llevarte +30 puntos.",
     "desc_late": "antes de que acabe la noche.",
     "friends_captured_one": "{{count}} amigo ya ha subido la suya · verás las suyas cuando subas la tuya",
     "friends_captured_other": "{{count}} amigos ya han subido la suya · verás las suyas cuando subas la tuya",
+    "be_first": "Sé el primero de tu grupo esta noche 👀",
     "go": "Hacer mi Momento",
+    "go_wow": "¡HACER MI MOMENTO AHORA!",
     "later": "Ahora no"
   },
   "report": {
@@ -1098,7 +1103,13 @@
     "vis_invitados": "Solo invitados",
     "cancel_confirm": "¿Cancelar el plan para todos?",
     "cancel_no": "No, seguir",
-    "cancel_yes": "Sí, cancelar"
+    "cancel_yes": "Sí, cancelar",
+    "cta_title": "👋 Te queda sabernos tu nombre",
+    "cta_desc": "Regístrate en 10 s y verás quién va a cada fiesta de tu ciudad, podrás montar tus propios planes y te avisaremos al cerrarse este.",
+    "cta_register": "Crear cuenta",
+    "cta_login": "Ya tengo cuenta",
+    "guest_hint_title": "¿Tienes cuenta en ¿Quién va?",
+    "guest_hint_sub": "Entra para ver quién va, montar planes y enterarte cuando cierre este"
   },
   "attendance": {
     "night_last": "anoche",

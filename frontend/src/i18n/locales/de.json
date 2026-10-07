@@ -101,7 +101,8 @@
     "tagline": "Sieh, wer zu welcher Party geht, sag ob du dabei bist und plane mit deinen Leuten.",
     "more": "Mehr Optionen",
     "view_big": "Große Ansicht",
-    "view_compact": "Kompakte Ansicht"
+    "view_compact": "Kompakte Ansicht",
+    "language": "Sprache"
   },
   "plans": {
     "view_dia": "Tag",
@@ -614,6 +615,7 @@
   "eventcard": {
     "starts_in": "Beginnt in",
     "friends_fomo": "gehen hin und du nicht. Willst du das verpassen?",
+    "views_title": "Personen, die dieses Event gesehen haben",
     "follow_on": "Wir sagen dir Bescheid, wenn sie verfügbar sind 🔔",
     "follow_off": "Benachrichtigungen aus",
     "toast_error": "Fehler",
@@ -790,12 +792,15 @@
   "momentgate": {
     "pill": "Deinen Moment machen",
     "title": "Es ist DER MOMENT!",
+    "title_wow": "DER MOMENT!",
     "desc_pre": "Mach dein Überraschungsfoto (vorne und hinten)",
     "desc_ontime": "jetzt, um +30 Punkte zu bekommen.",
     "desc_late": "bevor die Nacht endet.",
     "friends_captured_one": "{{count}} Freund hat seins schon gepostet · du siehst ihres, sobald du deins postest",
     "friends_captured_other": "{{count}} Freunde haben ihres schon gepostet · du siehst ihres, sobald du deins postest",
+    "be_first": "Sei heute Nacht die erste Person deiner Crew 👀",
     "go": "Meinen Moment machen",
+    "go_wow": "MEINEN MOMENT JETZT MACHEN!",
     "later": "Jetzt nicht"
   },
   "report": {
@@ -1098,7 +1103,13 @@
     "vis_invitados": "Nur Eingeladene",
     "cancel_confirm": "Plan für alle abbrechen?",
     "cancel_no": "Nein, behalten",
-    "cancel_yes": "Ja, abbrechen"
+    "cancel_yes": "Ja, abbrechen",
+    "cta_title": "👋 Nur noch dein Name fehlt",
+    "cta_desc": "In 10 Sek. registrieren: sieh, wer zu jeder Party in deiner Stadt geht, erstelle eigene Pläne und erhalte eine Push-Mitteilung, wenn dieser Plan schließt.",
+    "cta_register": "Konto erstellen",
+    "cta_login": "Ich habe schon ein Konto",
+    "guest_hint_title": "Hast du ein ¿Quién va?-Konto?",
+    "guest_hint_sub": "Melde dich an, um zu sehen wer geht, eigene Pläne zu erstellen und benachrichtigt zu werden"
   },
   "attendance": {
     "night_last": "letzte Nacht",
