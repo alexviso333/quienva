@@ -351,6 +351,12 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
                         <input
                           value={pickQ}
                           onChange={(e) => setPickQ(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter") return;
+                            e.preventDefault();
+                            const top = tab === "eventos" ? filteredEvents[0] : filteredVenues[0];
+                            if (top) (tab === "eventos" ? addEvent : addVenue)(top);
+                          }}
                           data-testid="create-plan-pick-search"
                           placeholder={tab === "eventos"
                             ? t("createplan.search_events", "Busca una fiesta de {{city}}…", { city: effCity.split(",")[0] })

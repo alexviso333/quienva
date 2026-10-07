@@ -850,3 +850,55 @@ Estado: Verificado — backend 6/6 y frontend 4/4 (testing agent iteration_10). 
 - Capacitor 7: plugin pasa a CAPBridgedPlugin + MainViewController (registerPluginInstance); Codemagic cambia Main.storyboard. Eliminado el .m.
 - Pendiente usuario: APNS_TEAM_ID en Render (+ APNS_KEY_ID/APNS_PRIVATE_KEY), App ID me.quienva.app.QuienVaWidgets, subir APP_VERSION.
 - Dashboards PostHog: aplazado por el usuario.
+
+## 2026-06 (fork) — Rediseño Live Activity + selector de fiestas/discotecas + Feed más limpio
+Petición del usuario (ES): "el diseño [de la isla dinámica] es muy pobre, quiero que hagas un pedazo
+de diseño. Y haz tambien que dentro de donde le das a montar tu el plan tmb te de opcion de elegir
+uno de los eventos o una de las discotecas... Tmb me da la impresion que en movil lo de miercoles,
+donde esta la noche y las historias estan como muy comprimidas". Elecciones confirmadas: añadir SOLO
+el sitio que va ganando a la isla (no los "fuera/pendientes"), selector con 3 pestañas, y feed "un
+pelín más aireado" pero con MENOS opciones (revisado como usuario nuevo).
+
+### 1. Live Activity rediseñada (nativo iOS, se valida en el build de Codemagic)
+- `frontend/native/LiveActivity/QuienVaWidgets.swift`: reescrito. Glow rosa/cian de fondo (en
+  `.background`, no afecta al alto), contador gigante en degradado neón, medidor de aforo que es
+  **puntos** si el umbral es ≤ 8 y barra con glow si es mayor, chip de cuenta atrás con icono,
+  chip "VA GANANDO · <sitio> · <votos>", línea de estado ("Faltan 2 para cerrarlo" / "¡Aforo
+  completo!") y estado cerrado con llama. Isla expandida: contador + CIERRA + título/sitio ganador
+  + medidor + "N opciones". Compacta: bolt + 4/6 y cuenta atrás. Minimal: nº dentro.
+- `QuienVaPlanAttributes.swift`: 3 campos NUEVOS y OPCIONALES en ContentState — `lugar`,
+  `lugarVotos`, `numOpciones` (opcionales a propósito: un payload viejo sigue decodificando).
+- `QuienVaLiveActivityPlugin.swift`: pasa los 3 campos nuevos en start y update.
+- `backend/server.py`: nuevo `_plan_leading_option(plan, participants)` -> (nombre, votos, nº
+  opciones) con desempate por orden de definición; `_plan_live_state` ya manda lugar/lugarVotos/
+  numOpciones. Verificado en python (incluye empates).
+- `frontend/src/lib/liveActivity.js`: `leadingOf(plan)` replica el cálculo en cliente para que la
+  isla arranque ya con el sitio ganador sin esperar al push.
+- OJO: en el pod no hay Xcode/swiftc, así que el Swift NO está compilado — se valida en Codemagic.
+
+### 2. "Monta tu plan": elegir fiesta / discoteca / a mano
+- `frontend/src/components/CreatePlanSheet.js` reescrito: estado único `opts` (máx 3) y selector
+  con pestañas `create-plan-tab-eventos|locales|manual`, buscador (`create-plan-pick-search`,
+  Enter añade el primer resultado), lista con foto (`create-plan-pick-list`), opciones elegidas en
+  `create-plan-chosen` con contador n/3 y borrado; el selector desaparece al llegar a 3. El evento
+  preseleccionado (desde la ficha de evento) entra como primera opción.
+- `backend/server.py`: `GET /api/venues` acepta `city` opcional (antes solo la ciudad del perfil).
+
+### 3. Feed menos abrumador (usuario nuevo) y más aire
+- `pages/Feed.js`: los 4 iconos del header pasan a **un solo menú** `feed-more-btn` ->
+  `feed-more-menu` (Locales, Vista compacta, Idioma); quedan visibles solo la ciudad y la campana.
+  Fuera los chips de salto de sección (`feed-section-chips`, duplicaban los títulos). Nueva frase
+  única que explica la app (`feed-tagline`). Más margen entre hora, titular e historias.
+- `components/Stories.js`: burbujas de 64 -> 70 px y más padding vertical.
+- i18n: nuevas claves `createplan.*` (sub2, voting_on, pick_hint, tabs, buscadores, vacíos) y
+  `feed.*` (tagline, more, view_big, view_compact) en es/en/de.
+
+### Testing
+- `test_reports/iteration_18.json`: backend 7/7 y frontend 11/11 (390x844). Flujo e2e verificado:
+  evento + discoteca + opción a mano -> plan creado -> votación en /plan/{slug}.
+- `backend/tests/test_iteration18_create_plan_picker.py` (creado por el testing agent).
+
+### Pendiente
+- **Usuario**: subir a GitHub, bumpear `APP_VERSION` en `codemagic.yaml` y lanzar build para ver
+  la isla nueva en TestFlight (el Swift no se puede compilar en el pod).
+- Dashboards/funnels de PostHog (aplazado por el usuario).

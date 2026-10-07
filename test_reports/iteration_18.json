@@ -1,0 +1,44 @@
+{
+  "summary": "Full backend + frontend verification of the CreatePlanSheet redesign (eventos/locales/manual picker) and the Feed overflow menu. All 7 backend tests pass (venues optional city param works for logged-in user + guest; events city param works; POST /api/plans with 3 mixed opciones -> slug + opt_ids; friend vote via /respond is reflected). All 11 frontend scenarios pass on mobile 390x844 against the public preview URL.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verifications": {
+    "feed_section_chips_absent": true,
+    "feed_tagline_present": true,
+    "feed_more_menu_contains_locales_compact_lang": true,
+    "create_plan_picker_three_tabs": true,
+    "submit_disabled_when_no_option": true,
+    "event_add_adds_opt0": true,
+    "venue_add_adds_opt1": true,
+    "manual_enter_adds_opt2": true,
+    "picker_hidden_at_3_of_3": true,
+    "rm_restores_picker": true,
+    "manual_add_btn_works": true,
+    "share_step_appears": true,
+    "created_plan_url": "/plan/madrid-30f1 (3 opciones listed, I'm in / voting UI visible)",
+    "preset_event_prefills_opt0": true,
+    "preset_counter_1_of_3_and_picker_visible": true,
+    "backend_venues_city_param_madrid": "returns Madrid venues even when user city is different",
+    "backend_create_plan_mixed_3_opts": "slug returned, 3 opt_ids assigned",
+    "backend_friend_vote_reflected_in_participants": true,
+    "pytest_file": "/app/backend/tests/test_iteration18_create_plan_picker.py (7/7 PASSED)"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration18_create_plan_picker.py",
+    "/app/test_reports/pytest/iter18.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CreatePlanSheet submit maps non-event options to {texto_libre, venue_nombre} with the SAME value — fine for backend, but when the chosen option is a real venue (kind='venue') it still goes as texto_libre; consider adding a venue_id (if the backend supports it) so the live state 'lugar' can carry the canonical venue name/photo.",
+    "_plan_leading_option breaks ties by dict iteration order of max(); for deterministic UX, prefer tie-breaking by option definition order (plan['opciones'] index).",
+    "Feed overflow menu closes only via its invisible fullscreen overlay or route-nav; it does NOT close on Escape. Minor a11y nit — add key handler for keyboard users.",
+    "CreatePlanSheet: pressing Enter in the Discotecas/Fiestas search input currently does nothing. Consider auto-picking the top filtered result on Enter for parity with the 'A mano' tab."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration18_create_plan_picker.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (11/11 UI scenarios)"},
+  "test_credentials": "test@quienva.app / Test1234! and amigo@quienva.app / Test1234! (login response key is 'token', not 'access_token').",
+  "seed_data_creation": "Created a plan slug=madrid-30f1 titled 'TEST_iter18 picker plan' via UI, plus one via API test (also TEST_iter18). Both can be safely left — pytest attempts best-effort DELETE at teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login endpoint returns {user, token} (not access_token). The event-detail entry point to CreatePlanSheet is the 'Propose to my group' / 'Montar plan' button in EventDetail — there is no data-testid on it, so page.get_by_text works. Preset event prefills opt-0 with venue name (e.g., 'Goya Social Club') not event name. plan-fab works on all logged-in feed views at 390px. Live Activity Swift redesign is iOS-native and NOT testable here per request."
+}

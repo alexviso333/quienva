@@ -13772,7 +13772,9 @@ def _plan_leading_option(plan: dict, participants: list) -> tuple:
             tally[p["opcion_preferida"]] = tally.get(p["opcion_preferida"], 0) + 1
     if not tally:
         return (short(opts[0]) or None, 0, len(opts))
-    best_id, votes = max(tally.items(), key=lambda kv: kv[1])
+    # Empate -> gana la que se definió antes (orden del plan), no el del dict.
+    order = {o.get("opt_id"): i for i, o in enumerate(opts)}
+    best_id, votes = min(tally.items(), key=lambda kv: (-kv[1], order.get(kv[0], 99)))
     for o in opts:
         if o.get("opt_id") == best_id:
             return (short(o) or None, votes, len(opts))
