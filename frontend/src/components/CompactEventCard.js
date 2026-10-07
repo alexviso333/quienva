@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
-import { Flame, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList, Euro } from "lucide-react";
+import { Flame, Ticket, Lock, Clock, Star, Check, Bell, ClipboardList, Euro, Eye } from "lucide-react";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import api, { mediaThumb } from "@/lib/api";
@@ -210,6 +210,12 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
                   ? t("compact.going_count", { count: goingCount })
                   : t("compact.interested_count", { count: interestedCount })}
               </span>
+              {(event.view_count ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-white/40 ml-auto shrink-0" data-testid={`compact-views-${event.id}`}>
+                  <Eye className="w-2.5 h-2.5" />
+                  {event.view_count}
+                </span>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-1 mt-1.5 text-[10px] text-white/45" data-testid={`compact-aggsocial-${event.id}`}>
@@ -239,6 +245,12 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
                 }
                 return <span>{t("eventcard.new_this_week")}</span>;
               })()}
+              {(event.view_count ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-white/35 ml-auto shrink-0">
+                  <Eye className="w-2.5 h-2.5" />
+                  {event.view_count}
+                </span>
+              )}
             </div>
           )}
         </div>

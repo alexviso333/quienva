@@ -351,12 +351,35 @@ export function EventCard({ event, index = 0, onSetStatus, pending, highlight, c
         </div>
 
         {/* Crowd counts — separated intent signal ("17 van · 42 interesados"),
-            never summed. Shown whenever there is any real activity. */}
-        {!isPast && (((event.going_count ?? event.total_going ?? 0) > 0) || ((event.interested_count ?? event.total_interested ?? 0) > 0)) && (
-          <p className="text-[11px] text-white/45 -mt-1 leading-tight" data-testid={`event-counts-${event.id}`}>
-            <b className="text-white/80">{event.going_count ?? event.total_going ?? 0}</b> {t("eventcard.count_going", "van")}
-            <span className="text-white/25"> · </span>
-            <b className="text-white/70">{event.interested_count ?? event.total_interested ?? 0}</b> {t("eventcard.count_interested", "interesados")}
+            never summed. Shown whenever there is any real activity.
+            Append also the public view count (👁) when ≥ 20 so there's gentle
+            social proof on new events without screaming "1 persona lo vio". */}
+        {!isPast && (((event.going_count ?? event.total_going ?? 0) > 0) || ((event.interested_count ?? event.total_interested ?? 0) > 0) || (event.view_count ?? 0) > 0) && (
+          <p className="text-[11px] text-white/45 -mt-1 leading-tight flex items-center flex-wrap gap-x-1" data-testid={`event-counts-${event.id}`}>
+            {((event.going_count ?? event.total_going ?? 0) > 0) && (
+              <>
+                <b className="text-white/80">{event.going_count ?? event.total_going ?? 0}</b> {t("eventcard.count_going", "van")}
+              </>
+            )}
+            {((event.going_count ?? event.total_going ?? 0) > 0) && ((event.interested_count ?? event.total_interested ?? 0) > 0) && (
+              <span className="text-white/25"> · </span>
+            )}
+            {((event.interested_count ?? event.total_interested ?? 0) > 0) && (
+              <>
+                <b className="text-white/70">{event.interested_count ?? event.total_interested ?? 0}</b> {t("eventcard.count_interested", "interesados")}
+              </>
+            )}
+            {(event.view_count ?? 0) > 0 && (
+              <span
+                data-testid={`event-views-${event.id}`}
+                className="inline-flex items-center gap-1 text-white/40"
+                title={t("eventcard.views_title", "Personas que han visto este evento")}
+              >
+                {((event.going_count ?? event.total_going ?? 0) > 0 || (event.interested_count ?? event.total_interested ?? 0) > 0) ? <span className="text-white/25"> · </span> : null}
+                <Eye className="w-3 h-3" />
+                <b className="text-white/60">{event.view_count}</b>
+              </span>
+            )}
           </p>
         )}
 

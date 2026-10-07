@@ -33,39 +33,48 @@ export default function MomentFeedBanner() {
     <div className="px-4 pt-1 pb-3" data-testid="moment-feed-banner">
       <button
         onClick={() => navigate("/momento")}
-        className="relative w-full overflow-hidden rounded-3xl border-2 border-yellow-300/60 bg-gradient-to-br from-[#241d05] via-[#141207] to-black p-5 text-left active:scale-[0.99] transition-transform shadow-[0_0_40px_-8px_rgba(253,224,71,0.45)]"
+        className="relative w-full overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-br from-[#2a0916] via-[#0f0820] to-black p-5 text-left active:scale-[0.99] transition-transform shadow-[0_20px_55px_-10px_rgba(236,72,153,0.55)]"
       >
-        {/* glow pulse */}
-        <span className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full bg-yellow-300/20 blur-2xl animate-pulse" />
+        {/* 3 glows en contratiempo */}
+        <span className="pointer-events-none absolute -top-14 -left-10 w-56 h-56 rounded-full bg-pink-500/35 blur-3xl animate-pulse" />
+        <span className="pointer-events-none absolute -bottom-16 -right-10 w-64 h-64 rounded-full bg-cyan-400/25 blur-[90px] animate-pulse" style={{ animationDelay: "500ms" }} />
+        <span className="pointer-events-none absolute top-1/2 left-1/3 w-32 h-32 rounded-full bg-yellow-300/25 blur-2xl animate-pulse" style={{ animationDelay: "900ms" }} />
+
         <div className="relative flex items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-yellow-300/20 flex items-center justify-center shrink-0 animate-pulse">
-            <Zap className="w-8 h-8 text-yellow-300" />
+          <div className="relative w-16 h-16 shrink-0">
+            <span className="absolute inset-0 rounded-2xl bg-yellow-300/40 blur-md animate-ping" />
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-yellow-300 via-orange-400 to-pink-500 flex items-center justify-center shadow-lg shadow-pink-500/40">
+              <Zap className="w-9 h-9 text-black" strokeWidth={2.5} />
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-black text-yellow-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-yellow-300 animate-ping" />
-              {t("momentgate.pill")}
+          <div className="min-w-0 flex-1">
+            <p className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] font-black text-pink-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-ping" />
+              EN VIVO · {t("momentgate.pill", "Hacer tu Momento")}
             </p>
-            <h2 className="font-display text-2xl font-black text-white leading-none mt-1">
-              {t("momentgate.title")}
+            <h2
+              className="font-display text-2xl font-black leading-none mt-1 bg-gradient-to-r from-yellow-300 via-pink-400 to-cyan-300 bg-clip-text text-transparent"
+              style={{ letterSpacing: "-0.02em" }}
+            >
+              {t("momentgate.title_wow", "¡EL MOMENTO!")}
             </h2>
             {moment.event_name && (
-              <p className="text-yellow-200/90 text-sm font-semibold truncate mt-0.5">{moment.event_name}</p>
+              <p className="text-white/85 text-xs font-semibold truncate mt-1">📍 {moment.event_name}</p>
             )}
           </div>
         </div>
 
         {moment.friends_captured > 0 && (
-          <div className="relative mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-            <Users className="w-3.5 h-3.5 text-qv-secondary" />
-            <span className="text-white/80 text-xs font-semibold">
+          <div className="relative mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 border border-white/15">
+            <Users className="w-3.5 h-3.5 text-cyan-300" />
+            <span className="text-white/90 text-xs font-semibold">
               {t("momentgate.friends_captured", { count: moment.friends_captured })}
             </span>
           </div>
         )}
 
-        <div className="relative mt-4 w-full h-12 rounded-2xl bg-gradient-to-r from-yellow-300 to-amber-400 text-black font-display font-black text-sm flex items-center justify-center gap-2">
-          <Camera className="w-5 h-5" /> {t("momentgate.go")}
+        <div className="relative mt-4 w-full h-12 rounded-2xl bg-gradient-to-r from-pink-500 via-orange-400 to-yellow-300 text-black font-display font-black text-sm flex items-center justify-center gap-2 shadow-[0_10px_28px_-8px_rgba(236,72,153,0.6)]">
+          <Camera className="w-5 h-5" strokeWidth={2.5} /> {t("momentgate.go_wow", "¡HACER MI MOMENTO AHORA!")}
         </div>
       </button>
     </div>
