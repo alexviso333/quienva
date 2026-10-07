@@ -112,6 +112,13 @@ export default function Login() {
 
   const goAfterAuth = async () => {
     await claimPendingInvites();
+    // Honour explicit ?return=... (e.g. coming from a plan view). SPA-safe:
+    // only allow in-app paths starting with "/".
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const r = sp.get("return");
+      if (r && r.startsWith("/") && !r.startsWith("//")) { navigate(r); return; }
+    } catch (e) { /* ignore */ }
     const returnPath = consumeReturnEvent();
     if (returnPath) { navigate(returnPath); return; }
     const onboarded = localStorage.getItem("qv_onboarded") === "1";

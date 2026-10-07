@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
@@ -31,6 +31,7 @@ export default function PlanView() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
 
   const [respondFor, setRespondFor] = useState(null); // solo para "cambiar": muestra la barra otra vez
@@ -305,24 +306,48 @@ export default function PlanView() {
             )}
 
             {/* Pull the voter into the rest of the app (this is the app, not a
-                separate page): the parties of their city, one tap away. */}
-            <button
-              type="button"
-              data-testid="planview-explore"
-              onClick={() => navigate("/feed")}
-              className="mt-4 w-full flex items-center gap-3 rounded-2xl border border-qv-secondary/30 bg-gradient-to-r from-qv-secondary/10 to-qv-primary/10 p-3.5 text-left active:scale-[0.99]"
-            >
-              <span className="w-9 h-9 rounded-xl bg-qv-secondary/15 flex items-center justify-center shrink-0">
-                <PartyPopper className="w-4.5 h-4.5 text-qv-secondary" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-white">
-                  {t("planview.explore_title", "Mira qué fiestas hay en {{city}}", { city: cityLabel || "tu ciudad" })}
+                separate page): the parties of their city, one tap away.
+                Guests get a register-CTA variant instead, to convert without
+                blocking the one-tap voting flow. */}
+            {!user && !isClosed ? (
+              <button
+                type="button"
+                data-testid="planview-register-hint"
+                onClick={() => navigate(`/login?return=${encodeURIComponent(location.pathname)}`)}
+                className="mt-4 w-full flex items-center gap-3 rounded-2xl border border-qv-primary/35 bg-gradient-to-r from-qv-primary/15 to-qv-secondary/10 p-3.5 text-left active:scale-[0.99]"
+              >
+                <span className="w-9 h-9 rounded-xl bg-qv-primary/15 flex items-center justify-center shrink-0">
+                  <UserPlus className="w-4.5 h-4.5 text-qv-primary" />
                 </span>
-                <span className="block text-xs text-white/55">{t("planview.explore_sub", "Horarios, precios y quién va")}</span>
-              </span>
-              <Home className="w-4 h-4 text-white/30 shrink-0" />
-            </button>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-white">
+                    {t("planview.guest_hint_title", "¿Tienes cuenta en ¿Quién va?")}
+                  </span>
+                  <span className="block text-xs text-white/60">
+                    {t("planview.guest_hint_sub", "Entra para ver quién va, montar planes y enterarte cuando cierre este")}
+                  </span>
+                </span>
+                <ArrowLeft className="w-4 h-4 text-white/30 shrink-0 rotate-180" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-testid="planview-explore"
+                onClick={() => navigate("/feed")}
+                className="mt-4 w-full flex items-center gap-3 rounded-2xl border border-qv-secondary/30 bg-gradient-to-r from-qv-secondary/10 to-qv-primary/10 p-3.5 text-left active:scale-[0.99]"
+              >
+                <span className="w-9 h-9 rounded-xl bg-qv-secondary/15 flex items-center justify-center shrink-0">
+                  <PartyPopper className="w-4.5 h-4.5 text-qv-secondary" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-white">
+                    {t("planview.explore_title", "Mira qué fiestas hay en {{city}}", { city: cityLabel || "tu ciudad" })}
+                  </span>
+                  <span className="block text-xs text-white/55">{t("planview.explore_sub", "Horarios, precios y quién va")}</span>
+                </span>
+                <Home className="w-4 h-4 text-white/30 shrink-0" />
+              </button>
+            )}
 
             {/* Your response status */}
             {plan.mine?.intencion && !isClosed ? (
@@ -339,6 +364,39 @@ export default function PlanView() {
                   ? t("planview.notify_push", "Te avisamos con una notificación en cuanto el plan se cierre.")
                   : t("planview.notify_signup", "¿Quieres que te avisemos al cerrarse el plan? Crea tu cuenta: tarda 10 segundos.")}
               </p>
+            ) : null}
+
+            {/* Non-registered CTA — prominent but not pushy. Only after they
+                voted (so we don't block the "respond in one tap" flow), and
+                only when there's no user session. */}
+            {!user && plan.mine?.intencion && !isClosed ? (
+              <div
+                data-testid="planview-register-cta"
+                className="mt-3 rounded-2xl border border-qv-primary/40 bg-gradient-to-br from-qv-primary/10 via-qv-secondary/5 to-transparent p-3.5"
+              >
+                <p className="text-sm font-bold text-white leading-tight">
+                  {t("planview.cta_title", "👋 Te queda sabernos tu nombre")}
+                </p>
+                <p className="text-xs text-white/60 mt-1 leading-snug">
+                  {t("planview.cta_desc", "Regístrate en 10 s y verás quién va a cada fiesta de tu ciudad, podrás montar tus propios planes y te avisaremos al cerrarse este.")}
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => navigate(`/login?return=${encodeURIComponent(location.pathname)}`)}
+                    data-testid="planview-cta-register"
+                    className="h-11 rounded-xl bg-gradient-to-r from-qv-primary to-[#ff3d7f] text-white text-sm font-black active:scale-[0.98] shadow-[0_10px_25px_-8px_rgba(255,0,85,0.55)]"
+                  >
+                    {t("planview.cta_register", "Crear cuenta")}
+                  </button>
+                  <button
+                    onClick={() => navigate(`/login?return=${encodeURIComponent(location.pathname)}`)}
+                    data-testid="planview-cta-login"
+                    className="h-11 rounded-xl bg-white/[0.08] border border-white/15 text-white text-sm font-bold active:scale-[0.98]"
+                  >
+                    {t("planview.cta_login", "Ya tengo cuenta")}
+                  </button>
+                </div>
+              </div>
             ) : null}
 
             {/* Te han invitado desde la app y aún no has contestado */}

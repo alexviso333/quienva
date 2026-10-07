@@ -15,7 +15,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import CitySelectorSheet from "@/components/CitySelectorSheet";
 import MyOpenPlans from "@/components/MyOpenPlans";
 import { captureEvent } from "@/analytics/posthog";
-import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3, Bell, MoreHorizontal } from "lucide-react";
+import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3, Bell, MoreHorizontal, Globe } from "lucide-react";
 import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 
@@ -528,8 +528,15 @@ export default function Feed() {
                         {compact ? <Rows3 className="w-4 h-4 text-qv-secondary" /> : <LayoutGrid className="w-4 h-4 text-qv-secondary" />}
                         {compact ? t("feed.view_big", "Vista ampliada") : t("feed.view_compact", "Vista compacta")}
                       </button>
-                      <div className="flex items-center gap-3 px-3 py-1.5">
-                        <LanguageSwitcher compact />
+                      {/* Idioma: ahora como fila consistente (icono + texto +
+                          selector ES/EN/DE). Antes había un botón-globo redondo
+                          sin texto, que parecía otro icono grande fuera de sitio. */}
+                      <div className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-white/85">
+                        <span className="flex items-center gap-3">
+                          <Globe className="w-4 h-4 text-qv-secondary" />
+                          {t("feed.language", "Idioma")}
+                        </span>
+                        <LanguageSwitcher />
                       </div>
                     </div>
                   </>

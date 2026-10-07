@@ -576,6 +576,15 @@ export default function Admin() {
               💶 Dinero
             </button>
           </div>
+          <div className="flex gap-2 mt-2">
+            <button
+              data-testid="admin-metrics-btn"
+              onClick={() => navigate("/admin/metricas")}
+              className="flex-1 h-11 rounded-2xl bg-white/[0.06] border border-white/20 text-white font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+            >
+              <BarChart3 className="w-4 h-4 text-qv-secondary" /> Métricas totales
+            </button>
+          </div>
         </header>
 
         {/* Ajuste: avisos de nuevos registros */}
