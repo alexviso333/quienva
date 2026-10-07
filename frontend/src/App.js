@@ -31,6 +31,7 @@ const Profile = lazy(() => import("@/pages/Profile"));
 const Admin = lazy(() => import("@/pages/Admin"));
 const AdminMoney = lazy(() => import("@/pages/AdminMoney"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
+const AdminMetrics = lazy(() => import("@/pages/AdminMetrics"));
 const EventDetail = lazy(() => import("@/pages/EventDetail"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 const UserProfile = lazy(() => import("@/pages/UserProfile"));
@@ -186,6 +187,7 @@ function AppRouter() {
         <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
         <Route path="/admin/dinero" element={<ProtectedRoute adminOnly><AdminMoney /></ProtectedRoute>} />
         <Route path="/admin/dashboard" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+        <Route path="/admin/metricas" element={<ProtectedRoute adminOnly><AdminMetrics /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/feed" replace />} />
         <Route path="*" element={<Navigate to="/feed" replace />} />
       </Routes>
