@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api, { API } from "@/lib/api";
-import { ArrowLeft, Loader2, Eye, PartyPopper, Star, MousePointerClick, Ticket, Users, UserPlus, Clock, Globe, BarChart3, Download, TrendingUp, Zap, LineChart } from "lucide-react";
+import { ArrowLeft, Loader2, Eye, PartyPopper, Star, MousePointerClick, Ticket, Users, UserPlus, Clock, Globe, BarChart3, Download, TrendingUp, Zap, LineChart, Sparkles } from "lucide-react";
 
 const WINDOWS = [7, 14, 30, 60, 90];
 
@@ -171,6 +171,40 @@ export default function AdminMetrics() {
             <Download className="w-3.5 h-3.5" /> CSV
           </button>
         </header>
+
+        {/* Preview "El Momento" — admin-only visual test */}
+        <div className="px-5 mt-2">
+          <button
+            onClick={async () => {
+              try {
+                const r = await api.post("/admin/moment/test");
+                const d = r?.data || {};
+                const parts = [
+                  `prompt_id: ${d.prompt_id || "?"}`,
+                  `APNs: ${d.apns_configured ? "ON" : "OFF"}`,
+                  `tokens Live Activity: ${d.live_activity_tokens_admin ?? 0}`,
+                ];
+                alert(
+                  "✅ Momento REAL disparado:\n\n" + parts.join("\n") +
+                  "\n\n" + (d.hint || "") +
+                  "\n\nAhora abre la app en tu iPhone (TestFlight)."
+                );
+                // Navegar al feed para ver el modal WOW aparecer con datos reales
+                navigate("/feed");
+              } catch (e) {
+                alert("❌ Error disparando el Momento: " + (e?.response?.data?.detail || e.message));
+              }
+            }}
+            data-testid="metrics-preview-moment"
+            className="w-full h-12 rounded-2xl bg-gradient-to-r from-pink-500 via-orange-400 to-yellow-300 text-black font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] shadow-[0_10px_30px_-10px_rgba(236,72,153,0.6)]"
+          >
+            <Sparkles className="w-4 h-4" strokeWidth={2.5} />
+            Disparar "El Momento" REAL (solo yo)
+          </button>
+          <p className="text-[10px] text-white/40 text-center mt-1.5">
+            Flujo completo: push APNs + Live Activity + modal in-app. Solo tu usuario lo recibe.
+          </p>
+        </div>
 
         {/* Ventana temporal */}
         <div className="px-5">
