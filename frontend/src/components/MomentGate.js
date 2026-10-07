@@ -22,15 +22,40 @@ export default function MomentGate() {
   const [dismissed, setDismissed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  const { data: moment } = useQuery({
+  // --- Admin preview mode: ?preview_moment=1 ----------------------------
+  // Renders the WOW UI with mock data so the admin can see exactly how it
+  // looks without having to wait for an actual Moment to fire. Only works
+  // when the current user is admin.
+  const previewOn = user?.role === "admin" && new URLSearchParams(location.search).get("preview_moment") === "1";
+  const previewData = useMemo(() => {
+    if (!previewOn) return null;
+    const inSec = (s) => new Date(Date.now() + s * 1000).toISOString();
+    return {
+      active: true,
+      event_id: "preview",
+      event_name: "Fiesta de Prueba (Preview)",
+      venue: "QuienVa HQ",
+      on_time: true,
+      friends_captured: 3,
+      capturing_now: 12,
+      prompt: {
+        id: "preview-prompt",
+        on_time_deadline: inSec(180), // 3-min countdown
+        expires_at: inSec(60 * 60),
+      },
+    };
+  }, [previewOn]);
+
+  const { data: realMoment } = useQuery({
     queryKey: ["active-moment"],
     queryFn: async () => (await api.get("/me/active-moment")).data,
-    enabled: !!user && !loading,
+    enabled: !!user && !loading && !previewOn,
     refetchInterval: 30000,
     staleTime: 10000,
     retry: false,
   });
 
+  const moment = previewOn ? previewData : realMoment;
   const promptId = moment?.prompt?.id;
   const deadline = moment?.prompt?.on_time_deadline;
 
@@ -53,12 +78,16 @@ export default function MomentGate() {
   const onLogin = location.pathname === "/login" || location.pathname.startsWith("/auth");
 
   // Don't stack modals: wait until the push-permission step has been resolved.
-  const pushResolved = user ? localStorage.getItem(`qv_push_granted_${user.user_id}`) === "1" : false;
+  // Preview mode bypasses this gate so admins can inspect the UI anytime.
+  const pushResolved = previewOn
+    ? true
+    : (user ? localStorage.getItem(`qv_push_granted_${user.user_id}`) === "1" : false);
 
   // Only *block* during real party hours (20:00–06:00 local). Otherwise the
   // small pill is enough — no full-screen interruption in the middle of the day.
+  // Preview mode forces the night-window behaviour so the WOW modal always renders.
   const hourNow = new Date().getHours();
-  const isNightWindow = hourNow >= 20 || hourNow < 6;
+  const isNightWindow = previewOn ? true : (hourNow >= 20 || hourNow < 6);
 
   // Countdown in seconds remaining of the on_time window (+30 points reward).
   const secondsLeft = useMemo(() => {
@@ -74,8 +103,26 @@ export default function MomentGate() {
 
   if (!user || !moment?.active || onMomentoPage || onLogin || !pushResolved) return null;
 
-  const go = () => navigate("/momento");
+  const stripPreviewParam = () => {
+    const sp = new URLSearchParams(location.search);
+    sp.delete("preview_moment");
+    const qs = sp.toString();
+    navigate(location.pathname + (qs ? `?${qs}` : ""), { replace: true });
+  };
+
+  const go = () => {
+    if (previewOn) {
+      stripPreviewParam();
+      return;
+    }
+    navigate("/momento");
+  };
   const dismiss = () => {
+    if (previewOn) {
+      stripPreviewParam();
+      setDismissed(true);
+      return;
+    }
     if (promptId) sessionStorage.setItem(`qv_moment_dismissed_${promptId}`, "1");
     setDismissed(true);
   };
