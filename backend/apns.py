@@ -117,7 +117,6 @@ async def send_apns(device_token: str, title: str, body: str, data: dict | None 
         return "err"
 
 
-
 async def send_live_activity(activity_token: str, content_state: dict, event: str = "update",
                              stale_seconds: int | None = None, dismissal_seconds: int | None = None,
                              alert: dict | None = None) -> str:
@@ -174,4 +173,63 @@ async def send_live_activity(activity_token: str, content_state: dict, event: st
         return "err"
     except Exception as e:  # pragma: no cover
         logger.warning("APNs live-activity exception: %s", e)
+        return "err"
+
+
+async def send_live_activity_start(start_token: str, attributes_type: str,
+                                   attributes: dict, content_state: dict,
+                                   stale_seconds: int = 3600,
+                                   alert: dict | None = None) -> str:
+    """Push-to-start a Live Activity remotely (iOS 17.2+). `start_token` is the
+    per-user push-to-start token the device reported for a given
+    ActivityAttributes type. `attributes_type` is the Swift Attributes struct
+    name (e.g. "MomentActivityAttributes" or "PlanInviteActivityAttributes").
+    `attributes` is the one-time attribute payload. Returns 'ok' / 'gone' /
+    'err' (never raises).
+    """
+    if not is_configured():
+        return "err"
+    try:
+        import httpx
+    except Exception:  # pragma: no cover
+        return "err"
+    now = int(time.time())
+    aps: dict = {
+        "timestamp": now,
+        "event": "start",
+        "attributes-type": attributes_type,
+        "attributes": attributes,
+        "content-state": content_state,
+        "stale-date": now + max(60, int(stale_seconds)),
+    }
+    if alert is not None:
+        aps["alert"] = alert
+    payload = {"aps": aps}
+    headers = {
+        "authorization": f"bearer {_provider_token()}",
+        "apns-topic": f"{APNS_BUNDLE_ID}.push-type.liveactivity",
+        "apns-push-type": "liveactivity",
+        "apns-priority": "10",
+        "apns-id": str(uuid4()),
+    }
+    try:
+        async with httpx.AsyncClient(http2=True, timeout=15) as client:
+            resp = await client.post(
+                f"{APNS_HOST}/3/device/{start_token}",
+                json=payload,
+                headers=headers,
+            )
+        if resp.status_code == 200:
+            return "ok"
+        reason = ""
+        try:
+            reason = resp.json().get("reason", "")
+        except Exception:
+            reason = resp.text[:120]
+        if resp.status_code == 410 or reason in ("Unregistered", "BadDeviceToken"):
+            return "gone"
+        logger.warning("APNs live-activity-start failed %s: %s", resp.status_code, reason)
+        return "err"
+    except Exception as e:  # pragma: no cover
+        logger.warning("APNs live-activity-start exception: %s", e)
         return "err"
