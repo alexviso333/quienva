@@ -15991,6 +15991,68 @@ async def code_dump_zip_short():
     )
 
 
+@api_router.get("/qvsrc-preview-moment.zip")
+async def code_dump_zip_preview_moment():
+    """Mini-ZIP: ONLY the files touched by the admin "Preview Momento" feature.
+    Lets the user commit the smallest possible diff to GitHub."""
+    try:
+        with open("/app/frontend/public/qvsrc-preview-moment.zip", "rb") as _f:
+            data = _f.read()
+    except Exception:
+        raise HTTPException(status_code=404, detail="ZIP not generated")
+    return _StreamingResponse(
+        iter([data]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="qvsrc-preview-moment.zip"'},
+    )
+
+
+@api_router.get("/qvsrc/file")
+async def code_dump_single_file(path: str):
+    """Download ONE file from the export as a raw attachment.
+    Lets the user bypass GitHub's web editor paste-size limit by uploading
+    the file directly ("Add file → Upload files" on GitHub). The ``path``
+    query param must match an entry inside ``qvsrc.zip`` (e.g.
+    ``frontend/src/components/EventCard.js``)."""
+    import zipfile as _zf
+    import os as _os
+    try:
+        with _zf.ZipFile("/app/frontend/public/qvsrc.zip", "r") as z:
+            names = set(z.namelist())
+            # Accept both with and without a leading slash, and tolerate
+            # the caller passing just the basename (e.g. "EventCard.js").
+            candidates = [path, path.lstrip("/")]
+            if "/" not in path:
+                candidates += [n for n in names if n.endswith("/" + path) or n == path]
+            match = next((c for c in candidates if c in names), None)
+            if not match:
+                raise HTTPException(status_code=404, detail=f"Not in ZIP: {path}")
+            data = z.read(match)
+            filename = _os.path.basename(match)
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=f"ZIP error: {_e}")
+    # text/plain forces browsers to download instead of trying to render.
+    return _StreamingResponse(
+        iter([data]),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@api_router.get("/qvsrc/list")
+async def code_dump_list():
+    """List every file available inside the generated ZIP so the user can
+    pick the exact path to pass to ``/api/qvsrc/file?path=...``."""
+    import zipfile as _zf
+    try:
+        with _zf.ZipFile("/app/frontend/public/qvsrc.zip", "r") as z:
+            return {"files": sorted(z.namelist())}
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=f"ZIP error: {_e}")
+
+
 @api_router.get("/qvsrc", response_class=_HTMLResponse)
 async def code_dump_short():
     """Public, SW-bypassing export page. Short URL, no auth, no secret in the
@@ -16121,57 +16183,80 @@ async def _fire_plan_invite_live_start(plan: dict, inviter: dict, invited_uids: 
 
 @api_router.post("/admin/moment/test")
 async def admin_moment_test(admin: dict = Depends(require_admin)):
-    """Dispara una Live Activity + push de prueba del Momento al usuario
-    admin. Sin crear registros reales en moment_prompts/captures. Útil para
-    probar la isla dinámica en el iPhone del admin sin esperar a la noche."""
-    # 1) Push suave al admin
-    try:
-        await create_notification(
-            admin["user_id"], "moment_prompt",
-            "⚡ Es EL MOMENTO (PRUEBA) · 2 min para +30 pts",
-            {"event_id": "test", "type": "moment", "test": True},
-        )
-    except Exception:
-        pass
-    # 2) Live Activity push-to-start simulando el Momento (iOS 17.2+)
-    started = 0
-    gone = 0
-    err = 0
-    if apns.is_configured():
-        deadline = (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat()
-        attributes = {"event_id": "test", "event_name": "Prueba Momento"}
-        content_state = {
-            "phase": "momento",
-            "deadline": deadline,
-            "event_name": "Prueba Momento",
-            "capturing_now": 0,
-            "my_likes": 0,
+    """Dispara EL MOMENTO REAL end-to-end, pero visible SOLO para el admin.
+
+    Crea (o reutiliza) un evento de test oculto (`city="__test_hidden"`, nunca
+    aparece en el feed publico), marca al admin como `voy`, borra cualquier
+    captura/prompt previo del admin en ese evento y luego llama a `_fire_moment`
+    para que todo el pipeline normal se ejecute:
+      - Push APNs con `moment_prompt` -> notificacion en el iPhone
+      - `_fire_moment_live_start` -> Live Activity en la Dynamic Island
+      - `moment_prompts` DB -> `/me/active-moment` devuelve `active:true` ->
+        el modal WOW aparece dentro de la app al abrirla
+    """
+    uid = admin["user_id"]
+    now_utc = datetime.now(timezone.utc)
+
+    TEST_EVENT_ID = "__test_moment_admin"
+    today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+    ev = await db.events.find_one({"id": TEST_EVENT_ID}, {"_id": 0})
+    if not ev:
+        ev = {
+            "id": TEST_EVENT_ID,
+            "name": "Fiesta de Prueba (Admin)",
+            "venue": "QuienVa HQ",
+            "city": "__test_hidden",
+            "date": today_iso,
+            "start_time": "22:00",
+            "end_time": "04:00",
+            "genre": "test",
+            "address": "QuienVa HQ",
+            "poster": "",
+            "source": "admin_test",
+            "created_at": now_utc.isoformat(),
+            "is_test": True,
         }
-        async for row in db.live_activity_start_tokens.find(
-            {"user_id": admin["user_id"], "kind": "moment"}, {"_id": 0}):
-            res = await apns.send_live_activity_start(
-                row["token"], "MomentActivityAttributes", attributes, content_state,
-                stale_seconds=180,
-                alert={"title": "⚡ Es EL MOMENTO (prueba)", "body": "Prueba Momento", "sound": None},
-            )
-            if res == "ok":
-                started += 1
-            elif res == "gone":
-                gone += 1
-            else:
-                err += 1
+        await db.events.insert_one({**ev})
+    else:
+        await db.events.update_one(
+            {"id": TEST_EVENT_ID},
+            {"$set": {"date": today_iso, "moment_cancelled": False}})
+
+    await db.interests.update_one(
+        {"user_id": uid, "event_id": TEST_EVENT_ID},
+        {"$set": {
+            "user_id": uid, "event_id": TEST_EVENT_ID, "status": "voy",
+            "updated_at": now_utc.isoformat(),
+        }},
+        upsert=True,
+    )
+
+    await db.captures.delete_many({"event_id": TEST_EVENT_ID, "user_id": uid})
+    await db.moment_prompts.delete_one({"event_id": TEST_EVENT_ID})
+
+    result = await _fire_moment(ev, triggered_by=f"admin_test:{uid}")
+
+    la_tokens = await db.live_activity_start_tokens.count_documents(
+        {"user_id": uid, "kind": "moment"})
+
     return {
         "ok": True,
+        "test_event_id": TEST_EVENT_ID,
+        "prompt_id": result["prompt"]["id"],
+        "on_time_deadline": result["prompt"]["on_time_deadline"],
+        "notified": result["notified"],
         "apns_configured": apns.is_configured(),
-        "live_activities_started": started,
-        "gone_tokens": gone,
-        "errors": err,
+        "live_activity_tokens_admin": la_tokens,
         "hint": (
-            "Si live_activities_started = 0 y apns_configured = true, es que "
-            "la app iOS todavía no ha subido su push-to-start token "
-            "(POST /api/live-activity/start-token con kind='moment'). Hay que "
-            "añadir el ActivityAttribute 'MomentActivityAttributes' en Swift "
-            "y llamar a Activity.pushToStartTokenUpdates para enviarlo."
+            "Abre la app en el iPhone (TestFlight) para ver el modal WOW. "
+            "La Dynamic Island solo saltara si la app iOS esta compilada con "
+            "MomentActivityAttributes y ha subido su push-to-start token "
+            "(live_activity_tokens_admin > 0)."
+            if la_tokens > 0 else
+            "El modal WOW aparecera al abrir la app. Para que la Dynamic "
+            "Island tambien salte, la app iOS tiene que estar compilada con "
+            "MomentActivityAttributes y haber subido su push-to-start token "
+            "(POST /api/live-activity/start-token con kind='moment')."
         ),
     }
 
