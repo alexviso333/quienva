@@ -121,18 +121,18 @@ private struct QVCounter: View {
     }
 }
 
-/// Chip de la opción que va ganando ("🏆 Fitz · 3").
+/// Chip de la opción que va ganando ("👑 Fitz · 3"). `hot` = acaba de cambiar.
 @available(iOS 16.1, *)
 private struct QVLeadingPill: View {
     let name: String
     let votes: Int?
-    let locked: Bool
+    let hot: Bool
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: locked ? "flame.fill" : "crown.fill")
+            Image(systemName: hot ? "arrow.triangle.swap" : "crown.fill")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(locked ? qvPink : qvCyan)
+                .foregroundStyle(hot ? qvPink : qvCyan)
             Text(name)
                 .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(.white)
@@ -146,8 +146,10 @@ private struct QVLeadingPill: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
         .background(
-            Capsule().fill(.white.opacity(0.08))
-                .overlay(Capsule().strokeBorder(.white.opacity(0.14), lineWidth: 1))
+            Capsule().fill(hot ? qvPink.opacity(0.18) : Color.white.opacity(0.08))
+                .overlay(Capsule().strokeBorder(hot ? qvPink.opacity(0.85) : Color.white.opacity(0.14),
+                                                lineWidth: hot ? 1.5 : 1))
+                .shadow(color: hot ? qvPink.opacity(0.7) : .clear, radius: 7)
         )
     }
 }
@@ -202,13 +204,13 @@ struct QuienVaPlanLockScreen: View {
                     Spacer(minLength: 4)
                     if let lugar = state.lugar, !lugar.isEmpty {
                         VStack(alignment: .trailing, spacing: 3) {
-                            Text((state.numOpciones ?? 1) > 1 ? "VA GANANDO" : "DÓNDE")
+                            Text(state.cambio == true ? "¡CAMBIO!" : ((state.numOpciones ?? 1) > 1 ? "VA GANANDO" : "DÓNDE"))
                                 .font(.system(size: 8, weight: .black))
                                 .tracking(1.4)
-                                .foregroundStyle(.white.opacity(0.35))
+                                .foregroundStyle(state.cambio == true ? qvPink : Color.white.opacity(0.35))
                             QVLeadingPill(name: lugar,
                                           votes: (state.numOpciones ?? 1) > 1 ? state.lugarVotos : nil,
-                                          locked: false)
+                                          hot: state.cambio == true)
                         }
                     }
                 }
@@ -309,14 +311,14 @@ struct QuienVaPlanActivityWidget: Widget {
                             .lineLimit(1)
                         if let lugar = s.lugar, !lugar.isEmpty {
                             HStack(spacing: 3) {
-                                Image(systemName: (s.numOpciones ?? 1) > 1 ? "crown.fill" : "mappin.and.ellipse")
+                                Image(systemName: s.cambio == true ? "arrow.triangle.swap" : ((s.numOpciones ?? 1) > 1 ? "crown.fill" : "mappin.and.ellipse"))
                                     .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(qvCyan)
+                                    .foregroundStyle(s.cambio == true ? qvPink : qvCyan)
                                 Text((s.numOpciones ?? 1) > 1 && (s.lugarVotos ?? 0) > 0
                                      ? "\(lugar) · \(s.lugarVotos ?? 0)"
                                      : lugar)
                                     .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.white.opacity(0.62))
+                                    .foregroundStyle(s.cambio == true ? Color.white : Color.white.opacity(0.62))
                                     .lineLimit(1)
                             }
                         }

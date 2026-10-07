@@ -24,11 +24,14 @@ public struct QuienVaPlanAttributes: ActivityAttributes {
         public var lugarVotos: Int?
         /// Nº total de opciones a votar (1 = no hay votación, solo asistencia).
         public var numOpciones: Int?
+        /// true solo en la actualización en la que CAMBIA el sitio ganador
+        /// (la isla lo destaca y el móvil vibra).
+        public var cambio: Bool?
 
         public init(dentro: Int, umbral: Int, cierraEpoch: Double? = nil,
                     ganadora: String? = nil, estado: String = "abierto",
                     lugar: String? = nil, lugarVotos: Int? = nil,
-                    numOpciones: Int? = nil) {
+                    numOpciones: Int? = nil, cambio: Bool? = nil) {
             self.dentro = dentro
             self.umbral = umbral
             self.cierraEpoch = cierraEpoch
@@ -37,6 +40,7 @@ public struct QuienVaPlanAttributes: ActivityAttributes {
             self.lugar = lugar
             self.lugarVotos = lugarVotos
             self.numOpciones = numOpciones
+            self.cambio = cambio
         }
     }
 

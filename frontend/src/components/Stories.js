@@ -228,9 +228,9 @@ function StoryViewer({ groups, groupIndex, startIndex = 0, onClose }) {
   const [gi, setGi] = useState(groupIndex);
   const [idx, setIdx] = useState(startIndex);
   const [paused, setPaused] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [reactText, setReactText] = useState("");
   const [typing, setTyping] = useState(false);
+  const touchY = useRef(null);
 
   const group = groups[gi];
   const story = group?.stories[idx];
@@ -241,16 +241,22 @@ function StoryViewer({ groups, groupIndex, startIndex = 0, onClose }) {
     if (story) markSeen([story.id]);
   }, [story]);
 
+  // Bloquea el scroll de la página de debajo mientras el visor está abierto:
+  // en iOS el rubber-band robaba los toques y el visor parecía congelado.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const nextStory = useCallback(() => {
-    setProgress(0);
     const g = groups[gi];
-    if (idx < g.stories.length - 1) { setIdx((i) => i + 1); return; }
+    if (g && idx < g.stories.length - 1) { setIdx((i) => i + 1); return; }
     if (gi < groups.length - 1) { setGi((x) => x + 1); setIdx(0); return; }
     onClose();
   }, [groups, gi, idx, onClose]);
 
   const prevStory = useCallback(() => {
-    setProgress(0);
     if (idx > 0) { setIdx((i) => i - 1); return; }
     if (gi > 0) {
       const pg = groups[gi - 1];
@@ -259,17 +265,8 @@ function StoryViewer({ groups, groupIndex, startIndex = 0, onClose }) {
     }
   }, [groups, gi, idx]);
 
-  // auto-advance timer
-  useEffect(() => {
-    if (paused || typing || !story) return;
-    const started = Date.now();
-    const id = setInterval(() => {
-      const pct = Math.min(100, ((Date.now() - started) / STORY_MS) * 100);
-      setProgress(pct);
-      if (pct >= 100) { clearInterval(id); nextStory(); }
-    }, 50);
-    return () => clearInterval(id);
-  }, [paused, typing, story, nextStory]);
+  // El avance lo dispara el fin de la animación CSS de la barra (sin timers ni
+  // setState por frame). Pausar = animation-play-state: paused.
 
   // keyboard
   useEffect(() => {
@@ -326,28 +323,23 @@ function StoryViewer({ groups, groupIndex, startIndex = 0, onClose }) {
   const holdEnd = () => setPaused(false);
 
   return (
-    <motion.div
-      className="fixed inset-0 z-[90] bg-black select-none"
+    <div
+      className="fixed inset-0 z-[90] bg-black select-none qv-story-in"
       data-testid="story-viewer"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      style={{ touchAction: "none" }}
+      onTouchStart={(e) => { touchY.current = e.touches[0]?.clientY ?? null; }}
+      onTouchEnd={(e) => {
+        const start = touchY.current;
+        touchY.current = null;
+        const end = e.changedTouches[0]?.clientY;
+        if (start != null && end != null && end - start > 110) onClose();
+      }}
     >
-      <motion.div
-        key={`${gi}-${idx}`}
-        className="absolute inset-0"
-        drag="y"
-        dragDirectionLock
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.6 }}
-        onDragEnd={(_e, info) => { if (info.offset.y > 120) onClose(); }}
-        initial={{ opacity: 0, scale: 1.02 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-      >
-        {/* blurred backdrop so vertical/horizontal photos fill the screen nicely */}
+      <div className="absolute inset-0">
+        {/* Fondo: la misma foto en miniatura y ampliada (parece desenfocada pero
+            SIN filtro CSS: un blur a pantalla completa colgaba el WebView iOS). */}
         <div className="absolute inset-0 overflow-hidden">
-          <SafeImg src={mediaThumb(story.image_url, 480)} className="w-full h-full object-cover blur-2xl opacity-45 scale-110" />
+          <SafeImg src={mediaThumb(story.image_url, 48)} className="w-full h-full object-cover opacity-45 scale-110" />
         </div>
         <div className="absolute inset-0 flex items-center justify-center">
           <SafeImg src={mediaThumb(story.image_url, 1080)} className="max-w-full max-h-full object-contain" />
@@ -363,6 +355,7 @@ function StoryViewer({ groups, groupIndex, startIndex = 0, onClose }) {
             onPointerDown={holdStart}
             onPointerUp={holdEnd}
             onPointerLeave={holdEnd}
+            onPointerCancel={holdEnd}
           />
           <button
             className="flex-1 h-full"
@@ -372,17 +365,27 @@ function StoryViewer({ groups, groupIndex, startIndex = 0, onClose }) {
             onPointerDown={holdStart}
             onPointerUp={holdEnd}
             onPointerLeave={holdEnd}
+            onPointerCancel={holdEnd}
           />
         </div>
 
-        {/* progress segments */}
+        {/* progress segments (animadas por CSS, sin re-renders) */}
         <div className="absolute top-[max(8px,env(safe-area-inset-top))] left-3 right-3 flex gap-1 z-20">
           {group.stories.map((_, i) => (
             <div key={i} className="flex-1 h-[2.5px] rounded-full bg-white/25 overflow-hidden">
-              <div
-                className="h-full bg-white"
-                style={{ width: i < idx ? "100%" : i === idx ? `${progress}%` : "0%", transition: i === idx ? "width 60ms linear" : "none" }}
-              />
+              {i < idx ? (
+                <div className="h-full w-full bg-white" />
+              ) : i === idx ? (
+                <div
+                  key={`${gi}-${idx}`}
+                  className="h-full w-full bg-white qv-story-progress"
+                  style={{
+                    animationDuration: `${STORY_MS}ms`,
+                    animationPlayState: paused || typing ? "paused" : "running",
+                  }}
+                  onAnimationEnd={nextStory}
+                />
+              ) : null}
             </div>
           ))}
         </div>
@@ -480,8 +483,8 @@ function StoryViewer({ groups, groupIndex, startIndex = 0, onClose }) {
             </div>
           )}
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
 
@@ -555,15 +558,16 @@ export function StoriesBar() {
       </div>
 
       <AddStoryDialog open={addOpen} onOpenChange={setAddOpen} />
-      <AnimatePresence>
-        {viewer && (
-          <StoryViewer
-            groups={groups}
-            groupIndex={Math.min(viewer.groupIndex, Math.max(0, groups.length - 1))}
-            onClose={() => setViewer(null)}
-          />
-        )}
-      </AnimatePresence>
+      {/* Sin AnimatePresence a propósito: si la app se va a segundo plano durante
+          la animación de salida, el overlay se quedaba en el DOM tapando toda la
+          pantalla y la app parecía colgada (había que cerrarla y reabrirla). */}
+      {viewer && groups.length > 0 && (
+        <StoryViewer
+          groups={groups}
+          groupIndex={Math.min(viewer.groupIndex, Math.max(0, groups.length - 1))}
+          onClose={() => setViewer(null)}
+        />
+      )}
     </>
   );
 }
@@ -616,16 +620,14 @@ export function StoriesArchive({ open, onOpenChange }) {
           )}
         </DialogContent>
       </Dialog>
-      <AnimatePresence>
-        {viewerIdx !== null && myGroup && (
-          <StoryViewer
-            groups={[myGroup]}
-            groupIndex={0}
-            startIndex={viewerIdx}
-            onClose={() => { setViewerIdx(null); onOpenChange(true); }}
-          />
-        )}
-      </AnimatePresence>
+      {viewerIdx !== null && myGroup && (
+        <StoryViewer
+          groups={[myGroup]}
+          groupIndex={0}
+          startIndex={viewerIdx}
+          onClose={() => { setViewerIdx(null); onOpenChange(true); }}
+        />
+      )}
     </>
   );
 }

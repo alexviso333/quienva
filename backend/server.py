@@ -13806,7 +13806,9 @@ async def _plan_live_state(plan: dict, participants: list) -> dict:
 
 async def _plan_push_live(plan: dict, participants: list = None, event: str = "update"):
     """Actualiza (o termina) la Live Activity de TODOS los que la tengan activa
-    para este plan: creador y participantes con la app instalada."""
+    para este plan: creador y participantes con la app instalada.
+    Si cambia el sitio que va ganando, la push lleva `alert`: iOS hace vibrar el
+    móvil y destaca (parpadea) la isla dinámica en vez de actualizarla en silencio."""
     if not apns.is_configured():
         return 0
     try:
@@ -13814,12 +13816,22 @@ async def _plan_push_live(plan: dict, participants: list = None, event: str = "u
             participants = await db.plan_participants.find(
                 {"plan_id": plan["id"]}, {"_id": 0}).to_list(500)
         cs = await _plan_live_state(plan, participants)
+        alert = None
+        if event == "update" and (cs.get("numOpciones") or 0) > 1:
+            nuevo = cs.get("lugar")
+            if nuevo and nuevo != plan.get("live_lugar"):
+                alert = {"title": "¡Cambio de plan!",
+                         "body": f"Ahora va ganando {nuevo}"}
+                cs["cambio"] = True
+                await db.plans.update_one({"id": plan["id"]}, {"$set": {"live_lugar": nuevo}})
+                plan["live_lugar"] = nuevo
         sent = 0
         async for la in db.live_activities.find({"plan_id": plan["id"], "ended": {"$ne": True}}):
             res = await apns.send_live_activity(
                 la["token"], cs, event=event,
                 stale_seconds=4 * 3600 if event == "update" else None,
-                dismissal_seconds=900 if event == "end" else None)
+                dismissal_seconds=900 if event == "end" else None,
+                alert=alert)
             if res == "gone" or event == "end":
                 await db.live_activities.update_one({"_id": la["_id"]}, {"$set": {"ended": True}})
             if res == "ok":

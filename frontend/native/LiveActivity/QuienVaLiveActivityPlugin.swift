@@ -114,10 +114,22 @@ public class QuienVaLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             estado: call.getString("estado") ?? "abierto",
             lugar: call.getString("lugar"),
             lugarVotos: call.getInt("lugarVotos"),
-            numOpciones: call.getInt("numOpciones")
+            numOpciones: call.getInt("numOpciones"),
+            cambio: call.getBool("cambio")
         )
         Task {
-            await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(4 * 3600)))
+            if #available(iOS 16.2, *), let body = call.getString("alertBody"), !body.isEmpty {
+                // Cambio de sitio ganador: alerta -> vibración + isla destacada.
+                let alert = AlertConfiguration(
+                    title: LocalizedStringResource(stringLiteral: call.getString("alertTitle") ?? "¡Cambio de plan!"),
+                    body: LocalizedStringResource(stringLiteral: body),
+                    sound: .default
+                )
+                await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(4 * 3600)),
+                                      alertConfiguration: alert)
+            } else {
+                await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(4 * 3600)))
+            }
             call.resolve(["updated": true])
         }
     }

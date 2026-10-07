@@ -193,3 +193,23 @@ body {
         @apply border-border;
     }
 }
+
+/* Visor de historias — la barra de progreso se anima en CSS (compositor) para no
+   re-renderizar React 20 veces por segundo: en el WebView de iOS eso repintaba
+   toda la capa a pantalla completa y podía colgar la app. */
+@keyframes qv-story-progress {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+.qv-story-progress {
+    transform-origin: left center;
+    animation-name: qv-story-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+    will-change: transform;
+}
+@keyframes qv-story-in {
+    from { opacity: 0; transform: scale(1.015); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.qv-story-in { animation: qv-story-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }

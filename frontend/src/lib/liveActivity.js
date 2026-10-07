@@ -9,6 +9,7 @@ const LiveActivity = registerPlugin("QuienVaLiveActivity");
 
 let listenerBound = false;
 const started = new Set();
+const lastLugar = new Map();   // slug -> último sitio ganador conocido
 
 function available() {
   return isNativeApp() && Capacitor.getPlatform() === "ios" && Capacitor.isPluginAvailable("QuienVaLiveActivity");
@@ -55,6 +56,8 @@ export async function startPlanActivity(plan) {
   if (started.has(plan.slug)) return;
   started.add(plan.slug);
   bindTokenListener();
+  const lead = leadingOf(plan);
+  if (lead.lugar) lastLugar.set(plan.slug, lead.lugar);
   try {
     await LiveActivity.startPlan({
       slug: plan.slug,
@@ -64,7 +67,7 @@ export async function startPlanActivity(plan) {
       umbral: plan.umbral_personas ?? 0,
       cierraEpoch: epochOf(plan.hora_limite),
       estado: plan.estado,
-      ...leadingOf(plan),
+      ...lead,
     });
   } catch (e) {
     started.delete(plan.slug);
@@ -73,6 +76,12 @@ export async function startPlanActivity(plan) {
 
 export async function updatePlanActivity(plan) {
   if (!available() || !plan?.slug || !started.has(plan.slug)) return;
+  const lead = leadingOf(plan);
+  // Si cambia el sitio que va ganando, la actualización va con alerta: iOS
+  // vibra y destaca la isla dinámica en vez de cambiarla en silencio.
+  const prev = lastLugar.get(plan.slug);
+  const changed = lead.numOpciones > 1 && lead.lugar && prev && lead.lugar !== prev;
+  if (lead.lugar) lastLugar.set(plan.slug, lead.lugar);
   try {
     await LiveActivity.updatePlan({
       slug: plan.slug,
@@ -81,7 +90,10 @@ export async function updatePlanActivity(plan) {
       cierraEpoch: epochOf(plan.hora_limite),
       ganadora: plan.opcion_ganadora_nombre || undefined,
       estado: plan.estado,
-      ...leadingOf(plan),
+      ...lead,
+      cambio: changed || undefined,
+      alertTitle: changed ? "¡Cambio de plan!" : undefined,
+      alertBody: changed ? `Ahora va ganando ${lead.lugar}` : undefined,
     });
   } catch (e) { /* ignore */ }
 }
