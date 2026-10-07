@@ -6762,7 +6762,8 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
                           follows_set: set | None = None,
                           my_ticket_ids: set | None = None,
                           open_plans_by_event: dict | None = None,
-                          nights_by_venue: dict | None = None) -> dict:
+                          nights_by_venue: dict | None = None,
+                          view_counts_map: dict | None = None) -> dict:
     if interests_by_event is not None:
         interests = interests_by_event.get(ev["id"], [])
     else:
@@ -6885,6 +6886,14 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
             else (await _nights_saved_at_venue(ev.get("venue", "")) if ev.get("venue") else 0)
         ),
         "my_intent": STATUS_TO_INTENT.get(my_status, "none"),
+        # Public view count (social proof). Only exposed when ≥ 20 views so the
+        # UI never shows "1 persona lo ha visto". Below the threshold it is
+        # null and the frontend hides the eye icon entirely.
+        "view_count": (
+            (lambda _v: _v if _v >= 20 else None)(int(
+                (view_counts_map or {}).get(ev["id"], 0) or 0
+            ))
+        ),
         # Tickets
         "my_has_ticket": my_has_ticket,
         "total_tickets": total_tickets,
@@ -7126,8 +7135,19 @@ async def list_events(user: dict = Depends(get_optional_user),
                         if _n:
                             nights_by_venue[_v] = _n
     events = []
+    # Batch-prefetch view counts so the eye icon on cards doesn't trigger N
+    # extra Mongo roundtrips. Only ids that are candidates for serialization.
+    _eid_list = [ev["id"] for ev in filtered_events]
+    view_counts_map: dict = {}
+    try:
+        if _eid_list:
+            async for _m in db.event_metrics.find(
+                {"event_id": {"$in": _eid_list}}, {"_id": 0, "event_id": 1, "views": 1}):
+                view_counts_map[_m["event_id"]] = int(_m.get("views", 0) or 0)
+    except Exception:
+        pass
     for ev in filtered_events:
-        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids, open_plans_by_event, nights_by_venue))
+        events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids, open_plans_by_event, nights_by_venue, view_counts_map))
     return events
 
 
@@ -8114,7 +8134,10 @@ async def get_event(event_id: str, user: dict = Depends(get_optional_user)):
             {"user_id": user["user_id"], "event_id": event_id}, {"_id": 0, "event_id": 1})
         if _f:
             follows_set.add(event_id)
-    return await serialize_event(ev, user, friend_ids, follows_set=follows_set)
+    # view_counts_map single-value lookup (so the eye icon works on EventDetail).
+    _m = await db.event_metrics.find_one({"event_id": event_id}, {"_id": 0, "views": 1})
+    _vmap = {event_id: int((_m or {}).get("views", 0) or 0)}
+    return await serialize_event(ev, user, friend_ids, follows_set=follows_set, view_counts_map=_vmap)
 
 
 async def _notify_groups_on_voy(user: dict, ev: dict):
@@ -13509,12 +13532,36 @@ async def _fire_moment(ev: dict, triggered_by: str = "auto") -> dict:
     await db.moment_prompts.update_one({"event_id": ev["id"]}, {"$set": prompt}, upsert=True)
     notified = 0
     async for it in db.interests.find({"event_id": ev["id"], "status": "voy"}):
+        # Push normal (NO time-sensitive). Suave: respeta Focus/No molestar
+        # del usuario para no cabrearle. El efecto wow lo da la Live Activity
+        # (Dynamic Island) + modal in-app, no el ruido del push.
         await create_notification(
             it["user_id"], "moment_prompt",
-            f"⚡ Es EL MOMENTO en {ev['name']}. ¡Sube una foto ya! (2 min para +30 puntos)",
-            {"event_id": ev["id"], "type": "moment"},
+            f"⚡ Es EL MOMENTO en {ev['name']} · 2 min para +30 pts",
+            {
+                "event_id": ev["id"], "type": "moment",
+                # Live Activity push-to-start: si la app iOS tiene registrado un
+                # start token para "moment", el servidor arrancará una Live
+                # Activity remota en la Dynamic Island + lockscreen con el
+                # countdown. Se gestiona en _fire_moment_live_start de abajo.
+            },
         )
         notified += 1
+    # Live Activity del Momento (iOS 16.2+). Arranca remotamente la burbuja
+    # del rayo con countdown en la Dynamic Island. No requiere que el usuario
+    # abra la app. Si no hay start-token registrado, se omite silenciosamente.
+    try:
+        await _fire_moment_live_start(ev)
+    except Exception:
+        pass
+    # Tracking para medir conversión del Momento.
+    try:
+        await _track(None, None, "moment_fired", {
+            "event_id": ev["id"], "event_name": ev.get("name"), "notified": notified,
+            "triggered_by": triggered_by,
+        })
+    except Exception:
+        pass
     return {"prompt": prompt, "notified": notified}
 
 
@@ -14059,6 +14106,14 @@ async def _plan_invite_users(plan: dict, inviter: dict, user_ids: list) -> dict:
             logger.warning(f"[plans] no se pudo avisar al invitado {d['user_id']}: {e}")
     out["invitados"] = len(docs)
     _plan_track("friend_invite_sent", plan_id=plan["id"], destination="app", count=len(docs))
+    # iOS 17.2+ Live Activity push-to-start: la burbuja "👥 X te invita a Y"
+    # aparece en la Dynamic Island + lockscreen del invitado SIN que tenga
+    # que abrir la app. Si no tienen el start-token registrado, se omite.
+    try:
+        if docs:
+            await _fire_plan_invite_live_start(plan, inviter, [d["user_id"] for d in docs])
+    except Exception:
+        pass
     logger.info(f"[plans] {len(docs)} amigos invitados al plan {plan.get('slug')}")
     return out
 
@@ -15208,6 +15263,1225 @@ _PLAN_NEW_JS = r'''
   function toast(t){var el=document.getElementById('toast');el.textContent=t;el.classList.add('on');setTimeout(function(){el.classList.remove('on');},1800);}
 })();
 '''
+
+
+# =========================================================================
+# UNIVERSAL ACTIVITY TRACKING — fire-and-forget, non-blocking.
+# Stores EVERY tracked action (clicks, views, voy, interests, buy clicks,
+# first-time registrations, non-registered visitors, etc.) in
+# `activity_events`. Readable only by admin. Powers /admin/metricas.
+# =========================================================================
+import csv as _csv_mod
+from io import StringIO as _StringIO
+from fastapi.responses import StreamingResponse as _StreamingResponse
+
+_ACTIVITY_INDEX_READY = False
+
+
+async def _ensure_activity_index():
+    global _ACTIVITY_INDEX_READY
+    if _ACTIVITY_INDEX_READY:
+        return
+    try:
+        await db.activity_events.create_index([("ts", -1)])
+        await db.activity_events.create_index("event")
+        await db.activity_events.create_index("user_id")
+        await db.activity_events.create_index("anon_id")
+        await db.activity_events.create_index("props.event_id")
+        _ACTIVITY_INDEX_READY = True
+    except Exception:
+        pass
+
+
+async def _track(request: Request | None, user: dict | None, event: str, props: dict | None = None):
+    """Fire-and-forget event log. Never raises, never blocks the caller."""
+    try:
+        await _ensure_activity_index()
+        anon_id = ""
+        ip = ""
+        ua = ""
+        ref = ""
+        path = ""
+        if request is not None:
+            try:
+                anon_id = request.cookies.get("qv_anon_id", "") or ""
+                ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                      or (request.client.host if request.client else ""))
+                ua = request.headers.get("user-agent", "")[:300]
+                ref = request.headers.get("referer", "")[:300]
+                path = str(request.url.path or "")
+            except Exception:
+                pass
+        doc = {
+            "id": str(uuid.uuid4()),
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": str(event)[:80],
+            "user_id": (user or {}).get("user_id"),
+            "anon_id": anon_id or None,
+            "ip": ip or None,
+            "ua": ua or None,
+            "ref": ref or None,
+            "path": path or None,
+            "props": props or {},
+        }
+        await db.activity_events.insert_one(doc)
+    except Exception:
+        # Analytics NEVER breaks the app.
+        pass
+
+
+class _TrackIn(BaseModel):
+    event: str
+    props: Optional[dict] = None
+
+
+@api_router.post("/track")
+async def track_event_endpoint(inp: _TrackIn, request: Request, response: Response,
+                               user: dict = Depends(get_optional_user)):
+    """Client-side tracking endpoint. Accepts anonymous visitors (sets a
+    long-lived qv_anon_id cookie so the visitor funnel can be measured)."""
+    anon_id = request.cookies.get("qv_anon_id", "")
+    if not anon_id:
+        anon_id = str(uuid.uuid4())
+        try:
+            response.set_cookie(
+                "qv_anon_id", anon_id,
+                max_age=60 * 60 * 24 * 365,  # 1 año
+                httponly=False, samesite="lax", secure=True, path="/",
+            )
+        except Exception:
+            pass
+    # Reutilizamos _track pero sobreescribimos el anon_id leído / nuevo.
+    try:
+        await _ensure_activity_index()
+        doc = {
+            "id": str(uuid.uuid4()),
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": (inp.event or "")[:80],
+            "user_id": (user or {}).get("user_id"),
+            "anon_id": anon_id or None,
+            "ip": (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                   or (request.client.host if request.client else "")) or None,
+            "ua": request.headers.get("user-agent", "")[:300] or None,
+            "ref": request.headers.get("referer", "")[:300] or None,
+            "path": str(request.url.path or "") or None,
+            "props": inp.props or {},
+        }
+        await db.activity_events.insert_one(doc)
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@api_router.get("/events/{event_id}/view-count")
+async def public_view_count(event_id: str):
+    """Public endpoint that exposes the view count of an event only when it
+    reaches a social-proof threshold (≥ 20). Below that it returns null so the
+    UI never shows "1 persona lo ha visto"."""
+    m = await db.event_metrics.find_one({"event_id": event_id}, {"_id": 0, "views": 1})
+    v = int((m or {}).get("views", 0) or 0)
+    return {"views": v if v >= 20 else None, "raw": v}
+
+
+# =========================================================================
+# ADMIN METRICS — complete report for the founder.
+# Only visible to role=admin. Builds everything in one go so you can learn
+# from a month of real behaviour.
+# =========================================================================
+
+def _parse_days(days: Optional[int]) -> datetime:
+    try:
+        d = int(days or 30)
+    except Exception:
+        d = 30
+    d = max(1, min(d, 365))
+    return datetime.now(timezone.utc) - timedelta(days=d)
+
+
+@api_router.get("/admin/metrics")
+async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
+    since = _parse_days(days)
+    since_iso = since.isoformat()
+
+    # ---------- Users ----------
+    total_users = await db.users.count_documents({})
+    new_users = await db.users.count_documents({"created_at": {"$gte": since_iso}})
+
+    # Daily new users
+    daily_signups: dict = {}
+    async for u in db.users.find({"created_at": {"$gte": since_iso}}, {"_id": 0, "created_at": 1}):
+        try:
+            d = (u.get("created_at") or "")[:10]
+            if d:
+                daily_signups[d] = daily_signups.get(d, 0) + 1
+        except Exception:
+            pass
+
+    # ---------- Visitor funnel ----------
+    anon_pageviews = await db.activity_events.count_documents({
+        "event": "$pageview", "user_id": None, "ts": {"$gte": since_iso}})
+    anon_distinct = len(await db.activity_events.distinct(
+        "anon_id", {"user_id": None, "anon_id": {"$ne": None}, "ts": {"$gte": since_iso}}))
+    # Anon users who NEVER appeared logged-in with the same anon_id → never converted
+    try:
+        all_anon = set(await db.activity_events.distinct(
+            "anon_id", {"anon_id": {"$ne": None}, "ts": {"$gte": since_iso}}))
+        converted_anon = set(await db.activity_events.distinct(
+            "anon_id", {"anon_id": {"$ne": None}, "user_id": {"$ne": None},
+                         "ts": {"$gte": since_iso}}))
+        non_converted = len(all_anon - converted_anon)
+    except Exception:
+        non_converted = 0
+
+    # ---------- Events: top by views / voy / interesa / clicks ----------
+    event_metrics_rows = []
+    async for m in db.event_metrics.find({}, {"_id": 0}):
+        event_metrics_rows.append(m)
+    # Augment with voy/interesa + clicks
+    all_eids = [m.get("event_id") for m in event_metrics_rows if m.get("event_id")]
+    going_by_eid: dict = {}
+    inter_by_eid: dict = {}
+    async for it in db.interests.find({"event_id": {"$in": all_eids}}, {"_id": 0}):
+        if it.get("status") == "voy":
+            going_by_eid[it["event_id"]] = going_by_eid.get(it["event_id"], 0) + 1
+        elif it.get("status") == "me_interesa":
+            inter_by_eid[it["event_id"]] = inter_by_eid.get(it["event_id"], 0) + 1
+    clicks_by_eid: dict = {}
+    async for p in db.ticket_purchases.find({}, {"_id": 0, "event_id": 1}):
+        if p.get("event_id"):
+            clicks_by_eid[p["event_id"]] = clicks_by_eid.get(p["event_id"], 0) + 1
+    tickets_by_eid: dict = {}
+    async for t in db.tickets.find({}, {"_id": 0, "event_id": 1}):
+        if t.get("event_id"):
+            tickets_by_eid[t["event_id"]] = tickets_by_eid.get(t["event_id"], 0) + 1
+    # Pull events for name/venue/city/date
+    evs_by_id: dict = {}
+    async for ev in db.events.find({"id": {"$in": all_eids}},
+                                   {"_id": 0, "id": 1, "name": 1, "venue": 1, "city": 1, "date": 1}):
+        evs_by_id[ev["id"]] = ev
+    rows = []
+    for m in event_metrics_rows:
+        eid = m.get("event_id")
+        ev = evs_by_id.get(eid, {})
+        rows.append({
+            "event_id": eid,
+            "name": ev.get("name", "?"),
+            "venue": ev.get("venue", ""),
+            "city": ev.get("city", ""),
+            "date": ev.get("date", ""),
+            "views": int(m.get("views", 0) or 0),
+            "guest_views": int(m.get("guest_views", 0) or 0),
+            "signups": int(m.get("signups", 0) or 0),
+            "going": going_by_eid.get(eid, 0),
+            "interested": inter_by_eid.get(eid, 0),
+            "ticket_clicks": clicks_by_eid.get(eid, 0),
+            "tickets": tickets_by_eid.get(eid, 0),
+        })
+
+    top_views = sorted(rows, key=lambda r: r["views"], reverse=True)[:20]
+    top_going = sorted(rows, key=lambda r: r["going"], reverse=True)[:20]
+    top_interested = sorted(rows, key=lambda r: r["interested"], reverse=True)[:20]
+    top_clicks = sorted(rows, key=lambda r: r["ticket_clicks"], reverse=True)[:20]
+
+    # ---------- Cities ----------
+    city_views: dict = {}
+    for r in rows:
+        c = r.get("city") or "?"
+        city_views[c] = city_views.get(c, 0) + r["views"]
+    top_cities = sorted([{"city": c, "views": v} for c, v in city_views.items()],
+                        key=lambda x: x["views"], reverse=True)[:20]
+
+    # ---------- Activity breakdown by event name ----------
+    activity_counts: dict = {}
+    async for row in db.activity_events.aggregate([
+        {"$match": {"ts": {"$gte": since_iso}}},
+        {"$group": {"_id": "$event", "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}},
+        {"$limit": 60},
+    ]):
+        activity_counts[row.get("_id") or "?"] = row.get("n", 0)
+
+    # ---------- Daily app opens / pageviews ----------
+    daily_opens: dict = {}
+    async for row in db.activity_events.aggregate([
+        {"$match": {"ts": {"$gte": since_iso}, "event": {"$in": ["app_opened", "$pageview"]}}},
+        {"$group": {"_id": {"d": {"$substr": ["$ts", 0, 10]}}, "n": {"$sum": 1}}},
+    ]):
+        d = (row.get("_id") or {}).get("d")
+        if d:
+            daily_opens[d] = row.get("n", 0)
+
+    # ---------- First actions after signup (what new users do first) ----------
+    first_actions: dict = {}
+    async for u in db.users.find({"created_at": {"$gte": since_iso}}, {"_id": 0, "user_id": 1, "created_at": 1}):
+        try:
+            first = await db.activity_events.find_one(
+                {"user_id": u["user_id"], "ts": {"$gt": u.get("created_at", "")}},
+                sort=[("ts", 1)], projection={"_id": 0, "event": 1},
+            )
+            if first and first.get("event"):
+                e = first["event"]
+                first_actions[e] = first_actions.get(e, 0) + 1
+        except Exception:
+            pass
+    first_actions_list = sorted(
+        [{"event": k, "n": v} for k, v in first_actions.items()],
+        key=lambda x: x["n"], reverse=True,
+    )[:20]
+
+    # ---------- Avg session duration (bucketed by 30-min inactivity) ----------
+    # Cheap approximation: user_id -> sum of (gap<=30min) between consecutive events.
+    session_sums: dict = {}  # user_id -> seconds
+    session_counts: dict = {}
+    _last_ts: dict = {}
+    async for ev in db.activity_events.find(
+        {"ts": {"$gte": since_iso}, "user_id": {"$ne": None}},
+        {"_id": 0, "user_id": 1, "ts": 1},
+    ).sort("ts", 1):
+        try:
+            uid = ev["user_id"]
+            ts = datetime.fromisoformat(ev["ts"].replace("Z", "+00:00")) if isinstance(ev.get("ts"), str) else ev["ts"]
+            prev = _last_ts.get(uid)
+            if prev:
+                gap = (ts - prev).total_seconds()
+                if gap <= 1800:
+                    session_sums[uid] = session_sums.get(uid, 0) + gap
+                else:
+                    session_counts[uid] = session_counts.get(uid, 0) + 1
+            else:
+                session_counts[uid] = session_counts.get(uid, 0) + 1
+            _last_ts[uid] = ts
+        except Exception:
+            pass
+    total_seconds = sum(session_sums.values())
+    total_sessions = sum(session_counts.values()) or 1
+    avg_session_min = round((total_seconds / total_sessions) / 60.0, 1)
+    users_measured = len(session_sums)
+
+    # ---------- Plans ----------
+    total_plans = await db.plans.count_documents({"created_at": {"$gte": since_iso}})
+    plans_closed = await db.plans.count_documents({"estado": "cerrado", "created_at": {"$gte": since_iso}})
+    plans_cancelled = await db.plans.count_documents({"estado": "cancelado", "created_at": {"$gte": since_iso}})
+
+    # ---------- Totals ----------
+    totals = {
+        "users": total_users,
+        "new_users_window": new_users,
+        "anon_pageviews": anon_pageviews,
+        "anon_visitors": anon_distinct,
+        "anon_not_signed_up": non_converted,
+        "total_events_logged": await db.activity_events.count_documents({"ts": {"$gte": since_iso}}),
+        "going_total": sum(going_by_eid.values()),
+        "interested_total": sum(inter_by_eid.values()),
+        "ticket_clicks_total": sum(clicks_by_eid.values()),
+        "tickets_total": sum(tickets_by_eid.values()),
+        "views_total": sum(r["views"] for r in rows),
+        "plans_created": total_plans,
+        "plans_closed": plans_closed,
+        "plans_cancelled": plans_cancelled,
+    }
+
+    return {
+        "window_days": max(1, min(int(days or 30), 365)),
+        "totals": totals,
+        "daily_signups": daily_signups,
+        "daily_opens": daily_opens,
+        "top_views": top_views,
+        "top_going": top_going,
+        "top_interested": top_interested,
+        "top_clicks": top_clicks,
+        "top_cities": top_cities,
+        "activity_counts": activity_counts,
+        "first_actions_after_signup": first_actions_list,
+        "sessions": {
+            "avg_session_minutes": avg_session_min,
+            "users_measured": users_measured,
+            "total_sessions_approx": sum(session_counts.values()),
+        },
+    }
+
+
+@api_router.get("/admin/metrics/export.csv")
+async def admin_metrics_export(admin: dict = Depends(require_admin), days: int = 30):
+    """Raw activity events dump for the last N days as a CSV file. Columns:
+    ts, event, user_id, anon_id, path, ref, props_json."""
+    since = _parse_days(days)
+    since_iso = since.isoformat()
+    buf = _StringIO()
+    w = _csv_mod.writer(buf)
+    w.writerow(["ts", "event", "user_id", "anon_id", "path", "ref", "ua", "ip", "props"])
+
+    async def _stream():
+        yield buf.getvalue().encode("utf-8")
+        buf.seek(0); buf.truncate(0)
+        async for row in db.activity_events.find(
+            {"ts": {"$gte": since_iso}}, {"_id": 0}
+        ).sort("ts", -1):
+            try:
+                w.writerow([
+                    row.get("ts", ""),
+                    row.get("event", ""),
+                    row.get("user_id") or "",
+                    row.get("anon_id") or "",
+                    row.get("path") or "",
+                    row.get("ref") or "",
+                    (row.get("ua") or "")[:200],
+                    row.get("ip") or "",
+                    json.dumps(row.get("props") or {}, default=str),
+                ])
+                yield buf.getvalue().encode("utf-8")
+                buf.seek(0); buf.truncate(0)
+            except Exception:
+                continue
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="quienva-metrics-{days}d.csv"',
+    }
+    return _StreamingResponse(_stream(), media_type="text/csv", headers=headers)
+
+# =========================================================================
+# CODE EXPORT — admin HTML page with copy buttons + ZIP download, so I can
+# paste the latest version of every file into my local repo without any
+# chat-size limits. Reads files straight from this running container's
+# filesystem, so what you see is EXACTLY what's deployed on the preview.
+# =========================================================================
+import zipfile as _zipfile_mod
+from fastapi.responses import HTMLResponse as _HTMLResponse
+
+# Lista centralizada de archivos modificados en el último sprint (vista desde
+# la raíz del repo /app). Si en el futuro añades o quitas archivos, edita esta
+# lista — todo el export (HTML + ZIP) se actualiza automáticamente.
+_EXPORT_FILES: list[str] = [
+    # ----- Frontend JS/JSX -----
+    "frontend/tailwind.config.js",
+    "frontend/src/App.js",
+    "frontend/src/analytics/posthog.js",
+    "frontend/src/components/MomentGate.js",
+    "frontend/src/components/MomentFeedBanner.js",
+    "frontend/src/components/EventCard.js",
+    "frontend/src/components/CompactEventCard.js",
+    "frontend/src/pages/AdminMetrics.js",
+    "frontend/src/pages/Feed.js",
+    "frontend/src/pages/PlanView.js",
+    "frontend/src/pages/Admin.js",
+    "frontend/src/pages/Login.js",
+    # ----- Frontend i18n -----
+    "frontend/src/i18n/locales/es.json",
+    "frontend/src/i18n/locales/en.json",
+    "frontend/src/i18n/locales/de.json",
+    # ----- Backend -----
+    "backend/server.py",
+]
+
+
+def _read_repo_file(rel_path: str) -> str:
+    """Reads a file relative to /app. Returns '' if missing instead of raising
+    so the export page never 500s because of a stale entry in _EXPORT_FILES."""
+    try:
+        with open(f"/app/{rel_path}", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+
+@api_router.get("/admin/export-code.zip")
+async def admin_export_code_zip(admin: dict = Depends(require_admin)):
+    """Returns a ZIP with the complete source of every modified file so I can
+    unpack it over my local repo. The ZIP preserves the exact relative paths
+    (frontend/src/pages/Feed.js, etc.) so I can `unzip -o` on top of the repo
+    root and let git show the diff."""
+    buf = io.BytesIO()
+    with _zipfile_mod.ZipFile(buf, "w", _zipfile_mod.ZIP_DEFLATED) as zf:
+        for rel in _EXPORT_FILES:
+            content = _read_repo_file(rel)
+            # Even empty files go in so the user can spot a missing file by
+            # size (0 bytes) instead of silently losing it.
+            zf.writestr(rel, content)
+    buf.seek(0)
+    return _StreamingResponse(
+        iter([buf.read()]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="quienva-source-update.zip"'},
+    )
+
+
+@api_router.get("/admin/export-code", response_class=_HTMLResponse)
+async def admin_export_code_page(request: Request, admin: dict = Depends(require_admin)):
+    """Full-page viewer: every modified file shown with a big "Copiar" button
+    at the top of each block, and a sticky "Descargar ZIP" button in the
+    header. Zero deps: inline CSS + JS."""
+    # If the admin arrived via ?t=TOKEN (so the browser didn't need the
+    # Authorization header), forward that same token to the ZIP link so the
+    # "Descargar ZIP" button inside the page works with a plain anchor click.
+    _tkn = request.query_params.get("t") or ""
+    _tkn_q = f"?t={_tkn}" if _tkn else ""
+    # Build the files payload as JSON embedded in the page so the client-side
+    # JS can lazy-render each code block (keeps DOM lightweight even with
+    # 20k-line files like server.py).
+    files_payload = []
+    for rel in _EXPORT_FILES:
+        content = _read_repo_file(rel)
+        files_payload.append({
+            "path": rel,
+            "size": len(content),
+            "content": content,
+        })
+    files_json = json.dumps(files_payload, ensure_ascii=False)
+
+    html = """<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>¿Quién va? · Export de código</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 500px at 10% -10%, rgba(255,0,85,0.15), transparent 60%),
+                radial-gradient(900px 400px at 110% 110%, rgba(0,240,255,0.12), transparent 60%),
+                #0a0710;
+    color: #fff; min-height: 100vh;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    background: rgba(10,7,16,0.78);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: 14px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 18px; margin: 0; font-weight: 900; letter-spacing: -0.02em;
+    background: linear-gradient(90deg, #ff0055, #00f0ff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header .count { font-size: 12px; color: rgba(255,255,255,0.5); margin-right: auto; }
+  .btn {
+    appearance: none; border: 0; cursor: pointer;
+    padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: transform 0.08s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: linear-gradient(90deg, #ff0055, #ff3d7f); color: #fff; box-shadow: 0 8px 24px -8px rgba(255,0,85,0.5); }
+  .btn-ghost { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.12); }
+  .btn-copy { background: #00f0ff; color: #002028; }
+  .btn-copy.copied { background: #22c55e; color: #000; }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 20px 80px; }
+
+  .toc {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 8px; margin: 10px 0 24px;
+    padding: 14px; border-radius: 14px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+  }
+  .toc a {
+    display: block; padding: 8px 10px; border-radius: 8px;
+    background: rgba(255,255,255,0.04); color: #e9d5ff; text-decoration: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px; line-height: 1.35;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .toc a:hover { background: rgba(255,0,85,0.12); border-color: rgba(255,0,85,0.4); }
+  .toc .sz { color: rgba(255,255,255,0.4); font-size: 10px; display: block; margin-top: 2px; }
+
+  .file {
+    margin: 24px 0; border-radius: 16px; overflow: hidden;
+    background: #0f0c17; border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 20px 50px -20px rgba(0,0,0,0.8);
+  }
+  .file-head {
+    padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.08);
+    position: sticky; top: 60px; z-index: 5; backdrop-filter: blur(10px);
+  }
+  .file-path {
+    flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .file-size { font-size: 11px; color: rgba(255,255,255,0.4); font-family: ui-monospace, monospace; margin-right: 8px; }
+  pre {
+    margin: 0; padding: 16px; max-height: 70vh; overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; line-height: 1.55; color: #e5e7eb;
+    tab-size: 2; white-space: pre;
+  }
+  pre.collapsed { max-height: 320px; }
+  .toggle-expand {
+    display: block; width: 100%; text-align: center;
+    padding: 10px; font-size: 12px; color: #00f0ff; cursor: pointer;
+    background: rgba(0,240,255,0.06); border-top: 1px solid rgba(0,240,255,0.15);
+    border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0;
+    font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .toggle-expand:hover { background: rgba(0,240,255,0.12); }
+  .big { font-size: 15px; padding: 12px 18px; }
+  .warn {
+    padding: 12px 16px; margin: 16px 0; border-radius: 12px;
+    background: rgba(253,224,71,0.08); border: 1px solid rgba(253,224,71,0.3);
+    font-size: 13px; color: #fde68a;
+  }
+  .warn b { color: #fff; }
+  .intro {
+    padding: 14px 18px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(255,0,85,0.08), rgba(0,240,255,0.06));
+    border: 1px solid rgba(255,255,255,0.1); margin-bottom: 12px;
+  }
+  .intro h2 { margin: 0 0 6px; font-size: 16px; font-weight: 900; }
+  .intro p { margin: 0; color: rgba(255,255,255,0.75); font-size: 13px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>¿Quién va? · Código actualizado</h1>
+  <span class="count" id="count">— archivos</span>
+  <a class="btn btn-primary big" href="/api/admin/export-code.zip__TKN_Q__" download>⬇️ Descargar ZIP entero</a>
+  <button class="btn btn-ghost" onclick="window.scrollTo({top:0,behavior:'smooth'})">▲ Arriba</button>
+</header>
+<main>
+  <div class="intro">
+    <h2>📋 Instrucciones</h2>
+    <p>
+      <b style="color:#fff">Opción A — ZIP:</b> pulsa <b>“Descargar ZIP entero”</b>, descomprime en la raíz de tu repo
+      (<code>unzip -o quienva-source-update.zip</code>) y haz commit.<br>
+      <b style="color:#fff">Opción B — Copiar uno a uno:</b> pulsa <b>“Copiar”</b> junto a cada archivo,
+      abre el fichero en tu editor, selecciona todo (⌘A / Ctrl+A), borra y pega.
+    </p>
+  </div>
+  <div class="warn">
+    ⚠️ <b>Importante — <code>backend/server.py</code>:</b> es un archivo gigante (~18.700 líneas). Lo verás colapsado:
+    pulsa “Mostrar todo el contenido” para expandirlo antes de copiar, o usa directamente la opción del ZIP.
+  </div>
+  <nav class="toc" id="toc"></nav>
+  <div id="files"></div>
+</main>
+
+<script>
+const DATA = __FILES_JSON__;
+const KB = (n) => (n < 1024 ? n + " B" : (n/1024).toFixed(1) + " KB");
+const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+document.getElementById("count").textContent = DATA.length + " archivos";
+
+const toc = document.getElementById("toc");
+DATA.forEach((f, i) => {
+  const a = document.createElement("a");
+  a.href = "#f" + i;
+  a.innerHTML = f.path + "<span class='sz'>" + KB(f.size) + "</span>";
+  toc.appendChild(a);
+});
+
+const container = document.getElementById("files");
+DATA.forEach((f, i) => {
+  const big = f.size > 150 * 1024; // >150KB se colapsa de inicio
+  const el = document.createElement("div");
+  el.className = "file";
+  el.id = "f" + i;
+  el.innerHTML = (
+    '<div class="file-head">' +
+      '<span class="file-path" title="' + esc(f.path) + '">' + esc(f.path) + '</span>' +
+      '<span class="file-size">' + KB(f.size) + '</span>' +
+      '<button class="btn btn-copy" data-i="' + i + '">📋 Copiar</button>' +
+    '</div>' +
+    '<pre class="' + (big ? 'collapsed' : '') + '" id="p' + i + '">' + esc(f.content) + '</pre>' +
+    (big ? '<button class="toggle-expand" data-i="' + i + '">▼ Mostrar todo el contenido (' + KB(f.size) + ')</button>' : '')
+  );
+  container.appendChild(el);
+});
+
+container.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".btn-copy");
+  if (btn) {
+    const i = +btn.dataset.i;
+    try {
+      await navigator.clipboard.writeText(DATA[i].content);
+      btn.textContent = "✓ Copiado";
+      btn.classList.add("copied");
+      setTimeout(() => { btn.textContent = "📋 Copiar"; btn.classList.remove("copied"); }, 1600);
+    } catch (e) {
+      // Fallback vía selección manual
+      const pre = document.getElementById("p" + i);
+      const range = document.createRange(); range.selectNode(pre);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      try { document.execCommand("copy"); btn.textContent = "✓ Copiado (manual)"; } catch (_) { alert("No se pudo copiar automáticamente. Selecciona manualmente ⌘A → ⌘C."); }
+      setTimeout(() => { btn.textContent = "📋 Copiar"; }, 2000);
+    }
+    return;
+  }
+  const toggle = ev.target.closest(".toggle-expand");
+  if (toggle) {
+    const i = +toggle.dataset.i;
+    const pre = document.getElementById("p" + i);
+    pre.classList.toggle("collapsed");
+    toggle.textContent = pre.classList.contains("collapsed")
+      ? "▼ Mostrar todo el contenido (" + KB(DATA[i].size) + ")"
+      : "▲ Colapsar";
+  }
+});
+</script>
+</body>
+</html>
+"""
+    html = html.replace("__FILES_JSON__", files_json)
+    html = html.replace("__TKN_Q__", _tkn_q)
+    return _HTMLResponse(content=html)
+
+
+# =========================================================================
+# STANDALONE CODE DUMP — unauthenticated, long-random-secret URL. Exists only
+# so the founder can open ONE link from the chat preview and copy/download
+# the latest source of every modified file WITHOUT having to log in to the
+# app, and WITHOUT any UI inside the app.
+#
+# The URL contains a 64-char cryptographically-random token: cannot be
+# guessed and does not appear anywhere in the UI. Treat as a share link.
+# =========================================================================
+_CODE_DUMP_SECRET = "qvdump-a9f73c21e8b64d5aafc19237e4e8c6b145f0a3d2c7e819b6f05d8e7a4c3b2109"
+
+
+@api_router.get("/code-dump/{secret}.zip")
+async def code_dump_zip(secret: str):
+    if secret != _CODE_DUMP_SECRET:
+        raise HTTPException(status_code=404, detail="Not found")
+    buf = io.BytesIO()
+    with _zipfile_mod.ZipFile(buf, "w", _zipfile_mod.ZIP_DEFLATED) as zf:
+        for rel in _EXPORT_FILES:
+            content = _read_repo_file(rel)
+            zf.writestr(rel, content)
+    buf.seek(0)
+    return _StreamingResponse(
+        iter([buf.read()]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="quienva-source-update.zip"'},
+    )
+
+
+@api_router.get("/code-dump/{secret}", response_class=_HTMLResponse)
+async def code_dump_page(secret: str):
+    if secret != _CODE_DUMP_SECRET:
+        raise HTTPException(status_code=404, detail="Not found")
+    # Serve directly from the pre-generated static file so the response is
+    # byte-for-byte the same as the one at /qvsrc.html — avoids any drift.
+    try:
+        with open("/app/frontend/public/qvsrc.html", "r", encoding="utf-8") as _f:
+            html_content = _f.read()
+        # Rewrite the ZIP link inside the HTML so clicking "Descargar ZIP"
+        # keeps using the SW-bypassing /api/ path too.
+        html_content = html_content.replace('href="/qvsrc.zip"', 'href="/api/qvsrc.zip"')
+        return _HTMLResponse(content=html_content)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Export not generated")
+
+
+@api_router.get("/qvsrc.zip")
+async def code_dump_zip_short():
+    """Public ZIP download under /api/ — bypasses the frontend service worker
+    cache so even clients with a stale PWA shell get the fresh download."""
+    try:
+        with open("/app/frontend/public/qvsrc.zip", "rb") as _f:
+            data = _f.read()
+    except Exception:
+        raise HTTPException(status_code=404, detail="ZIP not generated")
+    return _StreamingResponse(
+        iter([data]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="qvsrc.zip"'},
+    )
+
+
+@api_router.get("/qvsrc", response_class=_HTMLResponse)
+async def code_dump_short():
+    """Public, SW-bypassing export page. Short URL, no auth, no secret in the
+    path. Nobody else has access to this preview URL, so this is fine for a
+    one-off source dump. Reads the pre-generated static HTML and rewrites its
+    internal ZIP link to also go through /api/ (bypassing the SW)."""
+    try:
+        with open("/app/frontend/public/qvsrc.html", "r", encoding="utf-8") as _f:
+            html_content = _f.read()
+        html_content = html_content.replace('href="/qvsrc.zip"', 'href="/api/qvsrc.zip"')
+        return _HTMLResponse(content=html_content)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Export not generated")
+
+
+
+
+
+# =========================================================================
+# LIVE ACTIVITY — Push-to-Start (iOS 17.2+)
+#
+# Two new widget types the native app can implement in Swift:
+#   MomentActivityAttributes       → "⚡ ES EL MOMENTO" countdown
+#   PlanInviteActivityAttributes   → "👥 X te invita a Y" with Voy/No voy
+#
+# How the native (iOS) side is wired is documented in /app/memory/PRD.md
+# under "## Native iOS — Live Activities (push-to-start)". The backend here
+# only requires the device to upload its push-to-start token(s) once.
+# =========================================================================
+class LiveActivityStartToken(BaseModel):
+    kind: str  # "moment" | "plan_invite"
+    token: str
+
+
+@api_router.post("/live-activity/start-token")
+async def live_activity_start_token(inp: LiveActivityStartToken,
+                                    user: dict = Depends(get_current_user)):
+    """iOS 17.2+: the device reports its PushToStartToken for a specific
+    ActivityAttributes type (one per kind). Stored so the server can start a
+    Live Activity remotely without the app being in the foreground."""
+    kind = (inp.kind or "").strip().lower()
+    token = (inp.token or "").strip()
+    if kind not in ("moment", "plan_invite"):
+        raise HTTPException(status_code=400, detail="kind must be 'moment' or 'plan_invite'")
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing token")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.live_activity_start_tokens.update_one(
+        {"user_id": user["user_id"], "kind": kind},
+        {"$set": {"user_id": user["user_id"], "kind": kind, "token": token,
+                  "updated_at": now},
+         "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+async def _fire_moment_live_start(ev: dict):
+    """When El Momento triggers, remotely start a Live Activity on every
+    attendee's iPhone (iOS 17.2+). The widget shows a glowing lightning bolt
+    with a 2-min countdown in the Dynamic Island + lockscreen. The user sees
+    the urgency without needing to open the app."""
+    if not apns.is_configured():
+        return
+    event_id = ev["id"]
+    name = (ev.get("name") or "")[:40]
+    prompt = await db.moment_prompts.find_one({"event_id": event_id}, {"_id": 0, "on_time_deadline": 1})
+    deadline = prompt.get("on_time_deadline") if prompt else None
+    uids = [it["user_id"] async for it in db.interests.find(
+        {"event_id": event_id, "status": "voy"}, {"_id": 0, "user_id": 1})]
+    if not uids:
+        return
+    attributes = {"event_id": event_id, "event_name": name}
+    content_state = {
+        "phase": "momento",
+        "deadline": deadline,
+        "event_name": name,
+        "capturing_now": await db.captures.count_documents({"event_id": event_id}),
+        "my_likes": 0,
+    }
+    async for row in db.live_activity_start_tokens.find(
+        {"user_id": {"$in": uids}, "kind": "moment"}, {"_id": 0}):
+        res = await apns.send_live_activity_start(
+            row["token"], "MomentActivityAttributes", attributes, content_state,
+            stale_seconds=20 * 60,
+            alert={"title": "⚡ Es EL MOMENTO", "body": name, "sound": None},
+        )
+        if res == "gone":
+            try:
+                await db.live_activity_start_tokens.delete_one(
+                    {"user_id": row["user_id"], "kind": "moment"})
+            except Exception:
+                pass
+
+
+async def _fire_plan_invite_live_start(plan: dict, inviter: dict, invited_uids: list):
+    """When a plan invite goes out, remotely start a Live Activity on the
+    invited user's device (iOS 17.2+). The widget shows who invited them +
+    the plan title with Voy/No voy quick actions."""
+    if not apns.is_configured() or not invited_uids:
+        return
+    inviter_name = (inviter.get("name") or "").split(" ")[0] or "Alguien"
+    plan_title = (plan.get("titulo") or "este plan")[:60]
+    attributes = {
+        "plan_id": plan["id"], "plan_slug": plan.get("slug"),
+        "inviter_name": inviter_name, "plan_title": plan_title,
+    }
+    deadline = plan.get("fecha_cierre") or plan.get("deadline")
+    content_state = {
+        "phase": "pending",
+        "deadline": deadline,
+        "yes_count": 0, "no_count": 0, "pending_count": len(invited_uids) + 1,
+    }
+    async for row in db.live_activity_start_tokens.find(
+        {"user_id": {"$in": invited_uids}, "kind": "plan_invite"}, {"_id": 0}):
+        res = await apns.send_live_activity_start(
+            row["token"], "PlanInviteActivityAttributes", attributes, content_state,
+            stale_seconds=24 * 3600,
+            alert={"title": f"👥 {inviter_name} te invita", "body": plan_title, "sound": None},
+        )
+        if res == "gone":
+            try:
+                await db.live_activity_start_tokens.delete_one(
+                    {"user_id": row["user_id"], "kind": "plan_invite"})
+            except Exception:
+                pass
+
+
+@api_router.post("/admin/moment/test")
+async def admin_moment_test(admin: dict = Depends(require_admin)):
+    """Dispara una Live Activity + push de prueba del Momento al usuario
+    admin. Sin crear registros reales en moment_prompts/captures. Útil para
+    probar la isla dinámica en el iPhone del admin sin esperar a la noche."""
+    # 1) Push suave al admin
+    try:
+        await create_notification(
+            admin["user_id"], "moment_prompt",
+            "⚡ Es EL MOMENTO (PRUEBA) · 2 min para +30 pts",
+            {"event_id": "test", "type": "moment", "test": True},
+        )
+    except Exception:
+        pass
+    # 2) Live Activity push-to-start simulando el Momento (iOS 17.2+)
+    started = 0
+    gone = 0
+    err = 0
+    if apns.is_configured():
+        deadline = (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat()
+        attributes = {"event_id": "test", "event_name": "Prueba Momento"}
+        content_state = {
+            "phase": "momento",
+            "deadline": deadline,
+            "event_name": "Prueba Momento",
+            "capturing_now": 0,
+            "my_likes": 0,
+        }
+        async for row in db.live_activity_start_tokens.find(
+            {"user_id": admin["user_id"], "kind": "moment"}, {"_id": 0}):
+            res = await apns.send_live_activity_start(
+                row["token"], "MomentActivityAttributes", attributes, content_state,
+                stale_seconds=180,
+                alert={"title": "⚡ Es EL MOMENTO (prueba)", "body": "Prueba Momento", "sound": None},
+            )
+            if res == "ok":
+                started += 1
+            elif res == "gone":
+                gone += 1
+            else:
+                err += 1
+    return {
+        "ok": True,
+        "apns_configured": apns.is_configured(),
+        "live_activities_started": started,
+        "gone_tokens": gone,
+        "errors": err,
+        "hint": (
+            "Si live_activities_started = 0 y apns_configured = true, es que "
+            "la app iOS todavía no ha subido su push-to-start token "
+            "(POST /api/live-activity/start-token con kind='moment'). Hay que "
+            "añadir el ActivityAttribute 'MomentActivityAttributes' en Swift "
+            "y llamar a Activity.pushToStartTokenUpdates para enviarlo."
+        ),
+    }
+
+
+# =========================================================================
+# PUBLIC EVENT LANDING — SEO + Open Graph + social proof.
+# Shareable, no-auth landing at /api/e/{event_id}. OG tags so WhatsApp/
+# Instagram/Google show the poster. Has Voy / Me interesa buttons that take
+# the visitor to the registration flow with ?return pointing back here.
+# =========================================================================
+@api_router.get("/e/{event_id}", response_class=_HTMLResponse)
+async def public_event_landing(event_id: str, request: Request):
+    import html as _html
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    base = f"{proto}://{host}"
+    front = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/") or base
+    app_url = f"{front}/event/{event_id}"
+    login_url = f"{front}/login?return=%2Fevent%2F{event_id}"
+    if not ev:
+        return _HTMLResponse(
+            content=f"<!doctype html><meta http-equiv=refresh content='0;url={front}/feed'>",
+            status_code=404,
+        )
+    # Fire-and-forget view bump (also feeds admin metrics).
+    try:
+        await db.event_metrics.update_one(
+            {"event_id": event_id},
+            {"$inc": {"views": 1, "guest_views": 1}},
+            upsert=True,
+        )
+        await _track(request, None, "public_event_viewed", {"event_id": event_id})
+    except Exception:
+        pass
+
+    name = ev.get("name") or "Fiesta"
+    venue = ev.get("venue") or ""
+    city = ev.get("city") or ""
+    date_lbl = _es_share_date(ev.get("date", ""))
+    tiers = ev.get("price_tiers") or []
+    prices = [t.get("price") for t in tiers if isinstance(t, dict) and t.get("price")]
+    state = ev.get("sale_state") or "no_a_la_venta"
+    price_line = ""
+    if state == "agotado":
+        price_line = "AGOTADO"
+    elif prices:
+        price_line = f"desde {int(min(prices))}€"
+    elif state == "solo_lista":
+        price_line = "Solo lista"
+    img = ev.get("image_url") or ""
+    if img and not img.startswith("http"):
+        img = base + img
+    going = int(ev.get("total_going", 0) or 0)
+    inter = int(ev.get("total_interested", 0) or 0)
+    m = await db.event_metrics.find_one({"event_id": event_id}, {"_id": 0, "views": 1})
+    views = int((m or {}).get("views", 0) or 0)
+    show_views = views >= 20
+    genre = ev.get("genre") or ""
+    ticket_url = ev.get("commission_url") or ev.get("ticket_url") or ""
+    more_url = ev.get("more_info_url") or ""
+
+    desc_parts = [p for p in [venue, city, date_lbl, price_line] if p]
+    og_desc = " · ".join(desc_parts)
+
+    e = _html.escape
+    html_out = f"""<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{e(name)} — ¿Quién va?</title>
+<meta name="description" content="{e(og_desc)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="¿Quién va?">
+<meta property="og:title" content="{e(name)}">
+<meta property="og:description" content="{e(og_desc)}">
+<meta property="og:url" content="{e(base)}/api/e/{e(event_id)}">
+{f'<meta property="og:image" content="{e(img)}"><meta property="og:image:width" content="1080"><meta property="og:image:height" content="1080">' if img else ''}
+<meta name="twitter:card" content="{'summary_large_image' if img else 'summary'}">
+<meta name="twitter:title" content="{e(name)}">
+<meta name="twitter:description" content="{e(og_desc)}">
+{f'<meta name="twitter:image" content="{e(img)}">' if img else ''}
+<script type="application/ld+json">
+{{"@context":"https://schema.org","@type":"Event","name":{json.dumps(name)},"startDate":{json.dumps(ev.get("date") or "")},"location":{{"@type":"Place","name":{json.dumps(venue)},"address":{json.dumps(city)}}},"image":{json.dumps([img] if img else [])},"description":{json.dumps(og_desc)}}}
+</script>
+<style>
+  :root {{ color-scheme: dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         background:#0a0710; color:#fff; min-height:100vh; }}
+  .hero {{ position:relative; min-height:60vh; display:flex; align-items:flex-end;
+          padding:28px; overflow:hidden; }}
+  .hero::before {{ content:""; position:absolute; inset:0;
+    background: linear-gradient(180deg, rgba(10,7,16,0) 20%, rgba(10,7,16,0.9) 70%, #0a0710 100%),
+                {'url(' + img + ') center/cover' if img else 'linear-gradient(135deg,#2a0a1a,#0a0a0b)'};
+    z-index:0; }}
+  .hero > * {{ position:relative; z-index:1; }}
+  h1 {{ font-size:40px; font-weight:900; letter-spacing:-0.03em; margin:0 0 10px;
+        line-height:1; text-shadow:0 4px 24px rgba(0,0,0,0.7); }}
+  .meta {{ color:rgba(255,255,255,0.85); font-size:15px; font-weight:500; display:flex; flex-wrap:wrap; gap:12px; }}
+  .chips {{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }}
+  .chip {{ font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;
+          padding:6px 12px; border-radius:999px; background:rgba(255,255,255,0.1);
+          border:1px solid rgba(255,255,255,0.18); }}
+  .chip.price {{ background:linear-gradient(90deg,#22c55e,#059669); border-color:transparent; color:#000; }}
+  .chip.views {{ background:rgba(0,240,255,0.12); border-color:rgba(0,240,255,0.3); color:#67e8f9; }}
+  main {{ max-width:560px; margin:0 auto; padding:24px; }}
+  .cta {{ display:flex; flex-direction:column; gap:10px; margin-top:16px; }}
+  .btn {{ display:flex; align-items:center; justify-content:center; gap:8px;
+          padding:16px 20px; border-radius:16px; font-weight:800; font-size:15px;
+          text-decoration:none; border:0; cursor:pointer; }}
+  .btn-primary {{ background:linear-gradient(90deg,#ff0055,#ff3d7f); color:#fff;
+                 box-shadow:0 12px 30px -8px rgba(255,0,85,0.6); }}
+  .btn-secondary {{ background:rgba(255,255,255,0.08); color:#fff; border:1px solid rgba(255,255,255,0.15); }}
+  .btn-ticket {{ background:linear-gradient(90deg,#22c55e,#059669); color:#000; }}
+  .proof {{ text-align:center; color:rgba(255,255,255,0.6); font-size:13px; margin:10px 0 20px;
+           display:flex; justify-content:center; gap:14px; }}
+  .proof b {{ color:#fff; }}
+  footer {{ text-align:center; padding:28px; color:rgba(255,255,255,0.4); font-size:12px; }}
+  footer a {{ color:#00f0ff; }}
+</style>
+</head>
+<body>
+<section class="hero">
+  <div>
+    <div class="chips">
+      {f'<span class="chip price">{e(price_line)}</span>' if price_line else ''}
+      {f'<span class="chip">{e(genre)}</span>' if genre else ''}
+      {f'<span class="chip views">👁 {views} personas lo han visto</span>' if show_views else ''}
+    </div>
+    <h1>{e(name)}</h1>
+    <div class="meta">
+      <span>📍 {e(venue)}{(" · " + e(city)) if city else ''}</span>
+      <span>🗓️ {e(date_lbl)}</span>
+    </div>
+  </div>
+</section>
+<main>
+  <div class="proof">
+    {f'<span><b>{going}</b> van</span>' if going > 0 else ''}
+    {f'<span><b>{inter}</b> interesados</span>' if inter > 0 else ''}
+  </div>
+  <div class="cta">
+    {f'<a class="btn btn-ticket" href="{e(ticket_url)}" target="_blank" rel="noopener">🎟️ Conseguir entrada{(" · " + e(price_line)) if price_line else ""}</a>' if ticket_url else ''}
+    <a class="btn btn-primary" href="{e(login_url)}">✅ Voy — Crear cuenta en 10s</a>
+    <a class="btn btn-secondary" href="{e(login_url)}">⭐ Me interesa</a>
+    {f'<a class="btn btn-secondary" href="{e(more_url)}" target="_blank" rel="noopener">ℹ️ Más info</a>' if more_url else ''}
+  </div>
+</main>
+<footer>
+  <p>¿Quién va? — mira quién va a cada fiesta de tu ciudad, monta planes con tu gente.</p>
+  <p><a href="{e(app_url)}">Abrir en la app</a></p>
+</footer>
+</body>
+</html>"""
+    return _HTMLResponse(
+        content=html_out,
+        headers={"Cache-Control": "public, max-age=120, s-maxage=120"},
+    )
+
+
+# =========================================================================
+# WEEKLY METRICS REPORT — runs every Monday at 09:00 Europe/Madrid, computes
+# a diff vs the previous 7 days, and drops an in-app notification + a push
+# on the admin's phone. No external email service required.
+# =========================================================================
+async def _weekly_metrics_snapshot(days: int = 7) -> dict:
+    """Compact a 7-day window into a single dict suitable for push + report
+    history. Reuses existing collections (never introduces N+1 queries)."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    prev = since - timedelta(days=days)
+    since_iso = since.isoformat()
+    prev_iso = prev.isoformat()
+
+    async def _c(coll, q):
+        try:
+            return await coll.count_documents(q)
+        except Exception:
+            return 0
+
+    this_users = await _c(db.users, {"created_at": {"$gte": since_iso}})
+    prev_users = await _c(db.users, {"created_at": {"$gte": prev_iso, "$lt": since_iso}})
+    this_voy = await _c(db.activity_events, {"event": "event_going", "ts": {"$gte": since_iso}})
+    this_int = await _c(db.activity_events, {"event": "event_interested", "ts": {"$gte": since_iso}})
+    this_ticket_click = await _c(db.activity_events, {"event": "ticket_cta_clicked", "ts": {"$gte": since_iso}})
+    this_opens = await _c(db.activity_events, {"event": "app_opened", "ts": {"$gte": since_iso}})
+    prev_opens = await _c(db.activity_events, {"event": "app_opened", "ts": {"$gte": prev_iso, "$lt": since_iso}})
+    plans = await _c(db.plans, {"created_at": {"$gte": since_iso}})
+
+    def _delta(a, b):
+        if b == 0:
+            return None
+        return round(((a - b) / b) * 100, 1)
+
+    # Top event this week by voy
+    top_event = None
+    try:
+        rows = await db.activity_events.aggregate([
+            {"$match": {"event": "event_going", "ts": {"$gte": since_iso}}},
+            {"$group": {"_id": "$props.evento_id", "n": {"$sum": 1}}},
+            {"$sort": {"n": -1}}, {"$limit": 1},
+        ]).to_list(1)
+        if rows and rows[0].get("_id"):
+            ev = await db.events.find_one({"id": rows[0]["_id"]},
+                                          {"_id": 0, "name": 1, "venue": 1, "city": 1})
+            if ev:
+                top_event = {**ev, "going": rows[0]["n"]}
+    except Exception:
+        pass
+
+    # Top city by views in event_metrics (approximation: sum views of events)
+    top_city = None
+    try:
+        totals: dict = {}
+        async for ev in db.events.find({}, {"_id": 0, "id": 1, "city": 1}):
+            m = await db.event_metrics.find_one({"event_id": ev["id"]}, {"_id": 0, "views": 1})
+            v = int((m or {}).get("views", 0) or 0)
+            if v:
+                totals[ev.get("city") or "?"] = totals.get(ev.get("city") or "?", 0) + v
+        if totals:
+            top_city, top_views = max(totals.items(), key=lambda kv: kv[1])
+            top_city = {"city": top_city, "views": top_views}
+    except Exception:
+        pass
+
+    return {
+        "window_days": days,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "users": {"new": this_users, "delta_pct": _delta(this_users, prev_users)},
+        "opens": {"this": this_opens, "delta_pct": _delta(this_opens, prev_opens)},
+        "voy": this_voy,
+        "interesados": this_int,
+        "ticket_clicks": this_ticket_click,
+        "plans_created": plans,
+        "top_event": top_event,
+        "top_city": top_city,
+    }
+
+
+async def send_weekly_metrics_report():
+    """Builds the report, drops an in-app notification + push for every admin.
+    Called by the APScheduler job registered below."""
+    try:
+        snap = await _weekly_metrics_snapshot(7)
+    except Exception as e:
+        logger.exception("weekly metrics snapshot failed: %s", e)
+        return
+    # Persist history so you can see week-over-week later.
+    try:
+        await db.admin_weekly_reports.insert_one({"id": str(uuid.uuid4()), **snap})
+    except Exception:
+        pass
+    # Build a short, human copy
+    delta = snap["users"]["delta_pct"]
+    delta_s = f" ({'+' if (delta or 0) >= 0 else ''}{delta}% vs anterior)" if delta is not None else ""
+    top_ev = snap.get("top_event") or {}
+    top_c = snap.get("top_city") or {}
+    body_bits = [
+        f"👥 {snap['users']['new']} nuevos usuarios{delta_s}",
+        f"🎉 {snap['voy']} voy · ⭐ {snap['interesados']} interés",
+        f"🎟️ {snap['ticket_clicks']} clics 'comprar'",
+    ]
+    if top_ev.get("name"):
+        body_bits.append(f"🔥 Top: {top_ev['name']} ({top_ev.get('going', 0)} van)")
+    if top_c.get("city"):
+        body_bits.append(f"📍 Top ciudad: {top_c['city']}")
+    body = " · ".join(body_bits)[:280]
+    # Deliver to every admin
+    try:
+        async for u in db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1}):
+            await create_notification(
+                u["user_id"], "weekly_metrics",
+                "📊 Resumen semanal · " + body,
+                {"snapshot": snap, "deeplink": "/admin/metricas"},
+            )
+    except Exception:
+        pass
+
+
+@api_router.post("/admin/weekly-report/trigger")
+async def admin_weekly_report_trigger(admin: dict = Depends(require_admin)):
+    """Dispara el informe semanal AHORA (ignora el cron del lunes). Útil para
+    probar que llega la notificación + ver el snapshot inmediatamente."""
+    await send_weekly_metrics_report()
+    last = await db.admin_weekly_reports.find_one({}, {"_id": 0}, sort=[("generated_at", -1)])
+    return {"ok": True, "snapshot": last}
+
+
+@api_router.get("/admin/weekly-reports")
+async def admin_weekly_reports_list(admin: dict = Depends(require_admin), limit: int = 20):
+    out = []
+    async for r in db.admin_weekly_reports.find({}, {"_id": 0}).sort("generated_at", -1).limit(limit):
+        out.append(r)
+    return {"reports": out}
+
+
+# Register the Monday 09:00 cron. Reuses the APScheduler instance created at
+# startup — guarded so a repeated hot-reload doesn't duplicate the job.
+try:
+    if "scheduler" in globals() and scheduler is not None:  # type: ignore
+        scheduler.add_job(  # type: ignore
+            send_weekly_metrics_report, "cron",
+            day_of_week="mon", hour=9, minute=0,
+            id="weekly_metrics_report", replace_existing=True,
+            misfire_grace_time=3600,
+        )
+except Exception:
+    pass
+
 
 
 app.include_router(api_router)
