@@ -72,12 +72,30 @@ function Bar({ value, max, color = "bg-qv-primary" }) {
 export default function AdminMetrics() {
   const navigate = useNavigate();
   const [days, setDays] = useState(30);
+  const [testing, setTesting] = useState(null);
+  const [testResult, setTestResult] = useState(null);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["admin-metrics", days],
     queryFn: async () => (await api.get(`/admin/metrics?days=${days}`)).data,
     staleTime: 30000,
   });
+
+  const runTest = async (kind) => {
+    setTesting(kind);
+    setTestResult(null);
+    try {
+      const url = kind === "moment"
+        ? "/admin/moment/test"
+        : "/admin/weekly-report/trigger";
+      const { data: d } = await api.post(url);
+      setTestResult({ kind, ok: true, data: d });
+    } catch (e) {
+      setTestResult({ kind, ok: false, error: e?.message || "error" });
+    } finally {
+      setTesting(null);
+    }
+  };
 
   const totals = data?.totals;
   const conversion = useMemo(() => {
@@ -323,6 +341,64 @@ export default function AdminMetrics() {
               </button>
               <span>· datos de los últimos {days} días</span>
             </div>
+
+            {/* Herramientas admin: probar notificaciones + Live Activities sin
+                esperar a que llegue el momento real o el cron del lunes. */}
+            <Section title="Herramientas de prueba" icon={Zap}>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-3.5 flex flex-col gap-2.5" data-testid="admin-tools">
+                <button
+                  onClick={() => runTest("moment")}
+                  disabled={testing === "moment"}
+                  data-testid="admin-test-moment"
+                  className="w-full h-11 rounded-xl bg-gradient-to-r from-yellow-300 via-orange-400 to-pink-500 text-black font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60"
+                >
+                  {testing === "moment" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                  Probar notificación "EL MOMENTO" (y Live Activity)
+                </button>
+                <button
+                  onClick={() => runTest("weekly")}
+                  disabled={testing === "weekly"}
+                  data-testid="admin-test-weekly"
+                  className="w-full h-11 rounded-xl bg-white/[0.08] border border-white/15 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60"
+                >
+                  {testing === "weekly" ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                  Disparar resumen semanal ahora
+                </button>
+                {testResult && (
+                  <div
+                    data-testid="admin-test-result"
+                    className={`rounded-xl text-xs p-2.5 ${testResult.ok ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-200" : "bg-red-500/10 border border-red-500/30 text-red-200"}`}
+                  >
+                    {testResult.ok ? (
+                      <>
+                        <b>✓ Enviado.</b>
+                        {testResult.kind === "moment" ? (
+                          <span className="block mt-1 text-white/70">
+                            {testResult.data?.apns_configured
+                              ? `Live Activities arrancadas: ${testResult.data?.live_activities_started ?? 0}`
+                              : "APNs no configurado — solo push in-app"}
+                            {testResult.data?.hint ? (
+                              <span className="block text-[10px] mt-1 text-white/50">{testResult.data.hint}</span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span className="block mt-1 text-white/70">
+                            Snapshot generado · {testResult.data?.snapshot?.users?.new ?? 0} usuarios nuevos
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>✗ Error: {String(testResult.error)}</>
+                    )}
+                  </div>
+                )}
+                <p className="text-[10.5px] text-white/40 leading-snug mt-1">
+                  La notificación llega como push suave (NO ruidosa) + modal in-app. En iPhone 16.2+
+                  con la app rebuilt y con start-token subido, además arranca la Live Activity en la
+                  Dynamic Island con el countdown.
+                </p>
+              </div>
+            </Section>
           </div>
         )}
       </div>
