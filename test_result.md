@@ -103,6 +103,272 @@
 #====================================================================================================
 
 user_problem_statement: |
+  Iteración "el plan se decide solo" (owner, julio/oct 2026). Sin romper lo que ya funciona:
+  T1 Quitar del hero el contador "0 planes esta semana · 0 ciudades · 0 discotecas" (o que lea datos reales y no muestre nada si no hay dato > 50).
+  T2 Hero nuevo: H1 "El plan se decide solo.", subtítulo nuevo, CTA primario "Crear un plan gratis" -> /p/nuevo, CTA secundario discreto "Ver fiestas de esta noche" -> /fiestas/madrid.
+  T3 /p/nuevo en español (el owner lo veía en inglés).
+  T4 Reemplazar los 3 bloques de "Por qué ¿Quién va?" por: Decide con tu grupo / Guarda la noche / Mira quién va.
+  T5 Nueva respuesta de la primera pregunta del FAQ.
+  T6 "Noches en X sitio" mentía (listaba fiestas pasadas como si el owner hubiera ido) -> pasar a PRÓXIMAS noches del local.
+  T7 Isla dinámica: mostrar nombre del evento + nombre de la discoteca ("MIERCOLES · Nazca Club").
+  T8 Visibilidad del plan: todos / solo amigos / solo invitados (solo descubrimiento; el link de WhatsApp sigue abierto).
+  T9 Cancelar plan: un solo toque (antes se podía pulsar 20 veces y se cancelaba 20 veces).
+  T10 Quitar los avisos verdes de confirmación en toda la app (menos /admin). Los errores se mantienen.
+  T11 Compartir plan: el link iba como capacitor://localhost/p/... dentro de la app.
+  T12 Botón "proponer plan" también en modo compacto.
+
+backend:
+  - task: "Hero SSR nuevo + contador real (>50) + FAQ + bloques 'Por qué'"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            _HOME_T es/en/de: h1 "El plan se decide solo", sub nuevo, claves cta_primary/cta_secondary.
+            _render_home: stats solo si el número > 50 y se quita el contador de "ciudades"; si no hay stats el div no se renderiza.
+            Se ELIMINA la animación count-up de ".stat b" (era la causa de ver "0").
+            ctarow: <a class="cta cta-xl" href="{front}/p/nuevo"> + <a class="cta-sub" href="/fiestas/madrid">. cta_swap_js eliminado.
+            _SEO_UI b1/b2/b3 reemplazados (Decide con tu grupo / Guarda la noche / Mira quién va) en es/en/de + iconos nuevos.
+            FAQ: primera respuesta reescrita en es/en/de.
+            _PLAN_HOME_T h2 renombrado a "Así se monta un plan" para no duplicar el H1.
+            Verificado a mano: GET /api/home devuelve H1/sub/CTAs correctos y "133 discotecas" (dato real).
+        - working: true
+          agent: "testing"
+          comment: |
+            TESTED (2026-10-08): ✅ ALL CHECKS PASSED
+            
+            Tested GET /api/home, /api/en/home, /api/de/home:
+            ✅ ES: H1 "El plan se decide solo", CTA primary "Crear un plan gratis", CTA secondary "Ver fiestas de esta noche"
+            ✅ EN: H1 "The plan decides itself", CTA primary "Create a free plan", CTA secondary "See parties tonight"
+            ✅ DE: H1 "Der Plan entscheidet sich selbst", CTA primary "Gratis Plan erstellen", CTA secondary "Partys heute Abend ansehen"
+            ✅ All stats > 50 (found 1 stat: "133 discotecas")
+            ✅ NO "ciudades"/"cities"/"Städte" stat found
+            ✅ All 3 blocks present: "Decide con tu grupo"/"Decide with your group"/"Entscheide mit deiner Gruppe", "Guarda la noche"/"Keep the night"/"Bewahr die Nacht", "Mira quién va"/"See who's going"/"Sieh, wer hingeht"
+            ✅ New FAQ answer found in all languages
+            ✅ NO count-up animation script (toLocaleString) found
+            ✅ H2 "Así se monta un plan" found (demo section), NOT duplicated
+
+  - task: "Visibilidad del plan (todos / amigos / invitados)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            _PLAN_VISIBILIDADES = {todos, amigos, invitados}. PlanCreateIn.visibilidad (default "todos", valor inválido -> "todos").
+            Se guarda en el documento del plan y se expone en _plan_public.
+            GET /events/{event_id}/plans ahora recibe Request: filtra por visibilidad (todos -> cualquiera;
+            amigos -> amigos del creador vía accepted_friend_ids; invitados -> solo participantes/invitados;
+            el creador siempre ve el suyo). Invitado anónimo solo ve los "todos".
+            serialize_event.open_plans_count solo cuenta planes públicos (no filtra nombres pero tampoco el número).
+            IMPORTANTE: GET /plans/{slug} sigue ABIERTO a propósito (el link de WhatsApp es el core del producto).
+        - working: true
+          agent: "testing"
+          comment: |
+            TESTED (2026-10-08): ✅ ALL CHECKS PASSED
+            
+            ✅ POST /api/plans with visibilidad="todos" → returns visibilidad="todos"
+            ✅ POST /api/plans with visibilidad="amigos" → returns visibilidad="amigos"
+            ✅ POST /api/plans with visibilidad="invitados" → returns visibilidad="invitados"
+            ✅ POST /api/plans with visibilidad="basura" (invalid) → returns visibilidad="todos" (correct default)
+            ✅ GET /api/plans/{slug} returns 200 for ALL visibilidad types (link is open as intended)
+            ✅ GET /api/plans/{slug} includes visibilidad field in response
+            ✅ GET /api/events/{event_id}/plans WITHOUT auth returns ONLY "todos" plans (11 todos, 0 amigos/invitados)
+            
+            Visibility filtering working correctly: anonymous users only see "todos" plans, shared links remain open.
+
+  - task: "Isla dinámica: evento + discoteca"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            _plan_build_option guarda club_nombre = event.venue (vacío si coincide con venue_nombre).
+            Helpers nuevos _plan_norm_txt y _plan_opt_full_name (-> "MIERCOLES · Nazca Club", máx 42 chars),
+            usados en _plan_leading_option (campo `lugar` de la Live Activity), _plan_option_label y _plan_label.
+            No hace falta tocar Swift: `lugar` ya es un String libre.
+        - working: true
+          agent: "testing"
+          comment: |
+            TESTED (2026-10-08): ✅ ALL CHECKS PASSED
+            
+            ✅ POST /api/plans with evento_id + venue_nombre="Bubbles" (different from club) → club_nombre="Es Paradis Ibiza"
+            ✅ POST /api/plans with evento_id + venue_nombre="Es Paradis Ibiza" (same as club) → club_nombre="" (no repetition)
+            ✅ POST /api/plans with texto_libre option → club_nombre="" (correct)
+            
+            club_nombre field working correctly: shows club name when different from event name, empty when same or for free-text options.
+
+  - task: "venue-nights: próximas noches del local (antes pasadas/falsas)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            GET /events/{id}/venue-nights ahora devuelve eventos FUTUROS del mismo venue+city
+            (date >= max(hoy, fecha del evento), id != event_id), orden ascendente, máx 8, con
+            id/name/date/time/image_url/price/sale_state y kind:"upcoming". Ya no devuelve attended/photos.
+            nights_at_venue (prueba social de las tarjetas) pasa a contar SOLO fiestas pasadas del local
+            CON fotos en el álbum (batch en /events + helper _nights_saved_at_venue para la ruta no-batch).
+            Si es 0, el frontend cae al siguiente aviso y no se muestra nada falso.
+        - working: true
+          agent: "testing"
+          comment: |
+            TESTED (2026-10-08): ✅ ALL CHECKS PASSED (tested 3 Ibiza events)
+            
+            ✅ All dates >= today (Europe/Madrid timezone)
+            ✅ Does NOT include the same event_id
+            ✅ Dates in ascending order
+            ✅ Max 8 nights returned
+            ✅ All required fields present: id, name, date, time, image_url, price, sale_state
+            ✅ kind="upcoming" in all responses
+            ✅ NO "attended" or "photos" fields (removed as expected)
+            ✅ GET /api/events?city=Ibiza: all events have nights_at_venue=0 (no photos in album_uploads)
+            ✅ open_plans_count field present in all events
+            
+            venue-nights endpoint working correctly: returns only future nights, properly ordered, with correct fields.
+
+frontend:
+  - task: "Quitar avisos verdes de confirmación (toasts) en toda la app menos /admin"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/lib/notify.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Nuevo src/lib/notify.js: exporta `toast` donde success/info/warning/message/loading/custom son no-op
+            y error/dismiss pasan a sonner. 32 archivos cambiados de `from "sonner"` a `from "@/lib/notify"`.
+            Los 14 archivos de /admin siguen importando sonner directamente (decisión del owner).
+
+  - task: "Compartir plan con dominio público (bug capacitor://localhost)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/lib/share.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Nuevo src/lib/share.js con PUBLIC_BASE (REACT_APP_PUBLIC_WEB_URL o https://www.quienva.me),
+            publicUrl(path) y ensurePublicUrl(url). PlanView.shareUrl ya no usa window.location.origin.
+            CreatePlanSheet normaliza data.share_url del backend con ensurePublicUrl.
+
+  - task: "Cancelar/cerrar plan: un solo toque + confirmación"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/PlanView.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Estados `acting` y `confirmCancel`. runAction() ignora toques si planLocked
+            (closeMut.isPending || acting || isClosed). "Cancelar" abre confirmación
+            (planview-cancel-confirm / -yes / -no) y el botón se bloquea con spinner.
+            Ya no se muestra el toast "Plan actualizado".
+
+  - task: "Selector de visibilidad al crear plan + textos ES exactos"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/CreatePlanSheet.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Chips Todos/Amigos/Invitados (data-testid create-plan-vis-*) con pista debajo; se envía `visibilidad`.
+            i18n es: "Monta tu plan", "Elige hasta 3 sitios y que tu grupo vote", "¿Dónde quedáis?",
+            "Elige una fiesta, una discoteca o escríbelo tú", "Fiestas/Discotecas/A mano",
+            "Título y cupo (opcional)", "Crear y compartir", "Cancelar", feed "Estás sin cuenta 👀"/"Entrar".
+            i18n/index.js: detection order ["localStorage"] -> la app arranca SIEMPRE en español.
+            Verificado a mano en el navegador.
+
+  - task: "Próximas noches del local + botón plan en modo compacto"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/VenueNights.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            VenueNights reescrito: "Próximas noches en {{venue}}" con fecha/hora/precio (sin asistentes ni fotos).
+            CompactEventCard: nuevo mini-botón (data-testid compact-plan-{id}) que abre la hoja de crear plan
+            con el evento preseleccionado, debajo de la campana.
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Hero SSR nuevo + contador real (>50) + FAQ + bloques 'Por qué'"
+    - "Visibilidad del plan (todos / amigos / invitados)"
+    - "venue-nights: próximas noches del local (antes pasadas/falsas)"
+    - "Isla dinámica: evento + discoteca"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: |
+        Solo BACKEND por ahora (el frontend lo he verificado a mano con screenshots y espero permiso del owner).
+        Base local: http://localhost:8001/api  · Mongo local `quienva_dev` con 43 eventos (casi todos de Ibiza) y 133 locales.
+        NO hay usuarios creados; los planes funcionan SIN cuenta (creador identificado por `creador_token`).
+        Probad por favor:
+        1. GET /api/home (y /api/en/home, /api/de/home): H1 "El plan se decide solo", subtítulo nuevo,
+           <a class="cta cta-xl" ...>/p/nuevo</a> y <a class="cta-sub" ...>/fiestas/madrid</a>.
+           NO debe aparecer ningún ".stat" con valor <= 50 ni el contador de "ciudades".
+           Debe aparecer "Decide con tu grupo", "Guarda la noche", "Mira quién va" y la nueva respuesta del FAQ.
+           No debe existir en el HTML el script de count-up (buscad "toLocaleString" cerca de ".stat b").
+        2. POST /api/plans con visibilidad "todos" / "amigos" / "invitados" / "basura" (esta última debe guardarse como "todos").
+           Comprobad que GET /api/plans/{slug} responde 200 SIEMPRE (el link debe seguir abierto) y devuelve `visibilidad`.
+        3. GET /api/events/{event_id}/plans sin autenticación: solo debe listar los planes con visibilidad "todos".
+           Usad un evento real (p. ej. d0a5fd95-6d9e-452b-b878-7a84ae578462, Bubbles en Es Paradis Ibiza) y cread
+           planes sobre él con las 3 visibilidades.
+        4. POST /api/plans con una opción `evento_id` real: la opción devuelta debe traer `club_nombre` con el
+           nombre de la discoteca (p. ej. "Es Paradis Ibiza") cuando el nombre del evento es distinto, y vacío si coincide.
+        5. GET /api/events/{id}/venue-nights: todas las `date` deben ser >= hoy, no debe incluir el propio evento,
+           deben venir ordenadas ascendentemente y traer kind:"upcoming". Ya NO debe traer `attended` ni `photos`.
+        6. GET /api/events?city=Ibiza&date_filter=all debe seguir respondiendo 200 y `nights_at_venue` debe ser 0
+           mientras no haya fotos en album_uploads de fiestas pasadas de ese local (antes contaba fiestas pasadas).
+        7. Regresión: POST /api/plans/{slug}/respond, /close, /cancel y GET /api/plans/mine deben seguir funcionando.
+
+
+user_problem_statement: |
   Iteración importante del app "¿Quién va?" (Palma). Quiero (1) que el botón Google login siga
   visible pero funcione bien (pendiente credenciales), (2) racha destacada en el feed (no solo
   finde, también días y semanas seguidas), (3) sistema masivo de insignias con puntos por cada
@@ -2656,7 +2922,7 @@ agent_communication:
           
           Test environment: Mobile viewport 430x920, Ibiza city, 16 events loaded
           Admin credentials: admin@quienva.app / admin123 (working)
-          Backend URL: https://voting-island-widget.preview.emergentagent.com
+          Backend URL: https://voting-party-planner.preview.emergentagent.com
 
   - agent: "testing"
     message: |
@@ -3215,7 +3481,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials: admin@quienva.app / admin123 + 3 normal test users
-      Base URL: https://voting-island-widget.preview.emergentagent.com/api
+      Base URL: https://voting-party-planner.preview.emergentagent.com/api
 
   - agent: "main"
     message: |
@@ -3329,7 +3595,7 @@ agent_communication:
       
       Test file: /app/backend_test.py
       Test credentials used: admin@quienva.app / admin123 + 5 fresh test users (Alice, Bob, and 3 others)
-      Base URL: https://voting-island-widget.preview.emergentagent.com/api
+      Base URL: https://voting-party-planner.preview.emergentagent.com/api
 
   - agent: "testing"
     message: |
@@ -6002,7 +6268,7 @@ agent_communication:
         
         Test files: /app/backend_test_captures_discover.py, /app/backend_test_discover_moments.py
         Test credentials used: admin@quienva.app / admin123 + 5 fresh test users
-        Base URL: https://voting-island-widget.preview.emergentagent.com/api
+        Base URL: https://voting-party-planner.preview.emergentagent.com/api
         Backend logs: No errors related to tested endpoints (only expected FourVenues token warnings)
 
   - agent: "main"
@@ -6067,7 +6333,7 @@ agent_communication:
       All multi-city expansion features working perfectly with ZERO issues. City filtering is precise with no cross-city contamination. WhatsApp share OG page generates proper meta tags for rich social previews. All regression tests pass. The app is ready for multi-city launch.
       
       Test file: /app/backend_test.py
-      Base URL: https://voting-island-widget.preview.emergentagent.com/api
+      Base URL: https://voting-party-planner.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -6175,7 +6441,7 @@ agent_communication:
       The privacy implementation is solid - real names are never exposed to other users in any endpoint (search, friends, profiles), while users still see their own real name. The city-alerts opt-in feature works correctly with proper defaults and persistence.
       
       Test file: /app/backend_test_fase3.py
-      Base URL: https://voting-island-widget.preview.emergentagent.com/api
+      Base URL: https://voting-party-planner.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
 
 
@@ -6302,7 +6568,7 @@ agent_communication:
       regression tests pass.
       
       Test file: /app/city_isolation_test.py
-      Base URL: https://voting-island-widget.preview.emergentagent.com/api
+      Base URL: https://voting-party-planner.preview.emergentagent.com/api
       Admin credentials: admin@quienva.app / admin123
       Test users created: 4 fresh users (Ibiza, Madrid, Barcelona, Marbella)
 
@@ -6718,7 +6984,7 @@ agent_communication:
         No false positives detected. Feed ordering preserved (affiliate-first, then price descending). All commission URLs correctly formatted.
         
         Test file: /app/backend_test.py
-        Base URL: https://voting-island-widget.preview.emergentagent.com/api
+        Base URL: https://voting-party-planner.preview.emergentagent.com/api
 
 test_focus_2026_08_06_notif_and_cityalerts:
   goal: "Verificar 2 cambios de backend SIN romper nada. Entorno LOCAL nuevo: la BD arranca vacía y NO hay token de FourVenues (no probar scrapers/afiliado aquí)."
@@ -6792,7 +7058,7 @@ agent_communication:
         Both bug fixes working perfectly. No regressions detected. All endpoints returning correct values with proper persistence.
         
         Test file: /app/backend_test.py
-        Base URL: https://voting-island-widget.preview.emergentagent.com/api
+        Base URL: https://voting-party-planner.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
 
 
@@ -7275,7 +7541,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://voting-island-widget.preview.emergentagent.com/api
+      Base URL: https://voting-party-planner.preview.emergentagent.com/api
       Admin: admin@quienva.app / admin123
       Test user: u1test1786031593@test.com
 
@@ -7412,7 +7678,7 @@ return 401 for guests.
         NO ISSUES FOUND. All requirements from review request satisfied.
         
         Test file: /app/backend_test.py
-        Base URL: https://voting-island-widget.preview.emergentagent.com/api
+        Base URL: https://voting-party-planner.preview.emergentagent.com/api
 
 
 #====================================================================================================
@@ -7649,7 +7915,7 @@ agent_communication:
         - Own username update allowed (no-op, no clash)
         
         Test file: /app/backend_test.py
-        Backend URL: https://voting-island-widget.preview.emergentagent.com/api
+        Backend URL: https://voting-party-planner.preview.emergentagent.com/api
         Admin: admin@quienva.app / admin123
         
         NO ISSUES FOUND. All 3 tasks working perfectly.
@@ -7746,7 +8012,7 @@ agent_communication:
       TESTED: New SSR homepage, venue pages, and sitemap features for SEO optimization.
       
       TEST ENVIRONMENT:
-      - Base URL: https://voting-island-widget.preview.emergentagent.com/api
+      - Base URL: https://voting-party-planner.preview.emergentagent.com/api
       - Test data: Venue "Olivia Valere" (slug: olivia-valere) in Marbella with events t1 (Gims Live), t2 (House Night)
       - Canonical URLs use preview domain (expected behavior for preview environment)
       
@@ -7898,7 +8164,7 @@ agent_communication:
       NO ISSUES FOUND. All requirements from review request satisfied.
       
       Test file: /app/backend_test.py
-      Base URL: https://voting-island-widget.preview.emergentagent.com/api
+      Base URL: https://voting-party-planner.preview.emergentagent.com/api
       Total tests: 24 passed, 0 failed
 
 backend:
@@ -9287,7 +9553,7 @@ agent_communication:
           ✅ TEST 1: Artist page with events (carl-cox)
           - GET /api/artista/carl-cox with User-Agent: Googlebot → 200 ✓
           - <h1> contains "Carl Cox" ✓
-          - Canonical link present: https://voting-island-widget.preview.emergentagent.com/artista/carl-cox ✓
+          - Canonical link present: https://voting-party-planner.preview.emergentagent.com/artista/carl-cox ✓
           - 4 hreflang links present (es/en/de/x-default) ✓
           - 10 JSON-LD script tags found ✓
           - 7 valid Event JSON-LD structures with complete data:
@@ -10518,7 +10784,7 @@ frontend:
           ✅ TESTED WEB BUILD LAUNCH SPLASH BEHAVIOR (3 test scenarios, 100% PASS)
           
           Verified the branded launch overlay (#qv-splash) behavior on the web build at:
-          https://voting-island-widget.preview.emergentagent.com/feed
+          https://voting-party-planner.preview.emergentagent.com/feed
           
           ✅ TEST 1: WEB (UNTOUCHED) - Splash hidden on plain web (PASS)
           - Navigated to /feed as guest (no login)
@@ -10566,7 +10832,7 @@ agent_communication:
       TEST RESULTS:
       
       ✅ TEST 1: WEB (UNTOUCHED) - Splash hidden on plain web (PASS)
-      - Navigated to /feed as guest at https://voting-island-widget.preview.emergentagent.com
+      - Navigated to /feed as guest at https://voting-party-planner.preview.emergentagent.com
       - #qv-splash element exists in DOM: YES ✓
       - getComputedStyle(#qv-splash).display === 'none' ✓ (overlay HIDDEN on plain web)
       - <html> has qv-native class: NO ✓ (correct for web)
@@ -10621,7 +10887,7 @@ agent_communication:
       native launch image (LaunchScreen.storyboard + splash.png) cannot be tested in browser and will 
       only be visible after Codemagic rebuild + App Store update.
       
-      Test URL: https://voting-island-widget.preview.emergentagent.com/feed
+      Test URL: https://voting-party-planner.preview.emergentagent.com/feed
       Test date: 2026-08-29
 
             * Line 1: "¿Quién" in white (rgb(255, 255, 255)) ✓
@@ -11990,7 +12256,7 @@ agent_communication:
         comment: |
           TESTED POLL CLOSED MESSAGE WITH WINNER FIELD (2026-09-06) - 100% PASS
           
-          Base URL: https://voting-island-widget.preview.emergentagent.com/api
+          Base URL: https://voting-party-planner.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!
           
           ✅ TEST SCENARIO:
@@ -12025,7 +12291,7 @@ agent_communication:
         comment: |
           TESTED NUDGE CONFIG ENDPOINTS (2026-09-06) - 100% PASS
           
-          Base URL: https://voting-island-widget.preview.emergentagent.com/api
+          Base URL: https://voting-party-planner.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!, ana@qvtest.com / User1234!
           
           ✅ TEST 1: GET /api/admin/invite-nudge/config (admin)
@@ -12085,7 +12351,7 @@ agent_communication:
         comment: |
           TESTED NUDGE STATS ENDPOINTS (2026-09-06) - 100% PASS
           
-          Base URL: https://voting-island-widget.preview.emergentagent.com/api
+          Base URL: https://voting-party-planner.preview.emergentagent.com/api
           Test credentials: admin@qvtest.com / Admin1234!, luis@qvtest.com / User1234!, ana@qvtest.com / User1234!
           
           ✅ TEST 1: GET /api/admin/invite-nudge/stats (admin)
@@ -12134,7 +12400,7 @@ agent_communication:
         comment: |
           TESTED BACKEND STARTUP VERIFICATION (2026-09-06) - 100% PASS
           
-          Base URL: https://voting-island-widget.preview.emergentagent.com/api
+          Base URL: https://voting-party-planner.preview.emergentagent.com/api
           
           ✅ TEST 1: Backend health check
           - GET /api/cities → 200 ✓
@@ -14565,7 +14831,7 @@ agent_communication:
       Test credentials: admin@quienva.app / Admin1234!
       Test event: Chinois Presents... (id: 8f297f48-dee2-4a10-b320-6d24a5a67903)
       Database: 50 events seeded in Ibiza via scrapers
-      Backend URL: https://voting-island-widget.preview.emergentagent.com/api
+      Backend URL: https://voting-party-planner.preview.emergentagent.com/api
       
       NO ISSUES FOUND. Feature ready for production.
 
@@ -14726,7 +14992,7 @@ backend:
           Test credentials: admin@quienva.app / admin123
           Test event: Chinois Presents... (id: 8b9c7dab-c4b5-46bc-bcb2-637be11fee44)
           Database: 50 events in Ibiza
-          Backend URL: https://voting-island-widget.preview.emergentagent.com/api
+          Backend URL: https://voting-party-planner.preview.emergentagent.com/api
           
           NO ISSUES FOUND. Feature ready for production.
 
@@ -15838,3 +16104,71 @@ agent_communication:
       
       Test file: /app/backend_test_plan_invites.py
       All test scenarios documented with concrete examples.
+    - agent: "testing"
+      message: |
+        BACKEND TESTING COMPLETE (2026-10-08) - "El plan se decide solo" iteration
+        
+        ✅ ALL 7 TEST SUITES PASSED (100% success rate)
+        
+        Tested ONLY backend at http://localhost:8001/api as requested.
+        
+        ### SUMMARY
+        
+        ✅ Landing SSR (GET /api/home, /api/en/home, /api/de/home):
+           - H1 "El plan se decide solo" / "The plan decides itself" / "Der Plan entscheidet sich selbst"
+           - CTA primary "Crear un plan gratis" with id="qvcta" → /p/nuevo
+           - CTA secondary "Ver fiestas de esta noche" → /fiestas/madrid (all languages)
+           - Stats > 50 only (found "133 discotecas")
+           - NO "ciudades"/"cities"/"Städte" stat
+           - 3 blocks present: Decide/Guarda/Mira (all languages)
+           - New FAQ answer present
+           - NO count-up animation script
+           - H2 "Así se monta un plan" (demo section), NOT duplicated
+        
+        ✅ Plan Visibility (POST /api/plans with visibilidad):
+           - "todos" → "todos" ✓
+           - "amigos" → "amigos" ✓
+           - "invitados" → "invitados" ✓
+           - "basura" (invalid) → "todos" (correct default) ✓
+           - GET /api/plans/{slug} always returns 200 (link is open) ✓
+           - GET /api/events/{id}/plans WITHOUT auth: only "todos" plans visible ✓
+        
+        ✅ Club Nombre in Plan Options:
+           - venue_nombre different from club → club_nombre shows club name ✓
+           - venue_nombre same as club → club_nombre empty (no repetition) ✓
+           - texto_libre option → club_nombre empty ✓
+        
+        ✅ Venue Nights (GET /api/events/{id}/venue-nights):
+           - All dates >= today (Europe/Madrid) ✓
+           - Does NOT include same event_id ✓
+           - Dates in ascending order ✓
+           - Max 8 nights ✓
+           - All required fields present ✓
+           - kind="upcoming" ✓
+           - NO "attended" or "photos" fields ✓
+        
+        ✅ Events Ibiza (GET /api/events?city=Ibiza&date_filter=all):
+           - nights_at_venue=0 for all events (no photos in album_uploads) ✓
+           - open_plans_count field present ✓
+        
+        ✅ Regression Tests:
+           - POST /api/plans/{slug}/respond (intencion: dentro/voy_si/paso) ✓
+           - POST /api/plans/{slug}/close (with x-participante-token) ✓
+           - POST /api/plans/{slug}/cancel (with x-participante-token) ✓
+           - GET /api/plans/mine?slugs=... ✓
+           - GET /api/ciudad/madrid (SSR HTML) ✓
+           - GET /api/p/nuevo (SSR HTML) ✓
+        
+        ### ACTION ITEMS FOR MAIN AGENT
+        
+        ✅ ALL BACKEND TESTS PASSED - NO ISSUES FOUND
+        
+        All backend functionality for "el plan se decide solo" iteration is working correctly:
+        - Landing pages (ES/EN/DE) with new hero, stats, blocks, and FAQ
+        - Plan visibility system (todos/amigos/invitados) with proper filtering
+        - Club nombre in plan options (dynamic island)
+        - Venue-nights endpoint returning only future events
+        - Events API with correct nights_at_venue and open_plans_count
+        - All regression tests passing
+        
+        YOU MUST ASK USER BEFORE DOING FRONTEND TESTING

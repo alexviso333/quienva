@@ -8,7 +8,7 @@ import {
   X, ChevronLeft, ChevronRight, Share2, Download, Loader2,
   Sparkles, PartyPopper, Building2, Music2, Camera, Users, CalendarDays, Images, Zap,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 function prevMonth(mstr) {
   const y = parseInt(mstr.slice(0, 4), 10);

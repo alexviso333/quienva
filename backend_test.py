@@ -1,391 +1,857 @@
 #!/usr/bin/env python3
 """
-Backend test for ¿Quién va? FastAPI app
-Testing focus areas from review request:
-1. SEO city landing pages show ALL events (>24) - HIGH PRIORITY
-2. Auth regression (google/apple callbacks, email/password flow) - HIGH PRIORITY
-3. General regression (GET /api/cities, GET /api/events)
+Backend testing for "el plan se decide solo" iteration (2026-10)
+Testing ONLY backend at http://localhost:8001/api
 """
-
 import requests
 import json
-import uuid
+import re
 from datetime import datetime, timedelta
-from pymongo import MongoClient
-import os
-from dotenv import load_dotenv
-from pathlib import Path
+from zoneinfo import ZoneInfo
 
-# Load environment
-load_dotenv(Path('/app/backend/.env'))
+BASE_URL = "http://localhost:8001/api"
 
-# Configuration
-BASE_URL = "https://voting-island-widget.preview.emergentagent.com/api"
-MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-DB_NAME = os.environ.get('DB_NAME', 'quienva')
-
-# MongoDB connection
-mongo_client = MongoClient(MONGO_URL)
-db = mongo_client[DB_NAME]
-
-# Test results
-test_results = {
-    "passed": 0,
-    "failed": 0,
-    "errors": []
-}
-
-def log_test(name, passed, details=""):
-    """Log test result"""
-    if passed:
-        test_results["passed"] += 1
-        print(f"✅ {name}")
-    else:
-        test_results["failed"] += 1
-        test_results["errors"].append(f"{name}: {details}")
-        print(f"❌ {name}: {details}")
-    if details and passed:
-        print(f"   {details}")
-
-def seed_events_for_city(city_id, count=30):
-    """Seed test events for a city"""
-    print(f"\n📦 Seeding {count} events for {city_id}...")
-    
-    # Get today's date in Europe/Madrid timezone
-    today = datetime.now()
-    
-    events = []
-    for i in range(count):
-        event_date = (today + timedelta(days=i)).strftime("%Y-%m-%d")
-        event = {
-            "id": str(uuid.uuid4()),
-            "name": f"Test Event {i+1} - {city_id}",
-            "venue": f"Test Venue {(i % 5) + 1}",
-            "city": city_id,
-            "date": event_date,
-            "time": "23:00",
-            "image_url": f"https://example.com/image{i}.jpg",
-            "price_tiers": [{"label": "General", "price": 20 + i}],
-            "commission_url": f"https://example.com/event{i}",
-            "sale_state": "on_sale",
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
-        }
-        events.append(event)
-    
-    # Insert events
-    if events:
-        db.events.insert_many(events)
-        print(f"✅ Seeded {len(events)} events for {city_id}")
-    
-    return len(events)
-
-def cleanup_test_events():
-    """Clean up test events"""
-    result = db.events.delete_many({"name": {"$regex": "^Test Event"}})
-    print(f"🧹 Cleaned up {result.deleted_count} test events")
-
-def test_seo_city_pages():
-    """Test 1: SEO city landing pages show ALL events (>24)"""
+def test_landing_ssr():
+    """Test 1: Landing SSR pages (GET /api/home, /api/en/home, /api/de/home)"""
     print("\n" + "="*80)
-    print("TEST 1: SEO CITY LANDING PAGES SHOW ALL EVENTS (HIGH PRIORITY)")
+    print("TEST 1: LANDING SSR (GET /api/home, /api/en/home, /api/de/home)")
     print("="*80)
     
-    # Seed MORE than 24 events for Madrid
-    city_id = "Madrid"
-    event_count = seed_events_for_city(city_id, 30)
+    tests = [
+        ("es", f"{BASE_URL}/home", "El plan se decide solo", "Crear un plan gratis", "Ver fiestas de esta noche"),
+        ("en", f"{BASE_URL}/en/home", "The plan decides itself", "Create a free plan", "See parties tonight"),
+        ("de", f"{BASE_URL}/de/home", "Der Plan entscheidet sich selbst", "Gratis Plan erstellen", "Partys heute Abend ansehen"),
+    ]
     
-    # Test 1a: GET /api/ciudad/madrid (HTML)
-    print(f"\n1a. Testing GET /api/ciudad/madrid...")
-    try:
-        resp = requests.get(f"{BASE_URL}/ciudad/madrid", timeout=30)
-        log_test(
-            "GET /api/ciudad/madrid returns 200",
-            resp.status_code == 200,
-            f"Status: {resp.status_code}"
-        )
-        
-        if resp.status_code == 200:
+    results = []
+    for lang, url, h1_text, cta_text, cta_sub_text in tests:
+        print(f"\n--- Testing {lang.upper()} ({url}) ---")
+        try:
+            resp = requests.get(url, timeout=10)
+            print(f"Status: {resp.status_code}")
+            
+            if resp.status_code != 200:
+                results.append(f"❌ {lang}: HTTP {resp.status_code}")
+                continue
+            
             html = resp.text
             
-            # Count seo-event-card items
-            card_count = html.count('data-testid="seo-event-card"')
-            log_test(
-                f"Renders MORE than 24 event cards (found {card_count})",
-                card_count > 24,
-                f"Expected >24, got {card_count}"
-            )
+            # Check H1
+            h1_match = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.DOTALL)
+            if h1_match and h1_text in h1_match.group(1):
+                print(f"✅ H1 contains: '{h1_text}'")
+            else:
+                print(f"❌ H1 does NOT contain: '{h1_text}'")
+                if h1_match:
+                    print(f"   Found: {h1_match.group(1)[:100]}")
+                results.append(f"❌ {lang}: H1 incorrect")
+                continue
             
-            # Check stats header count
-            # Look for pattern like "30 planes" or similar
-            import re
-            stats_match = re.search(r'(\d+)\s+planes?', html, re.IGNORECASE)
-            if stats_match:
-                stats_count = int(stats_match.group(1))
-                log_test(
-                    f"Stats header count matches seeded events",
-                    stats_count >= 30,
-                    f"Stats shows {stats_count} events"
-                )
+            # Check CTA primary button
+            cta_match = re.search(r'<a[^>]*id="qvcta"[^>]*class="cta cta-xl"[^>]*href="[^"]*p/nuevo"[^>]*>(.*?)</a>', html, re.DOTALL)
+            if not cta_match:
+                cta_match = re.search(r'<a[^>]*class="cta cta-xl"[^>]*id="qvcta"[^>]*href="[^"]*p/nuevo"[^>]*>(.*?)</a>', html, re.DOTALL)
             
-            # Check JSON-LD blocks are capped
-            jsonld_count = html.count('application/ld+json')
-            log_test(
-                f"JSON-LD blocks are capped (~30 event blocks)",
-                jsonld_count < 50,
-                f"Found {jsonld_count} JSON-LD blocks (should be ~30-35)"
-            )
+            if cta_match and cta_text in cta_match.group(1):
+                print(f"✅ CTA primary button found with text: '{cta_text}'")
+            else:
+                print(f"❌ CTA primary button NOT found or text incorrect")
+                results.append(f"❌ {lang}: CTA primary button missing")
+                continue
             
-    except Exception as e:
-        log_test("GET /api/ciudad/madrid", False, str(e))
+            # Check CTA secondary link
+            cta_sub_patterns = [
+                r'<a[^>]*class="cta-sub"[^>]*href="[^"]*fiestas/madrid"[^>]*>(.*?)</a>',
+                r'<a[^>]*class="cta-sub"[^>]*href="[^"]*parties/madrid"[^>]*>(.*?)</a>',
+                r'<a[^>]*class="cta-sub"[^>]*href="[^"]*partys/madrid"[^>]*>(.*?)</a>',
+            ]
+            cta_sub_match = None
+            for pattern in cta_sub_patterns:
+                cta_sub_match = re.search(pattern, html, re.DOTALL)
+                if cta_sub_match:
+                    break
+            
+            if cta_sub_match and cta_sub_text in cta_sub_match.group(1):
+                print(f"✅ CTA secondary link found with text: '{cta_sub_text}'")
+            else:
+                print(f"❌ CTA secondary link NOT found or text incorrect")
+                if cta_sub_match:
+                    print(f"   Found text: {cta_sub_match.group(1)[:100]}")
+                results.append(f"❌ {lang}: CTA secondary link missing")
+                continue
+            
+            # Check stats: no stat should be <= 50
+            stat_matches = re.findall(r'<span[^>]*class="stat"[^>]*>.*?<b[^>]*>(\d+)</b>', html, re.DOTALL)
+            invalid_stats = [int(s) for s in stat_matches if int(s) <= 50]
+            if invalid_stats:
+                print(f"❌ Found stats with value <= 50: {invalid_stats}")
+                results.append(f"❌ {lang}: Stats <= 50 found")
+                continue
+            else:
+                print(f"✅ No stats with value <= 50 (found {len(stat_matches)} stats)")
+            
+            # Check NO "ciudades"/"cities"/"Städte" stat
+            forbidden_words = ["ciudades", "cities", "Städte"]
+            has_forbidden = False
+            for word in forbidden_words:
+                # Check if it's in a stat context (within <span class="stat">...</span>)
+                pattern = r'<span[^>]*class="stat"[^>]*>.*?' + re.escape(word) + r'.*?</span>'
+                if re.search(pattern, html, re.IGNORECASE | re.DOTALL):
+                    print(f"❌ Found forbidden word '{word}' in stats")
+                    has_forbidden = True
+            
+            if not has_forbidden:
+                print(f"✅ No forbidden words (ciudades/cities/Städte) in stats")
+            else:
+                results.append(f"❌ {lang}: Forbidden stat word found")
+                continue
+            
+            # Check for the 3 new blocks
+            blocks = [
+                ("Decide con tu grupo", "Decide with your group", "Entscheide mit deiner Gruppe"),
+                ("Guarda la noche", "Keep the night", "Bewahr die Nacht"),
+                ("Mira quién va", "See who", "Sieh, wer"),  # Partial match to handle HTML entities
+            ]
+            
+            missing_blocks = []
+            for es, en, de in blocks:
+                text = es if lang == "es" else (en if lang == "en" else de)
+                if text not in html:
+                    missing_blocks.append(text)
+            
+            if missing_blocks:
+                print(f"❌ Missing blocks: {missing_blocks}")
+                results.append(f"❌ {lang}: Missing blocks")
+                continue
+            else:
+                print(f"✅ All 3 blocks found (Decide/Guarda/Mira)")
+            
+            # Check FAQ first answer
+            faq_texts = {
+                "es": "es la forma más rápida de decidir dónde salís",
+                "en": "is the fastest way to decide where you're going out",
+                "de": "ist der schnellste Weg zu entscheiden",  # Partial match
+            }
+            if faq_texts[lang] in html:
+                print(f"✅ New FAQ answer found")
+            else:
+                print(f"❌ New FAQ answer NOT found")
+                results.append(f"❌ {lang}: FAQ answer missing")
+                continue
+            
+            # Check NO count-up animation script
+            if 'toLocaleString("es")' in html or 'toLocaleString(' in html:
+                print(f"❌ Count-up animation script found (should be removed)")
+                results.append(f"❌ {lang}: Count-up script present")
+                continue
+            else:
+                print(f"✅ No count-up animation script")
+            
+            # Check H2 "Así se monta un plan" (not duplicated)
+            h2_matches = re.findall(r'<h2[^>]*>(.*?)</h2>', html, re.DOTALL)
+            h2_texts = [re.sub(r'<[^>]+>', '', m).strip() for m in h2_matches]
+            
+            if lang == "es":
+                h1_count = sum(1 for t in h2_texts if "El plan se decide solo" in t)
+                demo_count = sum(1 for t in h2_texts if "Así se monta un plan" in t)
+                
+                if h1_count > 0:
+                    print(f"❌ H2 'El plan se decide solo' found (should not be duplicated)")
+                    results.append(f"❌ {lang}: H2 duplicated")
+                    continue
+                
+                if demo_count > 0:
+                    print(f"✅ H2 'Así se monta un plan' found (demo section)")
+                else:
+                    print(f"⚠️  H2 'Así se monta un plan' not found (may be OK)")
+            
+            results.append(f"✅ {lang}: ALL CHECKS PASSED")
+            
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            results.append(f"❌ {lang}: Exception - {e}")
     
-    # Test 1b: Timeframe pages still work
-    print(f"\n1b. Testing timeframe pages...")
-    try:
-        resp = requests.get(f"{BASE_URL}/ciudad/madrid/esta-noche", timeout=30)
-        log_test(
-            "GET /api/ciudad/madrid/esta-noche returns 200",
-            resp.status_code == 200,
-            f"Status: {resp.status_code}"
-        )
-    except Exception as e:
-        log_test("GET /api/ciudad/madrid/esta-noche", False, str(e))
-    
-    try:
-        resp = requests.get(f"{BASE_URL}/ciudad/madrid/este-finde", timeout=30)
-        log_test(
-            "GET /api/ciudad/madrid/este-finde returns 200",
-            resp.status_code == 200,
-            f"Status: {resp.status_code}"
-        )
-    except Exception as e:
-        log_test("GET /api/ciudad/madrid/este-finde", False, str(e))
-    
-    # Test 1c: Home page is UNCHANGED
-    print(f"\n1c. Testing home page unchanged...")
-    try:
-        resp = requests.get(f"{BASE_URL}/home", timeout=30)
-        log_test(
-            "GET /api/home returns 200 HTML",
-            resp.status_code == 200 and 'text/html' in resp.headers.get('content-type', ''),
-            f"Status: {resp.status_code}, Content-Type: {resp.headers.get('content-type')}"
-        )
-    except Exception as e:
-        log_test("GET /api/home", False, str(e))
-
-def test_auth_regression():
-    """Test 2: Auth regression (google/apple callbacks, email/password flow)"""
     print("\n" + "="*80)
-    print("TEST 2: AUTH REGRESSION (HIGH PRIORITY)")
+    print("TEST 1 SUMMARY:")
+    for r in results:
+        print(r)
     print("="*80)
     
-    # Test 2a: Google callback with invalid body (must NOT return 500)
-    print(f"\n2a. Testing Google callback with invalid body...")
-    try:
-        payload = {
-            "code": "bad_code_12345",
-            "redirect_uri": "http://example.com",
-            "guest_city": None
-        }
-        resp = requests.post(f"{BASE_URL}/auth/google/callback", json=payload, timeout=10)
-        log_test(
-            "POST /api/auth/google/callback with invalid code returns 400/401 (NOT 500)",
-            resp.status_code in [400, 401],
-            f"Status: {resp.status_code} (expected 400/401, not 500)"
-        )
-    except Exception as e:
-        log_test("POST /api/auth/google/callback graceful error", False, str(e))
+    return all("✅" in r for r in results)
+
+
+def test_plan_visibility():
+    """Test 2: Plan visibility (todos/amigos/invitados/invalid)"""
+    print("\n" + "="*80)
+    print("TEST 2: PLAN VISIBILITY")
+    print("="*80)
     
-    # Test 2b: Apple callback with invalid identity_token (must NOT return 500)
-    print(f"\n2b. Testing Apple callback with invalid token...")
-    try:
-        payload = {
-            "identity_token": "invalid_token_xyz",
-            "guest_city": None
-        }
-        resp = requests.post(f"{BASE_URL}/auth/apple/callback", json=payload, timeout=10)
-        log_test(
-            "POST /api/auth/apple/callback with invalid token returns 400/401 (NOT 500)",
-            resp.status_code in [400, 401],
-            f"Status: {resp.status_code} (expected 400/401, not 500)"
-        )
-    except Exception as e:
-        log_test("POST /api/auth/apple/callback graceful error", False, str(e))
+    results = []
     
-    # Test 2c: Email/password flow (register -> login -> /me)
-    print(f"\n2c. Testing email/password flow...")
-    test_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
-    test_password = "TestPass123!"
-    test_username = f"testuser_{uuid.uuid4().hex[:6]}"
+    # Test creating plans with different visibilidad values
+    test_cases = [
+        ("todos", "todos"),
+        ("amigos", "amigos"),
+        ("invitados", "invitados"),
+        ("basura", "todos"),  # Invalid should default to "todos"
+    ]
     
-    # Register
-    try:
-        register_payload = {
-            "email": test_email,
-            "password": test_password,
-            "name": "Test User",
-            "username": test_username,
-            "birthdate": "1995-01-01",
-            "city": "Madrid"
-        }
-        resp = requests.post(f"{BASE_URL}/auth/register", json=register_payload, timeout=10)
-        log_test(
-            "POST /api/auth/register creates user",
-            resp.status_code == 200,
-            f"Status: {resp.status_code}"
-        )
+    created_slugs = []
+    
+    for input_vis, expected_vis in test_cases:
+        print(f"\n--- Creating plan with visibilidad='{input_vis}' ---")
         
-        if resp.status_code == 200:
-            register_data = resp.json()
-            token = register_data.get("token")
+        payload = {
+            "opciones": [
+                {"texto_libre": f"Test option for {input_vis}"}
+            ],
+            "visibilidad": input_vis
+        }
+        
+        try:
+            resp = requests.post(f"{BASE_URL}/plans", json=payload, timeout=10)
+            print(f"Status: {resp.status_code}")
             
-            # Login
-            login_payload = {
-                "email": test_email,
-                "password": test_password
-            }
-            resp = requests.post(f"{BASE_URL}/auth/login", json=login_payload, timeout=10)
-            log_test(
-                "POST /api/auth/login returns token",
-                resp.status_code == 200 and "token" in resp.json(),
-                f"Status: {resp.status_code}"
-            )
+            if resp.status_code != 200:
+                print(f"❌ Failed to create plan: {resp.text[:200]}")
+                results.append(f"❌ Create plan with visibilidad='{input_vis}': HTTP {resp.status_code}")
+                continue
+            
+            data = resp.json()
+            slug = data.get("slug")
+            creador_token = data.get("creador_token")
+            plan_vis = data.get("plan", {}).get("visibilidad")
+            
+            print(f"Created plan: {slug}")
+            print(f"Returned visibilidad: {plan_vis}")
+            print(f"Expected visibilidad: {expected_vis}")
+            
+            if plan_vis == expected_vis:
+                print(f"✅ Visibilidad correct: {plan_vis}")
+                results.append(f"✅ Create plan with visibilidad='{input_vis}' -> '{expected_vis}'")
+                created_slugs.append((slug, creador_token, expected_vis))
+            else:
+                print(f"❌ Visibilidad incorrect: expected '{expected_vis}', got '{plan_vis}'")
+                results.append(f"❌ Create plan with visibilidad='{input_vis}': wrong value")
+            
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            results.append(f"❌ Create plan with visibilidad='{input_vis}': Exception")
+    
+    # Test GET /api/plans/{slug} - should always return 200 (link is open)
+    print(f"\n--- Testing GET /api/plans/{{slug}} (should always be 200) ---")
+    for slug, token, vis in created_slugs:
+        try:
+            resp = requests.get(f"{BASE_URL}/plans/{slug}", timeout=10)
+            print(f"GET /plans/{slug} (visibilidad={vis}): {resp.status_code}")
             
             if resp.status_code == 200:
-                login_token = resp.json().get("token")
-                
-                # GET /me
-                headers = {"Authorization": f"Bearer {login_token}"}
-                resp = requests.get(f"{BASE_URL}/auth/me", headers=headers, timeout=10)
-                log_test(
-                    "GET /api/auth/me returns user data",
-                    resp.status_code == 200 and resp.json().get("email") == test_email,
-                    f"Status: {resp.status_code}, Email: {resp.json().get('email') if resp.status_code == 200 else 'N/A'}"
-                )
-                
-                # Save credentials to test_credentials.md
-                if resp.status_code == 200:
-                    save_test_credentials(test_email, test_password, login_token)
+                data = resp.json()
+                returned_vis = data.get("visibilidad")
+                if returned_vis == vis:
+                    print(f"✅ Plan accessible, visibilidad field present: {returned_vis}")
+                    results.append(f"✅ GET /plans/{slug}: 200 with visibilidad={vis}")
+                else:
+                    print(f"❌ Visibilidad field incorrect or missing")
+                    results.append(f"❌ GET /plans/{slug}: visibilidad field wrong")
+            else:
+                print(f"❌ Plan not accessible: {resp.status_code}")
+                results.append(f"❌ GET /plans/{slug}: HTTP {resp.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            results.append(f"❌ GET /plans/{slug}: Exception")
     
-    except Exception as e:
-        log_test("Email/password flow", False, str(e))
-
-def test_general_regression():
-    """Test 3: General regression (GET /api/cities, GET /api/events)"""
     print("\n" + "="*80)
-    print("TEST 3: GENERAL REGRESSION")
+    print("TEST 2 SUMMARY:")
+    for r in results:
+        print(r)
     print("="*80)
     
-    # Test 3a: GET /api/cities
-    print(f"\n3a. Testing GET /api/cities...")
-    try:
-        resp = requests.get(f"{BASE_URL}/cities", timeout=10)
-        log_test(
-            "GET /api/cities returns 200 with valid JSON",
-            resp.status_code == 200 and isinstance(resp.json(), dict),
-            f"Status: {resp.status_code}"
-        )
+    return all("✅" in r for r in results)
+
+
+def test_event_plans_visibility():
+    """Test 3: GET /api/events/{id}/plans without auth - only shows 'todos' plans"""
+    print("\n" + "="*80)
+    print("TEST 3: EVENT PLANS VISIBILITY (GET /api/events/{id}/plans)")
+    print("="*80)
+    
+    event_id = "d0a5fd95-6d9e-452b-b878-7a84ae578462"  # Bubbles at Es Paradis Ibiza
+    
+    results = []
+    
+    # Create 3 plans with different visibilidad on the same event
+    print(f"\n--- Creating 3 plans on event {event_id} ---")
+    
+    visibilidades = ["todos", "amigos", "invitados"]
+    created_plans = []
+    
+    for vis in visibilidades:
+        payload = {
+            "opciones": [
+                {"evento_id": event_id, "venue_nombre": "Bubbles"}
+            ],
+            "visibilidad": vis
+        }
         
-        if resp.status_code == 200:
-            cities_data = resp.json()
-            cities = cities_data.get("cities", [])
-            log_test(
-                "Cities list contains supported cities",
-                len(cities) >= 5,
-                f"Found {len(cities)} cities"
-            )
-    except Exception as e:
-        log_test("GET /api/cities", False, str(e))
+        try:
+            resp = requests.post(f"{BASE_URL}/plans", json=payload, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                slug = data.get("slug")
+                print(f"✅ Created plan with visibilidad='{vis}': {slug}")
+                created_plans.append((slug, vis))
+            else:
+                print(f"❌ Failed to create plan with visibilidad='{vis}': {resp.status_code}")
+                results.append(f"❌ Create plan for event: HTTP {resp.status_code}")
+        except Exception as e:
+            print(f"❌ Error creating plan: {e}")
+            results.append(f"❌ Create plan for event: Exception")
     
-    # Test 3b: GET /api/events (with and without ?city=)
-    print(f"\n3b. Testing GET /api/events...")
-    try:
-        resp = requests.get(f"{BASE_URL}/events", timeout=10)
-        log_test(
-            "GET /api/events returns 200 with valid JSON",
-            resp.status_code == 200 and isinstance(resp.json(), list),
-            f"Status: {resp.status_code}"
-        )
-    except Exception as e:
-        log_test("GET /api/events", False, str(e))
+    if len(created_plans) != 3:
+        print(f"❌ Could not create all 3 plans (created {len(created_plans)})")
+        results.append(f"❌ Setup failed: only {len(created_plans)} plans created")
+        return False
+    
+    # Now GET /api/events/{id}/plans WITHOUT authentication
+    print(f"\n--- GET /api/events/{event_id}/plans (no auth) ---")
     
     try:
-        resp = requests.get(f"{BASE_URL}/events?city=Madrid", timeout=10)
-        log_test(
-            "GET /api/events?city=Madrid returns 200 with valid JSON",
-            resp.status_code == 200 and isinstance(resp.json(), list),
-            f"Status: {resp.status_code}"
-        )
+        resp = requests.get(f"{BASE_URL}/events/{event_id}/plans", timeout=10)
+        print(f"Status: {resp.status_code}")
         
-        if resp.status_code == 200:
-            events = resp.json()
-            log_test(
-                "Events list contains Madrid events",
-                len(events) > 0,
-                f"Found {len(events)} events"
-            )
+        if resp.status_code != 200:
+            print(f"❌ Failed to get event plans: {resp.status_code}")
+            results.append(f"❌ GET event plans: HTTP {resp.status_code}")
+            return False
+        
+        data = resp.json()
+        plans = data.get("plans", [])
+        
+        print(f"Returned {len(plans)} plan(s)")
+        
+        # Should only return "todos" plans (not amigos/invitados)
+        todos_count = 0
+        other_count = 0
+        
+        for plan in plans:
+            vis = plan.get("visibilidad", "")
+            slug = plan.get("slug", "")
+            print(f"  Plan {slug}: visibilidad={vis}")
+            
+            if vis == "todos":
+                todos_count += 1
+            else:
+                other_count += 1
+        
+        if other_count == 0:
+            print(f"✅ Only 'todos' plans returned ({todos_count} total, 0 amigos/invitados)")
+            results.append(f"✅ GET event plans: only 'todos' visible")
+        else:
+            print(f"❌ Incorrect plans returned: {todos_count} 'todos', {other_count} amigos/invitados")
+            results.append(f"❌ GET event plans: visibility filter broken")
+        
     except Exception as e:
-        log_test("GET /api/events?city=Madrid", False, str(e))
+        print(f"❌ Error: {e}")
+        results.append(f"❌ GET event plans: Exception")
+    
+    print("\n" + "="*80)
+    print("TEST 3 SUMMARY:")
+    for r in results:
+        print(r)
+    print("="*80)
+    
+    return all("✅" in r for r in results)
 
-def save_test_credentials(email, password, token):
-    """Save test credentials to /app/memory/test_credentials.md"""
+
+def test_club_nombre_in_options():
+    """Test 4: club_nombre field in plan options"""
+    print("\n" + "="*80)
+    print("TEST 4: CLUB_NOMBRE IN PLAN OPTIONS")
+    print("="*80)
+    
+    event_id = "d0a5fd95-6d9e-452b-b878-7a84ae578462"  # Bubbles at Es Paradis Ibiza
+    
+    results = []
+    
+    # Test 1: venue_nombre different from club name
+    print(f"\n--- Test 1: venue_nombre='Bubbles' (different from club) ---")
+    payload = {
+        "opciones": [
+            {"evento_id": event_id, "venue_nombre": "Bubbles"}
+        ]
+    }
+    
     try:
-        os.makedirs("/app/memory", exist_ok=True)
-        with open("/app/memory/test_credentials.md", "w") as f:
-            f.write("# Test Credentials for ¿Quién va?\n\n")
-            f.write("## Test User (Email/Password)\n")
-            f.write(f"- Email: {email}\n")
-            f.write(f"- Password: {password}\n")
-            f.write(f"- Token: {token}\n")
-            f.write(f"- Created: {datetime.now().isoformat()}\n")
-        print(f"\n💾 Saved test credentials to /app/memory/test_credentials.md")
+        resp = requests.post(f"{BASE_URL}/plans", json=payload, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            opciones = data.get("plan", {}).get("opciones", [])
+            if opciones:
+                club_nombre = opciones[0].get("club_nombre", "")
+                print(f"club_nombre: '{club_nombre}'")
+                
+                if club_nombre == "Es Paradis Ibiza":
+                    print(f"✅ club_nombre correct: 'Es Paradis Ibiza'")
+                    results.append(f"✅ club_nombre with different venue_nombre")
+                else:
+                    print(f"❌ club_nombre incorrect: expected 'Es Paradis Ibiza', got '{club_nombre}'")
+                    results.append(f"❌ club_nombre incorrect")
+            else:
+                print(f"❌ No opciones returned")
+                results.append(f"❌ No opciones in response")
+        else:
+            print(f"❌ Failed to create plan: {resp.status_code}")
+            results.append(f"❌ Create plan: HTTP {resp.status_code}")
     except Exception as e:
-        print(f"⚠️  Failed to save test credentials: {e}")
+        print(f"❌ Error: {e}")
+        results.append(f"❌ Test 1: Exception")
+    
+    # Test 2: venue_nombre same as club name
+    print(f"\n--- Test 2: venue_nombre='Es Paradis Ibiza' (same as club) ---")
+    payload = {
+        "opciones": [
+            {"evento_id": event_id, "venue_nombre": "Es Paradis Ibiza"}
+        ]
+    }
+    
+    try:
+        resp = requests.post(f"{BASE_URL}/plans", json=payload, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            opciones = data.get("plan", {}).get("opciones", [])
+            if opciones:
+                club_nombre = opciones[0].get("club_nombre", "")
+                print(f"club_nombre: '{club_nombre}'")
+                
+                if club_nombre == "":
+                    print(f"✅ club_nombre empty (correct, no repetition)")
+                    results.append(f"✅ club_nombre empty when same as venue")
+                else:
+                    print(f"❌ club_nombre should be empty, got '{club_nombre}'")
+                    results.append(f"❌ club_nombre not empty")
+            else:
+                print(f"❌ No opciones returned")
+                results.append(f"❌ No opciones in response")
+        else:
+            print(f"❌ Failed to create plan: {resp.status_code}")
+            results.append(f"❌ Create plan: HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        results.append(f"❌ Test 2: Exception")
+    
+    # Test 3: texto_libre option
+    print(f"\n--- Test 3: texto_libre option ---")
+    payload = {
+        "opciones": [
+            {"texto_libre": "Bar de la esquina"}
+        ]
+    }
+    
+    try:
+        resp = requests.post(f"{BASE_URL}/plans", json=payload, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            opciones = data.get("plan", {}).get("opciones", [])
+            if opciones:
+                club_nombre = opciones[0].get("club_nombre", "")
+                print(f"club_nombre: '{club_nombre}'")
+                
+                if club_nombre == "":
+                    print(f"✅ club_nombre empty for texto_libre (correct)")
+                    results.append(f"✅ club_nombre empty for texto_libre")
+                else:
+                    print(f"❌ club_nombre should be empty for texto_libre, got '{club_nombre}'")
+                    results.append(f"❌ club_nombre not empty for texto_libre")
+            else:
+                print(f"❌ No opciones returned")
+                results.append(f"❌ No opciones in response")
+        else:
+            print(f"❌ Failed to create plan: {resp.status_code}")
+            results.append(f"❌ Create plan: HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        results.append(f"❌ Test 3: Exception")
+    
+    print("\n" + "="*80)
+    print("TEST 4 SUMMARY:")
+    for r in results:
+        print(r)
+    print("="*80)
+    
+    return all("✅" in r for r in results)
 
-def print_summary():
-    """Print test summary"""
+
+def test_venue_nights():
+    """Test 5: GET /api/events/{id}/venue-nights"""
     print("\n" + "="*80)
-    print("TEST SUMMARY")
+    print("TEST 5: VENUE-NIGHTS (GET /api/events/{id}/venue-nights)")
     print("="*80)
-    print(f"✅ Passed: {test_results['passed']}")
-    print(f"❌ Failed: {test_results['failed']}")
     
-    if test_results['errors']:
-        print("\n❌ FAILED TESTS:")
-        for error in test_results['errors']:
-            print(f"  - {error}")
+    # Test with 2-3 different Ibiza events
+    test_events = [
+        "d0a5fd95-6d9e-452b-b878-7a84ae578462",  # Bubbles at Es Paradis Ibiza
+    ]
+    
+    # Get more Ibiza events
+    try:
+        resp = requests.get(f"{BASE_URL}/events?city=Ibiza&date_filter=all", timeout=10)
+        if resp.status_code == 200:
+            events = resp.json()  # API returns list directly
+            if isinstance(events, list):
+                # Get 2 more events
+                for ev in events[:5]:
+                    eid = ev.get("id")
+                    if eid and eid not in test_events:
+                        test_events.append(eid)
+                        if len(test_events) >= 3:
+                            break
+    except:
+        pass
+    
+    print(f"Testing {len(test_events)} events")
+    
+    results = []
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    
+    for event_id in test_events:
+        print(f"\n--- Testing event {event_id} ---")
+        
+        try:
+            resp = requests.get(f"{BASE_URL}/events/{event_id}/venue-nights", timeout=10)
+            print(f"Status: {resp.status_code}")
+            
+            if resp.status_code != 200:
+                print(f"❌ Failed: HTTP {resp.status_code}")
+                results.append(f"❌ venue-nights for {event_id[:8]}: HTTP {resp.status_code}")
+                continue
+            
+            data = resp.json()
+            nights = data.get("nights", [])
+            kind = data.get("kind", "")
+            
+            print(f"Returned {len(nights)} nights, kind='{kind}'")
+            
+            # Check kind
+            if kind != "upcoming":
+                print(f"❌ kind should be 'upcoming', got '{kind}'")
+                results.append(f"❌ venue-nights: wrong kind")
+                continue
+            
+            # Check each night
+            all_ok = True
+            for i, night in enumerate(nights):
+                night_id = night.get("id", "")
+                name = night.get("name", "")
+                date_str = night.get("date", "")
+                time_str = night.get("time", "")
+                image_url = night.get("image_url", "")
+                price = night.get("price")
+                sale_state = night.get("sale_state", "")
+                
+                # Check required fields
+                required_fields = ["id", "name", "date", "time", "image_url", "price", "sale_state"]
+                missing = [f for f in required_fields if f not in night]
+                if missing:
+                    print(f"  Night {i}: ❌ Missing fields: {missing}")
+                    all_ok = False
+                    continue
+                
+                # Check date >= today
+                try:
+                    night_date = datetime.fromisoformat(date_str).date()
+                    if night_date < today:
+                        print(f"  Night {i}: ❌ Date {date_str} is in the past")
+                        all_ok = False
+                        continue
+                except:
+                    print(f"  Night {i}: ❌ Invalid date format: {date_str}")
+                    all_ok = False
+                    continue
+                
+                # Check NOT the same event
+                if night_id == event_id:
+                    print(f"  Night {i}: ❌ Includes the same event ID")
+                    all_ok = False
+                    continue
+                
+                # Check NO attended or photos fields
+                if "attended" in night or "photos" in night:
+                    print(f"  Night {i}: ❌ Has 'attended' or 'photos' field (should be removed)")
+                    all_ok = False
+                    continue
+                
+                print(f"  Night {i}: ✅ {name} on {date_str}")
+            
+            # Check ordering (dates should be ascending)
+            dates = []
+            for night in nights:
+                try:
+                    dates.append(datetime.fromisoformat(night.get("date", "")).date())
+                except:
+                    pass
+            
+            if dates and dates != sorted(dates):
+                print(f"❌ Dates not in ascending order")
+                all_ok = False
+            else:
+                print(f"✅ Dates in ascending order")
+            
+            # Check max 8
+            if len(nights) > 8:
+                print(f"❌ More than 8 nights returned: {len(nights)}")
+                all_ok = False
+            else:
+                print(f"✅ Max 8 nights (returned {len(nights)})")
+            
+            if all_ok:
+                results.append(f"✅ venue-nights for {event_id[:8]}: ALL CHECKS PASSED")
+            else:
+                results.append(f"❌ venue-nights for {event_id[:8]}: SOME CHECKS FAILED")
+            
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            results.append(f"❌ venue-nights for {event_id[:8]}: Exception")
     
     print("\n" + "="*80)
-    
-    # Overall result
-    if test_results['failed'] == 0:
-        print("🎉 ALL TESTS PASSED!")
-    else:
-        print(f"⚠️  {test_results['failed']} TEST(S) FAILED")
+    print("TEST 5 SUMMARY:")
+    for r in results:
+        print(r)
     print("="*80)
+    
+    return all("✅" in r for r in results)
+
+
+def test_events_ibiza():
+    """Test 6: GET /api/events?city=Ibiza&date_filter=all"""
+    print("\n" + "="*80)
+    print("TEST 6: EVENTS IBIZA (GET /api/events?city=Ibiza&date_filter=all)")
+    print("="*80)
+    
+    results = []
+    
+    try:
+        resp = requests.get(f"{BASE_URL}/events?city=Ibiza&date_filter=all", timeout=10)
+        print(f"Status: {resp.status_code}")
+        
+        if resp.status_code != 200:
+            print(f"❌ Failed: HTTP {resp.status_code}")
+            results.append(f"❌ GET events: HTTP {resp.status_code}")
+            return False
+        
+        # API returns a list directly, not a dict
+        events = resp.json()
+        if not isinstance(events, list):
+            print(f"❌ Response is not a list")
+            results.append(f"❌ GET events: wrong response type")
+            return False
+        
+        print(f"Returned {len(events)} events")
+        
+        # Check nights_at_venue = 0 (no photos in album_uploads)
+        all_ok = True
+        for i, ev in enumerate(events[:10]):  # Check first 10
+            nights = ev.get("nights_at_venue", -1)
+            if nights != 0:
+                print(f"  Event {i}: ❌ nights_at_venue={nights} (should be 0)")
+                all_ok = False
+            
+            # Check open_plans_count doesn't count amigos/invitados
+            # (we can't verify this directly without creating plans, but we can check the field exists)
+            if "open_plans_count" not in ev:
+                print(f"  Event {i}: ❌ Missing open_plans_count field")
+                all_ok = False
+        
+        if all_ok:
+            print(f"✅ All events have nights_at_venue=0")
+            print(f"✅ All events have open_plans_count field")
+            results.append(f"✅ GET events Ibiza: ALL CHECKS PASSED")
+        else:
+            results.append(f"❌ GET events Ibiza: SOME CHECKS FAILED")
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        results.append(f"❌ GET events Ibiza: Exception")
+    
+    print("\n" + "="*80)
+    print("TEST 6 SUMMARY:")
+    for r in results:
+        print(r)
+    print("="*80)
+    
+    return all("✅" in r for r in results)
+
+
+def test_regression():
+    """Test 7: Regression tests"""
+    print("\n" + "="*80)
+    print("TEST 7: REGRESSION TESTS")
+    print("="*80)
+    
+    results = []
+    
+    # Create a test plan first
+    print(f"\n--- Creating test plan for regression ---")
+    payload = {
+        "opciones": [
+            {"texto_libre": "Test regression"}
+        ]
+    }
+    
+    try:
+        resp = requests.post(f"{BASE_URL}/plans", json=payload, timeout=10)
+        if resp.status_code != 200:
+            print(f"❌ Failed to create test plan: {resp.status_code}")
+            results.append(f"❌ Setup: create plan failed")
+            return False
+        
+        data = resp.json()
+        slug = data.get("slug")
+        creador_token = data.get("creador_token")
+        
+        print(f"✅ Created test plan: {slug}")
+        
+        # Test respond
+        print(f"\n--- POST /api/plans/{slug}/respond ---")
+        respond_payload = {
+            "intencion": "dentro",
+            "apodo": "Test User"
+        }
+        resp = requests.post(f"{BASE_URL}/plans/{slug}/respond", json=respond_payload, timeout=10)
+        print(f"Status: {resp.status_code}")
+        if resp.status_code == 200:
+            print(f"✅ respond endpoint working")
+            results.append(f"✅ POST respond: 200")
+        else:
+            print(f"❌ respond failed: {resp.status_code}")
+            results.append(f"❌ POST respond: HTTP {resp.status_code}")
+        
+        # Test close
+        print(f"\n--- POST /api/plans/{slug}/close ---")
+        headers = {"x-participante-token": creador_token}
+        resp = requests.post(f"{BASE_URL}/plans/{slug}/close", headers=headers, timeout=10)
+        print(f"Status: {resp.status_code}")
+        if resp.status_code == 200:
+            print(f"✅ close endpoint working")
+            results.append(f"✅ POST close: 200")
+        else:
+            print(f"❌ close failed: {resp.status_code}")
+            results.append(f"❌ POST close: HTTP {resp.status_code}")
+        
+        # Create another plan for cancel test
+        resp = requests.post(f"{BASE_URL}/plans", json=payload, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            slug2 = data.get("slug")
+            creador_token2 = data.get("creador_token")
+            
+            # Test cancel
+            print(f"\n--- POST /api/plans/{slug2}/cancel ---")
+            headers = {"x-participante-token": creador_token2}
+            resp = requests.post(f"{BASE_URL}/plans/{slug2}/cancel", headers=headers, timeout=10)
+            print(f"Status: {resp.status_code}")
+            if resp.status_code == 200:
+                print(f"✅ cancel endpoint working")
+                results.append(f"✅ POST cancel: 200")
+            else:
+                print(f"❌ cancel failed: {resp.status_code}")
+                results.append(f"❌ POST cancel: HTTP {resp.status_code}")
+        
+        # Test GET /api/plans/mine
+        print(f"\n--- GET /api/plans/mine?slugs={slug} ---")
+        resp = requests.get(f"{BASE_URL}/plans/mine?slugs={slug}", timeout=10)
+        print(f"Status: {resp.status_code}")
+        if resp.status_code == 200:
+            print(f"✅ plans/mine endpoint working")
+            results.append(f"✅ GET plans/mine: 200")
+        else:
+            print(f"❌ plans/mine failed: {resp.status_code}")
+            results.append(f"❌ GET plans/mine: HTTP {resp.status_code}")
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        results.append(f"❌ Regression: Exception")
+    
+    # Test SSR pages
+    ssr_pages = [
+        ("/ciudad/madrid", "Madrid"),
+        ("/p/nuevo", "nuevo"),
+    ]
+    
+    for path, keyword in ssr_pages:
+        print(f"\n--- GET /api{path} ---")
+        try:
+            resp = requests.get(f"{BASE_URL}{path}", timeout=10)
+            print(f"Status: {resp.status_code}")
+            if resp.status_code == 200 and "text/html" in resp.headers.get("content-type", ""):
+                print(f"✅ SSR page working")
+                results.append(f"✅ GET {path}: 200 HTML")
+            else:
+                print(f"❌ SSR page failed: {resp.status_code}")
+                results.append(f"❌ GET {path}: HTTP {resp.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            results.append(f"❌ GET {path}: Exception")
+    
+    print("\n" + "="*80)
+    print("TEST 7 SUMMARY:")
+    for r in results:
+        print(r)
+    print("="*80)
+    
+    return all("✅" in r for r in results)
+
 
 def main():
-    """Main test runner"""
-    print("="*80)
-    print("¿QUIÉN VA? BACKEND TESTING")
-    print("="*80)
-    print(f"Backend URL: {BASE_URL}")
-    print(f"MongoDB: {MONGO_URL}/{DB_NAME}")
+    print("\n" + "="*80)
+    print("BACKEND TESTING: 'El plan se decide solo' iteration")
+    print("Base URL: http://localhost:8001/api")
     print("="*80)
     
-    try:
-        # Run tests
-        test_seo_city_pages()
-        test_auth_regression()
-        test_general_regression()
-        
-        # Print summary
-        print_summary()
-        
-    finally:
-        # Cleanup
-        cleanup_test_events()
-        mongo_client.close()
+    all_results = []
+    
+    # Run all tests
+    test1 = test_landing_ssr()
+    all_results.append(("Landing SSR", test1))
+    
+    test2 = test_plan_visibility()
+    all_results.append(("Plan Visibility", test2))
+    
+    test3 = test_event_plans_visibility()
+    all_results.append(("Event Plans Visibility", test3))
+    
+    test4 = test_club_nombre_in_options()
+    all_results.append(("Club Nombre in Options", test4))
+    
+    test5 = test_venue_nights()
+    all_results.append(("Venue Nights", test5))
+    
+    test6 = test_events_ibiza()
+    all_results.append(("Events Ibiza", test6))
+    
+    test7 = test_regression()
+    all_results.append(("Regression", test7))
+    
+    # Final summary
+    print("\n" + "="*80)
+    print("FINAL SUMMARY")
+    print("="*80)
+    
+    for name, passed in all_results:
+        status = "✅ PASSED" if passed else "❌ FAILED"
+        print(f"{name}: {status}")
+    
+    total = len(all_results)
+    passed = sum(1 for _, p in all_results if p)
+    
+    print(f"\nTotal: {passed}/{total} test suites passed")
+    print("="*80)
+    
+    return all(p for _, p in all_results)
+
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    exit(0 if success else 1)

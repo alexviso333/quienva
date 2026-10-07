@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Send, Loader2, MoreVertical, LogOut, Camera, Users, X, ImagePlus, Download, Trophy } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";

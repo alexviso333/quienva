@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 # Base URL from frontend/.env
-BASE_URL = "https://voting-island-widget.preview.emergentagent.com/api"
+BASE_URL = "https://voting-party-planner.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

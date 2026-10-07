@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { refreshNativePushIfGranted } from "@/lib/nativePush";
 import { isNativeApp } from "@/lib/platform";
 import { captureEvent, identifyUser, resetAnalytics } from "@/analytics/posthog";

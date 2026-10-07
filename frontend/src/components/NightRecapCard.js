@@ -4,7 +4,7 @@ import { mediaThumb, mediaUrl } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Sparkles, Share2, Download, Loader2, Users } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 /**
  * "Repaso de la noche" — a shareable recap card for a PAST party.

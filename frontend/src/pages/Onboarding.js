@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { PartyPopper, MapPin, ChevronRight, Loader2, Sparkles, Check } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 
 /**

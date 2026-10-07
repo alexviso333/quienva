@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { MoreVertical, Flag, Ban, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 // value = canonical string stored/sent to backend (kept stable across languages)
 const REASONS = [

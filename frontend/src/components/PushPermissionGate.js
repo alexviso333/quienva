@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { isPushSupported, subscribeToPush } from "@/lib/push";
 import { Bell, Loader2, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 /**
  * NON-BLOCKING notification prompt (spec 1.4).

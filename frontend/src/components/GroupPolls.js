@@ -5,7 +5,7 @@ import { BarChart3, Plus, Check, X, Loader2, CheckCircle2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import api, { mediaThumb } from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 function PollCard({ groupId, poll }) {
   const { t } = useTranslation();

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { ChevronLeft, Loader2, Bell } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 
 function Toggle({ on, onClick }) {

@@ -6,7 +6,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import { BadgesPanel } from "@/components/BadgesPanel";
 import { UserActionsMenu } from "@/components/ReportBlock";
 import { ArrowLeft, Loader2, MessageSquare, UserPlus, Clock, Check, Trophy, Flame, Calendar, Star } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 
 function StatMini({ icon: Icon, value, label, color = "text-qv-primary" }) {

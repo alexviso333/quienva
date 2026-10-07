@@ -11,7 +11,7 @@ import { useCreatePlan } from "@/context/CreatePlan";
 import { formatPartyDate } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 import { useGuestGate } from "@/context/GuestGate";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 import { captureEvent } from "@/analytics/posthog";
 import { MovingBadge } from "@/components/MovingNow";

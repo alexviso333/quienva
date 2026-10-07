@@ -22,9 +22,12 @@ i18n
     load: "languageOnly",
     interpolation: { escapeValue: false },
     detection: {
-      // Remember the user's manual choice; otherwise fall back to the browser
-      // language (perfect for German/British tourists in Mallorca/Ibiza).
-      order: ["localStorage", "navigator"],
+      // ESPAÑA PRIMERO: el idioma del móvil/navegador ya NO decide. Mucha gente
+      // en España tiene el móvil en inglés y la app les salía en inglés; ahora
+      // arranca SIEMPRE en español y solo cambia si el usuario elige idioma a
+      // mano en Ajustes (se recuerda en localStorage). El turista tiene además
+      // la web en /en y /de.
+      order: ["localStorage"],
       lookupLocalStorage: "qv_lang",
       caches: ["localStorage"],
     },

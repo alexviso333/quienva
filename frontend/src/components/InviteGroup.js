@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { MessageCircle, Copy, Share2 } from "lucide-react";
 import api from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 // Reusable "bring your group" block. Opens WhatsApp with a pre-written message
 // + the user's personal referral link (quienva.me/login?ref=CODE) so inviting

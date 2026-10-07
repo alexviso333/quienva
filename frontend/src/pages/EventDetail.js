@@ -19,7 +19,7 @@ import { useCreatePlan } from "@/context/CreatePlan";
 import {
   ArrowLeft, MapPin, Clock, Ticket, ExternalLink, Send, Check, Star, Navigation, CheckCircle2, Loader2, Bell, Instagram, Pencil, X, RotateCcw, Users, Eye, ClipboardList,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 import { captureEvent } from "@/analytics/posthog";
 

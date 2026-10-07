@@ -2,32 +2,39 @@
 import os
 import re
 import urllib.parse
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import requests
 import pytest
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://voting-island-widget.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://voting-party-planner.preview.emergentagent.com").rstrip("/")
 TIFFANY_EVENT_ID = "d5d1ba48-e907-49a9-b6ed-f4d76a3dbdba"
 
 
 # ---------- venue-nights endpoint ----------
 class TestVenueNights:
-    def test_tiffany_returns_three_nights(self):
+    def test_returns_upcoming_nights_only(self):
+        """Desde "el plan se decide solo" este endpoint devuelve las PRÓXIMAS
+        noches del local (antes devolvía pasadas, que se leían como "fiestas a
+        las que fuiste" y no era verdad)."""
         r = requests.get(f"{BASE_URL}/api/events/{TIFFANY_EVENT_ID}/venue-nights", timeout=20)
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data.get("venue") == "Tiffany's"
-        assert data.get("count") == 3
         nights = data.get("nights") or []
-        assert len(nights) == 3
-        by_name = {n["name"]: n for n in nights}
-        for required in ("Reggaeton Night", "Techno Marathon", "Opening Party"):
-            assert required in by_name, f"missing {required}: got {list(by_name)}"
-        expected_dates = {"Reggaeton Night": "2026-09-27", "Techno Marathon": "2026-09-20", "Opening Party": "2026-09-13"}
-        for name, exp in expected_dates.items():
-            assert by_name[name]["date"] == exp
+        assert data.get("count") == len(nights)
+        assert len(nights) <= 8
+        if not nights:
+            return
+        assert data.get("kind") == "upcoming"
+        today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+        dates = [n["date"] for n in nights]
+        assert all(d >= today for d in dates), f"past night returned: {dates}"
+        assert dates == sorted(dates), f"not ascending: {dates}"
+        assert all(n["id"] != TIFFANY_EVENT_ID for n in nights)
         for n in nights:
-            for k in ("id", "name", "date", "image_url", "attended", "photos"):
+            for k in ("id", "name", "date", "time", "image_url", "price", "sale_state"):
                 assert k in n, f"night missing key {k}"
+            assert "attended" not in n and "photos" not in n
 
     def test_non_existent_event_returns_empty(self):
         r = requests.get(f"{BASE_URL}/api/events/not-a-real-event-id/venue-nights", timeout=20)
@@ -78,15 +85,20 @@ class TestSSRLanding:
     def test_home_stats_bar_has_only_numeric_counters(self):
         html = requests.get(f"{BASE_URL}/api/home", timeout=20).text
         m = re.search(r'class="stats"[^>]*>(.*?)</div>', html, re.S)
-        assert m, "stats bar not found"
+        if not m:
+            # Desde "el plan se decide solo": si no hay ningún dato > 50 la barra
+            # de contadores NO se renderiza (antes salía "0 planes esta semana").
+            return
         stats = m.group(1)
         # No bogus pills without numbers
         assert "A la venta" not in stats
         assert "Esta noche" not in stats
-        # Must have the numeric stat labels
-        assert "planes esta semana" in stats
-        assert "ciudades" in stats
-        assert "discotecas" in stats
+        # El contador de "ciudades" se quitó (6 nunca impresiona a nadie).
+        assert "ciudades" not in stats
+        # Todo lo que quede tiene que ser un número REAL y mayor que 50.
+        nums = [int(n) for n in re.findall(r"<b>\s*([0-9]+)\s*</b>", stats)]
+        assert nums, "stats bar rendered with no numbers"
+        assert all(n > 50 for n in nums), f"stat <= 50 shown: {nums}"
 
     def test_city_and_sitemap_still_200(self):
         assert requests.get(f"{BASE_URL}/api/ciudad/madrid", timeout=20).status_code == 200

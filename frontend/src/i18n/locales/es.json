@@ -90,7 +90,7 @@
     "toast_going": "¡Apuntado! Tus amigos ya lo verán 🎉",
     "toast_saved": "Guardado en tus recuerdos ✨",
     "toast_error": "No se pudo actualizar",
-    "guest_title": "Estás mirando sin cuenta 👀",
+    "guest_title": "Estás sin cuenta 👀",
     "guest_sub": "Regístrate gratis para ver quién de tus amigos va.",
     "enter": "Entrar",
     "invited_suffix": "te ha invitado 🎉",
@@ -189,9 +189,10 @@
     "no_friends": "Todavía ningún amigo se ha apuntado.",
     "guest_who": "¿Quién va? 👀",
     "guest_sub": "Regístrate gratis para verlo y apuntarte.",
-    "venue_nights_title": "Noches en {{venue}}",
+    "venue_nights_title": "Próximas noches en {{venue}}",
     "how_to_get": "Cómo llegar",
-    "map": "Mapa"
+    "map": "Mapa",
+    "venue_nights_sub": "La agenda de este sitio"
   },
   "locales": {
     "title": "Locales",
@@ -840,7 +841,8 @@
     "going_count_other": "{{count}} van",
     "interested_count_one": "{{count}} interesado",
     "interested_count_other": "{{count}} interesados",
-    "be_first": "Sé el primero"
+    "be_first": "Sé el primero",
+    "make_plan": "Proponer plan"
   },
   "nightrecap": {
     "img_label": "★ REPASO DE LA NOCHE",
@@ -1091,7 +1093,12 @@
     "invite_pick": "Elige a quién invitas",
     "invited_ok": "Avisados {{n}} amigos",
     "invited_none": "Ya estaban todos en el plan",
-    "invited_ok_one": "Avisado 1 amigo"
+    "invited_ok_one": "Avisado 1 amigo",
+    "vis_amigos": "Solo amigos",
+    "vis_invitados": "Solo invitados",
+    "cancel_confirm": "¿Cancelar el plan para todos?",
+    "cancel_no": "No, seguir",
+    "cancel_yes": "Sí, cancelar"
   },
   "attendance": {
     "night_last": "anoche",
@@ -1122,7 +1129,7 @@
     "spot_ph": "Sitio (p. ej. Fitz)",
     "time": "Hora",
     "add_spot": "Añadir otra opción",
-    "more_opts": "Título y aforo (opcional)",
+    "more_opts": "Título y cupo (opcional)",
     "name_opt": "Título",
     "name_ph": "Jueves en Chueca",
     "quorum_opt": "Se cierra si somos",
@@ -1137,9 +1144,9 @@
     "close": "Hecho",
     "done_invited_one": "Avisado 1 amigo",
     "who_count_one": "1 seleccionado",
-    "sub2": "Elige hasta 3 sitios y tu grupo vota",
+    "sub2": "Elige hasta 3 sitios y que tu grupo vote",
     "voting_on": "Se vota entre:",
-    "pick_hint": "Elige una fiesta, una discoteca o escríbelo tú.",
+    "pick_hint": "Elige una fiesta, una discoteca o escríbelo tú",
     "free_opt": "Escrito por ti",
     "max_opts": "Máximo 3 opciones para votar",
     "tab_events": "Fiestas",
@@ -1148,7 +1155,14 @@
     "search_events": "Busca una fiesta de {{city}}…",
     "search_venues": "Busca una discoteca…",
     "no_events": "No hay fiestas que encajen. Prueba en «Discotecas» o escríbelo a mano.",
-    "no_venues": "Ninguna discoteca coincide."
+    "no_venues": "Ninguna discoteca coincide.",
+    "vis_label": "¿Quién lo ve en la app?",
+    "vis_todos": "Todos",
+    "vis_amigos": "Amigos",
+    "vis_invitados": "Invitados",
+    "vis_hint_todos": "Cualquiera puede verlo y apuntarse desde la fiesta.",
+    "vis_hint_amigos": "Solo tus amigos lo ven en la app.",
+    "vis_hint_invitados": "Solo quien invites. No aparece en ningún sitio."
   },
   "friendpicker": {
     "search": "Buscar amigo...",

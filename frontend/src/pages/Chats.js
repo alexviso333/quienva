@@ -7,7 +7,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import { Users2, MessageSquare, Plus, Loader2, ChevronRight, X, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 

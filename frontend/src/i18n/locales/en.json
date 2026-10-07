@@ -189,9 +189,10 @@
     "no_friends": "No friends have joined yet.",
     "guest_who": "Who's going? 👀",
     "guest_sub": "Sign up free to see it and join.",
-    "venue_nights_title": "Nights at {{venue}}",
+    "venue_nights_title": "Upcoming nights at {{venue}}",
     "how_to_get": "How to get there",
-    "map": "Map"
+    "map": "Map",
+    "venue_nights_sub": "What's on at this place"
   },
   "locales": {
     "title": "Venues",
@@ -840,7 +841,8 @@
     "going_count_other": "{{count}} going",
     "interested_count_one": "{{count}} interested",
     "interested_count_other": "{{count}} interested",
-    "be_first": "Be the first"
+    "be_first": "Be the first",
+    "make_plan": "Make a plan"
   },
   "nightrecap": {
     "img_label": "★ NIGHT RECAP",
@@ -1091,7 +1093,12 @@
     "invite_pick": "Pick who you invite",
     "invited_ok": "{{n}} friends notified",
     "invited_none": "They were all in the plan already",
-    "invited_ok_one": "1 friend notified"
+    "invited_ok_one": "1 friend notified",
+    "vis_amigos": "Friends only",
+    "vis_invitados": "Invited only",
+    "cancel_confirm": "Cancel the plan for everyone?",
+    "cancel_no": "No, keep it",
+    "cancel_yes": "Yes, cancel"
   },
   "attendance": {
     "night_last": "last night",
@@ -1148,7 +1155,14 @@
     "search_events": "Search a party in {{city}}…",
     "search_venues": "Search a club…",
     "no_events": "No parties match. Try “Clubs” or type it by hand.",
-    "no_venues": "No club matches."
+    "no_venues": "No club matches.",
+    "vis_label": "Who sees it in the app?",
+    "vis_todos": "Everyone",
+    "vis_amigos": "Friends",
+    "vis_invitados": "Invited",
+    "vis_hint_todos": "Anyone can see it and join from the party.",
+    "vis_hint_amigos": "Only your friends see it in the app.",
+    "vis_hint_invitados": "Only the people you invite. It shows up nowhere else."
   },
   "friendpicker": {
     "search": "Search friend...",

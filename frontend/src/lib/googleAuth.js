@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { isNativeApp } from "@/lib/platform";
 
 // Custom URL scheme the web callback uses to hand the session back to the app.

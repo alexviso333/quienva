@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ReportFlag } from "@/components/ReportBlock";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { captureEvent } from "@/analytics/posthog";
 
 /**

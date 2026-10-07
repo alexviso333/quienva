@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Loader2, ShieldCheck } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 /**
  * Blocking +18 gate. Shown when a logged-in user has no birthdate on file

@@ -8,7 +8,8 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import FriendPicker from "@/components/FriendPicker";
 import api, { mediaThumb } from "@/lib/api";
-import { toast } from "sonner";
+import { publicUrl } from "@/lib/share";
+import { toast } from "@/lib/notify";
 import { captureEvent } from "@/analytics/posthog";
 import { startPlanActivity, updatePlanActivity, endPlanActivity } from "@/lib/liveActivity";
 import {
@@ -40,6 +41,9 @@ export default function PlanView() {
   const [nameDraft, setNameDraft] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invSel, setInvSel] = useState([]);
+  // Cierre/cancelación: un solo toque (y confirmación antes de cancelar).
+  const [acting, setActing] = useState(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const pt = ptFor(slug);
   const ct = ctFor(slug);
@@ -122,9 +126,21 @@ export default function PlanView() {
 
   const closeMut = useMutation({
     mutationFn: async (action) => (await api.post(`/plans/${slug}/${action}`, {}, { headers: ct ? { "x-participante-token": ct } : {} })).data,
-    onSuccess: (data) => { if (data?.plan) qc.setQueryData(["plan", slug], data.plan); toast.success(t("planview.updated", "Plan actualizado")); },
-    onError: (e) => toast.error(e?.response?.data?.detail || t("planview.error", "No se pudo")),
+    onSuccess: (data) => { if (data?.plan) qc.setQueryData(["plan", slug], data.plan); },
+    onError: (e) => { setActing(null); toast.error(e?.response?.data?.detail || t("planview.error", "No se pudo")); },
   });
+
+  // Cerrar / cancelar tarda un poco (notifica a todo el grupo). Antes se podía
+  // pulsar 20 veces y se mandaban 20 cancelaciones: ahora el botón se bloquea
+  // en el primer toque y no se desbloquea hasta que el plan ya está cerrado.
+  const planLocked = closeMut.isPending || !!acting || isClosed;
+  const runAction = (action) => {
+    if (planLocked) return;
+    if (action === "cancel" && confirmCancel !== true) { setConfirmCancel(true); return; }
+    setActing(action);
+    setConfirmCancel(false);
+    closeMut.mutate(action);
+  };
 
   const fecha = useMemo(() => {
     if (!plan?.fecha_objetivo) return null;
@@ -140,9 +156,10 @@ export default function PlanView() {
   }, [plan]);
 
   const shareText = plan ? `👀 ${plan.titulo || "¿Quién va?"} — dinos si te apuntas` : "";
-  // Always share the canonical /p/{slug} link: it is the one that renders the
-  // rich WhatsApp preview and then redirects the human into the app.
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/p/${slug}` : "";
+  // SIEMPRE el link público /p/{slug} sobre el dominio real. Dentro de la app
+  // nativa window.location.origin es capacitor://localhost / https://localhost,
+  // así que usar el origin mandaba por WhatsApp un enlace que no abría nada.
+  const shareUrl = publicUrl(`/p/${slug}`);
   const shareWhatsApp = () => { captureEvent("plan_shared", { plan_id: slug, destination: "whatsapp" }); window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText}: ${shareUrl}`)}`, "_blank", "noopener,noreferrer"); };
   const copyLink = async () => { captureEvent("plan_shared", { plan_id: slug, destination: "copy_link" }); try { await navigator.clipboard.writeText(shareUrl); toast.success(t("planview.copied", "Enlace copiado")); } catch (e) { /* ignore */ } };
 
@@ -195,6 +212,13 @@ export default function PlanView() {
           <div className="px-4" data-testid="planview">
             {/* Header */}
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-qv-secondary">{cityLabel}{fecha ? ` · ${fecha}` : ""}</p>
+            {plan.visibilidad && plan.visibilidad !== "todos" ? (
+              <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-white/45 bg-white/[0.06] border border-white/10 rounded-full px-2 py-0.5" data-testid="planview-visibility">
+                {plan.visibilidad === "amigos"
+                  ? t("planview.vis_amigos", "Solo amigos")
+                  : t("planview.vis_invitados", "Solo invitados")}
+              </p>
+            ) : null}
             <h1 className="font-display text-3xl font-black text-white leading-tight mt-1">{plan.titulo || t("planview.default_title", "¿Nos cuadra este plan?")}</h1>
             {plan.mensaje_creador ? (
               <div className="mt-3 flex items-start gap-2.5 bg-white/[0.04] border border-white/10 rounded-2xl p-3">
@@ -208,7 +232,12 @@ export default function PlanView() {
               <div className="mt-4 rounded-2xl border border-qv-primary/40 bg-qv-primary/10 p-3.5 text-center" data-testid="planview-closed">
                 <p className="font-bold text-white">{plan.estado === "cancelado" ? t("planview.cancelled", "Plan cancelado") : t("planview.closed", "Plan cerrado")}</p>
                 {plan.estado === "cerrado" && plan.opcion_ganadora ? (
-                  <p className="text-sm text-white/70 mt-0.5">{t("planview.winner", "Quedáis en {{v}}", { v: (options.find((o) => o.opt_id === plan.opcion_ganadora)?.venue_nombre) || "el sitio elegido" })}</p>
+                  <p className="text-sm text-white/70 mt-0.5">{t("planview.winner", "Quedáis en {{v}}", { v: (() => {
+                    const w = options.find((o) => o.opt_id === plan.opcion_ganadora);
+                    if (!w) return "el sitio elegido";
+                    const base = w.venue_nombre || w.texto_libre || "el sitio elegido";
+                    return w.club_nombre ? `${base} · ${w.club_nombre}` : base;
+                  })() })}</p>
                 ) : null}
               </div>
             ) : null}
@@ -227,7 +256,7 @@ export default function PlanView() {
                     {o.image_url ? <img src={mediaThumb(o.image_url, 160)} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-white/5 flex items-center justify-center shrink-0"><MapPin className="w-5 h-5 text-white/40" /></div>}
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-white text-sm truncate">{o.venue_nombre || o.texto_libre}</p>
-                      <p className="text-xs text-white/55 truncate">{[o.hora, o.precio_desde ? `desde ${Math.round(o.precio_desde)}€` : null].filter(Boolean).join(" · ") || "\u00a0"}</p>
+                      <p className="text-xs text-white/55 truncate">{[o.club_nombre, o.hora, o.precio_desde ? `desde ${Math.round(o.precio_desde)}€` : null].filter(Boolean).join(" · ") || "\u00a0"}</p>
                     </div>
                     {chosen ? <Check className="w-5 h-5 text-qv-primary shrink-0" /> : (options.length > 1 && !isClosed ? <span className="text-[10px] text-white/40 shrink-0">{t("planview.prefer", "Prefiero")}</span> : null)}
                   </button>
@@ -342,12 +371,54 @@ export default function PlanView() {
               </button>
             ) : null}
 
-            {/* Creator controls */}
+            {/* Creator controls — un solo toque, con confirmación al cancelar */}
             {isCreator && !isClosed ? (
-              <div className="mt-3 flex items-center justify-center gap-4 text-xs" data-testid="planview-creator">
-                <button onClick={() => closeMut.mutate("close")} className="text-white/60 font-semibold active:scale-95">{t("planview.close_now", "Cerrar plan ahora")}</button>
-                <span className="text-white/20">·</span>
-                <button onClick={() => closeMut.mutate("cancel")} className="text-white/40 active:scale-95">{t("planview.cancel_plan", "Cancelar")}</button>
+              <div className="mt-3" data-testid="planview-creator">
+                {confirmCancel ? (
+                  <div className="rounded-2xl border border-white/12 bg-white/[0.04] p-3 text-center" data-testid="planview-cancel-confirm">
+                    <p className="text-sm text-white/85 font-semibold">{t("planview.cancel_confirm", "¿Cancelar el plan para todos?")}</p>
+                    <div className="mt-2.5 grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setConfirmCancel(false)}
+                        disabled={planLocked}
+                        data-testid="planview-cancel-no"
+                        className="bg-white/[0.06] border border-white/12 text-white/80 rounded-xl py-2.5 font-semibold text-sm active:scale-[0.99] disabled:opacity-50"
+                      >
+                        {t("planview.cancel_no", "No, seguir")}
+                      </button>
+                      <button
+                        onClick={() => runAction("cancel")}
+                        disabled={planLocked}
+                        data-testid="planview-cancel-yes"
+                        className="bg-white/[0.06] border border-qv-primary/40 text-qv-primary rounded-xl py-2.5 font-bold text-sm flex items-center justify-center gap-1.5 active:scale-[0.99] disabled:opacity-50"
+                      >
+                        {acting === "cancel" ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        {t("planview.cancel_yes", "Sí, cancelar")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-4 text-xs">
+                    <button
+                      onClick={() => runAction("close")}
+                      disabled={planLocked}
+                      data-testid="planview-close-now"
+                      className="text-white/60 font-semibold active:scale-95 disabled:opacity-40 inline-flex items-center gap-1.5"
+                    >
+                      {acting === "close" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      {t("planview.close_now", "Cerrar plan ahora")}
+                    </button>
+                    <span className="text-white/20">·</span>
+                    <button
+                      onClick={() => runAction("cancel")}
+                      disabled={planLocked}
+                      data-testid="planview-cancel-plan"
+                      className="text-white/40 active:scale-95 disabled:opacity-40"
+                    >
+                      {t("planview.cancel_plan", "Cancelar")}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>

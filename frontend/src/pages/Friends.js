@@ -6,7 +6,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import FindFriends from "@/components/FindFriends";
 import { Input } from "@/components/ui/input";
 import { UserPlus, Check, Clock, Search, X, Loader2, Compass, MessageCircle } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { captureEvent } from "@/analytics/posthog";

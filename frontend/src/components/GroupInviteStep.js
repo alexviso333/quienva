@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MessageCircle, Copy, Share2, Users, Loader2, Check, Sparkles } from "lucide-react";
 import api from "@/lib/api";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { groupInviteWhatsApp, shareGroupInvite, groupInviteUrl } from "@/lib/contacts";
 
 // Onboarding "Monta tu grupo" step, redesigned as TWO clear phases so it never

@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timedelta
 
 # Base URL from frontend/.env REACT_APP_BACKEND_URL with /api prefix
-BASE_URL = "https://voting-island-widget.preview.emergentagent.com/api"
+BASE_URL = "https://voting-party-planner.preview.emergentagent.com/api"
 
 def log(msg):
     print(f"[TEST] {msg}")

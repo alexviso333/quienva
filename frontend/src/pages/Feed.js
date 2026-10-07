@@ -16,7 +16,7 @@ import CitySelectorSheet from "@/components/CitySelectorSheet";
 import MyOpenPlans from "@/components/MyOpenPlans";
 import { captureEvent } from "@/analytics/posthog";
 import { PartyPopper, Flame, ChevronRight, Users, Sparkles, Building2, Compass, UserPlus, EyeOff, X, Search, MapPin, ChevronDown, Moon, LayoutGrid, Rows3, Bell, MoreHorizontal } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 
 // ============================================================================

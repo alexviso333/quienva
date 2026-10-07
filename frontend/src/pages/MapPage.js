@@ -8,7 +8,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 import { Loader2, LocateFixed } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 
 const TYPE_COLOR = {

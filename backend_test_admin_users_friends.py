@@ -26,7 +26,7 @@ import time
 import random
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://voting-island-widget.preview.emergentagent.com/api"
+BACKEND_URL = "https://voting-party-planner.preview.emergentagent.com/api"
 
 # Admin credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

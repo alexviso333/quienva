@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
-BASE_URL = "https://voting-island-widget.preview.emergentagent.com/api"
+BASE_URL = "https://voting-party-planner.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@quienva.app"
 ADMIN_PASSWORD = "admin123"
 

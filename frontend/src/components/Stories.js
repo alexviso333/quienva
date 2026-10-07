@@ -5,7 +5,7 @@ import api, { mediaThumb } from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Plus, X, Loader2, Trash2, CameraIcon, Send, ImageOff, Heart, Zap, Star, Camera, Images, ChevronLeft } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 

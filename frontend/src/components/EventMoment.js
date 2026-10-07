@@ -7,7 +7,7 @@ import { AvatarCircle } from "@/components/AvatarCircle";
 import { ReportFlag } from "@/components/ReportBlock";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Zap, Camera, Timer, Download, Share2, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 /**
  * "El Momento" — our own take on the BeReal-style capture during a party.

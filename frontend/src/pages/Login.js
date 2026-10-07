@@ -8,7 +8,7 @@ import { consumeReturnEvent } from "@/lib/returnEvent";
 import { isAppleSignInAvailable, startAppleLogin, isAppleCancel } from "@/lib/appleAuth";
 import { Input } from "@/components/ui/input";
 import { Loader2, UserPlus } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 

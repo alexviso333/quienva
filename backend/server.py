@@ -1699,7 +1699,7 @@ _ICONS_HEAD = (
     '<link rel="manifest" href="/manifest.json">'
     '<meta name="theme-color" content="#050508">'
     '<script>document.documentElement.classList.add("js-on")</script>'
-    '''<script>(function(){function ready(fn){if(document.readyState!="loading")fn();else document.addEventListener("DOMContentLoaded",fn);}ready(function(){var rev=document.querySelectorAll(".reveal");if("IntersectionObserver" in window && rev.length){var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting){en.target.classList.add("in");io.unobserve(en.target);}});},{threshold:0.12,rootMargin:"0px 0px -40px 0px"});Array.prototype.forEach.call(rev,function(el,i){el.style.transitionDelay=((i%4)*70)+"ms";io.observe(el);});}else{Array.prototype.forEach.call(rev,function(el){el.classList.add("in");});}Array.prototype.forEach.call(document.querySelectorAll(".glow-card"),function(c){c.addEventListener("mousemove",function(e){var r=c.getBoundingClientRect();c.style.setProperty("--gx",(e.clientX-r.left)+"px");c.style.setProperty("--gy",(e.clientY-r.top)+"px");});});var tb=document.querySelector(".topbar");if(tb){var os=function(){if(window.scrollY>40)tb.classList.add("shrink");else tb.classList.remove("shrink");};os();window.addEventListener("scroll",os,{passive:true});}Array.prototype.forEach.call(document.querySelectorAll(".stat b"),function(b){var t=b.textContent.trim();var n=parseInt(t.replace(/[^0-9]/g,""),10);if(!n||n>100000)return;var d=Math.min(1200,300+n*8);var s=null;function step(ts){if(!s)s=ts;var p=Math.min((ts-s)/d,1);b.textContent=Math.floor(p*n).toLocaleString("es");if(p<1)requestAnimationFrame(step);else b.textContent=t;}requestAnimationFrame(step);});});})();</script>'''
+    '''<script>(function(){function ready(fn){if(document.readyState!="loading")fn();else document.addEventListener("DOMContentLoaded",fn);}ready(function(){var rev=document.querySelectorAll(".reveal");if("IntersectionObserver" in window && rev.length){var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting){en.target.classList.add("in");io.unobserve(en.target);}});},{threshold:0.12,rootMargin:"0px 0px -40px 0px"});Array.prototype.forEach.call(rev,function(el,i){el.style.transitionDelay=((i%4)*70)+"ms";io.observe(el);});}else{Array.prototype.forEach.call(rev,function(el){el.classList.add("in");});}Array.prototype.forEach.call(document.querySelectorAll(".glow-card"),function(c){c.addEventListener("mousemove",function(e){var r=c.getBoundingClientRect();c.style.setProperty("--gx",(e.clientX-r.left)+"px");c.style.setProperty("--gy",(e.clientY-r.top)+"px");});});var tb=document.querySelector(".topbar");if(tb){var os=function(){if(window.scrollY>40)tb.classList.add("shrink");else tb.classList.remove("shrink");};os();window.addEventListener("scroll",os,{passive:true});}});})();</script>'''
 )
 
 
@@ -1778,12 +1778,14 @@ def _seo_topbar(front, lang, e):
 def _seo_benefits(lang, e):
     ui = _SEO_UI.get(lang, _SEO_UI["es"])
     ic_users = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>')
-    ic_ticket = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 11v2"/><path d="M13 17v2"/></svg>')
-    ic_zap = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>')
+    # Icons follow the NEW copy: 1) decide con tu grupo (lista + voto),
+    # 2) guarda la noche (cámara), 3) mira quién va (gente).
+    ic_vote = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>')
+    ic_cam = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3"/></svg>')
     return (f'<h2 class="sectitle">{e(ui["why"])}</h2><div class="benes">'
-            f'<div class="bene glow-card reveal"><div class="ic">{ic_users}</div><h3>{e(ui["b1t"])}</h3><p>{e(ui["b1d"])}</p></div>'
-            f'<div class="bene glow-card reveal"><div class="ic">{ic_ticket}</div><h3>{e(ui["b2t"])}</h3><p>{e(ui["b2d"])}</p></div>'
-            f'<div class="bene glow-card reveal"><div class="ic">{ic_zap}</div><h3>{e(ui["b3t"])}</h3><p>{e(ui["b3d"])}</p></div>'
+            f'<div class="bene glow-card reveal"><div class="ic">{ic_vote}</div><h3>{e(ui["b1t"])}</h3><p>{e(ui["b1d"])}</p></div>'
+            f'<div class="bene glow-card reveal"><div class="ic">{ic_cam}</div><h3>{e(ui["b2t"])}</h3><p>{e(ui["b2d"])}</p></div>'
+            f'<div class="bene glow-card reveal"><div class="ic">{ic_users}</div><h3>{e(ui["b3t"])}</h3><p>{e(ui["b3d"])}</p></div>'
             f'</div>')
 
 
@@ -2306,27 +2308,27 @@ _SEO_UI = {
     "es": {
         "open": "Abrir app",
         "why": "Por qu\u00e9 \u00bfQui\u00e9n va?",
-        "b1t": "Descubre qui\u00e9n va", "b1d": "Mira qu\u00e9 amigos van a cada fiesta antes de decidir el plan.",
-        "b2t": "Entradas al mejor precio", "b2d": "Precios reales y avisos cuando bajan o quedan pocas entradas.",
-        "b3t": "No te pierdas nada", "b3d": "Todas las discotecas y fiestas de tu ciudad, en un solo sitio.",
+        "b1t": "Decide con tu grupo", "b1d": "Monta el plan, que voten, se cierra solo cuando llegue el cupo.",
+        "b2t": "Guarda la noche", "b2d": "Las fotos del grupo, en el \u00e1lbum de la fiesta donde pas\u00f3.",
+        "b3t": "Mira qui\u00e9n va", "b3d": "Qu\u00e9 amigos ya se apuntaron antes de decidir.",
         "join": "\u00danete gratis", "join_h": "Vive la noche con tus amigos",
         "join_p": "Reg\u00edstrate gratis: mira qui\u00e9n va, consigue tus entradas y no te pierdas ni una fiesta.",
     },
     "en": {
         "open": "Open app",
         "why": "Why \u00bfQui\u00e9n va?",
-        "b1t": "See who's going", "b1d": "Check which friends are going to each party before you decide.",
-        "b2t": "Tickets at the best price", "b2d": "Real prices and alerts when they drop or are running low.",
-        "b3t": "Never miss out", "b3d": "Every club and party in your city, all in one place.",
+        "b1t": "Decide with your group", "b1d": "Build the plan, let them vote, it closes itself when the quorum hits.",
+        "b2t": "Keep the night", "b2d": "Your group's photos, in the album of the party where it happened.",
+        "b3t": "See who's going", "b3d": "Which friends already joined, before you decide.",
         "join": "Join free", "join_h": "Live the night with your friends",
         "join_p": "Sign up free: see who's going, grab your tickets and never miss a party.",
     },
     "de": {
         "open": "App \u00f6ffnen",
         "why": "Warum \u00bfQui\u00e9n va?",
-        "b1t": "Sieh, wer hingeht", "b1d": "Sieh, welche Freunde zu jeder Party gehen, bevor du dich entscheidest.",
-        "b2t": "Tickets zum besten Preis", "b2d": "Echte Preise und Hinweise, wenn sie sinken oder knapp werden.",
-        "b3t": "Verpass nichts", "b3d": "Alle Clubs und Partys deiner Stadt an einem Ort.",
+        "b1t": "Entscheide mit deiner Gruppe", "b1d": "Plan erstellen, abstimmen lassen, er schlie\u00dft sich beim Quorum automatisch.",
+        "b2t": "Bewahr die Nacht", "b2d": "Die Fotos der Gruppe, im Album der Party, wo es passiert ist.",
+        "b3t": "Sieh, wer hingeht", "b3d": "Welche Freunde schon dabei sind, bevor du entscheidest.",
         "join": "Kostenlos beitreten", "join_h": "Erlebe die Nacht mit deinen Freunden",
         "join_p": "Melde dich kostenlos an: sieh wer hingeht, hol dir Tickets und verpass keine Party.",
     },
@@ -3396,6 +3398,15 @@ QV_SOCIAL = [
 ]
 
 _HOME_EXTRA_CSS = (
+    # Hero CTA pair: big pink gradient button (create a plan) + discreet link.
+    ".ctarow{align-items:center}"
+    ".cta-xl{font-size:17px;padding:17px 34px}"
+    "@media(max-width:560px){.cta-xl{width:100%;padding:16px 22px;font-size:16px}}"
+    ".cta-sub{display:inline-flex;align-items:center;gap:6px;color:rgba(255,255,255,.55);"
+    "font-size:14px;font-weight:600;text-decoration:none;border-bottom:1px solid transparent;"
+    "transition:color .15s ease,border-color .15s ease}"
+    ".cta-sub:hover{color:#fff;border-color:rgba(255,255,255,.35)}"
+    "@media(max-width:560px){.cta-sub{width:100%;justify-content:center;padding-top:4px}}"
     ".hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:18px 0}"
     ".hcity{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden}"
     ".hcity-main{display:flex;flex-direction:column;gap:2px;padding:16px;text-decoration:none;color:#fff}"
@@ -3443,7 +3454,7 @@ _HOME_EXTRA_CSS = (
 
 _PLAN_HOME_T = {
     "es": {
-        "h2": "El plan se decide solo",
+        "h2": "As\u00ed se monta un plan",
         "p": "Crea un plan, m\u00e1ndalo por WhatsApp y que tu gente vote. Sin cuenta, sin grupos infinitos, sin \u00abal final qu\u00e9 hacemos\u00bb.",
         "steps": ["Eliges 2 o 3 fiestas", "Lo compartes por WhatsApp", "Se cierra solo al llegar el cupo"],
         "cta": "Crear un plan gratis",
@@ -3468,7 +3479,7 @@ _PLAN_HOME_T = {
         "n_venues": "discotecas",
     },
     "en": {
-        "h2": "The plan decides itself",
+        "h2": "How a plan works",
         "p": "Create a plan, drop it on WhatsApp and let your people vote. No account, no endless group chats.",
         "steps": ["Pick 2 or 3 parties", "Share it on WhatsApp", "It closes itself when the quorum hits"],
         "cta": "Create a free plan",
@@ -3493,7 +3504,7 @@ _PLAN_HOME_T = {
         "n_venues": "clubs",
     },
     "de": {
-        "h2": "Der Plan entscheidet sich selbst",
+        "h2": "So entsteht ein Plan",
         "p": "Erstelle einen Plan, schick ihn per WhatsApp und lass deine Leute abstimmen. Ohne Konto, ohne endlose Gruppenchats.",
         "steps": ["W\u00e4hle 2 oder 3 Partys", "Teile ihn per WhatsApp", "Er schlie\u00dft sich beim Quorum automatisch"],
         "cta": "Gratis Plan erstellen",
@@ -3563,8 +3574,10 @@ _HOME_T = {
     "es": {
         "title": "\u00bfQui\u00e9n va? \u2014 Fiestas y discotecas de hoy y este finde en tu ciudad",
         "desc": "Descubre todas las fiestas y discotecas de esta semana en Marbella, Ibiza, Madrid, Barcelona, Palma y Sevilla. Horarios, precios reales y qu\u00e9 amigos van. Consigue tus entradas en \u00bfQui\u00e9n va?",
-        "h1": "Todas las fiestas de tu ciudad, en un solo sitio",
-        "sub": "Descubre qu\u00e9 discotecas y fiestas hay hoy y este finde, mira qu\u00e9 amigos van y consigue tus entradas al mejor precio.",
+        "h1": "El plan se decide solo",
+        "sub": "Elige fiestas, m\u00e1ndalo a tu grupo por WhatsApp y que voten. Sin cuentas, sin \u00abal final qu\u00e9 hacemos\u00bb.",
+        "cta_primary": "Crear un plan gratis",
+        "cta_secondary": "Ver fiestas de esta noche",
         "cities_h": "Elige tu ciudad",
         "n_plans": "planes esta semana",
         "tonight": "Esta noche",
@@ -3572,7 +3585,7 @@ _HOME_T = {
         "faq_title": "Preguntas frecuentes",
         "faq": [
             ("\u00bfQu\u00e9 es \u00bfQui\u00e9n va?",
-             "\u00bfQui\u00e9n va? re\u00fane todas las fiestas y discotecas de tu ciudad con horarios, precios reales y qu\u00e9 amigos van, para que no te pierdas ning\u00fan plan y consigas tus entradas f\u00e1cil."),
+             "\u00bfQui\u00e9n va? es la forma m\u00e1s r\u00e1pida de decidir d\u00f3nde sal\u00eds. Montas un plan con 2 o 3 opciones, lo compartes por WhatsApp, tu grupo vota, y se cierra solo. Adem\u00e1s tienes todas las fiestas de tu ciudad y guardas las fotos de cada noche."),
             ("\u00bfEn qu\u00e9 ciudades est\u00e1 disponible?",
              "Ahora mismo en Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona, Palma de Mallorca y Sevilla, y cada semana a\u00f1adimos m\u00e1s fiestas."),
             ("\u00bfCu\u00e1nto cuesta?",
@@ -3582,8 +3595,10 @@ _HOME_T = {
     "en": {
         "title": "\u00bfQui\u00e9n va? \u2014 Parties & clubs tonight and this weekend in your city",
         "desc": "Discover every party and club this week in Marbella, Ibiza, Madrid, Barcelona, Palma and Sevilla. Times, real prices and which friends are going. Get your tickets on \u00bfQui\u00e9n va?",
-        "h1": "Every party in your city, in one place",
-        "sub": "Discover which clubs and parties are on tonight and this weekend, see which friends are going and get your tickets at the best price.",
+        "h1": "The plan decides itself",
+        "sub": "Pick a few parties, drop it on your group's WhatsApp and let them vote. No accounts, no endless \u201cso what are we doing?\u201d.",
+        "cta_primary": "Create a free plan",
+        "cta_secondary": "See parties tonight",
         "cities_h": "Choose your city",
         "n_plans": "plans this week",
         "tonight": "Tonight",
@@ -3591,7 +3606,7 @@ _HOME_T = {
         "faq_title": "FAQ",
         "faq": [
             ("What is \u00bfQui\u00e9n va?",
-             "\u00bfQui\u00e9n va? brings together every party and club in your city with times, real prices and which friends are going, so you never miss a plan and grab tickets easily."),
+             "\u00bfQui\u00e9n va? is the fastest way to decide where you're going out. You build a plan with 2 or 3 options, share it on WhatsApp, your group votes and it closes itself. You also get every party in your city and keep the photos of each night."),
             ("Which cities are available?",
              "Right now Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona, Palma de Mallorca and Sevilla \u2014 and we add more parties every week."),
             ("How much does it cost?",
@@ -3601,8 +3616,10 @@ _HOME_T = {
     "de": {
         "title": "\u00bfQui\u00e9n va? \u2014 Partys & Clubs heute und am Wochenende in deiner Stadt",
         "desc": "Entdecke alle Partys und Clubs dieser Woche in Marbella, Ibiza, Madrid, Barcelona, Palma und Sevilla. Zeiten, echte Preise und welche Freunde hingehen. Hol dir deine Tickets bei \u00bfQui\u00e9n va?",
-        "h1": "Alle Partys deiner Stadt an einem Ort",
-        "sub": "Entdecke, welche Clubs und Partys heute und am Wochenende stattfinden, sieh wer hingeht und hol dir deine Tickets zum besten Preis.",
+        "h1": "Der Plan entscheidet sich selbst",
+        "sub": "W\u00e4hle Partys, schick es per WhatsApp in deine Gruppe und lass abstimmen. Ohne Konto, ohne \u201awas machen wir jetzt?\u2018.",
+        "cta_primary": "Gratis Plan erstellen",
+        "cta_secondary": "Partys heute Abend ansehen",
         "cities_h": "W\u00e4hle deine Stadt",
         "n_plans": "Pl\u00e4ne diese Woche",
         "tonight": "Heute",
@@ -3610,7 +3627,7 @@ _HOME_T = {
         "faq_title": "H\u00e4ufige Fragen",
         "faq": [
             ("Was ist \u00bfQui\u00e9n va?",
-             "\u00bfQui\u00e9n va? b\u00fcndelt alle Partys und Clubs deiner Stadt mit Zeiten, echten Preisen und welche Freunde hingehen \u2014 damit du keinen Plan verpasst und einfach Tickets bekommst."),
+             "\u00bfQui\u00e9n va? ist der schnellste Weg zu entscheiden, wo ihr hingeht. Du baust einen Plan mit 2 oder 3 Optionen, teilst ihn per WhatsApp, deine Gruppe stimmt ab und er schlie\u00dft sich selbst. Dazu bekommst du alle Partys deiner Stadt und bewahrst die Fotos jeder Nacht."),
             ("Welche St\u00e4dte sind verf\u00fcgbar?",
              "Aktuell Marbella / Puerto Ban\u00fas, Ibiza, Madrid, Barcelona, Palma de Mallorca und Sevilla \u2014 und jede Woche kommen neue Partys dazu."),
             ("Was kostet es?",
@@ -3869,32 +3886,28 @@ async def _render_home(lang: str, request: Request):
     ogloc = {'es': 'es_ES', 'en': 'en_US', 'de': 'de_DE'}[lang]
     title = e(T["title"])
     desc = e(T["desc"])
-    # Real counters only — a pill with no number reads as broken.
+    # Real counters only, and only when the number is big enough to mean
+    # something (> 50). A pill showing "0" (or "6 ciudades") reads as broken, so
+    # if there is no solid number we render NOTHING.
     PT = _PLAN_HOME_T.get(lang) or _PLAN_HOME_T["es"]
     try:
         n_venues = await db.venues.count_documents({})
     except Exception:
         n_venues = 0
+    _STAT_MIN = 50
     _stats = []
-    if total > 0:
+    if total > _STAT_MIN:
         _stats.append(f'<span class="stat"><b>{total}</b> {e(T["n_plans"])}</span>')
-    _stats.append(f'<span class="stat"><b>{len(SUPPORTED_CITIES)}</b> {e(PT["n_cities"])}</span>')
-    if n_venues > 0:
+    if n_venues > _STAT_MIN:
         _stats.append(f'<span class="stat"><b>{n_venues}</b> {e(PT["n_venues"])}</span>')
-    stats_html = f'<div class="stats">{"".join(_stats)}</div>'
+    stats_html = f'<div class="stats">{"".join(_stats)}</div>' if _stats else ''
     plan_section = _home_plan_section(front, lang, e)
     after_section = _home_after_section(lang, e)
-    # OPTION B (owner): do NOT auto-redirect logged-in users to /feed. quienva.me
-    # ALWAYS shows the "Fiestas de hoy" SEO page (good for SEO + shareable), and a
-    # small script below just relabels the hero button to "Abrir la app" for people
-    # who already have a session, so they still get one clear tap into the app.
-    open_label = {"es": "Abrir la app", "en": "Open the app",
-                  "de": "App \u00f6ffnen"}.get(lang, "Abrir la app")
-    cta_swap_js = (
-        "<script>try{if(localStorage.getItem('qv_token')){"
-        "var c=document.getElementById('qvcta');"
-        "if(c){c.textContent=" + json.dumps(open_label, ensure_ascii=False) + ";}}}"
-        "catch(e){}</script>")
+    # Hero CTAs: the primary action of the whole product is CREATING A PLAN
+    # (/p/nuevo), with a discreet secondary link into tonight's parties.
+    hero_cta_primary = f'{front}/p/nuevo'
+    hero_cta_secondary = _city_paths(front, "madrid")[lang]
+    cta_swap_js = ""
     html_out = f"""<!doctype html>
 <html lang="{ST['html_lang']}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -3921,7 +3934,10 @@ async def _render_home(lang: str, request: Request):
 <h1>{e(T["h1"])}<span class="dot">.</span></h1>
 <p class="sub">{e(T["sub"])}</p>
 {stats_html}
-<div class="ctarow"><a id="qvcta" class="cta" href="{front}/feed">{e(_SEO_UI[lang]["join"])}</a></div>
+<div class="ctarow">
+<a id="qvcta" class="cta cta-xl" href="{e(hero_cta_primary)}">{e(T["cta_primary"])}</a>
+<a class="cta-sub" href="{e(hero_cta_secondary)}">{e(T["cta_secondary"])} \u2192</a>
+</div>
 {finder_html}
 </section>
 {ev_grid}
@@ -6724,6 +6740,23 @@ def _signups_recent(interests: list, hours: int = 24) -> int:
 
 
 
+async def _nights_saved_at_venue(venue: str) -> int:
+    """Noches REALMENTE guardadas en un local: fiestas pasadas de ese sitio que
+    tienen fotos en el álbum. Nunca cuenta fiestas sin recuerdos."""
+    if not venue:
+        return 0
+    try:
+        today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+        past_ids = await db.events.distinct("id", {"venue": venue, "date": {"$lt": today_iso}})
+        if not past_ids:
+            return 0
+        with_photos = await db.album_uploads.distinct("event_id", {"event_id": {"$in": past_ids}})
+        return len(with_photos)
+    except Exception:
+        return 0
+
+
+
 async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map: dict | None = None,
                           interests_by_event: dict | None = None,
                           follows_set: set | None = None,
@@ -6842,14 +6875,14 @@ async def serialize_event(ev: dict, user: dict, friend_ids: List[str], users_map
         # friends → crowd counts → open plans → nights at venue → editorial "new".
         "open_plans_count": (
             open_plans_by_event.get(ev["id"], 0) if open_plans_by_event is not None
-            else await db.plans.count_documents({"estado": "abierto", "opciones.evento_id": ev["id"]})
+            else await db.plans.count_documents({
+                "estado": "abierto", "opciones.evento_id": ev["id"],
+                "$or": [{"visibilidad": "todos"}, {"visibilidad": {"$exists": False}},
+                        {"visibilidad": None}]})
         ),
         "nights_at_venue": (
             nights_by_venue.get(ev.get("venue", ""), 0) if nights_by_venue is not None
-            else (await db.events.count_documents({
-                "venue": ev.get("venue", ""),
-                "date": {"$lt": datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()},
-            }) if ev.get("venue") else 0)
+            else (await _nights_saved_at_venue(ev.get("venue", "")) if ev.get("venue") else 0)
         ),
         "my_intent": STATUS_TO_INTENT.get(my_status, "none"),
         # Tickets
@@ -7057,8 +7090,11 @@ async def list_events(user: dict = Depends(get_optional_user),
     nights_by_venue: dict = {}
     if event_ids:
         _eid_set = set(event_ids)
+        # Solo los planes PÚBLICOS cuentan como prueba social agregada: un plan
+        # "solo amigos"/"solo invitados" no debe asomar ni como número.
         async for _p in db.plans.find(
-            {"estado": "abierto", "opciones.evento_id": {"$in": event_ids}},
+            {"estado": "abierto", "opciones.evento_id": {"$in": event_ids},
+             "$or": [{"visibilidad": "todos"}, {"visibilidad": {"$exists": False}}, {"visibilidad": None}]},
             {"_id": 0, "opciones": 1},
         ):
             _seen = set()
@@ -7069,12 +7105,26 @@ async def list_events(user: dict = Depends(get_optional_user),
                     open_plans_by_event[_e] = open_plans_by_event.get(_e, 0) + 1
         _venue_names = list({ev.get("venue", "") for ev in filtered_events if ev.get("venue")})
         if _venue_names:
+            # "X noches guardadas en Fitz" solo puede contar noches que EXISTEN de
+            # verdad como recuerdo: fiestas pasadas de ese local con fotos subidas
+            # al álbum. Antes contaba cualquier fiesta pasada (scrapeada), así que
+            # prometía recuerdos que no existían.
             _today_iso = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
-            async for _row in db.events.aggregate([
-                {"$match": {"venue": {"$in": _venue_names}, "date": {"$lt": _today_iso}}},
-                {"$group": {"_id": "$venue", "n": {"$sum": 1}}},
-            ]):
-                nights_by_venue[_row["_id"]] = _row["n"]
+            _past_by_venue: dict = {}
+            async for _pe in db.events.find(
+                {"venue": {"$in": _venue_names}, "date": {"$lt": _today_iso}},
+                {"_id": 0, "id": 1, "venue": 1},
+            ):
+                _past_by_venue.setdefault(_pe["venue"], []).append(_pe["id"])
+            _all_past_ids = [i for ids in _past_by_venue.values() for i in ids]
+            if _all_past_ids:
+                _with_photos = set(await db.album_uploads.distinct(
+                    "event_id", {"event_id": {"$in": _all_past_ids}}))
+                if _with_photos:
+                    for _v, _ids in _past_by_venue.items():
+                        _n = sum(1 for i in _ids if i in _with_photos)
+                        if _n:
+                            nights_by_venue[_v] = _n
     events = []
     for ev in filtered_events:
         events.append(await serialize_event(ev, user, friend_ids, users_map, interests_by_event, follows_set, my_ticket_ids, open_plans_by_event, nights_by_venue))
@@ -13588,6 +13638,8 @@ _PLAN_INTENTS = {"dentro", "voy_si", "depende", "paso"}
 # invitas a un amigo de la app. El invitado sale en la lista con 🕓 y NO cuenta
 # para el cupo hasta que responde de verdad.
 _PLAN_PENDING = "pendiente"
+# Visibilidad del plan DENTRO de la app (descubrimiento). El link siempre abre.
+_PLAN_VISIBILIDADES = {"todos", "amigos", "invitados"}
 _PLAN_INTENT_EMOJI = {"dentro": "\U0001F7E2", "voy_si": "\U0001F7E1",
                       "depende": "\U0001F7E0", "paso": "\u26AB",
                       _PLAN_PENDING: "\U0001F553"}
@@ -13670,6 +13722,13 @@ class PlanCreateIn(BaseModel):
     umbral_personas: Optional[int] = None
     hora_limite: Optional[str] = None
     creador_apodo: str = ""
+    # Quién DESCUBRE el plan dentro de la app (feed / ficha de la fiesta):
+    #   "todos"      -> cualquiera lo ve en la ficha de la fiesta
+    #   "amigos"     -> solo los amigos del creador
+    #   "invitados"  -> solo el creador y los invitados/participantes
+    # El enlace compartido por WhatsApp SIEMPRE funciona (es el core del
+    # producto: votar sin cuenta); la visibilidad solo controla el descubrimiento.
+    visibilidad: str = "todos"
     # Amigos de la app a los que se invita en el momento de crear el plan.
     invitar_user_ids: List[str] = Field(default_factory=list)
 
@@ -13700,11 +13759,16 @@ async def _plan_build_option(opt: "PlanOptionIn", orden: int) -> dict:
         "hora": (opt.hora or "").strip(),
         "precio_desde": opt.precio_desde,
         "image_url": "",
+        # Nombre de la DISCOTECA cuando la opción es una fiesta real. Se guarda
+        # aparte porque `venue_nombre` suele traer el nombre del EVENTO
+        # ("MIERCOLES", "Jueves"...) y así no sabes dónde es.
+        "club_nombre": "",
     }
     if o["evento_id"]:
         ev = await db.events.find_one({"id": o["evento_id"]}, {"_id": 0})
         if ev:
             o["venue_nombre"] = o["venue_nombre"] or ev.get("venue") or ev.get("name") or ""
+            o["club_nombre"] = (ev.get("venue") or "").strip()
             o["venue_direccion"] = o["venue_direccion"] or ev.get("address") or ""
             o["hora"] = o["hora"] or ev.get("time") or ""
             o["image_url"] = ev.get("image_url") or ""
@@ -13715,7 +13779,27 @@ async def _plan_build_option(opt: "PlanOptionIn", orden: int) -> dict:
                     o["precio_desde"] = min(prices)
     if not o["venue_nombre"] and o["texto_libre"]:
         o["venue_nombre"] = o["texto_libre"]
+    # Si el club coincide con el nombre mostrado no lo repetimos.
+    if _plan_norm_txt(o["club_nombre"]) == _plan_norm_txt(o["venue_nombre"]):
+        o["club_nombre"] = ""
     return o
+
+
+def _plan_norm_txt(s: str) -> str:
+    return (s or "").strip().lower()
+
+
+def _plan_opt_full_name(o: dict, limit: int = 42) -> str:
+    """Nombre de una opción como se muestra en la isla dinámica / avisos:
+    "MIERCOLES · Nazca Club". Si el evento no tiene discoteca distinta,
+    devuelve solo el nombre."""
+    name = (o.get("venue_nombre") or o.get("texto_libre") or "").strip()
+    club = (o.get("club_nombre") or "").strip()
+    if club and _plan_norm_txt(club) != _plan_norm_txt(name):
+        full = f"{name} \u00b7 {club}" if name else club
+    else:
+        full = name
+    return full[:limit]
 
 
 def _plan_counts(participants: list) -> dict:
@@ -13750,20 +13834,21 @@ def _plan_pick_winner(plan: dict, participants: list):
 async def _plan_option_label(plan: dict, opt_id: str) -> str:
     for o in (plan.get("opciones") or []):
         if o.get("opt_id") == opt_id:
-            name = (o.get("venue_nombre") or o.get("texto_libre") or "el plan").strip()
+            name = _plan_opt_full_name(o) or "el plan"
             return f"{name}{(' a las ' + o['hora']) if o.get('hora') else ''}"
     return "el plan"
 
 
 def _plan_leading_option(plan: dict, participants: list) -> tuple:
     """(nombre_corto, votos, nº_opciones) de la opción que va ganando la votación.
-    Alimenta la Live Activity: "VA GANANDO · Fitz · 3". Con una sola opción
-    devuelve su nombre y 0 votos (no hay votación, solo asistencia)."""
+    Alimenta la Live Activity: "VA GANANDO · MIERCOLES · Nazca Club · 3". El
+    nombre incluye la discoteca porque hay eventos que se llaman solo "Miércoles"
+    y sin el club no sabes dónde es."""
     opts = plan.get("opciones") or []
     if not opts:
         return (None, 0, 0)
     def short(o):
-        return (o.get("venue_nombre") or o.get("texto_libre") or "").strip()[:28]
+        return _plan_opt_full_name(o)
     if len(opts) == 1:
         return (short(opts[0]) or None, 0, 1)
     tally = {}
@@ -13886,7 +13971,7 @@ def _plan_label(plan: dict) -> str:
     if t:
         return t
     for o in (plan.get("opciones") or []):
-        n = (o.get("venue_nombre") or o.get("texto_libre") or "").strip()
+        n = _plan_opt_full_name(o)
         if n:
             return n
     return "un plan"
@@ -14202,6 +14287,7 @@ def _plan_public(plan: dict, participants: list, viewer_token: str = None, viewe
         "umbral_personas": plan.get("umbral_personas"),
         "hora_limite": plan.get("hora_limite"),
         "estado": plan.get("estado"),
+        "visibilidad": plan.get("visibilidad") or "todos",
         "opcion_ganadora": plan.get("opcion_ganadora"),
         "cierre_motivo": plan.get("cierre_motivo"),
         "counts": counts,
@@ -14239,6 +14325,7 @@ async def create_plan(body: PlanCreateIn, request: Request):
         "opciones": opciones,
         "umbral_personas": body.umbral_personas if (body.umbral_personas and body.umbral_personas > 1) else None,
         "hora_limite": (body.hora_limite or None),
+        "visibilidad": (body.visibilidad if body.visibilidad in _PLAN_VISIBILIDADES else "todos"),
         "estado": "abierto",
         "opcion_ganadora": None,
         "cierre_motivo": None,
@@ -14495,13 +14582,32 @@ async def cancel_plan(slug: str, request: Request):
 
 # ---- Open Graph dinamico 1200x630 -------------------------------------------
 @api_router.get("/events/{event_id}/plans")
-async def event_open_plans(event_id: str):
+async def event_open_plans(event_id: str, request: Request):
+    """Planes abiertos de esta fiesta que el visitante PUEDE descubrir.
+    La visibilidad solo afecta al descubrimiento: el enlace directo (/p/slug)
+    sigue abierto para cualquiera, que es lo que hace que funcione WhatsApp."""
+    user = await _plan_optional_user(request)
+    uid = user.get("user_id") if user else None
+    friend_ids = set(await accepted_friend_ids(uid)) if uid else set()
     cur = db.plans.find(
         {"estado": "abierto", "opciones.evento_id": event_id}, {"_id": 0}
     ).sort("created_at", -1)
-    plans = await cur.to_list(20)
+    plans = await cur.to_list(40)
     out = []
     for p in plans:
+        vis = p.get("visibilidad") or "todos"
+        if vis != "todos":
+            if not uid:
+                continue
+            if p.get("creator_user_id") == uid:
+                pass  # tu propio plan siempre lo ves
+            elif vis == "amigos" and p.get("creator_user_id") in friend_ids:
+                pass
+            elif await db.plan_participants.find_one(
+                    {"plan_id": p["id"], "user_id": uid}, {"_id": 1}):
+                pass  # te han invitado o ya has respondido
+            else:
+                continue
         dentro = await db.plan_participants.count_documents(
             {"plan_id": p["id"], "intencion": "dentro"})
         total = await db.plan_participants.count_documents({"plan_id": p["id"]})
@@ -14510,40 +14616,51 @@ async def event_open_plans(event_id: str):
             "titulo": p.get("titulo") or "Plan",
             "creador_apodo": p.get("creador_apodo"),
             "umbral_personas": p.get("umbral_personas"),
+            "visibilidad": p.get("visibilidad") or "todos",
             "dentro": dentro,
             "total": total,
             "hora_limite": p.get("hora_limite"),
         })
+        if len(out) >= 20:
+            break
     return {"plans": out, "count": len(out)}
 
 
 @api_router.get("/events/{event_id}/venue-nights")
 async def event_venue_nights(event_id: str):
-    """Past nights at the same venue — social proof + memories ("Noches en este
-    sitio"). Public: only aggregate counts, never names."""
-    ev = await db.events.find_one({"id": event_id}, {"_id": 0, "venue": 1, "city": 1})
+    """PRÓXIMAS noches en la misma discoteca — la agenda real del local sin salir
+    de la ficha. Antes devolvía fiestas PASADAS, que no eran útiles y además se
+    leían como "noches a las que fuiste" (no era verdad). Solo datos reales:
+    fecha, nombre y precio desde."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0, "venue": 1, "city": 1, "date": 1})
     if not ev or not ev.get("venue"):
         return {"nights": [], "count": 0}
     today = datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
-    q = {"venue": ev["venue"], "date": {"$lt": today}, "id": {"$ne": event_id}}
+    since = max(today, ev.get("date") or today)
+    q = {"venue": ev["venue"], "date": {"$gte": since}, "id": {"$ne": event_id}}
     if ev.get("city"):
         q["city"] = ev["city"]
     rows = await db.events.find(
-        q, {"_id": 0, "id": 1, "name": 1, "date": 1, "image_url": 1}
-    ).sort("date", -1).to_list(6)
+        q, {"_id": 0, "id": 1, "name": 1, "date": 1, "time": 1, "image_url": 1,
+            "current_price": 1, "price_tiers": 1, "sale_state": 1}
+    ).sort("date", 1).to_list(8)
     nights = []
     for r in rows:
-        attended = await db.interests.count_documents({"event_id": r["id"], "status": "estuve"})
-        photos = await db.album_uploads.count_documents({"event_id": r["id"]})
+        price = r.get("current_price")
+        if price is None:
+            tiers = [t.get("price") for t in (r.get("price_tiers") or [])
+                     if isinstance(t, dict) and t.get("price")]
+            price = min(tiers) if tiers else None
         nights.append({
             "id": r["id"],
             "name": r.get("name") or "",
             "date": r.get("date"),
+            "time": r.get("time") or "",
             "image_url": r.get("image_url"),
-            "attended": attended,
-            "photos": photos,
+            "price": price,
+            "sale_state": r.get("sale_state") or "",
         })
-    return {"nights": nights, "count": len(nights), "venue": ev["venue"]}
+    return {"nights": nights, "count": len(nights), "venue": ev["venue"], "kind": "upcoming"}
 
 
 @api_router.get("/og/plan/{slug}")
@@ -14927,7 +15044,7 @@ _PLAN_JS = r'''
     h+='<h1>'+esc(P.titulo || (P.opciones[0]?('\u00bfQui\u00e9n va a '+P.opciones[0].venue_nombre+'?'):'Plan'))+'</h1>';
     if(P.estado==='cerrado'){
       var w=(P.opciones||[]).filter(function(o){return o.opt_id===P.opcion_ganadora;})[0];
-      h+='<div class=status>'+(w?('\u2705 Cerrado \u00b7 Quedamos en '+esc(w.venue_nombre)+(w.hora?(' a las '+esc(w.hora)):'')):'Plan cerrado sin suficientes personas')+'</div>';
+      h+='<div class=status>'+(w?('\u2705 Cerrado \u00b7 Quedamos en '+esc(w.venue_nombre)+(w.club_nombre?(' \u00b7 '+esc(w.club_nombre)):'')+(w.hora?(' a las '+esc(w.hora)):'')):'Plan cerrado sin suficientes personas')+'</div>';
     } else if(P.estado==='cancelado'){
       h+='<div class=status>Plan cancelado</div>';
     }
@@ -14939,7 +15056,7 @@ _PLAN_JS = r'''
       h+='<div class="opt'+(win?' win':'')+'">';
       if(o.image_url){h+='<img src="'+esc(o.image_url)+'" alt="">';}
       h+='<div style="flex:1"><div class=on>'+esc(o.venue_nombre||o.texto_libre||'Opci\u00f3n')+'</div>';
-      var meta=[];if(o.hora)meta.push(o.hora);if(o.precio_desde)meta.push('desde '+o.precio_desde+'\u20ac');
+      var meta=[];if(o.club_nombre)meta.push(o.club_nombre);if(o.hora)meta.push(o.hora);if(o.precio_desde)meta.push('desde '+o.precio_desde+'\u20ac');
       h+='<div class=meta>'+esc(meta.join(' \u00b7 '))+'</div></div>';
       if((P.opciones.length>1)&&P.estado==='abierto'){
         h+='<button class="pref'+(selectedOpt===o.opt_id?' sel':'')+'" data-opt="'+o.opt_id+'">'+(selectedOpt===o.opt_id?'Tu voto':'Prefiero esta')+'</button>';

@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { getContacts, contactsSupported, inviteWhatsApp, shareInvite, inviteWhatsAppTo } from "@/lib/contacts";
 import { Contact, Share2, UserPlus, Check, Loader2, Sparkles, Send, Search } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 /**
  * Cold-start friend finder. Reads the device address book (NATIVE on iPhone/

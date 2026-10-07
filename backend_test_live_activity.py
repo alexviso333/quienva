@@ -16,7 +16,7 @@ import json
 from datetime import datetime, timedelta
 
 # Backend URL from frontend/.env
-API_BASE = "https://voting-island-widget.preview.emergentagent.com/api"
+API_BASE = "https://voting-party-planner.preview.emergentagent.com/api"
 
 # Test credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@quienva.app"

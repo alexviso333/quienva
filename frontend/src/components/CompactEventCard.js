@@ -8,9 +8,10 @@ import { BlurredGoingTeaser } from "@/components/BlurredGoingTeaser";
 import api, { mediaThumb } from "@/lib/api";
 import { formatPartyDate } from "@/lib/format";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/context/AuthContext";
 import { MovingBadge } from "@/components/MovingNow";
+import { useCreatePlan } from "@/context/CreatePlan";
 
 const SALE_STATE_META = {
   no_a_la_venta: { labelKey: "compact.sale_next", cls: "bg-white/15 text-white/80", icon: Clock },
@@ -49,6 +50,7 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { open: openCreatePlan } = useCreatePlan();
   const going = event.friends_going || [];
   const interested = event.friends_interested || [];
   const isVoy = event.my_status === "voy";
@@ -88,6 +90,16 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
   const handleVoy = (e) => {
     e.stopPropagation();
     if (onVoy) onVoy(isVoy ? "none" : "voy");
+  };
+
+  const onPlan = (e) => {
+    e.stopPropagation();
+    openCreatePlan(
+      { id: event.id, name: event.name, venue: event.venue, time: event.time,
+        price: event.current_price, image_url: event.image_url, city: event.city },
+      event.city,
+      "event_compact",
+    );
   };
 
   return (
@@ -148,6 +160,17 @@ export function CompactEventCard({ event, index = 0, width, onVoy }) {
           aria-label={t("compact.notify_me")}
         >
           <Bell className={`w-3.5 h-3.5 ${following ? "text-qv-secondary" : "text-white/80"}`} fill={following ? "currentColor" : "none"} />
+        </button>
+
+        {/* Proponer plan: la acción principal del producto también en compacto,
+            junto a la campana y al "Voy". */}
+        <button
+          data-testid={`compact-plan-${event.id}`}
+          onClick={onPlan}
+          className="absolute top-[38px] right-2 z-20 h-7 w-7 rounded-full bg-black/50 backdrop-blur-sm border border-qv-primary/50 flex items-center justify-center active:scale-90 transition-transform"
+          aria-label={t("compact.make_plan", "Proponer plan")}
+        >
+          <ClipboardList className="w-3.5 h-3.5 text-qv-primary" />
         </button>
 
         {onVoy && (

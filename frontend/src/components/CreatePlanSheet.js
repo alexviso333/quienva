@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ClipboardList, Plus, X, Check, Send, Link2, Loader2, PartyPopper, SlidersHorizontal, ChevronDown, Search, Building2, Flame, PencilLine, MapPin } from "lucide-react";
+import { ClipboardList, Plus, X, Check, Send, Link2, Loader2, PartyPopper, SlidersHorizontal, ChevronDown, Search, Building2, Flame, PencilLine, MapPin, Globe, Users, Lock } from "lucide-react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import FriendPicker from "@/components/FriendPicker";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
-import { toast } from "sonner";
+import { ensurePublicUrl, publicUrl } from "@/lib/share";
+import { toast } from "@/lib/notify";
 import { captureEvent } from "@/analytics/posthog";
 import { startPlanActivity } from "@/lib/liveActivity";
 
@@ -24,6 +25,19 @@ const dayLabel = (iso) => {
 
 let uid = 0;
 const nextKey = () => `o${++uid}`;
+
+// Visibilidad DENTRO de la app (quién descubre el plan en la ficha de la
+// fiesta). El enlace compartido por WhatsApp abre siempre, para cualquiera.
+const VIS_OPTS = [
+  { id: "todos", labelKey: "createplan.vis_todos", label: "Todos", icon: Globe },
+  { id: "amigos", labelKey: "createplan.vis_amigos", label: "Amigos", icon: Users },
+  { id: "invitados", labelKey: "createplan.vis_invitados", label: "Invitados", icon: Lock },
+];
+const VIS_HINT = {
+  todos: "Cualquiera puede verlo y apuntarse desde la fiesta.",
+  amigos: "Solo tus amigos lo ven en la app.",
+  invitados: "Solo quien invites. No aparece en ningún sitio.",
+};
 
 /* -------------------------------------------------------------------------- */
 /* Fila seleccionable del buscador (evento o discoteca)                        */
@@ -70,6 +84,7 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
   const [pickQ, setPickQ] = useState("");
   const [manual, setManual] = useState({ texto: "", hora: "" });
   const [invitados, setInvitados] = useState([]);
+  const [visibilidad, setVisibilidad] = useState("todos");  // todos | amigos | invitados
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -98,6 +113,7 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
       setPickQ("");
       setManual({ texto: "", hora: "" });
       setInvitados([]);
+      setVisibilidad("todos");
       setResult(null);
       setBusy(false);
     }
@@ -157,6 +173,9 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
     kind: "event",
     evento_id: e.id,
     nombre: e.name || e.venue || "",
+    // Discoteca: se guarda aparte porque hay eventos que se llaman solo
+    // "Miércoles" y sin el local no sabes dónde es (isla dinámica, avisos...).
+    club: e.venue || "",
     sub: [e.venue, dayLabel(e.date), e.time].filter(Boolean).join(" · "),
     hora: e.time || "",
     precio: e.current_price || null,
@@ -199,6 +218,7 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
         ciudad: effCity,
         opciones,
         umbral_personas: parseInt(umbral, 10) || null,
+        visibilidad: visibilidad,
         invitar_user_ids: invitados,
       };
       const { data } = await api.post("/plans", body);
@@ -206,6 +226,7 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
         plan_id: data?.plan?.id,
         num_opciones: opciones.length,
         has_quorum: !!body.umbral_personas,
+        visibilidad,
         source: presetEvent ? "event" : source,
         num_invitados: invitados.length,
         kinds: opts.map((o) => o.kind).join(","),
@@ -223,7 +244,9 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
     }
   };
 
-  const shareUrl = result?.share_url || "";
+  // Siempre el dominio público: dentro de la app nativa el origin es
+  // capacitor://localhost y el backend podría devolver su propio host.
+  const shareUrl = result?.slug ? publicUrl(`/p/${result.slug}`) : ensurePublicUrl(result?.share_url);
   const shareText = (() => {
     if (opts.length > 1) return `Montando plan${titulo ? ` · ${titulo}` : ""}. He puesto ${opts.length} opciones, votad cuál: ${shareUrl}`;
     if (umbral) return `${titulo || opts[0]?.nombre || "Plan"} 🔥 Se cierra si somos ${umbral}. ¿Te apuntas?: ${shareUrl}`;
@@ -416,6 +439,30 @@ export default function CreatePlanSheet({ open, onOpenChange, presetEvent = null
                   <FriendPicker selected={invitados} onChange={setInvitados} />
                 </div>
               ) : null}
+
+              {/* ¿Quién puede ver este plan en la app? El enlace de WhatsApp
+                  funciona siempre; esto solo controla quién lo descubre. */}
+              <div className="mt-4" data-testid="create-plan-visibility">
+                <p className="text-white/55 text-xs font-semibold mb-1.5">{t("createplan.vis_label", "¿Quién lo ve en la app?")}</p>
+                <div className="grid grid-cols-3 gap-1 bg-white/[0.04] rounded-xl p-1">
+                  {VIS_OPTS.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      data-testid={`create-plan-vis-${v.id}`}
+                      onClick={() => setVisibilidad(v.id)}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition-colors ${
+                        visibilidad === v.id ? "bg-qv-primary text-white shadow-[0_6px_16px_-8px_rgba(255,0,85,0.9)]" : "text-white/50"
+                      }`}
+                    >
+                      <v.icon className="w-3.5 h-3.5" /> {t(v.labelKey, v.label)}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-white/30 text-[11px] mt-1.5 leading-snug">
+                  {t(`createplan.vis_hint_${visibilidad}`, VIS_HINT[visibilidad])}
+                </p>
+              </div>
 
               {/* Ajustes opcionales */}
               {!showOpts ? (

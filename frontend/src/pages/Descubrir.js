@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ArrowLeft, UserPlus, Check, Loader2, Compass, Zap, Users, ImageOff, X, Heart } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 

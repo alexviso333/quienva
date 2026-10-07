@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { AvatarCircle } from "@/components/AvatarCircle";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, LogOut, Camera, Share2, Loader2, Save, Bell, BellRing, Archive, Grid3x3, Rows3, Copy, Eye, Users2, EyeOff, Ban, Zap, Globe2, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { isPushSupported, getPushStatus, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 import { StoriesArchive } from "@/components/Stories";
