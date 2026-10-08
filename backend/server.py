@@ -16449,6 +16449,152 @@ async def live_activity_start_token(inp: LiveActivityStartToken,
     return {"ok": True}
 
 
+# =========================================================================
+# DESCARGA DEL FIX "Live Activity push-to-start" (Dynamic Island del Momento).
+# Página que auto-descarga un ZIP con los archivos corregidos listos para
+# subir a GitHub (CodeMagic rebuild + Render redeploy). Pública a propósito:
+# solo sirve código fuente del propio proyecto.
+# =========================================================================
+_LIVE_ACTIVITY_FIX_FILES = [
+    "frontend/native/LiveActivity/QuienVaMomentLiveActivityPlugin.swift",
+    "frontend/native/LiveActivity/QuienVaLiveActivityPlugin.swift",
+    "frontend/src/lib/momentLiveActivity.js",
+    "frontend/src/lib/liveActivity.js",
+    "frontend/src/context/AuthContext.js",
+    "backend/server.py",
+]
+
+_LIVE_ACTIVITY_FIX_README = """FIX — Live Activity push-to-start (Dynamic Island del MOMENTO)
+================================================================
+
+PROBLEMA
+--------
+La app nunca subia el "push-to-start token" (kind='moment' / 'plan_invite'),
+asi que el backend no podia ARRANCAR la Live Activity / Dynamic Island de
+forma remota cuando saltaba EL MOMENTO o llegaba una invitacion a plan.
+Ademas el backend mandaba nombres de struct y de campos que NO coincidian con
+el codigo Swift, por lo que iOS habria descartado el push en silencio.
+
+QUE CAMBIA
+----------
+1. frontend/native/LiveActivity/QuienVaMomentLiveActivityPlugin.swift
+   + metodo observeStartToken() -> se suscribe a
+     Activity<QuienVaMomentAttributes>.pushToStartTokenUpdates (iOS 17.2+)
+     y emite el token a JS (listener "momentStartToken").
+
+2. frontend/native/LiveActivity/QuienVaLiveActivityPlugin.swift
+   + metodo observeStartToken() para QuienVaPlanAttributes
+     (listener "planStartToken").
+
+3. frontend/src/lib/momentLiveActivity.js
+   + registerMomentStartToken() -> POST /api/live-activity/start-token
+     { kind:"moment", token }.
+
+4. frontend/src/lib/liveActivity.js
+   + registerPlanStartToken() -> POST /api/live-activity/start-token
+     { kind:"plan_invite", token }.
+
+5. frontend/src/context/AuthContext.js
+   Llama a registerMomentStartToken() y registerPlanStartToken() al iniciar
+   sesion (junto al re-registro del push APNs).
+
+6. backend/server.py
+   _fire_moment_live_start() y _fire_plan_invite_live_start() ahora usan los
+   nombres de struct y campos REALES del Swift:
+     - "QuienVaMomentAttributes"  (eventId, ciudad / fase, deadlineEpoch,
+        nombreEvento, subiendoAhora, misLikes, amigosDentro)
+     - "QuienVaPlanAttributes"    (titulo, ciudad, slug / dentro, umbral,
+        cierraEpoch, estado, numOpciones)
+
+COMO APLICARLO
+--------------
+1. Descomprime este ZIP en la RAIZ de tu repo (respeta las rutas; sobrescribe).
+2. git add -A && git commit && push a GitHub (usa "Save to Github" si procede).
+3. CodeMagic reconstruye la app iOS (Swift) -> nueva build en TestFlight.
+4. Render redespliega el backend (server.py).
+5. Abre la app TestFlight, inicia sesion (sube los push-to-start tokens) y
+   usa el boton de admin "EL MOMENTO": ahora "Push to-start tokens iOS" sera
+   > 0 y saltara la Dynamic Island con la cuenta atras.
+"""
+
+
+def _build_live_activity_fix_zip() -> bytes:
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    buf = io.BytesIO()
+    with _zipfile_mod.ZipFile(buf, "w", _zipfile_mod.ZIP_DEFLATED) as zf:
+        zf.writestr("quienva-live-activity-fix/LEEME.txt", _LIVE_ACTIVITY_FIX_README)
+        for rel in _LIVE_ACTIVITY_FIX_FILES:
+            abspath = os.path.join(root, rel)
+            try:
+                with open(abspath, "r", encoding="utf-8") as fh:
+                    data = fh.read()
+            except Exception:
+                continue
+            zf.writestr(f"quienva-live-activity-fix/{rel}", data)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+@api_router.get("/live-activity-fix/download")
+async def live_activity_fix_download():
+    data = _build_live_activity_fix_zip()
+    headers = {
+        "Content-Disposition": 'attachment; filename="quienva-live-activity-fix.zip"',
+        "Content-Length": str(len(data)),
+    }
+    return _StreamingResponse(iter([data]), media_type="application/zip", headers=headers)
+
+
+@api_router.get("/live-activity-fix", response_class=_HTMLResponse)
+async def live_activity_fix_page():
+    files_list = "".join(f"<li><code>{f}</code></li>" for f in _LIVE_ACTIVITY_FIX_FILES)
+    html_out = f"""<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fix Live Activity — Descarga</title>
+<style>
+  :root {{ color-scheme: dark; }}
+  body {{ font-family: -apple-system, system-ui, sans-serif; background:#09060e;
+         color:#f4f0fa; margin:0; padding:28px 20px; line-height:1.5; }}
+  .card {{ max-width:620px; margin:0 auto; background:#140d1f;
+          border:1px solid #2a1c3d; border-radius:18px; padding:26px 24px; }}
+  h1 {{ font-size:22px; margin:0 0 6px; }}
+  .sub {{ color:#b9a8d6; font-size:14px; margin:0 0 20px; }}
+  a.btn {{ display:block; text-align:center; text-decoration:none;
+           background:linear-gradient(90deg,#ff0055,#ff3d80);
+           color:#fff; font-weight:700; padding:15px; border-radius:14px;
+           font-size:16px; margin:18px 0 10px; }}
+  code {{ background:#0c0813; padding:1px 6px; border-radius:6px;
+          color:#7ef1ff; font-size:12.5px; }}
+  ul {{ padding-left:18px; }}
+  li {{ margin:4px 0; font-size:13.5px; }}
+  .note {{ font-size:12.5px; color:#9c8bbd; margin-top:18px; }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Fix · Dynamic Island del MOMENTO</h1>
+    <p class="sub">La descarga empieza automáticamente. Si no, pulsa el botón.</p>
+    <a class="btn" id="dl" href="./live-activity-fix/download" download>⬇️ Descargar ZIP del fix</a>
+    <p>Dentro del ZIP (carpeta <code>quienva-live-activity-fix/</code>) + <code>LEEME.txt</code>:</p>
+    <ul>{files_list}</ul>
+    <p class="note">Descomprímelo en la <b>raíz</b> de tu repo respetando las rutas,
+    sobrescribe, haz commit/push a GitHub → CodeMagic (app iOS) + Render (backend)
+    reconstruyen. Luego inicia sesión en la app TestFlight para que suba los
+    push-to-start tokens.</p>
+  </div>
+  <script>
+    setTimeout(function () {{
+      try {{ document.getElementById("dl").click(); }} catch (e) {{}}
+    }}, 600);
+  </script>
+</body>
+</html>"""
+    return _HTMLResponse(content=html_out)
+
+
 async def _fire_moment_live_end(event_id: str) -> dict:
     """Termina (dismiss) todas las Live Activities del Momento de un evento.
     Envia APNs `event:"end"` a cada activity_token registrado en
@@ -16495,22 +16641,33 @@ async def _fire_moment_live_start(ev: dict):
     name = (ev.get("name") or "")[:40]
     prompt = await db.moment_prompts.find_one({"event_id": event_id}, {"_id": 0, "on_time_deadline": 1})
     deadline = prompt.get("on_time_deadline") if prompt else None
+    deadline_epoch = None
+    if deadline:
+        try:
+            deadline_epoch = datetime.fromisoformat(
+                str(deadline).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            deadline_epoch = None
     uids = [it["user_id"] async for it in db.interests.find(
         {"event_id": event_id, "status": "voy"}, {"_id": 0, "user_id": 1})]
     if not uids:
         return
-    attributes = {"event_id": event_id, "event_name": name}
+    # Las claves DEBEN coincidir con el struct Swift QuienVaMomentAttributes
+    # (frontend/native/LiveActivity/QuienVaMomentAttributes.swift). Si no,
+    # iOS descarta el push-to-start en silencio (aunque APNs devuelva 200).
+    attributes = {"eventId": event_id, "ciudad": ev.get("city") or ""}
     content_state = {
-        "phase": "momento",
-        "deadline": deadline,
-        "event_name": name,
-        "capturing_now": await db.captures.count_documents({"event_id": event_id}),
-        "my_likes": 0,
+        "fase": "momento",
+        "deadlineEpoch": deadline_epoch,
+        "nombreEvento": name,
+        "subiendoAhora": await db.captures.count_documents({"event_id": event_id}),
+        "misLikes": 0,
+        "amigosDentro": 0,
     }
     async for row in db.live_activity_start_tokens.find(
         {"user_id": {"$in": uids}, "kind": "moment"}, {"_id": 0}):
         res = await apns.send_live_activity_start(
-            row["token"], "MomentActivityAttributes", attributes, content_state,
+            row["token"], "QuienVaMomentAttributes", attributes, content_state,
             stale_seconds=20 * 60,
             alert={"title": "⚡ Es EL MOMENTO", "body": name, "sound": None},
         )
@@ -16530,20 +16687,33 @@ async def _fire_plan_invite_live_start(plan: dict, inviter: dict, invited_uids: 
         return
     inviter_name = (inviter.get("name") or "").split(" ")[0] or "Alguien"
     plan_title = (plan.get("titulo") or "este plan")[:60]
+    deadline = plan.get("hora_limite") or plan.get("fecha_cierre") or plan.get("deadline")
+    cierra_epoch = None
+    if deadline:
+        try:
+            cierra_epoch = datetime.fromisoformat(
+                str(deadline).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            cierra_epoch = None
+    # Reutiliza el MISMO widget/struct que el plan normal (QuienVaPlanAttributes)
+    # para que iOS lo renderice. Las claves DEBEN coincidir con
+    # frontend/native/LiveActivity/QuienVaPlanAttributes.swift.
     attributes = {
-        "plan_id": plan["id"], "plan_slug": plan.get("slug"),
-        "inviter_name": inviter_name, "plan_title": plan_title,
+        "titulo": plan_title,
+        "ciudad": plan.get("ciudad") or "",
+        "slug": plan.get("slug") or plan["id"],
     }
-    deadline = plan.get("fecha_cierre") or plan.get("deadline")
     content_state = {
-        "phase": "pending",
-        "deadline": deadline,
-        "yes_count": 0, "no_count": 0, "pending_count": len(invited_uids) + 1,
+        "dentro": 1,
+        "umbral": int(plan.get("umbral_personas") or (len(invited_uids) + 1)),
+        "cierraEpoch": cierra_epoch,
+        "estado": "abierto",
+        "numOpciones": len(plan.get("opciones") or []) or 1,
     }
     async for row in db.live_activity_start_tokens.find(
         {"user_id": {"$in": invited_uids}, "kind": "plan_invite"}, {"_id": 0}):
         res = await apns.send_live_activity_start(
-            row["token"], "PlanInviteActivityAttributes", attributes, content_state,
+            row["token"], "QuienVaPlanAttributes", attributes, content_state,
             stale_seconds=24 * 3600,
             alert={"title": f"👥 {inviter_name} te invita", "body": plan_title, "sound": None},
         )
