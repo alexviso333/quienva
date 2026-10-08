@@ -33,6 +33,27 @@ function epochOf(iso) {
   return Number.isFinite(t) ? t / 1000 : undefined;
 }
 
+let startTokenBound = false;
+/** Suscribe el push-to-start token de la invitación a plan (iOS 17.2+) y lo
+ * sube al backend (kind="plan_invite"). Así el servidor puede ARRANCAR la Live
+ * Activity en el móvil del invitado en cuanto le llega la invitación, sin que
+ * tenga que abrir la app. Idempotente; llamar al iniciar sesión. */
+export async function registerPlanStartToken() {
+  if (!available() || startTokenBound) return;
+  startTokenBound = true;
+  try {
+    await LiveActivity.addListener("planStartToken", async ({ token }) => {
+      if (!token) return;
+      try {
+        await api.post("/live-activity/start-token", { kind: "plan_invite", token });
+      } catch (e) { /* ignore */ }
+    });
+    await LiveActivity.observeStartToken();
+  } catch (e) {
+    startTokenBound = false;
+  }
+}
+
 // Opción que va ganando la votación — igual que _plan_leading_option en el
 // backend, para que la isla arranque ya con el dato sin esperar a un push.
 function leadingOf(plan) {

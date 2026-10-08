@@ -39,6 +39,27 @@ function epochOf(iso) {
   return Number.isFinite(t) ? t / 1000 : undefined;
 }
 
+let startTokenBound = false;
+/** Suscribe el push-to-start token del Momento (iOS 17.2+) y lo sube al
+ * backend (kind="moment"). A partir de aquí el servidor puede arrancar la
+ * Live Activity / Dynamic Island REMOTAMENTE cuando salta EL MOMENTO, sin
+ * necesidad de que la app esté abierta. Idempotente; llamar al iniciar sesión. */
+export async function registerMomentStartToken() {
+  if (!available() || startTokenBound) return;
+  startTokenBound = true;
+  try {
+    await MomentLA.addListener("momentStartToken", async ({ token }) => {
+      if (!token) return;
+      try {
+        await api.post("/live-activity/start-token", { kind: "moment", token });
+      } catch (e) { /* ignore */ }
+    });
+    await MomentLA.observeStartToken();
+  } catch (e) {
+    startTokenBound = false;
+  }
+}
+
 /** Arranca la Live Activity del Momento. Llama en cuanto `/me/active-moment`
  * devuelve `active:true` y el usuario sigue en la app. Idempotente. */
 export async function startMomentActivity(moment) {
