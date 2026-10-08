@@ -1,0 +1,51 @@
+FIX — Live Activity push-to-start (Dynamic Island del MOMENTO)
+================================================================
+
+PROBLEMA
+--------
+La app nunca subia el "push-to-start token" (kind='moment' / 'plan_invite'),
+asi que el backend no podia ARRANCAR la Live Activity / Dynamic Island de
+forma remota cuando saltaba EL MOMENTO o llegaba una invitacion a plan.
+Ademas el backend mandaba nombres de struct y de campos que NO coincidian con
+el codigo Swift, por lo que iOS habria descartado el push en silencio.
+
+QUE CAMBIA
+----------
+1. frontend/native/LiveActivity/QuienVaMomentLiveActivityPlugin.swift
+   + metodo observeStartToken() -> se suscribe a
+     Activity<QuienVaMomentAttributes>.pushToStartTokenUpdates (iOS 17.2+)
+     y emite el token a JS (listener "momentStartToken").
+
+2. frontend/native/LiveActivity/QuienVaLiveActivityPlugin.swift
+   + metodo observeStartToken() para QuienVaPlanAttributes
+     (listener "planStartToken").
+
+3. frontend/src/lib/momentLiveActivity.js
+   + registerMomentStartToken() -> POST /api/live-activity/start-token
+     { kind:"moment", token }.
+
+4. frontend/src/lib/liveActivity.js
+   + registerPlanStartToken() -> POST /api/live-activity/start-token
+     { kind:"plan_invite", token }.
+
+5. frontend/src/context/AuthContext.js
+   Llama a registerMomentStartToken() y registerPlanStartToken() al iniciar
+   sesion (junto al re-registro del push APNs).
+
+6. backend/server.py
+   _fire_moment_live_start() y _fire_plan_invite_live_start() ahora usan los
+   nombres de struct y campos REALES del Swift:
+     - "QuienVaMomentAttributes"  (eventId, ciudad / fase, deadlineEpoch,
+        nombreEvento, subiendoAhora, misLikes, amigosDentro)
+     - "QuienVaPlanAttributes"    (titulo, ciudad, slug / dentro, umbral,
+        cierraEpoch, estado, numOpciones)
+
+COMO APLICARLO
+--------------
+1. Descomprime este ZIP en la RAIZ de tu repo (respeta las rutas; sobrescribe).
+2. git add -A && git commit && push a GitHub (usa "Save to Github" si procede).
+3. CodeMagic reconstruye la app iOS (Swift) -> nueva build en TestFlight.
+4. Render redespliega el backend (server.py).
+5. Abre la app TestFlight, inicia sesion (sube los push-to-start tokens) y
+   usa el boton de admin "EL MOMENTO": ahora "Push to-start tokens iOS" sera
+   > 0 y saltara la Dynamic Island con la cuenta atras.
