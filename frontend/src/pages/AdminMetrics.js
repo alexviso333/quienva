@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api, { API } from "@/lib/api";
-import { ArrowLeft, Loader2, Eye, PartyPopper, Star, MousePointerClick, Ticket, Users, UserPlus, Clock, Globe, BarChart3, Download, TrendingUp, Zap, LineChart, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Eye, PartyPopper, Star, MousePointerClick, Ticket, Users, UserPlus, Clock, Globe, BarChart3, Download, TrendingUp, Zap, LineChart, Sparkles, User, ShieldAlert } from "lucide-react";
 
 const WINDOWS = [7, 14, 30, 60, 90];
 
@@ -72,13 +72,24 @@ function Bar({ value, max, color = "bg-qv-primary" }) {
 export default function AdminMetrics() {
   const navigate = useNavigate();
   const [days, setDays] = useState(30);
+  const [includeAdmin, setIncludeAdmin] = useState(false);
   const [testing, setTesting] = useState(null);
   const [testResult, setTestResult] = useState(null);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["admin-metrics", days],
-    queryFn: async () => (await api.get(`/admin/metrics?days=${days}`)).data,
+    queryKey: ["admin-metrics", days, includeAdmin],
+    queryFn: async () => (await api.get(
+      `/admin/metrics?days=${days}&include_admin=${includeAdmin ? 1 : 0}`
+    )).data,
     staleTime: 30000,
+  });
+
+  // Diagnostico Live Activity / isla dinamica (muestra por que el Momento
+  // no sale aunque los planes si: tokens por kind, APNs config, etc.)
+  const { data: laDiag, refetch: refetchLa } = useQuery({
+    queryKey: ["admin-live-activities-diag"],
+    queryFn: async () => (await api.get("/admin/live-activities")).data,
+    staleTime: 15000,
   });
 
   const runTest = async (kind) => {
@@ -133,7 +144,7 @@ export default function AdminMetrics() {
       const base = API || "";
       const token = localStorage.getItem("qv_token") || "";
       // Fetch con auth header y descarga como blob.
-      fetch(`${base}/admin/metrics/export.csv?days=${days}`, {
+      fetch(`${base}/admin/metrics/export.csv?days=${days}&include_admin=${includeAdmin ? 1 : 0}`, {
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -172,38 +183,130 @@ export default function AdminMetrics() {
           </button>
         </header>
 
-        {/* Preview "El Momento" — admin-only visual test */}
-        <div className="px-5 mt-2">
-          <button
-            onClick={async () => {
-              try {
-                const r = await api.post("/admin/moment/test");
-                const d = r?.data || {};
-                const parts = [
-                  `prompt_id: ${d.prompt_id || "?"}`,
-                  `APNs: ${d.apns_configured ? "ON" : "OFF"}`,
-                  `tokens Live Activity: ${d.live_activity_tokens_admin ?? 0}`,
-                ];
-                alert(
-                  "✅ Momento REAL disparado:\n\n" + parts.join("\n") +
-                  "\n\n" + (d.hint || "") +
-                  "\n\nAhora abre la app en tu iPhone (TestFlight)."
-                );
-                // Navegar al feed para ver el modal WOW aparecer con datos reales
-                navigate("/feed");
-              } catch (e) {
-                alert("❌ Error disparando el Momento: " + (e?.response?.data?.detail || e.message));
-              }
-            }}
-            data-testid="metrics-preview-moment"
-            className="w-full h-12 rounded-2xl bg-gradient-to-r from-pink-500 via-orange-400 to-yellow-300 text-black font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] shadow-[0_10px_30px_-10px_rgba(236,72,153,0.6)]"
-          >
-            <Sparkles className="w-4 h-4" strokeWidth={2.5} />
-            Disparar "El Momento" REAL (solo yo)
-          </button>
-          <p className="text-[10px] text-white/40 text-center mt-1.5">
-            Flujo completo: push APNs + Live Activity + modal in-app. Solo tu usuario lo recibe.
+        {/* Momento de prueba — admin only */}
+        <div className="px-5 mt-2 space-y-2">
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  const r = await api.post("/admin/moment/test");
+                  const d = r?.data || {};
+                  const diag = [
+                    `prompt_id: ${d.prompt_id || "?"}`,
+                    `expira: ${d.on_time_deadline ? new Date(d.on_time_deadline).toLocaleTimeString() : "?"} (deadline on-time) · ${d.expires_at ? new Date(d.expires_at).toLocaleTimeString() : "?"} (expiración)`,
+                    `APNs configurado: ${d.apns_configured ? "✅ SÍ" : "❌ NO"}`,
+                    `Push to-start tokens iOS: ${d.live_activity_tokens_admin ?? 0}`,
+                    `Push notifs enviadas: ${d.notified ?? 0}`,
+                  ];
+                  const problems = [];
+                  if (!d.apns_configured) problems.push("❌ APNs no está configurado en el backend (faltan certificados). Sin esto no habrá push ni Dynamic Island.");
+                  if ((d.live_activity_tokens_admin ?? 0) === 0) problems.push("❌ Tu iPhone no ha subido ningún push-to-start token con kind='moment'. La app Swift debe implementar MomentActivityAttributes + Activity.pushToStartTokenUpdates y llamar POST /api/live-activity/start-token.");
+                  alert(
+                    "✅ Momento REAL disparado:\n\n" + diag.join("\n") +
+                    (problems.length ? "\n\n⚠️ Por qué NO ves Dynamic Island:\n" + problems.join("\n") : "") +
+                    "\n\nAhora abre la app en tu iPhone (TestFlight) para ver el modal in-app."
+                  );
+                  navigate("/feed");
+                } catch (e) {
+                  alert("❌ Error disparando el Momento: " + (e?.response?.data?.detail || e.message));
+                }
+              }}
+              data-testid="metrics-preview-moment"
+              className="flex-[2] h-12 rounded-2xl bg-gradient-to-r from-pink-500 via-orange-400 to-yellow-300 text-black font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] shadow-[0_10px_30px_-10px_rgba(236,72,153,0.6)]"
+            >
+              <Sparkles className="w-4 h-4" strokeWidth={2.5} />
+              Disparar Momento REAL
+            </button>
+            <button
+              onClick={async () => {
+                if (!confirm("¿Parar el Momento de prueba ahora mismo?")) return;
+                try {
+                  const r = await api.post("/admin/moment/__test_moment_admin/stop");
+                  const d = r?.data || {};
+                  alert(
+                    "🛑 Momento detenido:\n\n" +
+                    `prompt borrado: ${d.prompt_deleted}\n` +
+                    `Live Activities terminadas (end push): ${d.live_activities_ended}\n` +
+                    `Marcadas como ended localmente: ${d.live_activities_marked_locally}\n` +
+                    `Capturas limpiadas (admin): ${d.captures_deleted_for_admin}\n\n` +
+                    "Puedes volver a lanzar el test cuando quieras."
+                  );
+                } catch (e) {
+                  alert("❌ Error parando el Momento: " + (e?.response?.data?.detail || e.message));
+                }
+              }}
+              data-testid="metrics-stop-moment"
+              className="flex-1 h-12 rounded-2xl bg-white/10 border border-white/15 text-white font-display font-black text-xs flex items-center justify-center gap-1.5 active:scale-[0.98]"
+              aria-label="Parar Momento de prueba"
+            >
+              🛑 Parar
+            </button>
+          </div>
+          <p className="text-[10px] text-white/40 text-center">
+            Flujo completo: push APNs + Live Activity + modal in-app. Test expira en 15 min; real = hasta que acaba la fiesta.
           </p>
+
+          {/* Diagnostico Live Activity / Dynamic Island */}
+          {laDiag ? (
+            <div className="mt-2 rounded-2xl bg-white/[0.03] border border-white/10 p-3" data-testid="la-diagnose">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-bold text-white/80">Diagnóstico Live Activity</p>
+                <button
+                  onClick={() => refetchLa()}
+                  className="text-[10px] text-qv-primary font-bold"
+                  data-testid="la-diagnose-refresh"
+                >
+                  Actualizar
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="flex flex-col">
+                  <span className="text-white/40 text-[9px] uppercase">APNs</span>
+                  <span className={`font-bold ${laDiag.apns_configured ? "text-emerald-400" : "text-red-400"}`}>
+                    {laDiag.apns_configured ? "✅ ON" : "❌ OFF"}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-white/40 text-[9px] uppercase">Entorno</span>
+                  <span className="font-bold text-white/80">{laDiag.apns_environment || "?"}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-white/40 text-[9px] uppercase">Token Momento (tú)</span>
+                  <span className={`font-bold ${laDiag.my_moment_token ? "text-emerald-400" : "text-red-400"}`}>
+                    {laDiag.my_moment_token ? "✅ Registrado" : "❌ FALTA"}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-white/40 text-[9px] uppercase">Token Plan (tú)</span>
+                  <span className={`font-bold ${laDiag.my_plan_token ? "text-emerald-400" : "text-red-400"}`}>
+                    {laDiag.my_plan_token ? "✅ Registrado" : "❌ FALTA"}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-white/40 text-[9px] uppercase">Tokens moment (red)</span>
+                  <span className="font-bold text-white/80 tabular-nums">
+                    {laDiag.push_to_start_tokens_by_kind?.moment ?? 0}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-white/40 text-[9px] uppercase">Tokens plan (red)</span>
+                  <span className="font-bold text-white/80 tabular-nums">
+                    {laDiag.push_to_start_tokens_by_kind?.plan_invite ?? 0}
+                  </span>
+                </div>
+              </div>
+              {Array.isArray(laDiag.diagnosis) && laDiag.diagnosis.length > 0 ? (
+                <div className="mt-2 space-y-1">
+                  {laDiag.diagnosis.map((m, i) => (
+                    <p key={i} className="text-[10px] text-amber-200 leading-tight">{m}</p>
+                  ))}
+                </div>
+              ) : null}
+              <p className="text-[9px] text-white/30 mt-2">
+                Topic: <span className="font-mono">{laDiag.liveactivity_topic}</span> · Live Activities totales: {laDiag.total} ({laDiag.activas} activas)
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {/* Ventana temporal */}
@@ -220,6 +323,47 @@ export default function AdminMetrics() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Toggle: incluir acciones de admins (yo). Default OFF — mis tests
+            no contaminan las métricas reales. */}
+        <div className="px-5 mt-2">
+          <button
+            type="button"
+            onClick={() => setIncludeAdmin((v) => !v)}
+            data-testid="metrics-include-admin"
+            className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl border transition-colors ${
+              includeAdmin
+                ? "bg-amber-500/10 border-amber-500/40"
+                : "bg-white/[0.03] border-white/10"
+            }`}
+            aria-pressed={includeAdmin}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <ShieldAlert className={`w-4 h-4 ${includeAdmin ? "text-amber-300" : "text-white/40"}`} />
+              <div className="min-w-0 text-left">
+                <p className={`text-xs font-bold ${includeAdmin ? "text-amber-200" : "text-white/80"}`}>
+                  {includeAdmin ? "Incluyendo mis acciones (admins)" : "Excluyendo mis acciones (admins)"}
+                </p>
+                <p className="text-[10px] text-white/40 leading-tight">
+                  {includeAdmin
+                    ? "Los tests que haces contaminan estas cifras."
+                    : "Default. Tus tests no afectan a las métricas."}
+                </p>
+              </div>
+            </div>
+            <span
+              className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${
+                includeAdmin ? "bg-amber-400" : "bg-white/15"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
+                  includeAdmin ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </button>
         </div>
 
         {isLoading && !data ? (
@@ -365,6 +509,61 @@ export default function AdminMetrics() {
                   ))}
                 </div>
                 {activityRows.length === 0 && <p className="text-white/40 text-sm text-center py-4">Sin eventos registrados en este rango.</p>}
+              </div>
+            </Section>
+
+            {/* Breakdown por usuario */}
+            <Section title="Acciones por usuario" icon={User}>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-x-auto" data-testid="metrics-per-user">
+                {(!data.per_user || data.per_user.length === 0) ? (
+                  <p className="text-white/40 text-sm py-4 text-center">Sin datos de usuarios en este rango.</p>
+                ) : (
+                  <table className="w-full text-left text-xs min-w-[640px]">
+                    <thead>
+                      <tr className="text-[10px] uppercase tracking-wider text-white/40 border-b border-white/10">
+                        <th className="px-2.5 py-2 font-bold">Usuario</th>
+                        <th className="px-2 py-2 font-bold text-right">Total</th>
+                        <th className="px-2 py-2 font-bold text-right">Views</th>
+                        <th className="px-2 py-2 font-bold text-right">Vista ev.</th>
+                        <th className="px-2 py-2 font-bold text-right">Voy</th>
+                        <th className="px-2 py-2 font-bold text-right">Interés</th>
+                        <th className="px-2 py-2 font-bold text-right">Estuve</th>
+                        <th className="px-2 py-2 font-bold text-right">Clics</th>
+                        <th className="px-2 py-2 font-bold text-right">Entr.</th>
+                        <th className="px-2 py-2 font-bold text-right">Planes</th>
+                        <th className="px-2 py-2 font-bold text-right">Mom.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.per_user.map((u) => (
+                        <tr key={u.user_id} className="border-b border-white/5 last:border-0">
+                          <td className="px-2.5 py-2 min-w-[160px]">
+                            <p className="font-semibold text-white truncate flex items-center gap-1.5">
+                              {u.name}
+                              {u.is_admin ? (
+                                <span className="text-[8px] uppercase tracking-widest bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-bold">adm</span>
+                              ) : null}
+                            </p>
+                            <p className="text-[10px] text-white/40 truncate">@{u.username || "—"} · {u.email}</p>
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums font-black text-white">{u.total_actions}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-white/80">{u.pageviews}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-white/80">{u.event_views}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-qv-primary font-semibold">{u.going}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-qv-secondary font-semibold">{u.interested}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-white/70">{u.estuve}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-white/80">{u.ticket_clicks}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-emerald-300 font-semibold">{u.tickets}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-pink-300 font-semibold">{u.plans_created}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-yellow-300 font-semibold">{u.moments_captured}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <p className="text-[10px] text-white/40 px-3 py-2">
+                  Top 100 por total de acciones. {includeAdmin ? "Incluye admins." : "Admins excluidos."}
+                </p>
               </div>
             </Section>
 
