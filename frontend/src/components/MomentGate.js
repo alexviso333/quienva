@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Zap, Camera, Users, X, Timer } from "lucide-react";
+import { startMomentActivity, updateMomentActivity, endMomentActivity } from "@/lib/momentLiveActivity";
 
 /**
  * Global "El Momento" gate — rediseñado "WOW".
@@ -58,6 +59,23 @@ export default function MomentGate() {
   const moment = previewOn ? previewData : realMoment;
   const promptId = moment?.prompt?.id;
   const deadline = moment?.prompt?.on_time_deadline;
+
+  // --- iOS Dynamic Island / Live Activity nativa -----------------------
+  // Si el Momento esta activo, arranca una Live Activity local en el
+  // iPhone (noop en web/android). Cuando desaparece, la termina.
+  const activeEventId = moment?.active && !previewOn ? moment.event_id : null;
+  useEffect(() => {
+    if (!activeEventId) return;
+    startMomentActivity(moment);
+    return () => { endMomentActivity(activeEventId); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEventId]);
+  // Actualiza contadores "subiendo ahora" cuando cambian.
+  useEffect(() => {
+    if (!activeEventId) return;
+    updateMomentActivity(moment);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEventId, moment?.capturing_now, moment?.friends_captured]);
 
   // Reset dismissal when a NEW moment arrives.
   useEffect(() => {
