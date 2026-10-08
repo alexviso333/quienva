@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import api from "@/lib/api";
 import { toast } from "@/lib/notify";
 import { refreshNativePushIfGranted } from "@/lib/nativePush";
+import { registerMomentStartToken } from "@/lib/momentLiveActivity";
+import { registerPlanStartToken } from "@/lib/liveActivity";
 import { isNativeApp } from "@/lib/platform";
 import { captureEvent, identifyUser, resetAnalytics } from "@/analytics/posthog";
 
@@ -13,8 +15,14 @@ export function AuthProvider({ children }) {
 
   // On the native app, whenever we have a logged-in user, silently re-register
   // the APNs device token so the backend always has a fresh, valid token.
+  // Also subscribe the Live Activity push-to-start tokens (Momento +
+  // invitación a plan) so the backend can launch the Dynamic Island remotely.
   useEffect(() => {
-    if (user?.user_id) refreshNativePushIfGranted();
+    if (user?.user_id) {
+      refreshNativePushIfGranted();
+      registerMomentStartToken();
+      registerPlanStartToken();
+    }
   }, [user?.user_id]);
 
   const checkAuth = useCallback(async () => {
