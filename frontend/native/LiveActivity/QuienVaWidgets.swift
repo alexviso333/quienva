@@ -382,5 +382,211 @@ struct QuienVaWidgetBundle: WidgetBundle {
     // así que no hace falta comprobar disponibilidad aquí.
     var body: some Widget {
         QuienVaPlanActivityWidget()
+        QuienVaMomentActivityWidget()
     }
 }
+
+// MARK: - ⚡ EL MOMENTO (Live Activity + Dynamic Island)
+
+@available(iOS 16.1, *)
+private struct QVMomentCountdown: View {
+    let epoch: Double?
+    var body: some View {
+        if let epoch, epoch > Date().timeIntervalSince1970 {
+            Text(timerInterval: Date()...Date(timeIntervalSince1970: epoch), countsDown: true)
+                .monospacedDigit()
+        } else {
+            Text("YA")
+        }
+    }
+}
+
+@available(iOS 16.1, *)
+struct QuienVaMomentLockScreen: View {
+    let attrs: QuienVaMomentAttributes
+    let state: QuienVaMomentAttributes.ContentState
+
+    private var title: String { state.nombreEvento.isEmpty ? "Es EL Momento" : state.nombreEvento }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                Image(systemName: "bolt.fill")
+                    .foregroundStyle(qvPink)
+                    .shadow(color: qvPink, radius: 6)
+                Text("¡EL MOMENTO!")
+                    .font(.system(size: 14, weight: .black))
+                    .tracking(1.2)
+                    .foregroundStyle(qvNeon)
+                Spacer(minLength: 6)
+                if state.fase == "momento", state.deadlineEpoch != nil {
+                    HStack(spacing: 4) {
+                        Image(systemName: "timer").font(.system(size: 9, weight: .bold))
+                        QVMomentCountdown(epoch: state.deadlineEpoch)
+                            .font(.system(size: 12, weight: .heavy))
+                    }
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(Color.yellow.opacity(0.14))
+                            .overlay(Capsule().strokeBorder(Color.yellow.opacity(0.5), lineWidth: 1))
+                    )
+                }
+            }
+
+            if state.fase == "captured" {
+                HStack(alignment: .bottom, spacing: 10) {
+                    VStack(alignment: .leading, spacing: -2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text("\(state.misLikes)")
+                                .font(.system(size: 40, weight: .black, design: .rounded))
+                                .foregroundStyle(qvNeon)
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 20, weight: .heavy))
+                                .foregroundStyle(qvPink)
+                        }
+                        Text("LIKES EN TU MOMENTO")
+                            .font(.system(size: 9, weight: .black)).tracking(1.6)
+                            .foregroundStyle(.white.opacity(0.42))
+                    }
+                    Spacer()
+                }
+            } else {
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(state.subiendoAhora > 0
+                             ? "\(state.subiendoAhora) subiendo ahora · \(state.amigosDentro) amig@s dentro"
+                             : "Sube la tuya para +30 pts")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Text("Toca para capturar")
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(qvPink)
+                }
+            }
+        }
+        .padding(.horizontal, 15).padding(.vertical, 13)
+        .background(
+            ZStack(alignment: .topLeading) {
+                qvPink.opacity(0.32).blur(radius: 44)
+                    .frame(width: 160, height: 160).offset(x: -56, y: -58)
+                Color.yellow.opacity(0.18).blur(radius: 44)
+                    .frame(width: 150, height: 150).offset(x: 230, y: -40)
+            }
+        )
+        .activityBackgroundTint(qvBg)
+        .activitySystemActionForegroundColor(.white)
+    }
+}
+
+@available(iOS 16.1, *)
+struct QuienVaMomentActivityWidget: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: QuienVaMomentAttributes.self) { context in
+            QuienVaMomentLockScreen(attrs: context.attributes, state: context.state)
+        } dynamicIsland: { context in
+            let s = context.state
+            return DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 20, weight: .black))
+                            .foregroundStyle(qvPink)
+                        if s.fase == "captured" {
+                            Text("\(s.misLikes)")
+                                .font(.system(size: 22, weight: .black, design: .rounded))
+                                .foregroundStyle(qvNeon)
+                        } else if s.subiendoAhora > 0 {
+                            Text("\(s.subiendoAhora)")
+                                .font(.system(size: 22, weight: .black, design: .rounded))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .padding(.leading, 2)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if s.fase == "momento", s.deadlineEpoch != nil {
+                            QVMomentCountdown(epoch: s.deadlineEpoch)
+                                .font(.system(size: 17, weight: .black))
+                                .foregroundStyle(.yellow)
+                            Text("+30 PTS")
+                                .font(.system(size: 8, weight: .black)).tracking(1.2)
+                                .foregroundStyle(.white.opacity(0.4))
+                        } else if s.fase == "captured" {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(qvPink)
+                        } else {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(qvPink)
+                        }
+                    }
+                    .padding(.trailing, 2)
+                }
+                DynamicIslandExpandedRegion(.center) {
+                    VStack(spacing: 1) {
+                        Text(s.nombreEvento.isEmpty ? "¡EL MOMENTO!" : s.nombreEvento)
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(s.fase == "captured" ? "Likes en tu Momento" : "Sube la tuya ya")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    HStack {
+                        Text(s.fase == "captured"
+                             ? "¡Hecho! Mira cuántos likes recibes"
+                             : (s.subiendoAhora > 0 ? "\(s.subiendoAhora) subiendo ahora" : "Toca para capturar"))
+                            .font(.system(size: 10, weight: .heavy))
+                            .foregroundStyle(.white.opacity(0.6))
+                        Spacer()
+                        Text(s.amigosDentro > 0 ? "\(s.amigosDentro) amig@s" : "")
+                            .font(.system(size: 10, weight: .heavy))
+                            .foregroundStyle(qvPink)
+                    }
+                }
+            } compactLeading: {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(qvPink)
+            } compactTrailing: {
+                if s.fase == "momento", s.deadlineEpoch != nil {
+                    QVMomentCountdown(epoch: s.deadlineEpoch)
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(.yellow)
+                        .frame(maxWidth: 48)
+                } else if s.fase == "captured" {
+                    HStack(spacing: 2) {
+                        Text("\(s.misLikes)")
+                            .font(.system(size: 13, weight: .black, design: .rounded))
+                            .foregroundStyle(qvPink)
+                        Image(systemName: "heart.fill").font(.system(size: 10))
+                            .foregroundStyle(qvPink)
+                    }
+                } else {
+                    Text(s.subiendoAhora > 0 ? "\(s.subiendoAhora)" : "")
+                        .font(.system(size: 12, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                }
+            } minimal: {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(qvPink)
+            }
+            .widgetURL(URL(string: "quienva://momento/\(context.attributes.eventId)"))
+            .keylineTint(qvPink)
+        }
+    }
+}
+
