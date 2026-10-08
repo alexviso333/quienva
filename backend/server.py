@@ -12879,9 +12879,16 @@ async def live_activity_end(inp: LiveActivityEnd, user: dict = Depends(get_curre
 
 @api_router.get("/admin/live-activities")
 async def admin_live_activities(admin: dict = Depends(require_admin)):
-    """Diagnóstico de la isla dinámica: ¿está APNs configurado?, ¿qué actividades
-    vivas hay y de qué plan? Sirve para comprobar en producción (Render) que la
-    Live Activity está llegando sin tener que montar una votación real."""
+    """Diagnostico de la isla dinamica: ¿esta APNs configurado?, ¿que actividades
+    vivas hay y de que plan? Sirve para comprobar en produccion (Render) que la
+    Live Activity esta llegando sin tener que montar una votacion real.
+
+    Añade un desglose por *kind* (`moment` vs `plan_invite`) de los push-to-start
+    tokens registrados: si `by_kind.moment == 0` pero `by_kind.plan_invite > 0`,
+    entonces la app Swift no esta llamando a
+    `Activity<MomentActivityAttributes>.pushToStartTokenUpdates` -> por eso el
+    Momento no sale en la isla dinamica aunque los planes si.
+    """
     out = []
     async for la in db.live_activities.find({}, {"_id": 0}).sort("updated_at", -1).limit(50):
         plan = None
@@ -12899,10 +12906,46 @@ async def admin_live_activities(admin: dict = Depends(require_admin)):
             "ended": bool(la.get("ended")),
             "updated_at": la.get("updated_at"),
         })
+    # Push-to-start tokens por kind (lo que importa para arrancar la LA en el iPhone)
+    by_kind: dict = {"moment": 0, "plan_invite": 0}
+    users_with_moment: list = []
+    users_with_plan: list = []
+    async for row in db.live_activity_start_tokens.find({}, {"_id": 0}):
+        k = row.get("kind")
+        if k in by_kind:
+            by_kind[k] += 1
+        uid = row.get("user_id")
+        if uid:
+            if k == "moment":
+                users_with_moment.append(uid)
+            elif k == "plan_invite":
+                users_with_plan.append(uid)
+    # Diagnóstico claro
+    diagnosis: list = []
+    if not apns.is_configured():
+        diagnosis.append("❌ APNs NO configurado (faltan APNS_TEAM_ID / KEY_ID / clave privada en el .env del backend). Sin esto no sale NADA ni plan ni momento.")
+    if by_kind["plan_invite"] > 0 and by_kind["moment"] == 0:
+        diagnosis.append("❌ CAUSA RAIZ: Hay tokens de plan_invite pero NINGUNO de moment. La app Swift tiene PlanInviteActivityAttributes pero NO MomentActivityAttributes. Hay que añadir en Xcode: (1) struct MomentActivityAttributes con tus campos de ContentState, (2) un Widget para ella, (3) en el AppDelegate/launch: `for try await token in Activity<MomentActivityAttributes>.pushToStartTokenUpdates { POST /api/live-activity/start-token { kind:'moment', token: hex } }`.")
+    if by_kind["moment"] == 0 and by_kind["plan_invite"] == 0 and apns.is_configured():
+        diagnosis.append("⚠️ No hay ningun token registrado. La app iOS no esta llamando a /api/live-activity/start-token. Revisa que las dos pushToStartTokenUpdates se estan ejecutando y que la cuenta esta logueada antes de subir el token.")
+    if by_kind["moment"] > 0 and by_kind["plan_invite"] > 0:
+        diagnosis.append("✅ Tokens para ambos kinds registrados. Si al disparar `/admin/moment/test` sigue sin aparecer la isla dinamica, revisa logs del backend por errores APNs.")
+
     return {
         "apns_configured": apns.is_configured(),
         "apns_environment": "production" if apns.APNS_PRODUCTION else "sandbox",
         "liveactivity_topic": f"{apns.APNS_BUNDLE_ID}.push-type.liveactivity",
+        "push_to_start_tokens_by_kind": by_kind,
+        "distinct_users_with_moment_token": len(set(users_with_moment)),
+        "distinct_users_with_plan_token": len(set(users_with_plan)),
+        "my_user_id": admin.get("user_id"),
+        "my_moment_token": await db.live_activity_start_tokens.find_one(
+            {"user_id": admin["user_id"], "kind": "moment"}, {"_id": 0, "token": 1, "updated_at": 1}
+        ),
+        "my_plan_token": await db.live_activity_start_tokens.find_one(
+            {"user_id": admin["user_id"], "kind": "plan_invite"}, {"_id": 0, "token": 1, "updated_at": 1}
+        ),
+        "diagnosis": diagnosis,
         "total": await db.live_activities.count_documents({}),
         "activas": await db.live_activities.count_documents({"ended": {"$ne": True}}),
         "items": out,
@@ -13519,14 +13562,49 @@ async def auto_trigger_moments():
 
 async def _fire_moment(ev: dict, triggered_by: str = "auto") -> dict:
     """Create the moment prompt for an event and notify all 'voy' users
-    (both in-app and web push). Idempotent-ish (upserts the prompt)."""
+    (both in-app and web push). Idempotent-ish (upserts the prompt).
+
+    `expires_at` se calcula dinámicamente:
+      - Test (`city == "__test_hidden"`): now + 15 min, para que el modal
+        no se quede horas si el admin se olvida de pararlo.
+      - Real: hora de cierre del evento (`date` + `end_time`) + 30 min de
+        gracia. Así se queda hasta que acabe la fiesta.
+      - Fallback: now + 6h si no hay end_time.
+    """
     now_utc = datetime.now(timezone.utc)
+    on_time_deadline = (now_utc + timedelta(minutes=2)).isoformat()
+    # ---- Compute expires_at ----
+    expires_dt: datetime | None = None
+    if (ev.get("city") or "").startswith("__test"):
+        expires_dt = now_utc + timedelta(minutes=15)
+    else:
+        try:
+            d_str = ev.get("date") or ""           # YYYY-MM-DD
+            t_str = ev.get("end_time") or ""        # HH:MM
+            if d_str and t_str:
+                tz = ZoneInfo("Europe/Madrid")
+                end_dt = datetime.fromisoformat(f"{d_str}T{t_str}:00").replace(tzinfo=tz)
+                # Si la fiesta acaba en madrugada (ej. 04:00 del dia siguiente),
+                # end_time < start_time -> sumamos un dia.
+                try:
+                    s_str = ev.get("start_time") or ""
+                    if s_str and end_dt.time() < datetime.fromisoformat(f"{d_str}T{s_str}:00").time():
+                        end_dt = end_dt + timedelta(days=1)
+                except Exception:
+                    pass
+                # Convert to UTC and add 30-min grace
+                expires_dt = end_dt.astimezone(timezone.utc) + timedelta(minutes=30)
+        except Exception:
+            expires_dt = None
+    if expires_dt is None or expires_dt <= now_utc:
+        expires_dt = now_utc + timedelta(hours=6)
+
     prompt = {
         "id": str(uuid.uuid4()),
         "event_id": ev["id"],
         "sent_at": now_utc.isoformat(),
-        "on_time_deadline": (now_utc + timedelta(minutes=2)).isoformat(),
-        "expires_at": (now_utc + timedelta(hours=6)).isoformat(),
+        "on_time_deadline": on_time_deadline,
+        "expires_at": expires_dt.isoformat(),
         "triggered_by": triggered_by,
     }
     await db.moment_prompts.update_one({"event_id": ev["id"]}, {"$set": prompt}, upsert=True)
@@ -15399,9 +15477,27 @@ def _parse_days(days: Optional[int]) -> datetime:
 
 
 @api_router.get("/admin/metrics")
-async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
+async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30,
+                        include_admin: bool = Query(False)):
+    """Panel de métricas admin.
+
+    Por defecto EXCLUYE las acciones de usuarios con role='admin' (así los
+    tests del propio admin no contaminan las métricas reales). Pasa
+    `?include_admin=1` para incluirlas.
+    """
     since = _parse_days(days)
     since_iso = since.isoformat()
+
+    # Lista de user_ids a excluir del cómputo (admins) cuando include_admin=False.
+    admin_uids: list = []
+    if not include_admin:
+        admin_uids = [u["user_id"] async for u in db.users.find(
+            {"role": "admin"}, {"_id": 0, "user_id": 1})]
+    # Filtro reutilizable para activity_events (y colecciones con user_id)
+    # cuando queremos descartar lo que hizo cualquier admin.
+    user_excl_filter: dict = {}
+    if admin_uids:
+        user_excl_filter = {"user_id": {"$nin": admin_uids}}
 
     # ---------- Users ----------
     total_users = await db.users.count_documents({})
@@ -15434,24 +15530,64 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
         non_converted = 0
 
     # ---------- Events: top by views / voy / interesa / clicks ----------
-    event_metrics_rows = []
-    async for m in db.event_metrics.find({}, {"_id": 0}):
-        event_metrics_rows.append(m)
-    # Augment with voy/interesa + clicks
+    # Si estamos excluyendo admins, recalculamos los contadores por evento a
+    # partir de activity_events en lugar de usar el agregado precomputado
+    # (que incluye todas las vistas, también las del admin).
+    event_metrics_rows: list = []
+    if admin_uids:
+        views_by_eid: dict = {}
+        guest_views_by_eid: dict = {}
+        async for row in db.activity_events.aggregate([
+            {"$match": {
+                "event": "event_viewed",
+                "ts": {"$gte": since_iso},
+                "$or": [{"user_id": None}, {"user_id": {"$nin": admin_uids}}],
+            }},
+            {"$group": {
+                "_id": "$props.event_id",
+                "views": {"$sum": 1},
+                "guest_views": {"$sum": {"$cond": [{"$eq": ["$user_id", None]}, 1, 0]}},
+            }},
+        ]):
+            eid = row.get("_id")
+            if not eid:
+                continue
+            views_by_eid[eid] = row.get("views", 0)
+            guest_views_by_eid[eid] = row.get("guest_views", 0)
+        for eid, v in views_by_eid.items():
+            event_metrics_rows.append({
+                "event_id": eid, "views": v,
+                "guest_views": guest_views_by_eid.get(eid, 0),
+                "signups": 0,
+            })
+    else:
+        async for m in db.event_metrics.find({}, {"_id": 0}):
+            event_metrics_rows.append(m)
+
+    # Augment with voy/interesa + clicks (filtrando admin si procede)
     all_eids = [m.get("event_id") for m in event_metrics_rows if m.get("event_id")]
     going_by_eid: dict = {}
     inter_by_eid: dict = {}
-    async for it in db.interests.find({"event_id": {"$in": all_eids}}, {"_id": 0}):
+    _int_filter: dict = {"event_id": {"$in": all_eids}}
+    if admin_uids:
+        _int_filter["user_id"] = {"$nin": admin_uids}
+    async for it in db.interests.find(_int_filter, {"_id": 0}):
         if it.get("status") == "voy":
             going_by_eid[it["event_id"]] = going_by_eid.get(it["event_id"], 0) + 1
         elif it.get("status") == "me_interesa":
             inter_by_eid[it["event_id"]] = inter_by_eid.get(it["event_id"], 0) + 1
     clicks_by_eid: dict = {}
-    async for p in db.ticket_purchases.find({}, {"_id": 0, "event_id": 1}):
+    _tp_filter: dict = {}
+    if admin_uids:
+        _tp_filter["user_id"] = {"$nin": admin_uids}
+    async for p in db.ticket_purchases.find(_tp_filter, {"_id": 0, "event_id": 1}):
         if p.get("event_id"):
             clicks_by_eid[p["event_id"]] = clicks_by_eid.get(p["event_id"], 0) + 1
     tickets_by_eid: dict = {}
-    async for t in db.tickets.find({}, {"_id": 0, "event_id": 1}):
+    _t_filter: dict = {}
+    if admin_uids:
+        _t_filter["user_id"] = {"$nin": admin_uids}
+    async for t in db.tickets.find(_t_filter, {"_id": 0, "event_id": 1}):
         if t.get("event_id"):
             tickets_by_eid[t["event_id"]] = tickets_by_eid.get(t["event_id"], 0) + 1
     # Pull events for name/venue/city/date
@@ -15463,6 +15599,10 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
     for m in event_metrics_rows:
         eid = m.get("event_id")
         ev = evs_by_id.get(eid, {})
+        # Skip events whose city is marked hidden (test events) so the
+        # admin's own test moment never appears in Top eventos.
+        if (ev.get("city") or "").startswith("__"):
+            continue
         rows.append({
             "event_id": eid,
             "name": ev.get("name", "?"),
@@ -15493,8 +15633,11 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
 
     # ---------- Activity breakdown by event name ----------
     activity_counts: dict = {}
+    _ac_match: dict = {"ts": {"$gte": since_iso}}
+    if admin_uids:
+        _ac_match["$or"] = [{"user_id": None}, {"user_id": {"$nin": admin_uids}}]
     async for row in db.activity_events.aggregate([
-        {"$match": {"ts": {"$gte": since_iso}}},
+        {"$match": _ac_match},
         {"$group": {"_id": "$event", "n": {"$sum": 1}}},
         {"$sort": {"n": -1}},
         {"$limit": 60},
@@ -15503,8 +15646,11 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
 
     # ---------- Daily app opens / pageviews ----------
     daily_opens: dict = {}
+    _dop_match: dict = {"ts": {"$gte": since_iso}, "event": {"$in": ["app_opened", "$pageview"]}}
+    if admin_uids:
+        _dop_match["$or"] = [{"user_id": None}, {"user_id": {"$nin": admin_uids}}]
     async for row in db.activity_events.aggregate([
-        {"$match": {"ts": {"$gte": since_iso}, "event": {"$in": ["app_opened", "$pageview"]}}},
+        {"$match": _dop_match},
         {"$group": {"_id": {"d": {"$substr": ["$ts", 0, 10]}}, "n": {"$sum": 1}}},
     ]):
         d = (row.get("_id") or {}).get("d")
@@ -15513,8 +15659,10 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
 
     # ---------- First actions after signup (what new users do first) ----------
     first_actions: dict = {}
-    async for u in db.users.find({"created_at": {"$gte": since_iso}}, {"_id": 0, "user_id": 1, "created_at": 1}):
+    async for u in db.users.find({"created_at": {"$gte": since_iso}}, {"_id": 0, "user_id": 1, "created_at": 1, "role": 1}):
         try:
+            if admin_uids and u.get("role") == "admin":
+                continue
             first = await db.activity_events.find_one(
                 {"user_id": u["user_id"], "ts": {"$gt": u.get("created_at", "")}},
                 sort=[("ts", 1)], projection={"_id": 0, "event": 1},
@@ -15530,12 +15678,14 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
     )[:20]
 
     # ---------- Avg session duration (bucketed by 30-min inactivity) ----------
-    # Cheap approximation: user_id -> sum of (gap<=30min) between consecutive events.
-    session_sums: dict = {}  # user_id -> seconds
+    session_sums: dict = {}
     session_counts: dict = {}
     _last_ts: dict = {}
+    _s_filter: dict = {"ts": {"$gte": since_iso}, "user_id": {"$ne": None}}
+    if admin_uids:
+        _s_filter["user_id"] = {"$nin": admin_uids}
     async for ev in db.activity_events.find(
-        {"ts": {"$gte": since_iso}, "user_id": {"$ne": None}},
+        _s_filter,
         {"_id": 0, "user_id": 1, "ts": 1},
     ).sort("ts", 1):
         try:
@@ -15559,9 +15709,109 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
     users_measured = len(session_sums)
 
     # ---------- Plans ----------
-    total_plans = await db.plans.count_documents({"created_at": {"$gte": since_iso}})
-    plans_closed = await db.plans.count_documents({"estado": "cerrado", "created_at": {"$gte": since_iso}})
-    plans_cancelled = await db.plans.count_documents({"estado": "cancelado", "created_at": {"$gte": since_iso}})
+    _plan_filter: dict = {"created_at": {"$gte": since_iso}}
+    if admin_uids:
+        _plan_filter["creator_user_id"] = {"$nin": admin_uids}
+    total_plans = await db.plans.count_documents(_plan_filter)
+    _plan_filter_closed = {**_plan_filter, "estado": "cerrado"}
+    _plan_filter_cancel = {**_plan_filter, "estado": "cancelado"}
+    plans_closed = await db.plans.count_documents(_plan_filter_closed)
+    plans_cancelled = await db.plans.count_documents(_plan_filter_cancel)
+
+    # ---------- Per-user breakdown ----------
+    # Mismo panel pero por usuario. Agrega activity_events por user_id y le
+    # añade voy/interesa/plans/tickets/moments. Top 100 por total de acciones.
+    per_user_counts: dict = {}
+    _pu_match: dict = {"ts": {"$gte": since_iso}, "user_id": {"$ne": None}}
+    async for row in db.activity_events.aggregate([
+        {"$match": _pu_match},
+        {"$group": {
+            "_id": {"uid": "$user_id", "event": "$event"},
+            "n": {"$sum": 1},
+        }},
+    ]):
+        _id = row.get("_id") or {}
+        uid = _id.get("uid")
+        ev = _id.get("event") or "?"
+        n = row.get("n", 0)
+        if not uid:
+            continue
+        d = per_user_counts.setdefault(uid, {"total": 0, "events": {}})
+        d["total"] += n
+        d["events"][ev] = d["events"].get(ev, 0) + n
+    # Voy / interesa / estuve por usuario
+    pu_going: dict = {}
+    pu_inter: dict = {}
+    pu_estuve: dict = {}
+    async for it in db.interests.find({}, {"_id": 0, "user_id": 1, "status": 1}):
+        uid = it.get("user_id"); st = it.get("status")
+        if not uid:
+            continue
+        if st == "voy":
+            pu_going[uid] = pu_going.get(uid, 0) + 1
+        elif st == "me_interesa":
+            pu_inter[uid] = pu_inter.get(uid, 0) + 1
+        elif st == "estuve":
+            pu_estuve[uid] = pu_estuve.get(uid, 0) + 1
+    pu_tc: dict = {}
+    async for p in db.ticket_purchases.find({}, {"_id": 0, "user_id": 1}):
+        uid = p.get("user_id")
+        if uid:
+            pu_tc[uid] = pu_tc.get(uid, 0) + 1
+    pu_tickets: dict = {}
+    async for t in db.tickets.find({}, {"_id": 0, "user_id": 1}):
+        uid = t.get("user_id")
+        if uid:
+            pu_tickets[uid] = pu_tickets.get(uid, 0) + 1
+    pu_plans: dict = {}
+    async for pl in db.plans.find({}, {"_id": 0, "creator_user_id": 1}):
+        uid = pl.get("creator_user_id")
+        if uid:
+            pu_plans[uid] = pu_plans.get(uid, 0) + 1
+    pu_moments: dict = {}
+    async for c in db.captures.find({}, {"_id": 0, "user_id": 1}):
+        uid = c.get("user_id")
+        if uid:
+            pu_moments[uid] = pu_moments.get(uid, 0) + 1
+
+    # Enriquecer con datos de usuario (nombre, email, is_admin)
+    all_uids = set(per_user_counts.keys()) | set(pu_going.keys()) | set(pu_inter.keys()) | \
+        set(pu_tc.keys()) | set(pu_tickets.keys()) | set(pu_plans.keys()) | set(pu_moments.keys())
+    users_meta: dict = {}
+    if all_uids:
+        async for u in db.users.find(
+            {"user_id": {"$in": list(all_uids)}},
+            {"_id": 0, "user_id": 1, "name": 1, "username": 1, "email": 1, "role": 1, "created_at": 1},
+        ):
+            users_meta[u["user_id"]] = u
+
+    per_user_rows: list = []
+    for uid in all_uids:
+        meta = users_meta.get(uid, {})
+        is_admin = meta.get("role") == "admin"
+        if admin_uids and is_admin:
+            continue  # excluye admins si procede
+        c = per_user_counts.get(uid, {"total": 0, "events": {}})
+        per_user_rows.append({
+            "user_id": uid,
+            "name": meta.get("name") or meta.get("username") or "?",
+            "username": meta.get("username") or "",
+            "email": meta.get("email") or "",
+            "is_admin": is_admin,
+            "created_at": meta.get("created_at") or "",
+            "total_actions": c["total"],
+            "pageviews": c["events"].get("$pageview", 0) + c["events"].get("app_opened", 0),
+            "event_views": c["events"].get("event_viewed", 0),
+            "going": pu_going.get(uid, 0),
+            "interested": pu_inter.get(uid, 0),
+            "estuve": pu_estuve.get(uid, 0),
+            "ticket_clicks": pu_tc.get(uid, 0),
+            "tickets": pu_tickets.get(uid, 0),
+            "plans_created": pu_plans.get(uid, 0),
+            "moments_captured": pu_moments.get(uid, 0),
+        })
+    per_user_rows.sort(key=lambda r: r["total_actions"], reverse=True)
+    per_user_rows = per_user_rows[:100]
 
     # ---------- Totals ----------
     totals = {
@@ -15570,7 +15820,10 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
         "anon_pageviews": anon_pageviews,
         "anon_visitors": anon_distinct,
         "anon_not_signed_up": non_converted,
-        "total_events_logged": await db.activity_events.count_documents({"ts": {"$gte": since_iso}}),
+        "total_events_logged": await db.activity_events.count_documents({
+            "ts": {"$gte": since_iso},
+            **({"$or": [{"user_id": None}, {"user_id": {"$nin": admin_uids}}]} if admin_uids else {}),
+        }),
         "going_total": sum(going_by_eid.values()),
         "interested_total": sum(inter_by_eid.values()),
         "ticket_clicks_total": sum(clicks_by_eid.values()),
@@ -15583,6 +15836,8 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
 
     return {
         "window_days": max(1, min(int(days or 30), 365)),
+        "include_admin": bool(include_admin),
+        "excluded_admin_user_ids": admin_uids,
         "totals": totals,
         "daily_signups": daily_signups,
         "daily_opens": daily_opens,
@@ -15598,15 +15853,22 @@ async def admin_metrics(admin: dict = Depends(require_admin), days: int = 30):
             "users_measured": users_measured,
             "total_sessions_approx": sum(session_counts.values()),
         },
+        "per_user": per_user_rows,
     }
 
 
 @api_router.get("/admin/metrics/export.csv")
-async def admin_metrics_export(admin: dict = Depends(require_admin), days: int = 30):
+async def admin_metrics_export(admin: dict = Depends(require_admin), days: int = 30,
+                               include_admin: bool = Query(False)):
     """Raw activity events dump for the last N days as a CSV file. Columns:
-    ts, event, user_id, anon_id, path, ref, props_json."""
+    ts, event, user_id, anon_id, path, ref, props_json. Por defecto excluye
+    las acciones de admins (pasa include_admin=1 para incluirlas)."""
     since = _parse_days(days)
     since_iso = since.isoformat()
+    admin_uids: list = []
+    if not include_admin:
+        admin_uids = [u["user_id"] async for u in db.users.find(
+            {"role": "admin"}, {"_id": 0, "user_id": 1})]
     buf = _StringIO()
     w = _csv_mod.writer(buf)
     w.writerow(["ts", "event", "user_id", "anon_id", "path", "ref", "ua", "ip", "props"])
@@ -15614,8 +15876,11 @@ async def admin_metrics_export(admin: dict = Depends(require_admin), days: int =
     async def _stream():
         yield buf.getvalue().encode("utf-8")
         buf.seek(0); buf.truncate(0)
+        _match: dict = {"ts": {"$gte": since_iso}}
+        if admin_uids:
+            _match["$or"] = [{"user_id": None}, {"user_id": {"$nin": admin_uids}}]
         async for row in db.activity_events.find(
-            {"ts": {"$gte": since_iso}}, {"_id": 0}
+            _match, {"_id": 0}
         ).sort("ts", -1):
             try:
                 w.writerow([
@@ -16007,6 +16272,55 @@ async def code_dump_zip_preview_moment():
     )
 
 
+@api_router.get("/qvsrc-metrics-exclude-admin.zip")
+async def code_dump_zip_metrics_exclude_admin():
+    """Mini-ZIP: ONLY the files touched by the "exclude admin from metrics +
+    per-user breakdown + toggle" feature."""
+    try:
+        with open("/app/frontend/public/qvsrc-metrics-exclude-admin.zip", "rb") as _f:
+            data = _f.read()
+    except Exception:
+        raise HTTPException(status_code=404, detail="ZIP not generated")
+    return _StreamingResponse(
+        iter([data]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="qvsrc-metrics-exclude-admin.zip"'},
+    )
+
+
+@api_router.get("/qvsrc-moment-stop.zip")
+async def code_dump_zip_moment_stop():
+    """Mini-ZIP consolidado: backend/server.py + AdminMetrics.js + MomentGate.js
+    con todos los cambios acumulados (metrics-exclude-admin + per-user table +
+    moment stop endpoint + dynamic expires_at). Para subir una sola vez a GitHub."""
+    try:
+        with open("/app/frontend/public/qvsrc-moment-stop.zip", "rb") as _f:
+            data = _f.read()
+    except Exception:
+        raise HTTPException(status_code=404, detail="ZIP not generated")
+    return _StreamingResponse(
+        iter([data]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="qvsrc-moment-stop.zip"'},
+    )
+
+
+@api_router.get("/qvsrc-la-diagnose.zip")
+async def code_dump_zip_la_diagnose():
+    """Mini-ZIP con solo backend/server.py que incluye el endpoint
+    /api/admin/live-activities mejorado (diagnostico por kind)."""
+    try:
+        with open("/app/frontend/public/qvsrc-la-diagnose.zip", "rb") as _f:
+            data = _f.read()
+    except Exception:
+        raise HTTPException(status_code=404, detail="ZIP not generated")
+    return _StreamingResponse(
+        iter([data]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="qvsrc-la-diagnose.zip"'},
+    )
+
+
 @api_router.get("/qvsrc/file")
 async def code_dump_single_file(path: str):
     """Download ONE file from the export as a raw attachment.
@@ -16110,6 +16424,41 @@ async def live_activity_start_token(inp: LiveActivityStartToken,
     return {"ok": True}
 
 
+async def _fire_moment_live_end(event_id: str) -> dict:
+    """Termina (dismiss) todas las Live Activities del Momento de un evento.
+    Envia APNs `event:"end"` a cada activity_token registrado en
+    `db.live_activities` y marca `ended:true` para que no se vuelva a tocar.
+    Devuelve contadores para diagnostico."""
+    ended = 0
+    gone = 0
+    err = 0
+    if not apns.is_configured():
+        # Marca igualmente como ended para que el admin pueda re-disparar
+        res = await db.live_activities.update_many(
+            {"event_id": event_id, "ended": {"$ne": True}},
+            {"$set": {"ended": True}})
+        return {"ended": 0, "gone": 0, "err": 0,
+                "marked_locally": res.modified_count, "apns_configured": False}
+    content_state = {"phase": "ended", "event_name": "", "capturing_now": 0, "my_likes": 0}
+    async for la in db.live_activities.find(
+        {"event_id": event_id, "ended": {"$ne": True}}, {"_id": 0}):
+        res = await apns.send_live_activity(
+            la["token"], content_state, event="end",
+            dismissal_seconds=0,
+        )
+        if res == "ok":
+            ended += 1
+        elif res == "gone":
+            gone += 1
+        else:
+            err += 1
+        await db.live_activities.update_one(
+            {"user_id": la["user_id"], "activity_id": la["activity_id"]},
+            {"$set": {"ended": True}})
+    return {"ended": ended, "gone": gone, "err": err,
+            "marked_locally": 0, "apns_configured": True}
+
+
 async def _fire_moment_live_start(ev: dict):
     """When El Momento triggers, remotely start a Live Activity on every
     attendee's iPhone (iOS 17.2+). The widget shows a glowing lightning bolt
@@ -16181,6 +16530,54 @@ async def _fire_plan_invite_live_start(plan: dict, inviter: dict, invited_uids: 
                 pass
 
 
+@api_router.post("/admin/moment/{event_id}/stop")
+async def admin_moment_stop(event_id: str, admin: dict = Depends(require_admin)):
+    """Para un Momento activo: borra el prompt (para que `/me/active-moment`
+    devuelva `active:false` y el modal in-app desaparezca), termina todas las
+    Live Activities registradas (dismiss en Dynamic Island + lockscreen) y,
+    si es el evento de test, borra tambien las capturas del admin para que
+    el siguiente trigger vuelva a mostrar el modal.
+
+    Devuelve contadores de diagnostico."""
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+
+    # 1) Borrar prompt -> MomentGate deja de ver el momento activo
+    prompt_deleted = await db.moment_prompts.delete_one({"event_id": event_id})
+
+    # 2) Terminar Live Activities
+    la_result = await _fire_moment_live_end(event_id)
+
+    # 3) Si es el evento de test, limpia capturas del admin para que el proximo
+    # trigger vuelva a mostrar el modal (si fuera un evento real, no tocamos
+    # las capturas: son fotos reales de los asistentes).
+    captures_deleted = 0
+    if (ev.get("city") or "").startswith("__test"):
+        res = await db.captures.delete_many(
+            {"event_id": event_id, "user_id": admin["user_id"]})
+        captures_deleted = res.deleted_count
+
+    try:
+        await _track(admin["user_id"], None, "moment_stopped", {
+            "event_id": event_id, "is_test": (ev.get("city") or "").startswith("__test"),
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "event_id": event_id,
+        "prompt_deleted": prompt_deleted.deleted_count,
+        "live_activities_ended": la_result.get("ended", 0),
+        "live_activities_gone": la_result.get("gone", 0),
+        "live_activities_err": la_result.get("err", 0),
+        "live_activities_marked_locally": la_result.get("marked_locally", 0),
+        "apns_configured": la_result.get("apns_configured", False),
+        "captures_deleted_for_admin": captures_deleted,
+    }
+
+
 @api_router.post("/admin/moment/test")
 async def admin_moment_test(admin: dict = Depends(require_admin)):
     """Dispara EL MOMENTO REAL end-to-end, pero visible SOLO para el admin.
@@ -16244,6 +16641,7 @@ async def admin_moment_test(admin: dict = Depends(require_admin)):
         "test_event_id": TEST_EVENT_ID,
         "prompt_id": result["prompt"]["id"],
         "on_time_deadline": result["prompt"]["on_time_deadline"],
+        "expires_at": result["prompt"]["expires_at"],
         "notified": result["notified"],
         "apns_configured": apns.is_configured(),
         "live_activity_tokens_admin": la_tokens,
