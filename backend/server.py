@@ -12924,12 +12924,18 @@ async def admin_live_activities(admin: dict = Depends(require_admin)):
     diagnosis: list = []
     if not apns.is_configured():
         diagnosis.append("❌ APNs NO configurado (faltan APNS_TEAM_ID / KEY_ID / clave privada en el .env del backend). Sin esto no sale NADA ni plan ni momento.")
-    if by_kind["plan_invite"] > 0 and by_kind["moment"] == 0:
-        diagnosis.append("❌ CAUSA RAIZ: Hay tokens de plan_invite pero NINGUNO de moment. La app Swift tiene PlanInviteActivityAttributes pero NO MomentActivityAttributes. Hay que añadir en Xcode: (1) struct MomentActivityAttributes con tus campos de ContentState, (2) un Widget para ella, (3) en el AppDelegate/launch: `for try await token in Activity<MomentActivityAttributes>.pushToStartTokenUpdates { POST /api/live-activity/start-token { kind:'moment', token: hex } }`.")
-    if by_kind["moment"] == 0 and by_kind["plan_invite"] == 0 and apns.is_configured():
-        diagnosis.append("⚠️ No hay ningun token registrado. La app iOS no esta llamando a /api/live-activity/start-token. Revisa que las dos pushToStartTokenUpdates se estan ejecutando y que la cuenta esta logueada antes de subir el token.")
-    if by_kind["moment"] > 0 and by_kind["plan_invite"] > 0:
-        diagnosis.append("✅ Tokens para ambos kinds registrados. Si al disparar `/admin/moment/test` sigue sin aparecer la isla dinamica, revisa logs del backend por errores APNs.")
+    # Count how many moment Live Activities are currently running (started
+    # locally by the Swift plugin when /me/active-moment became active).
+    moment_la_total = await db.live_activities.count_documents({"activity_id": {"$regex": "^moment:"}})
+    moment_la_active = await db.live_activities.count_documents(
+        {"activity_id": {"$regex": "^moment:"}, "ended": {"$ne": True}})
+    plan_la_total = await db.live_activities.count_documents({"activity_id": {"$regex": "^plan:"}})
+    if apns.is_configured() and moment_la_total == 0 and plan_la_total > 0:
+        diagnosis.append("❌ CAUSA RAIZ: Hay Live Activities de PLAN registradas pero NINGUNA de MOMENTO. La app Swift tiene el plugin del plan pero NO el del Momento. Hay que compilar en Codemagic con los archivos nuevos: QuienVaMomentAttributes.swift, QuienVaMomentLiveActivityPlugin.swift y el widget en QuienVaWidgets.swift. Despues registrar el plugin en MainViewController.swift.")
+    if apns.is_configured() and moment_la_total == 0 and plan_la_total == 0:
+        diagnosis.append("⚠️ No hay ninguna Live Activity registrada en la red. Al iniciar un Momento o un Plan, la app iOS deberia crear la actividad localmente y mandar el token a /api/live-activity/token.")
+    if moment_la_total > 0:
+        diagnosis.append(f"✅ Hay {moment_la_total} Live Activities del Momento registradas ({moment_la_active} activas). Si al disparar `/admin/moment/test` sigue sin saltar la isla, abre la app justo antes para que la LA se cree.")
 
     return {
         "apns_configured": apns.is_configured(),
@@ -12945,6 +12951,9 @@ async def admin_live_activities(admin: dict = Depends(require_admin)):
         "my_plan_token": await db.live_activity_start_tokens.find_one(
             {"user_id": admin["user_id"], "kind": "plan_invite"}, {"_id": 0, "token": 1, "updated_at": 1}
         ),
+        "moment_live_activities_total": moment_la_total,
+        "moment_live_activities_active": moment_la_active,
+        "plan_live_activities_total": plan_la_total,
         "diagnosis": diagnosis,
         "total": await db.live_activities.count_documents({}),
         "activas": await db.live_activities.count_documents({"ended": {"$ne": True}}),
@@ -16318,6 +16327,22 @@ async def code_dump_zip_la_diagnose():
         iter([data]),
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="qvsrc-la-diagnose.zip"'},
+    )
+
+
+@api_router.get("/qvsrc-moment-ios.zip")
+async def code_dump_zip_moment_ios():
+    """Mini-ZIP consolidado: Swift nativo del Momento (4 archivos) + wrapper JS
+    + MomentGate hookeado + backend diagnose/stop. Para Codemagic recompilar."""
+    try:
+        with open("/app/frontend/public/qvsrc-moment-ios.zip", "rb") as _f:
+            data = _f.read()
+    except Exception:
+        raise HTTPException(status_code=404, detail="ZIP not generated")
+    return _StreamingResponse(
+        iter([data]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="qvsrc-moment-ios.zip"'},
     )
 
 
