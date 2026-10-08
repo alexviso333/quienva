@@ -15,6 +15,7 @@ public class QuienVaLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "QuienVaLiveActivity"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "observeStartToken", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startPlan", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updatePlan", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endPlan", returnType: CAPPluginReturnPromise),
@@ -22,6 +23,7 @@ public class QuienVaLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var activities: [String: Any] = [:]   // slug -> Activity<QuienVaPlanAttributes>
     private var streaming = Set<String>()          // slugs cuyo token ya escuchamos
+    private var startTokenObserved = false         // push-to-start ya enganchado
 
     /// Busca la actividad del plan: primero en memoria y, si la app se reinició,
     /// entre las que iOS mantiene vivas (Activity.activities).
@@ -41,6 +43,28 @@ public class QuienVaLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             call.resolve(["supported": false])
         }
+    }
+
+    /// Push-to-start (iOS 17.2+): escucha el token push-to-start de
+    /// `QuienVaPlanAttributes` y lo emite a JS (listener "planStartToken").
+    /// JS lo sube al backend con POST /api/live-activity/start-token
+    /// (kind="plan_invite") para que el servidor pueda ARRANCAR la Live
+    /// Activity de la invitación a plan de forma remota SIN abrir la app.
+    @objc func observeStartToken(_ call: CAPPluginCall) {
+        guard #available(iOS 17.2, *) else {
+            call.resolve(["observing": false, "reason": "needs iOS 17.2+"]); return
+        }
+        if startTokenObserved {
+            call.resolve(["observing": true, "already": true]); return
+        }
+        startTokenObserved = true
+        Task {
+            for await data in Activity<QuienVaPlanAttributes>.pushToStartTokenUpdates {
+                let token = data.map { String(format: "%02x", $0) }.joined()
+                self.notifyListeners("planStartToken", data: ["token": token])
+            }
+        }
+        call.resolve(["observing": true])
     }
 
     @objc func startPlan(_ call: CAPPluginCall) {

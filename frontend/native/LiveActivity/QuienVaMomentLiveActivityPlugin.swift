@@ -13,6 +13,7 @@ public class QuienVaMomentLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "QuienVaMomentLiveActivity"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "observeStartToken", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startMoment", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateMoment", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endMoment", returnType: CAPPluginReturnPromise),
@@ -20,6 +21,7 @@ public class QuienVaMomentLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var activities: [String: Any] = [:]   // eventId -> Activity
     private var streaming = Set<String>()          // eventIds con token ya escuchado
+    private var startTokenObserved = false         // push-to-start ya enganchado
 
     @available(iOS 16.2, *)
     private func findActivity(_ eventId: String) -> Activity<QuienVaMomentAttributes>? {
@@ -37,6 +39,28 @@ public class QuienVaMomentLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             call.resolve(["supported": false])
         }
+    }
+
+    /// Push-to-start (iOS 17.2+): escucha el token push-to-start de
+    /// `QuienVaMomentAttributes` y lo emite a JS (listener "momentStartToken").
+    /// JS lo sube al backend con POST /api/live-activity/start-token
+    /// (kind="moment") para que el servidor pueda ARRANCAR la Live Activity /
+    /// Dynamic Island de forma remota SIN que la app esté abierta.
+    @objc func observeStartToken(_ call: CAPPluginCall) {
+        guard #available(iOS 17.2, *) else {
+            call.resolve(["observing": false, "reason": "needs iOS 17.2+"]); return
+        }
+        if startTokenObserved {
+            call.resolve(["observing": true, "already": true]); return
+        }
+        startTokenObserved = true
+        Task {
+            for await data in Activity<QuienVaMomentAttributes>.pushToStartTokenUpdates {
+                let token = data.map { String(format: "%02x", $0) }.joined()
+                self.notifyListeners("momentStartToken", data: ["token": token])
+            }
+        }
+        call.resolve(["observing": true])
     }
 
     @objc func startMoment(_ call: CAPPluginCall) {
